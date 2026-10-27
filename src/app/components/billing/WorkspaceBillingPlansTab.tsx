@@ -72,8 +72,8 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   const [globalSettings, setGlobalSettings] = useState<GlobalBillingSettings>(getStoredGlobalBillingSettings());
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
 
-  // Category filter state ("All", "AI Receptionist", "AI Scribe", "EHR", "RCM")
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  // Category filter state (strictly category-wise: "AI Receptionist", "AI Scribe", "EHR", "RCM")
+  const [selectedCategory, setSelectedCategory] = useState<string>(PLAN_CATEGORIES[0]);
 
   // Cart modal/slide-over state
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -142,8 +142,8 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       ({ plan }) => (plan.tier || "").toLowerCase() !== "free"
     );
 
-    // Filter by selected category ("All", "AI Receptionist", "AI Scribe", "EHR", "RCM")
-    if (selectedCategory && selectedCategory !== "All") {
+    // Filter strictly by selected category ("AI Receptionist", "AI Scribe", "EHR", "RCM")
+    if (selectedCategory) {
       visiblePlans = visiblePlans.filter(
         ({ plan }) => (plan.category || "").toLowerCase() === selectedCategory.toLowerCase()
       );
@@ -216,13 +216,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
         {/* Categories selector pills placed BEFORE monthly / yearly */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          <span
-            className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Category:
-          </span>
-          {["All", ...PLAN_CATEGORIES].map((cat) => {
+          {PLAN_CATEGORIES.map((cat) => {
             const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
             return (
               <button
@@ -284,7 +278,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
             <ShoppingCart className="w-4 h-4 text-[#1E293B]" />
             <span>Cart</span>
             {cartItems.length > 0 && (
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-extrabold flex items-center justify-center shrink-0">
+              <span className="w-5 h-5 rounded-full bg-[#1E293B] text-white text-[10px] font-extrabold flex items-center justify-center shrink-0">
                 {cartItems.length}
               </span>
             )}
@@ -331,13 +325,8 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
               )}
 
               <div className="space-y-4">
-                {/* Category Badge & Plan Title */}
+                {/* Plan Title & Description */}
                 <div>
-                  <div className="mb-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 tracking-wide uppercase">
-                      {planCategory}
-                    </span>
-                  </div>
                   <h3
                     className="text-2xl font-bold text-slate-900 tracking-tight"
                     style={{ fontFamily: "Outfit, sans-serif" }}
@@ -364,9 +353,6 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                           Custom
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
-                        TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
-                      </p>
                     </div>
                   ) : (
                     <div>
@@ -382,30 +368,27 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                           /{isYearly ? "yr" : "mo"}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
-                        TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
-                      </p>
                     </div>
                   )}
                 </div>
 
-                {/* Resource Allocation Box */}
-                <div className="bg-[#f8fafc] border border-slate-100 rounded-2xl p-4.5 space-y-1.5 mt-5">
-                  <p
-                    className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    RESOURCE ALLOCATION
-                  </p>
-                  <p
-                    className="text-base font-bold text-slate-900"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {credits.toLocaleString()} credits
-                  </p>
-                  <p className="text-sm font-semibold text-slate-600">
-                    {includedSeats} team member{includedSeats > 1 ? "s" : ""}
-                  </p>
+                {/* Resource Allocation Box with Icons */}
+                <div className="bg-[#f8fafc] border border-slate-100 rounded-2xl p-4.5 space-y-2.5 mt-5">
+                  <div className="flex items-center gap-2.5">
+                    <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span
+                      className="text-base font-bold text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {credits.toLocaleString()} credits
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <Users className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-sm font-semibold text-slate-600">
+                      {includedSeats} team member{includedSeats > 1 ? "s" : ""}
+                    </span>
+                  </div>
                 </div>
 
                 {/* WHAT'S INCLUDED Feature List */}
@@ -448,10 +431,10 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   <button
                     type="button"
                     onClick={() => setIsCartOpen(true)}
-                    className="w-full py-3.5 rounded-full text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                    className="w-full py-3.5 rounded-full text-xs font-bold bg-[#1E293B] hover:bg-slate-900 text-white cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    <ShoppingCart className="w-4 h-4" />
+                    <ShoppingCart className="w-4 h-4 text-white" />
                     <span>In Cart (Review &amp; Pay)</span>
                   </button>
                 ) : (
@@ -842,7 +825,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-[#1E293B] flex items-center justify-center">
                   <ShoppingCart className="w-5 h-5" />
                 </div>
                 <div>
@@ -887,9 +870,9 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="bg-blue-50/70 border border-blue-200/60 rounded-xl p-3 flex items-start gap-2.5">
-                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-blue-800 leading-relaxed">
+                  <div className="bg-slate-100/90 border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-slate-700 leading-relaxed">
                       <strong>Multi-Category Subscription:</strong> You can hold 1 active plan per category at a time. All items will be activated immediately upon checkout.
                     </p>
                   </div>
@@ -904,7 +887,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                               item.type === "plan"
-                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                ? "bg-slate-100 text-[#1E293B] border border-slate-300"
                                 : item.type === "custom_credits" || item.type === "credit_pack"
                                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                 : "bg-purple-50 text-purple-700 border border-purple-200"
@@ -932,7 +915,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                           )}
                           {item.members && (
                             <p className="flex items-center gap-1">
-                              <Users className="w-3 h-3 text-blue-500" />
+                              <Users className="w-3 h-3 text-slate-500" />
                               <span>{item.members} Team {item.members === 1 ? "Member" : "Members"}</span>
                             </p>
                           )}
@@ -1024,7 +1007,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   className="w-full py-3.5 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  <CreditCard className="w-4 h-4 text-blue-300" />
+                  <CreditCard className="w-4 h-4 text-slate-300" />
                   <span>Pay &amp; Activate All (${cartItems.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(2)})</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>

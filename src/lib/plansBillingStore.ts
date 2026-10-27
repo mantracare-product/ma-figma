@@ -196,7 +196,7 @@ export interface CartItem {
 
 export const CART_STORAGE_KEY = "mantra_billing_cart_v2";
 export const CART_CHANGED_EVENT = "mantra_cart_changed";
-export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v2";
+export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v4";
 export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v1";
 export const TEAM_MEMBER_PACKS_STORAGE_KEY = "mantra_admin_team_member_packs_v1";
 export const GLOBAL_BILLING_SETTINGS_KEY = "mantra_global_billing_settings_v1";
@@ -263,13 +263,14 @@ export function getPackageLocalizedPrice(
 }
 
 export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
+  // ── CATEGORY 1: AI RECEPTIONIST (Healthcare) ──
   {
     id: "plan-ai-rec-starter",
-    name: "AI Voice Receptionist Starter",
+    name: "AI Clinic Receptionist Starter",
     category: "AI Receptionist",
     tier: "Starter",
-    targetCategory: "Global",
-    description: "24/7 autonomous AI voice receptionist for inbound calls and appointments.",
+    targetCategory: "Healthcare",
+    description: "24/7 autonomous AI voice receptionist for outpatient clinics and medical practices.",
     includedSeats: 2,
     monthlyCredits: 1000,
     yearlyCredits: 12000,
@@ -277,11 +278,11 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "2 team members included",
+      "2 staff members included",
       "1,000 Voice & Chat Credits / mo",
-      "24/7 AI Voice Answering Agent",
-      "Real-time Call logs & SMS Triage",
-      "Automated Scheduling & Booking",
+      "24/7 AI Medical Call Answering",
+      "Appointment Booking & Triage",
+      "HIPAA Compliant Call Logs",
     ],
     modules: ["telephony", "clients", "appointments"],
     moduleFeatures: {
@@ -302,23 +303,24 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ai-rec-pro",
-    name: "AI Voice Receptionist Pro",
+    name: "AI Clinic Receptionist Pro",
     category: "AI Receptionist",
     tier: "Professional",
-    targetCategory: "Global",
-    description: "Multi-line outbound dialing, intelligent triage rules, and team call transfers.",
+    targetCategory: "Healthcare",
+    description: "Multi-line inbound/outbound call triage, nurse line transfers, and emergency routing.",
     includedSeats: 5,
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
+    monthlyCredits: 3500,
+    yearlyCredits: 42000,
     isActive: true,
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "5 team members included",
-      "3,000 Voice & Chat Credits / mo",
-      "AI Voice Receptionist + Outbound Calling",
-      "Smart Routing & Automated Follow-ups",
-      "Priority VIP Call Queues",
+      "5 staff members included",
+      "3,500 Voice & Chat Credits / mo",
+      "Multi-Line Concurrent Call Handling",
+      "Intelligent Clinical Triage & Urgency Rules",
+      "Direct Provider & On-Call Transfers",
+      "SMS Appointment Confirmation & Reminders",
     ],
     modules: ["telephony", "clients", "appointments"],
     moduleFeatures: {
@@ -338,12 +340,52 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
+    id: "plan-ai-rec-custom",
+    name: "AI Hospital Reception Enterprise",
+    category: "AI Receptionist",
+    tier: "Custom",
+    targetCategory: "Healthcare",
+    description: "Hospital network deployment, custom multilingual voice models, and PBX telephony bridge.",
+    includedSeats: 20,
+    monthlyCredits: 15000,
+    yearlyCredits: 180000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "20+ staff seats included",
+      "Custom High-Volume Credit Allocation",
+      "Enterprise PBX / SIP Trunk Integration",
+      "Custom Trained Voice Models (30+ Languages)",
+      "Dedicated Healthcare SLA & BAA Agreement",
+      "Custom Hospital EHR Rota Dispatch",
+    ],
+    modules: ["telephony", "clients", "appointments", "workflows"],
+    moduleFeatures: {
+      telephony: ["Enterprise PBX Trunking", "Multilingual Voice", "Hospital Rota Dispatch"],
+    },
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+
+  // ── CATEGORY 2: AI SCRIBE (Healthcare) ──
+  {
     id: "plan-ai-scribe-starter",
     name: "AI Clinical Scribe Starter",
     category: "AI Scribe",
     tier: "Starter",
-    targetCategory: "Global",
-    description: "Real-time clinical consultation audio capture and instant SOAP note drafting.",
+    targetCategory: "Healthcare",
+    description: "Ambient consultation audio capture and instant SOAP note generation for solo practitioners.",
     includedSeats: 2,
     monthlyCredits: 1200,
     yearlyCredits: 14400,
@@ -351,10 +393,11 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "2 providers included",
+      "2 provider seats included",
       "1,200 Audio Transcription Credits / mo",
-      "Instant SOAP Note synthesis",
-      "EHR-ready copy & export",
+      "Real-Time Ambient Consultation Capture",
+      "Instant Structured SOAP Note Synthesis",
+      "One-Click EHR Copy & Export",
     ],
     modules: ["scribe"],
     moduleFeatures: {},
@@ -376,8 +419,8 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     name: "AI Clinical Scribe Pro",
     category: "AI Scribe",
     tier: "Professional",
-    targetCategory: "Global",
-    description: "Unlimited clinical dictations, multi-specialty templates, and direct EHR sync.",
+    targetCategory: "Healthcare",
+    description: "Multi-specialty clinical dictation, ICD-10 suggestions, and direct 2-way EHR sync.",
     includedSeats: 5,
     monthlyCredits: 4000,
     yearlyCredits: 48000,
@@ -385,11 +428,12 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "5 providers included",
+      "5 provider seats included",
       "4,000 Audio Transcription Credits / mo",
-      "Multi-specialty SOAP Templates",
-      "ICD-10 & CPT code suggestions",
-      "Direct EHR Chart Insertion",
+      "40+ Medical Specialty SOAP Templates",
+      "Automated ICD-10 & CPT Code Suggestions",
+      "Direct EHR Chart Insertion via FHIR API",
+      "Patient Visit Summary & Instructions Draft",
     ],
     modules: ["scribe"],
     moduleFeatures: {},
@@ -407,11 +451,49 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
+    id: "plan-ai-scribe-custom",
+    name: "AI Health System Scribe Enterprise",
+    category: "AI Scribe",
+    tier: "Custom",
+    targetCategory: "Healthcare",
+    description: "Hospital-wide ambient documentation, tailored clinical fine-tuning, and on-premise security.",
+    includedSeats: 25,
+    monthlyCredits: 20000,
+    yearlyCredits: 240000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "25+ clinician seats included",
+      "Unlimited Ambient Clinical Audio Processing",
+      "Custom Hospital Specialty Vocabularies",
+      "Epic, Cerner & Athenahealth Deep Bi-Directional Sync",
+      "Enterprise SOC2 & HIPAA Compliance Vault",
+      "Dedicated Clinical Account Manager",
+    ],
+    modules: ["scribe", "workflows"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+
+  // ── CATEGORY 3: EHR (Healthcare) ──
+  {
     id: "plan-ehr-starter",
     name: "Cloud EHR Essentials",
     category: "EHR",
     tier: "Starter",
-    targetCategory: "Global",
+    targetCategory: "Healthcare",
     description: "Core digital health records, patient demographics, and appointment scheduling.",
     includedSeats: 3,
     monthlyCredits: 1500,
@@ -420,10 +502,11 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "3 team members included",
+      "3 clinical staff included",
       "1,500 System & Notification Credits / mo",
-      "Patient Demographics & Medical History",
-      "Online Booking Widget & Reminders",
+      "Digital Health Records & Demographics",
+      "Patient Portal Self-Service Booking",
+      "Automated SMS & Email Reminders",
     ],
     modules: ["clients", "appointments"],
     moduleFeatures: {},
@@ -442,10 +525,10 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ehr-pro",
-    name: "Integrated EHR Suite",
+    name: "Integrated Clinical EHR Suite",
     category: "EHR",
     tier: "Professional",
-    targetCategory: "Global",
+    targetCategory: "Healthcare",
     description: "Full clinical charting, e-prescriptions, lab integrations, and digital intake forms.",
     includedSeats: 8,
     monthlyCredits: 5000,
@@ -454,11 +537,12 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "8 team members included",
+      "8 clinical staff included",
       "5,000 System Credits / mo",
-      "Clinical Charting & E-Prescriptions",
-      "Lab Orders & Digital Intake Forms",
-      "Secure Document Vault",
+      "Comprehensive Clinical Charting & E-Rx",
+      "Bi-directional Lab & Imaging Interfaces",
+      "Custom Digital Patient Intake Forms",
+      "Secure HIPAA Document & Records Vault",
     ],
     modules: ["clients", "appointments", "forms"],
     moduleFeatures: {},
@@ -476,12 +560,50 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
+    id: "plan-ehr-custom",
+    name: "Enterprise Health Network EHR",
+    category: "EHR",
+    tier: "Custom",
+    targetCategory: "Healthcare",
+    description: "Multi-facility health system EHR with FHIR interoperability, clinical trials, and HL7 feeds.",
+    includedSeats: 30,
+    monthlyCredits: 25000,
+    yearlyCredits: 300000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "30+ multi-facility staff included",
+      "Unlimited Records & High Quota Allocation",
+      "HL7 & FHIR Interoperability Bridge",
+      "Multi-Department Rota & Inpatient Tracking",
+      "Role-Based Audit Logs & Access Control",
+      "99.99% Guaranteed Enterprise Uptime SLA",
+    ],
+    modules: ["clients", "appointments", "forms", "workflows"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+
+  // ── CATEGORY 4: RCM (Healthcare) ──
+  {
     id: "plan-rcm-starter",
     name: "RCM Billing & Claims Starter",
     category: "RCM",
     tier: "Starter",
-    targetCategory: "Global",
-    description: "Automated claim submission, eligibility checks, and patient invoicing.",
+    targetCategory: "Healthcare",
+    description: "Automated claim submission, real-time eligibility checks, and patient invoicing.",
     includedSeats: 3,
     monthlyCredits: 1500,
     yearlyCredits: 18000,
@@ -489,10 +611,11 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "3 billers included",
+      "3 billing specialists included",
       "1,500 Billing & Claims Credits / mo",
-      "Automated Clearinghouse Submission",
-      "Patient Statements & Online Payments",
+      "Automated Clearinghouse EDI 837 Submission",
+      "Instant Patient Insurance Eligibility (EDI 270/271)",
+      "Patient Online Invoices & Settlement",
     ],
     modules: ["billing"],
     moduleFeatures: {},
@@ -514,8 +637,8 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     name: "Full Revenue Cycle Suite",
     category: "RCM",
     tier: "Professional",
-    targetCategory: "Global",
-    description: "End-to-end denial management, automated ERA posting, and financial analytics.",
+    targetCategory: "Healthcare",
+    description: "End-to-end denial management, automated ERA posting, and predictive collection analytics.",
     includedSeats: 6,
     monthlyCredits: 4500,
     yearlyCredits: 54000,
@@ -523,11 +646,12 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "6 billers included",
+      "6 billing specialists included",
       "4,500 Billing Credits / mo",
-      "Denial Management & Auto-ERA Posting",
-      "Advanced Revenue & Aging Analytics",
-      "Automated Patient Collections",
+      "Denial Workflow Automation & Resubmission",
+      "Automated ERA (EDI 835) Payment Posting",
+      "A/R Aging & Payer Performance Analytics",
+      "Automated SMS/Email Patient Collections",
     ],
     modules: ["billing"],
     moduleFeatures: {},
@@ -540,6 +664,42 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
       { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 185, yearlyPrice: 1776 },
       { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 210, yearlyPrice: 2016 },
       { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 128, yearlyPrice: 1228 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-rcm-custom",
+    name: "Enterprise Hospital RCM Solutions",
+    category: "RCM",
+    tier: "Custom",
+    targetCategory: "Healthcare",
+    description: "Large-scale revenue cycle operations with contract modeling, underpayment recovery, and dedicated billers.",
+    includedSeats: 25,
+    monthlyCredits: 25000,
+    yearlyCredits: 300000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "25+ enterprise billing seats included",
+      "Custom High-Volume Claims & Invoicing Quota",
+      "Payer Contract Modeling & Fee Schedule Rules",
+      "Automated Underpayment & Overpayment Audits",
+      "Dedicated Certified Billing Account Team",
+      "Tailored Clearinghouse & Bank Lockbox Integration",
+    ],
+    modules: ["billing", "workflows"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1037,17 +1197,27 @@ export const INITIAL_WORKSPACE_SUBSCRIPTIONS: Record<string, WorkspaceSubscripti
 
 export function getStoredPlans(): IndustryPlan[] {
   try {
-    if (typeof window !== "undefined" && localStorage.getItem("mantra_admin_industry_plans_v1")) {
+    if (typeof window !== "undefined") {
       localStorage.removeItem("mantra_admin_industry_plans_v1");
+      localStorage.removeItem("mantra_admin_industry_plans_v2");
+      localStorage.removeItem("mantra_admin_industry_plans_v3");
     }
-    const raw = localStorage.getItem(PLANS_STORAGE_KEY);
+    const raw = typeof window !== "undefined" ? localStorage.getItem(PLANS_STORAGE_KEY) : null;
     if (!raw) {
-      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+      }
       return INITIAL_INDUSTRY_PLANS;
     }
     const parsed: IndustryPlan[] = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== INITIAL_INDUSTRY_PLANS.length ||
+      parsed.some((p) => p.name.includes("Voice") || !p.category)
+    ) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+      }
       return INITIAL_INDUSTRY_PLANS;
     }
     // Guarantee category is populated for every plan
