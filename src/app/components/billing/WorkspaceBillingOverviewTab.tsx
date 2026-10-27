@@ -321,19 +321,6 @@ export default function WorkspaceBillingOverviewTab({
               >
                 {planName}
               </span>
-              {sub?.activePlans && sub.activePlans.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                  {sub.activePlans.map((ap) => (
-                    <span
-                      key={ap.planId}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      <strong className="font-bold">{ap.category || "Plan"}:</strong> {ap.planName}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
