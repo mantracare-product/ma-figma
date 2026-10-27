@@ -41,6 +41,8 @@ import { useOrganization } from "../context/OrganizationContext";
 import {
   getStoredProcesses,
   saveStoredProcesses,
+  getStoredWorkflowSteps,
+  saveStoredWorkflowSteps,
   getWorkflowStepsForStage as getStoreWorkflowSteps,
   CallTriggerSettings,
   getDefaultCallTriggerSettings,
@@ -53,7 +55,9 @@ import {
   isRequiredSystemCategory,
   isStageDeletable,
   DEFAULT_ENTITY_PROCESSES,
+  createDefaultStagesForEntity,
 } from "../../lib/useProcessStore";
+import ProcessProductsServicesCard from "../components/process/ProcessProductsServicesCard";
 import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
 import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
 import { getStagesTargetedByAutomation, AUTOMATION_STORE_EVENT, useAutomationRules, AutomationRule } from "../../lib/useAutomationStore";
@@ -131,6 +135,8 @@ export interface Process {
   connectedToPatientPortal?: boolean;
   connectedToAiReceptionist?: boolean;
   entityType?: EntityType;
+  assignedServiceIds?: (number | string)[];
+  assignedProductIds?: (number | string)[];
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -2777,11 +2783,33 @@ export default function Process() {
 
     const isAppointment = selectedEntity === "appointment";
     const isInsurance = selectedEntity === "insurance";
+    const isInvoice = selectedEntity === "invoice";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
-    const targetEntityType: EntityType = isAppointment ? "appointment" : isInsurance ? "insurance" : "client";
+    const targetEntityType: EntityType = isAppointment
+      ? "appointment"
+      : isInsurance
+      ? "insurance"
+      : isInvoice
+      ? "invoice"
+      : "client";
 
-    const defaultStages = DEFAULT_ENTITY_PROCESSES[targetEntityType as Exclude<EntityType, "client">]?.stages;
-    const initialStages = defaultStages ? defaultStages.map((st, i) => ({ ...st, id: `${st.id}-${Date.now()}-${i}` })) : [];
+    // Auto-render predefined stages for this entity
+    const initialStages = createDefaultStagesForEntity(targetEntityType, newProcessId);
+
+    // Register initial workflow steps into storage so actions appear immediately
+    try {
+      const storedSteps = getStoredWorkflowSteps();
+      let updatedStepsFlag = false;
+      initialStages.forEach((stg) => {
+        if (stg.workflowSteps && stg.workflowSteps.length > 0) {
+          storedSteps[stg.id] = stg.workflowSteps;
+          updatedStepsFlag = true;
+        }
+      });
+      if (updatedStepsFlag) {
+        saveStoredWorkflowSteps(storedSteps);
+      }
+    } catch {}
 
     const process: Process = {
       id: newProcessId,
@@ -2789,6 +2817,7 @@ export default function Process() {
       assignedToUserId: 1,
       stages: initialStages,
       entityType: targetEntityType,
+      assignedServiceIds: [],
       industryCategory: organization?.industryCategory || "All",
       industry: organization?.industry || "All",
       locations: organization?.location ? [organization.location] : (organization?.locations || ["All"]),
@@ -2799,7 +2828,13 @@ export default function Process() {
               industryCategory: organization.industryCategory,
               industries: organization.industry ? [organization.industry] : [],
               locations: organization.location ? [organization.location] : [],
-              entities: isAppointment ? ["appointment"] : isInsurance ? ["insurance"] : ["client", "process"],
+              entities: isAppointment
+                ? ["appointment"]
+                : isInsurance
+                ? ["insurance"]
+                : isInvoice
+                ? ["invoice"]
+                : ["client", "process"],
             },
           ]
         : undefined,
@@ -2819,7 +2854,17 @@ export default function Process() {
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
     setShowAddProcessModal(false);
-    toast.success(`${isAppointment ? "Appointment workflow" : isInsurance ? "Insurance & Claim workflow" : "Workflow"} added successfully`);
+    toast.success(
+      `${
+        isAppointment
+          ? "Appointment workflow"
+          : isInsurance
+          ? "Insurance & Claim workflow"
+          : isInvoice
+          ? "Invoice workflow"
+          : "Workflow"
+      } added successfully`
+    );
   };
 
   const handleUpdateProcess = (
@@ -3562,13 +3607,15 @@ export default function Process() {
           ]}
           onExport={() => setShowExportModal(true)}
           primaryAction={
-            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance"
+            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "invoice"
               ? {
                 label:
                   selectedEntity === "appointment"
                     ? "Add Appointment Workflow"
                     : selectedEntity === "insurance"
                     ? "Add Insurance & Claim Workflow"
+                    : selectedEntity === "invoice"
+                    ? "Add Invoice Workflow"
                     : "Add Workflow",
                 icon: <Plus className="w-3.5 h-3.5" />,
                 onClick: () => {
@@ -4152,6 +4199,19 @@ export default function Process() {
                         );
                       })()}
                     </div>
+
+                    {/* Products & Services Assignment Card */}
+                    <ProcessProductsServicesCard
+                      currentProcess={selectedProcessData}
+                      allProcesses={processes}
+                      onUpdateAssignedServices={(serviceIds) => {
+                        handleUpdateProcess({
+                          assignedServiceIds: serviceIds,
+                          assignedProductIds: serviceIds,
+                        });
+                        toast.success("Assigned products & services updated");
+                      }}
+                    />
 
                     {/* Knowledge Base Section */}
                     <div className="space-y-3">

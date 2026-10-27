@@ -22,6 +22,7 @@ import {
   Info,
   Pencil,
   MoreVertical,
+  Lock,
 } from "lucide-react";
 import type { WorkflowStep } from "../../types/workflow";
 import { isParallelStep } from "../../../lib/automationTree";
@@ -244,6 +245,14 @@ const DraggableAutomationCard: React.FC<DraggableCardProps> = ({
             <span>{badge.label}</span>
           </span>
 
+          {/* Fixed Action Badge */}
+          {(step.isFixed || (step as any).isFixedAction) && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+              <Lock className="w-2.5 h-2.5" />
+              <span>Fixed Action</span>
+            </span>
+          )}
+
           {/* Parallel Branch Badge */}
           {isParallelStep(step) && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
@@ -309,7 +318,7 @@ const DraggableAutomationCard: React.FC<DraggableCardProps> = ({
                 <span>Edit</span>
               </button>
 
-              {onDuplicate && (
+              {onDuplicate && !(step.isFixed || (step as any).isFixedAction) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -324,17 +333,27 @@ const DraggableAutomationCard: React.FC<DraggableCardProps> = ({
               )}
 
               {onDelete && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDelete();
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-gray-100 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                  <span>Delete</span>
-                </button>
+                step.isFixed || (step as any).isFixedAction ? (
+                  <div
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 bg-gray-50/50 text-left border-t border-gray-100 cursor-not-allowed select-none"
+                    title="System action is fixed for this stage and cannot be removed"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-gray-400" />
+                    <span>Fixed Action</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDelete();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-gray-100 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <span>Delete</span>
+                  </button>
+                )
               )}
             </div>
           )}

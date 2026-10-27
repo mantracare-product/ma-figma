@@ -53,6 +53,8 @@ import {
 import {
   getStoredProcesses,
   saveStoredProcesses,
+  getStoredWorkflowSteps,
+  saveStoredWorkflowSteps,
   getWorkflowStepsForStage as getStoreWorkflowSteps,
   CallTriggerSettings,
   getDefaultCallTriggerSettings,
@@ -63,7 +65,9 @@ import {
   ProcessTransitionTarget,
   EntityType,
   DEFAULT_ENTITY_PROCESSES,
+  createDefaultStagesForEntity,
 } from "../../../lib/useProcessStore";
+import ProcessProductsServicesCard from "../../components/process/ProcessProductsServicesCard";
 
 interface AISettings {
   platform: string;
@@ -135,6 +139,8 @@ export interface Process {
   connectedToPatientPortal?: boolean;
   connectedToAiReceptionist?: boolean;
   entityType?: EntityType;
+  assignedServiceIds?: (number | string)[];
+  assignedProductIds?: (number | string)[];
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -2708,12 +2714,31 @@ export default function AdminProcessTemplates() {
       return;
     }
 
+    const processId = String(Date.now());
+    const initialStages = createDefaultStagesForEntity(newProcessEntityType, processId);
+
+    // Register initial workflow steps into storage so actions appear immediately
+    try {
+      const storedSteps = getStoredWorkflowSteps();
+      let updatedStepsFlag = false;
+      initialStages.forEach((stg) => {
+        if (stg.workflowSteps && stg.workflowSteps.length > 0) {
+          storedSteps[stg.id] = stg.workflowSteps;
+          updatedStepsFlag = true;
+        }
+      });
+      if (updatedStepsFlag) {
+        saveStoredWorkflowSteps(storedSteps);
+      }
+    } catch {}
+
     const process: Process = {
-      id: String(Date.now()),
+      id: processId,
       ...newProcess,
       assignedToUserId: 1,
-      stages: [], // Newly added process has no predefined stages
+      stages: initialStages,
       entityType: newProcessEntityType,
+      assignedServiceIds: [],
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -3807,6 +3832,19 @@ export default function AdminProcessTemplates() {
                         );
                       })()}
                     </div>
+
+                    {/* Products & Services Assignment Card */}
+                    <ProcessProductsServicesCard
+                      currentProcess={selectedProcessData}
+                      allProcesses={processes}
+                      onUpdateAssignedServices={(serviceIds) => {
+                        handleUpdateProcess({
+                          assignedServiceIds: serviceIds,
+                          assignedProductIds: serviceIds,
+                        });
+                        toast.success("Assigned products & services updated");
+                      }}
+                    />
 
                     {/* Knowledge Base Section */}
                     <div className="space-y-3">

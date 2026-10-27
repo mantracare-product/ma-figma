@@ -67,6 +67,11 @@ export function isSampleInvoice(inv: ClientInvoice): boolean {
 
 export function hasInvoiceAutomation(processId?: string): boolean {
   try {
+    const processes = getStoredProcesses();
+    const invProcs = processes.filter((p) => p.entityType === "invoice");
+    if (invProcs.length > 0) return true;
+    if (DEFAULT_ENTITY_PROCESSES.invoice) return true;
+
     const rules = getStoredRules();
     const hasGlobalRule = rules.some((r) => {
       if (!r.enabled) return false;
@@ -100,7 +105,6 @@ export function hasInvoiceAutomation(processId?: string): boolean {
     if (hasGlobalRule) return true;
 
     // Check process stage workflowSteps & automations
-    const processes = getStoredProcesses();
     const targetProcesses = processId
       ? processes.filter((p) => p.id === processId || p.name === processId)
       : processes;

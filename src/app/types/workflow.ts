@@ -19,6 +19,8 @@ export type WorkflowStep = {
   executionType?: "wait" | "parallel";
   delayValue?: number;
   delayUnit?: string;
+  isFixed?: boolean;
+  isFixedAction?: boolean;
   connectAfterId?: string;
   conditions?: {
     field?: Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>;

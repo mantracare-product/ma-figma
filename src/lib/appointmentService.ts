@@ -24,6 +24,13 @@ import { findRoomForAppointment } from "./roomsStore";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
   try {
+    // Appointment workflows now include predefined stages with fixed actions (Booked, Completed, Reschedule, No-show),
+    // so appointment booking is enabled by default without requiring manual global automation configuration.
+    const processes = getStoredProcesses();
+    const apptProcs = processes.filter((p) => p.entityType === "appointment");
+    if (apptProcs.length > 0) return true;
+    if (DEFAULT_ENTITY_PROCESSES.appointment) return true;
+
     const rules = getStoredRules();
     const hasGlobalRule = rules.some((r) => {
       if (!r.enabled) return false;
@@ -69,7 +76,6 @@ export function hasAppointmentAutomation(processId?: string): boolean {
     if (hasGlobalRule) return true;
 
     // Check process stages workflowSteps & automations
-    const processes = getStoredProcesses();
     const targetProcesses = processId
       ? processes.filter((p) => p.id === processId || p.name === processId)
       : processes.filter((p) => p.entityType === "appointment");
@@ -647,6 +653,19 @@ class AppointmentService {
       }
       if (matchingRule.targetStageId) {
         targetStage = this.findStageById(matchingRule.targetStageId, targetProcess?.id);
+      }
+    }
+
+    // Route by assigned product / service: for whichever product/service is assigned to workflow,
+    // when appointment is booked for that service, the appointment will automatically be created in that workflow
+    if (payload.serviceId) {
+      const allApptProcs = getStoredProcesses().filter((p) => p.entityType === "appointment");
+      const matchedByService = allApptProcs.find((p) => {
+        const sIds = (p.assignedServiceIds || (p as any).assignedProductIds || []).map(String);
+        return sIds.includes(String(payload.serviceId));
+      });
+      if (matchedByService) {
+        targetProcess = matchedByService;
       }
     }
 

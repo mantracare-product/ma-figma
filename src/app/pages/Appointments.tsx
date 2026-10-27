@@ -642,13 +642,23 @@ export default function Appointments() {
       }
       toast.success("Appointment rescheduled successfully!");
     } else {
-      const targetProc = bookingProcessId
-        ? appointmentProcesses.find((p) => p.id === bookingProcessId || p.name === bookingProcessId)
-        : (appointmentProcess || appointmentProcesses[0]);
+      // If service is assigned to a specific appointment workflow, auto-route to that workflow
+      let assignedProc = null;
+      if (bookingServiceId) {
+        assignedProc = appointmentProcesses.find((p) => {
+          const sIds = (p.assignedServiceIds || (p as any).assignedProductIds || []).map(String);
+          return sIds.includes(String(bookingServiceId));
+        });
+      }
+
+      const targetProc = assignedProc
+        || (bookingProcessId
+          ? appointmentProcesses.find((p) => p.id === bookingProcessId || p.name === bookingProcessId)
+          : (appointmentProcess || appointmentProcesses[0]));
 
       const targetStage = targetProc?.stages?.find(
         (s) => s.id === bookingStageId || s.name === bookingStageId
-      );
+      ) || targetProc?.stages?.[0];
 
       const res = appointmentService.createAppointment({
         clientName: selectedClient.name,
@@ -676,6 +686,10 @@ export default function Appointments() {
 
       if (res.appointment) {
         setAppointments(appointmentService.getAppointments() as any);
+        if (targetProc?.id && selectedProcessFilter !== targetProc.id) {
+          setSelectedProcessFilter(targetProc.id);
+        }
+        setStageFilter("all");
       }
 
       if (res.invoiceId) {
@@ -748,21 +762,22 @@ export default function Appointments() {
       return;
     }
 
-    const service = services.find((s) => s.id === appointmentFormData.serviceId);
-    const maxId = appointments.reduce((max, a) => {
-      const num = typeof a.id === "number" ? a.id : parseInt(String(a.id).replace(/\D/g, ""), 10) || 0;
-      return Math.max(max, num);
-    }, 0);
-    const newAppointment: Appointment = {
-      id: maxId + 1,
-      ...appointmentFormData,
-      employeeId: Number(appointmentFormData.employeeId),
+    const res = appointmentService.createAppointment({
+      clientName: appointmentFormData.clientName,
+      clientEmail: appointmentFormData.clientEmail,
+      clientPhone: appointmentFormData.clientPhone,
+      employeeId: String(appointmentFormData.employeeId),
       serviceId: Number(appointmentFormData.serviceId),
-      duration: service?.duration || 30,
-      status: "scheduled",
-    };
+      date: appointmentFormData.date,
+      time: appointmentFormData.time,
+      notes: appointmentFormData.notes,
+      processId: appointmentProcess.id,
+    });
 
-    setAppointments([...appointments, newAppointment]);
+    if (res.appointment) {
+      setAppointments(appointmentService.getAppointments() as any);
+      setStageFilter("all");
+    }
     toast.success("Appointment booked successfully");
     setShowAddModal(false);
     resetForm();

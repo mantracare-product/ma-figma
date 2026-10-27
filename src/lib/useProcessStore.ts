@@ -137,6 +137,7 @@ export interface Stage {
   endPipelineOnReach?: boolean; // System setting to end this pipeline and move to next pipeline
   nextProcessTransitions?: ProcessTransitionTarget[];
   scopingRules?: ScopingRule[];
+  workflowSteps?: WorkflowStep[];
 }
 
 export interface ScopingRule {
@@ -169,6 +170,8 @@ export interface Process {
   connectedToPatientPortal?: boolean;
   connectedToAiReceptionist?: boolean;
   entityType?: EntityType; // "client" | "appointment" | "invoice" | "insurance" | "claim" (default: "client")
+  assignedServiceIds?: (number | string)[]; // Assigned products & services for this workflow
+  assignedProductIds?: (number | string)[];
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -381,6 +384,271 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   claim: ["draft", "submitted", "paid", "denied"],
 };
 
+export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
+  if (entityType === "appointment") {
+    return [
+      {
+        id: processIdPrefix === "appt" ? "appt-1" : `${processIdPrefix}-appt-booked`,
+        name: "Booked",
+        description: "Appointment confirmed and scheduled",
+        status: "active",
+        color: "#3B82F6",
+        systemCategory: "booked",
+        stageCategory: "in_progress",
+        stagePosition: "initial",
+        isInitial: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-booked-${Date.now()}-1`,
+            name: "Book Appointment",
+            description: "Fixed action: Automatically books and confirms the appointment in the system",
+            iconKey: "calendar",
+            stepKey: "book_appointment",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: processIdPrefix === "appt" ? "appt-2" : `${processIdPrefix}-appt-reminder`,
+        name: "Reminder",
+        description: "Reminder notification dispatched prior to session",
+        status: "active",
+        color: "#8B5CF6",
+        systemCategory: "reminder",
+        stageCategory: "in_progress",
+        stagePosition: "intermediate",
+        workflowSteps: [
+          {
+            id: `step-reminder-${Date.now()}-2`,
+            name: "Send Upcoming Reminder",
+            description: "Automated reminder message dispatched to client",
+            iconKey: "messagecircle",
+            stepKey: "whatsapp",
+            trigger: "stage",
+            enabled: true,
+          },
+        ],
+      },
+      {
+        id: processIdPrefix === "appt" ? "appt-3" : `${processIdPrefix}-appt-completed`,
+        name: "Completed",
+        description: "Consultation successfully completed",
+        status: "active",
+        color: "#10B981",
+        systemCategory: "completed",
+        stageCategory: "success",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-completed-${Date.now()}-3`,
+            name: "Complete Appointment",
+            description: "Fixed action: Closes appointment session and marks as completed",
+            iconKey: "calendar",
+            stepKey: "complete_appointment",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: processIdPrefix === "appt" ? "appt-4" : `${processIdPrefix}-appt-reschedule`,
+        name: "Reschedule",
+        description: "Appointment date or time moved or rescheduled",
+        status: "active",
+        color: "#F59E0B",
+        systemCategory: "rescheduled",
+        stageCategory: "lost",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-reschedule-${Date.now()}-4`,
+            name: "Reschedule Appointment",
+            description: "Fixed action: Flags appointment as rescheduled and opens rebooking workflow",
+            iconKey: "calendar",
+            stepKey: "reschedule_appointment",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: processIdPrefix === "appt" ? "appt-7" : `${processIdPrefix}-appt-noshow`,
+        name: processIdPrefix === "appt" ? "No-show" : "No show",
+        description: "Patient did not attend scheduled time",
+        status: "active",
+        color: "#64748B",
+        systemCategory: "no_show",
+        stageCategory: "lost",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-noshow-${Date.now()}-5`,
+            name: "Mark No-Show",
+            description: "Fixed action: Records missed appointment and triggers follow-up",
+            iconKey: "calendar",
+            stepKey: "no_show_appointment",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+    ];
+  }
+
+  if (entityType === "invoice") {
+    return [
+      {
+        id: `${processIdPrefix}-inv-draft`,
+        name: "Draft",
+        description: "New invoice created, pending review",
+        status: "active",
+        color: "#64748B",
+        systemCategory: "draft",
+        stageCategory: "in_progress",
+        stagePosition: "initial",
+        isInitial: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-draft-${Date.now()}-1`,
+            name: "Create Draft Invoice",
+            description: "Fixed action: Initializes draft invoice and computes line items",
+            iconKey: "filetext",
+            stepKey: "generate_invoice",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: `${processIdPrefix}-inv-payment-recorded`,
+        name: "Payment recorded",
+        description: "Payment or transaction has been received and recorded",
+        status: "active",
+        color: "#3B82F6",
+        systemCategory: "payment_recorded",
+        stageCategory: "in_progress",
+        stagePosition: "intermediate",
+        workflowSteps: [
+          {
+            id: `step-fixed-payment-${Date.now()}-2`,
+            name: "Record Payment",
+            description: "Fixed action: Automatically records payment against invoice balance",
+            iconKey: "creditcard",
+            stepKey: "record_payment",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: `${processIdPrefix}-inv-paid`,
+        name: "Paid",
+        description: "Full balance settled and receipt generated",
+        status: "active",
+        color: "#10B981",
+        systemCategory: "paid",
+        stageCategory: "success",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-paid-${Date.now()}-3`,
+            name: "Mark Paid & Issue Receipt",
+            description: "Fixed action: Closes invoice as paid and generates receipt",
+            iconKey: "creditcard",
+            stepKey: "mark_paid",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+      {
+        id: `${processIdPrefix}-inv-overdue`,
+        name: "Overdue",
+        description: "Payment past due date",
+        status: "active",
+        color: "#EF4444",
+        systemCategory: "overdue",
+        stageCategory: "lost",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+        workflowSteps: [
+          {
+            id: `step-fixed-overdue-${Date.now()}-4`,
+            name: "Mark Overdue & Notice",
+            description: "Fixed action: Flags invoice as past due and dispatches payment reminder",
+            iconKey: "filetext",
+            stepKey: "mark_overdue",
+            trigger: "stage",
+            enabled: true,
+            isFixed: true,
+            isFixedAction: true,
+          },
+        ],
+      },
+    ];
+  }
+
+  // Default Process / Client: Stage 1 (Inprogress), Stage 2 (Won), Stage 3 (Lost)
+  return [
+    {
+      id: `${processIdPrefix}-stg-1`,
+      name: "Stage 1",
+      description: "Initial intake and active engagement",
+      status: "active",
+      color: "#3B82F6",
+      stageCategory: "in_progress",
+      stagePosition: "initial",
+      isInitial: true,
+    },
+    {
+      id: `${processIdPrefix}-stg-2`,
+      name: "Stage 2",
+      description: "Successful outcome reached (Won)",
+      status: "active",
+      color: "#10B981",
+      stageCategory: "success",
+      stagePosition: "final",
+      isFinal: true,
+      isFinalStage: true,
+    },
+    {
+      id: `${processIdPrefix}-stg-3`,
+      name: "Stage 3",
+      description: "Unsuccessful or lost engagement (Lost)",
+      status: "active",
+      color: "#EF4444",
+      stageCategory: "lost",
+      stagePosition: "final",
+      isFinal: true,
+      isFinalStage: true,
+    },
+  ];
+}
+
 export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Process> = {
   appointment: {
     id: "process-appointment-default",
@@ -395,15 +663,7 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       tone: "Professional",
       style: "Balanced",
     },
-    stages: [
-      { id: "appt-1", name: "Booked", description: "Appointment confirmed and scheduled", status: "active", color: "#3B82F6", systemCategory: "booked", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "appt-2", name: "Rescheduled", description: "Appointment date or time moved", status: "active", color: "#F59E0B", systemCategory: "rescheduled", isSystemCategoryRequired: true, stagePosition: "intermediate" },
-      { id: "appt-3", name: "Reminder", description: "Reminder notification dispatched", status: "active", color: "#8B5CF6", systemCategory: "reminder", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "appt-4", name: "Checked In", description: "Patient arrived at facility or joined session", status: "active", color: "#06B6D4", systemCategory: "checked_in", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "appt-5", name: "Completed", description: "Consultation successfully completed", status: "active", color: "#10B981", systemCategory: "completed", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "appt-6", name: "Cancelled", description: "Appointment cancelled by patient or clinic", status: "active", color: "#EF4444", systemCategory: "cancelled", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "appt-7", name: "No-show", description: "Patient did not attend scheduled time", status: "active", color: "#64748B", systemCategory: "no_show", isSystemCategoryRequired: false, isFinal: true, isFinalStage: true, stagePosition: "final" },
-    ],
+    stages: createDefaultStagesForEntity("appointment", "appt"),
   },
   invoice: {
     id: "process-invoice-default",
@@ -418,15 +678,7 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       tone: "Professional",
       style: "Balanced",
     },
-    stages: [
-      { id: "inv-1", name: "Draft", description: "New invoice created, pending review", status: "active", color: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "inv-2", name: "Sent", description: "Invoice sent to client or payer", status: "active", color: "#3B82F6", systemCategory: "sent", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "inv-3", name: "Viewed", description: "Invoice viewed by recipient", status: "active", color: "#06B6D4", systemCategory: "viewed", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "inv-4", name: "Partially Paid", description: "Partial payment received", status: "active", color: "#F59E0B", systemCategory: "partially_paid", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "inv-5", name: "Paid", description: "Full balance settled", status: "active", color: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "inv-6", name: "Overdue", description: "Payment past due date", status: "active", color: "#F97316", systemCategory: "overdue", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "inv-7", name: "Void", description: "Invoice cancelled or voided", status: "active", color: "#EF4444", systemCategory: "void", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-    ],
+    stages: createDefaultStagesForEntity("invoice", "inv"),
   },
   insurance: {
     id: "process-insurance-default",
@@ -489,13 +741,7 @@ export function isStageDeletable(process: Process, stageId: string): { deletable
     return { deletable: false, reason: "A process must have at least one stage" };
   }
 
-  if (stage.isSystemCategoryRequired || isRequiredSystemCategory(process.entityType, stage.systemCategory)) {
-    return {
-      deletable: false,
-      reason: `Stages with required category "${stage.systemCategory || stage.name}" cannot be deleted.`,
-    };
-  }
-
+  // Stages can be deleted by user per prompt requirements
   return { deletable: true };
 }
 
@@ -1110,7 +1356,11 @@ export function getWorkflowStepsForStage(processId: string, stageId: string): Wo
   const processes = getStoredProcesses();
   const proc = processes.find((p) => p.id === processId);
   const stage = proc?.stages.find((s) => s.id === stageId);
-  return (stage as any)?.workflowSteps ?? [];
+  if ((stage as any)?.workflowSteps && (stage as any).workflowSteps.length > 0) {
+    return (stage as any).workflowSteps;
+  }
+  const stored = getStoredWorkflowSteps();
+  return stored[stageId] ?? (stage as any)?.workflowSteps ?? [];
 }
 
 export function useProcessStore() {
@@ -1154,7 +1404,12 @@ export function useProcessStore() {
     workflowSteps,
     setWorkflowSteps,
     getWorkflowStepsForStage: (processId: string, stageId: string) => {
-      return workflowSteps[stageId] ?? DEFAULT_WORKFLOW_STEPS["1-1"] ?? [];
+      const proc = processes.find((p) => p.id === processId);
+      const stage = proc?.stages.find((s) => s.id === stageId);
+      if ((stage as any)?.workflowSteps && (stage as any).workflowSteps.length > 0) {
+        return (stage as any).workflowSteps;
+      }
+      return workflowSteps[stageId] ?? (stage as any)?.workflowSteps ?? DEFAULT_WORKFLOW_STEPS["1-1"] ?? [];
     },
   };
 }
