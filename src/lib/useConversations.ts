@@ -936,12 +936,17 @@ export function getStoredConversations(): Conversation[] {
   return INITIAL_MOCK_CONVERSATIONS;
 }
 
+let isSyncingStoredConvs = false;
 export function saveStoredConversations(convs: Conversation[]): void {
+  if (isSyncingStoredConvs) return;
   try {
+    isSyncingStoredConvs = true;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
     window.dispatchEvent(new Event(TEST_CHAT_SYNC_EVENT));
     window.dispatchEvent(new Event("storage"));
-  } catch {}
+  } catch {} finally {
+    isSyncingStoredConvs = false;
+  }
 }
 
 export function computeSessionWindow(conv?: Conversation): SessionWindowStatus {

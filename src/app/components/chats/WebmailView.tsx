@@ -663,14 +663,6 @@ export default function WebmailView({
     return () => window.removeEventListener("open-webmail-compose", handleGlobalCompose);
   }, [signatures]);
 
-  // Listen to global open signatures event from topbar gear menu
-  useEffect(() => {
-    const handleGlobalSignatures = () => {
-      setIsSignaturesDrawerOpen(true);
-    };
-    window.addEventListener("open-webmail-signatures", handleGlobalSignatures);
-    return () => window.removeEventListener("open-webmail-signatures", handleGlobalSignatures);
-  }, []);
 
   // Listen to global mark all as read from topbar action menu
   useEffect(() => {
@@ -1159,6 +1151,16 @@ export default function WebmailView({
     setSigHtmlTab("code");
     setIsAddSignatureModalOpen(true);
   };
+
+  // Listen to global open signatures event from topbar gear menu
+  useEffect(() => {
+    const handleGlobalSignatures = () => {
+      setIsSignaturesDrawerOpen(true);
+      setIsAddSignatureModalOpen(false);
+    };
+    window.addEventListener("open-webmail-signatures", handleGlobalSignatures);
+    return () => window.removeEventListener("open-webmail-signatures", handleGlobalSignatures);
+  }, []);
 
   const handleSaveSignature = () => {
     if (!sigEditorBody.trim()) {

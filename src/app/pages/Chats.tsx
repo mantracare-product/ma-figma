@@ -1299,18 +1299,6 @@ export default function Chats() {
     localStorage.setItem("whatsappCampaigns", JSON.stringify(campaigns));
   }, [campaigns]);
 
-  useEffect(() => { localStorage.setItem("whatsappMockConversations", JSON.stringify(conversations)); }, [conversations]);
-
-  useEffect(() => {
-    const handler = () => {
-      try {
-        const stored = localStorage.getItem("whatsappMockConversations");
-        if (stored) setConversations(JSON.parse(stored));
-      } catch {}
-    };
-    window.addEventListener(TEST_CHAT_SYNC_EVENT, handler);
-    return () => window.removeEventListener(TEST_CHAT_SYNC_EVENT, handler);
-  }, []);
 
   // Handle navigation state (channel, threadId, clientId, emailId)
   useEffect(() => {
@@ -2693,18 +2681,24 @@ export default function Chats() {
                     <button
                       type="button"
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent("open-webmail-signatures"));
+                        handleSubModeChange("inbox");
+                        setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent("open-webmail-signatures"));
+                        }, 50);
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50/60 text-[#1456f0] transition-colors flex items-center gap-2 font-bold cursor-pointer"
                     >
                       <FileEdit className="w-3.5 h-3.5 text-[#1456f0]" />
-                      <span>Edit signature</span>
+                      <span>Signatures</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent("mark-all-webmail-read"));
+                        handleSubModeChange("inbox");
+                        setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent("mark-all-webmail-read"));
+                        }, 50);
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
@@ -2728,7 +2722,9 @@ export default function Chats() {
                       type="button"
                       onClick={() => {
                         handleSubModeChange("inbox");
-                        window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+                        setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+                        }, 50);
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
