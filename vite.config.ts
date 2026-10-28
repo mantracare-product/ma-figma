@@ -72,6 +72,25 @@ function apiServerPlugin() {
           });
           return;
         }
+        if (req.url === '/api/onboarding/extract' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: any) => { body += chunk; });
+          req.on('end', async () => {
+            try {
+              const reqBody = JSON.parse(body);
+              const { handleOnboardingExtractRequest } = await server.ssrLoadModule('./api/onboarding/extract.ts');
+              const result = await handleOnboardingExtractRequest(reqBody);
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ unconfigured: true, error: String(err?.message || err) }));
+            }
+          });
+          return;
+        }
         next();
       });
     },

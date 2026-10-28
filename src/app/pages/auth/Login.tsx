@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { Link, useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { useHowItWorks } from "../../context/HowItWorksContext";
@@ -11,6 +11,8 @@ import {
   ArrowRight,
   Zap,
   Share2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import logo from "@/imports/ma_logo-1.png";
 
@@ -29,7 +31,8 @@ export default function Login() {
       ""
     );
   });
-
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
@@ -50,33 +53,53 @@ export default function Login() {
     }
   }, [isVerifyRoute, resendTimer]);
 
-  // Handle continuing from Email step to Verification step
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  // Handle direct Login with Email and Password
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       toast.error("Please enter your email address");
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmed)) {
+    if (!emailRegex.test(cleanEmail)) {
       toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!password) {
+      toast.error("Please enter your password");
       return;
     }
 
     setLoading(true);
     setTimeout(() => {
+      login();
+      const currentEmail = cleanEmail.toLowerCase();
+      const namePart = currentEmail.split("@")[0].replace(/[._-]/g, " ");
+      const formattedName =
+        namePart.charAt(0).toUpperCase() + namePart.slice(1);
+
+      localStorage.setItem("login_email", currentEmail);
+      localStorage.setItem(
+        "user_data",
+        JSON.stringify({
+          name: formattedName || "Admin User",
+          email: currentEmail,
+          role: localStorage.getItem("user_role") || "SystemAdmin",
+        })
+      );
+
       setLoading(false);
-      localStorage.setItem("login_email", trimmed.toLowerCase());
-      setResendTimer(60);
-      setOtp("");
-      isVerifyingRef.current = false;
-      toast.success("Verification code sent to your email");
-      navigate("/verify", { state: { email: trimmed.toLowerCase() } });
-    }, 350);
+      toast.success("Welcome back to MantraAssist!");
+      navigate("/", { replace: true });
+
+      setTimeout(() => {
+        triggerAutoOpen();
+      }, 500);
+    }, 400);
   };
 
-  // Complete verification and navigate to Dashboard
+  // Complete verification (from signup) and navigate to Onboarding
   const completeVerification = (code: string) => {
     if (isVerifyingRef.current) return;
     isVerifyingRef.current = true;
@@ -100,22 +123,21 @@ export default function Login() {
 
       setLoading(false);
       toast.success("Verification successful! Welcome to MantraAssist.");
-      navigate("/", { replace: true });
 
-      setTimeout(() => {
-        triggerAutoOpen();
-      }, 500);
+      navigate("/onboarding", {
+        replace: true,
+        state: {
+          email: currentEmail,
+          name: (location.state as any)?.name || formattedName,
+        },
+      });
     }, 450);
   };
 
-  // Handle OTP input change (auto-submits when 6 digits are typed)
+  // Handle OTP input change (manual submission only via Submit button)
   const handleOtpChange = (val: string) => {
     const numericCode = val.replace(/\D/g, "").slice(0, 6);
     setOtp(numericCode);
-
-    if (numericCode.length === 6) {
-      completeVerification(numericCode);
-    }
   };
 
   // Handle OTP form submission via button or Enter key
@@ -148,9 +170,8 @@ export default function Login() {
     { text: "Reduce administrative workload" },
   ];
 
-  return (
-    <GuestRoute>
-      <div className="min-h-screen flex">
+  const content = (
+    <div className="min-h-screen flex">
         {/* Left Side - Brand & Features (Dark Slate/Navy Hero with Glass Cards) */}
         <div
           className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
@@ -404,7 +425,7 @@ export default function Login() {
                 className="text-4xl font-bold mb-3 text-gray-900 tracking-tight"
                 style={{ fontFamily: "Inter, sans-serif", fontWeight: 700 }}
               >
-                {isVerifyRoute ? "Verify your account" : "Get started"}
+                {isVerifyRoute ? "Verify your account" : "Welcome Back"}
               </h2>
               <p
                 className="text-base text-gray-600 leading-relaxed"
@@ -418,14 +439,14 @@ export default function Login() {
                     </span>
                   </>
                 ) : (
-                  "Log in with your email address"
+                  "Enter your email and password to access your account"
                 )}
               </p>
             </div>
 
             {/* Main Form */}
             {isVerifyRoute ? (
-              /* ── VERIFICATION CODE VIEW ── */
+              /* ── VERIFICATION CODE VIEW (FROM SIGNUP) ── */
               <form onSubmit={handleOtpSubmit} className="space-y-6">
                 <div>
                   <label
@@ -453,11 +474,16 @@ export default function Login() {
                       onClick={() => {
                         setOtp("");
                         isVerifyingRef.current = false;
-                        navigate("/login", { state: { email } });
+                        navigate("/signup", {
+                          state: {
+                            email,
+                            name: (location.state as any)?.name,
+                            country: (location.state as any)?.country,
+                          },
+                        });
                       }}
-                      className="text-sm font-semibold hover:underline cursor-pointer transition-colors"
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer transition-colors"
                       style={{
-                        color: "#3b82f6",
                         fontFamily: "Inter, sans-serif",
                       }}
                     >
@@ -482,74 +508,112 @@ export default function Login() {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || otp.length < 6}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-bold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-600/40 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                  style={{ fontFamily: "Inter, sans-serif", fontWeight: 600 }}
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <span>Verify & Sign In</span>
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </button>
+                <div className="pt-2 flex justify-center">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-80 max-w-full py-4 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-base font-semibold rounded-full shadow-md shadow-slate-900/15 hover:shadow-lg hover:shadow-slate-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    {loading ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>Submit</span>
+                        <ArrowRight className="w-4.5 h-4.5 text-blue-400" />
+                      </>
+                    )}
+                  </button>
+                </div>
               </form>
             ) : (
-              /* ── EMAIL INPUT VIEW ── */
-              <form onSubmit={handleEmailSubmit} className="space-y-6">
+              /* ── EMAIL & PASSWORD LOGIN VIEW ── */
+              <form onSubmit={handleLoginSubmit} className="space-y-5">
+                {/* 1. Email Address */}
                 <div>
                   <label
-                    className="block text-sm font-bold mb-3 text-gray-900"
-                    style={{ fontFamily: "Inter, sans-serif", fontWeight: 600 }}
+                    className="block text-sm font-semibold mb-2 text-slate-800"
+                    style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    Email Address
+                    Email address
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full px-5 py-4 bg-white border-2 border-gray-200 rounded-xl text-base focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300 text-gray-900"
-                    style={{
-                      fontFamily: "Inter, sans-serif",
-                      fontWeight: 400,
-                    }}
+                    placeholder="Enter your email here"
+                    className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+                    style={{ fontFamily: "Inter, sans-serif" }}
                     autoFocus
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-bold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-600/40 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                  style={{ fontFamily: "Inter, sans-serif", fontWeight: 600 }}
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <span>Continue</span>
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
+                {/* 2. Password */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label
+                      className="block text-sm font-semibold text-slate-800"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Password
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password here"
+                      className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs pr-11"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4.5 h-4.5" />
+                      ) : (
+                        <Eye className="w-4.5 h-4.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
-            {/* Footer */}
-            {!isVerifyRoute && (
-              <div className="mt-8 text-center">
-                <p
-                  className="text-sm text-gray-500"
-                  style={{ fontFamily: "Inter, sans-serif", fontWeight: 400 }}
-                >
-                  Don't have an account? Just enter your email to get started
-                </p>
-              </div>
+                {/* Bottom Section: Centered "Sign in" button & "Don't have an account? Sign up" */}
+                <div className="pt-3 flex flex-col items-center space-y-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-80 max-w-full py-4 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-base font-semibold rounded-full shadow-md shadow-slate-900/15 hover:shadow-lg hover:shadow-slate-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    {loading ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>Sign in</span>
+                        <ArrowRight className="w-4.5 h-4.5 text-blue-400" />
+                      </>
+                    )}
+                  </button>
+
+                  <p
+                    className="text-sm text-gray-500 pt-1"
+                    style={{ fontFamily: "Inter, sans-serif", fontWeight: 400 }}
+                  >
+                    Don't have an account?{" "}
+                    <Link
+                      to="/signup"
+                      className="text-blue-600 hover:text-blue-700 font-semibold hover:underline transition-colors"
+                    >
+                      Sign up
+                    </Link>
+                  </p>
+                </div>
+              </form>
             )}
 
             {/* Mobile Features Preview */}
@@ -577,6 +641,11 @@ export default function Login() {
           </div>
         </div>
       </div>
-    </GuestRoute>
   );
+
+  if (isVerifyRoute) {
+    return content;
+  }
+
+  return <GuestRoute>{content}</GuestRoute>;
 }

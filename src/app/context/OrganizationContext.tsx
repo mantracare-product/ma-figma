@@ -7,6 +7,17 @@ export interface Organization {
   industry: string;
   locations?: string[];
   location?: string;
+  primaryLocation?: string;
+  availability?: string;
+  operatingHours?: string | null;
+  teamSize?: string;
+  primaryRequirements?: string[];
+  uploadedDocuments?: any[];
+  telephonyChoice?: string | null;
+  website?: string;
+  description?: string;
+  callVolume?: string | null;
+  internationalCalls?: boolean | null;
   country?: string;
   currency?: string;
   email: string;

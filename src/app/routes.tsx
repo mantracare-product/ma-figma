@@ -52,6 +52,7 @@ const ManageTeamMember = withLazy(() => import("./pages/ManageTeamMember"));
 const Services = withLazy(() => import("./pages/Services"));
 const Appointments = withLazy(() => import("./pages/Appointments"));
 const Signup = withLazy(() => import("./pages/auth/Signup"));
+const Onboarding = withLazy(() => import("./pages/auth/Onboarding"));
 const Chats = withLazy(() => import("./pages/Chats"));
 const NotFound = withLazy(() => import("./pages/NotFound"));
 const GuidePageRoute = withLazy(() => import("./pages/GuidePageRoute"));
@@ -159,6 +160,14 @@ export const router = createBrowserRouter([
   {
     path: "/signup",
     Component: Signup,
+  },
+  {
+    path: "/onboarding",
+    Component: Onboarding,
+  },
+  {
+    path: "/onbaording",
+    Component: Onboarding,
   },
   {
     Component: ProtectedRoute,
