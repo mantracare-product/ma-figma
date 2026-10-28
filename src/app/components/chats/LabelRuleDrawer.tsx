@@ -14,6 +14,8 @@ import {
   GitFork,
   Sparkles,
   ChevronDown,
+  Filter,
+  Paperclip,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -60,6 +62,21 @@ export default function LabelRuleDrawer({
   const [color, setColor] = useState<EmailLabel["color"]>("blue");
   const [enabled, setEnabled] = useState(true);
   const [connectedEmailAccount, setConnectedEmailAccount] = useState<string>("all");
+
+  // Criteria mode: "prompt" vs "filters"
+  const [criteriaType, setCriteriaType] = useState<"prompt" | "filters">("prompt");
+  const [fromFilter, setFromFilter] = useState("");
+  const [toFilter, setToFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [hasWordsFilter, setHasWordsFilter] = useState("");
+  const [doesntHaveFilter, setDoesntHaveFilter] = useState("");
+  const [sizeComparison, setSizeComparison] = useState<"greater_than" | "less_than">("greater_than");
+  const [sizeValue, setSizeValue] = useState("");
+  const [sizeUnit, setSizeUnit] = useState<"MB" | "KB" | "Bytes">("MB");
+  const [dateWithin, setDateWithin] = useState("1 day");
+  const [dateSpecific, setDateSpecific] = useState("");
+  const [searchFolder, setSearchFolder] = useState("All Mail");
+  const [hasAttachment, setHasAttachment] = useState(false);
 
   // Drafting rules state
   const [autoDraftEnabled, setAutoDraftEnabled] = useState(true);
@@ -123,6 +140,19 @@ export default function LabelRuleDrawer({
       setColor(label.color || "blue");
       setEnabled(label.enabled !== undefined ? label.enabled : true);
       setConnectedEmailAccount(label.connectedEmailAccount || "all");
+      setCriteriaType(label.criteriaType || (label.filterRules ? "filters" : "prompt"));
+      setFromFilter(label.filterRules?.from || "");
+      setToFilter(label.filterRules?.to || "");
+      setSubjectFilter(label.filterRules?.subject || "");
+      setHasWordsFilter(label.filterRules?.hasWords || "");
+      setDoesntHaveFilter(label.filterRules?.doesntHave || "");
+      setSizeComparison(label.filterRules?.sizeComparison || "greater_than");
+      setSizeValue(label.filterRules?.sizeValue || "");
+      setSizeUnit(label.filterRules?.sizeUnit || "MB");
+      setDateWithin(label.filterRules?.dateWithin || "1 day");
+      setDateSpecific(label.filterRules?.dateSpecific || "");
+      setSearchFolder(label.filterRules?.searchFolder || "All Mail");
+      setHasAttachment(Boolean(label.filterRules?.hasAttachment));
       setAutoDraftEnabled(label.autoDraftEnabled !== undefined ? label.autoDraftEnabled : true);
       setDraftingRule(label.draftingRule || "");
       setAssignedSignatureId(label.assignedSignatureId || "none");
@@ -142,6 +172,19 @@ export default function LabelRuleDrawer({
       setColor("blue");
       setEnabled(true);
       setConnectedEmailAccount("all");
+      setCriteriaType("prompt");
+      setFromFilter("");
+      setToFilter("");
+      setSubjectFilter("");
+      setHasWordsFilter("");
+      setDoesntHaveFilter("");
+      setSizeComparison("greater_than");
+      setSizeValue("");
+      setSizeUnit("MB");
+      setDateWithin("1 day");
+      setDateSpecific("");
+      setSearchFolder("All Mail");
+      setHasAttachment(false);
       setAutoDraftEnabled(true);
       setDraftingRule("");
       setAssignedSignatureId("none");
@@ -164,10 +207,44 @@ export default function LabelRuleDrawer({
       toast.error("Please enter a label name");
       return;
     }
-    if (!description.trim()) {
-      toast.error("Please enter a classification description");
-      return;
+
+    let finalDescription = description.trim();
+
+    if (criteriaType === "prompt") {
+      if (!finalDescription) {
+        toast.error("Please enter classification criteria or switch to filter rules");
+        return;
+      }
+    } else {
+      const hasAnyFilter = Boolean(
+        fromFilter.trim() ||
+        toFilter.trim() ||
+        subjectFilter.trim() ||
+        hasWordsFilter.trim() ||
+        doesntHaveFilter.trim() ||
+        sizeValue.trim() ||
+        dateSpecific ||
+        hasAttachment
+      );
+      if (!hasAnyFilter && !finalDescription) {
+        toast.error("Please specify at least one filter criterion (e.g. From, Subject, or Has words)");
+        return;
+      }
+
+      // Auto-summarize filters for description column if not custom written
+      if (!finalDescription || finalDescription.startsWith("Filter: ") || finalDescription.startsWith("Filters: ")) {
+        const parts: string[] = [];
+        if (fromFilter.trim()) parts.push(`From: ${fromFilter.trim()}`);
+        if (toFilter.trim()) parts.push(`To: ${toFilter.trim()}`);
+        if (subjectFilter.trim()) parts.push(`Subject: "${subjectFilter.trim()}"`);
+        if (hasWordsFilter.trim()) parts.push(`Has: "${hasWordsFilter.trim()}"`);
+        if (doesntHaveFilter.trim()) parts.push(`Exclude: "${doesntHaveFilter.trim()}"`);
+        if (sizeValue.trim()) parts.push(`Size ${sizeComparison === "greater_than" ? ">" : "<"} ${sizeValue.trim()} ${sizeUnit}`);
+        if (hasAttachment) parts.push("Has attachment");
+        finalDescription = parts.length > 0 ? `Filters: ${parts.join(" • ")}` : `Filter: ${searchFolder}`;
+      }
     }
+
     if (handoffEnabled && (!forwardTo.trim() || !forwardTo.includes("@"))) {
       toast.error("Please enter a valid forwarding email address for handoff");
       return;
@@ -178,12 +255,27 @@ export default function LabelRuleDrawer({
     const updatedLabel: EmailLabel = {
       id: label ? label.id : `lbl-${Date.now()}`,
       name: name.trim(),
-      description: description.trim(),
+      description: finalDescription,
       color,
       enabled,
       isPredefined: label ? label.isPredefined : false,
       connectedEmailAccount,
       assignedSignatureId: assignedSignatureId === "none" ? undefined : assignedSignatureId,
+      criteriaType,
+      filterRules: criteriaType === "filters" ? {
+        from: fromFilter.trim() || undefined,
+        to: toFilter.trim() || undefined,
+        subject: subjectFilter.trim() || undefined,
+        hasWords: hasWordsFilter.trim() || undefined,
+        doesntHave: doesntHaveFilter.trim() || undefined,
+        sizeComparison,
+        sizeValue: sizeValue.trim() || undefined,
+        sizeUnit,
+        dateWithin,
+        dateSpecific: dateSpecific || undefined,
+        searchFolder,
+        hasAttachment,
+      } : undefined,
       draftingRule: draftingRule.trim() || undefined,
       autoDraftEnabled,
       autoCreateContact,
@@ -413,26 +505,241 @@ export default function LabelRuleDrawer({
                 </div>
               </div>
 
-              {/* Classification Description (Criteria) */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <label
-                    className="text-xs font-semibold text-slate-700"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Classification Criteria
-                  </label>
-                  <Tooltip text="AI matching criteria to determine when this label is automatically applied to incoming emails.">
-                    <Info className="w-3 h-3 text-slate-400 cursor-help" />
-                  </Tooltip>
+              {/* Classification Description (Criteria - Prompt vs Filters) */}
+              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <label
+                      className="text-xs font-semibold text-slate-700 truncate"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Classification Criteria
+                    </label>
+                    <Tooltip text="Choose whether to classify emails using an AI natural-language prompt or structured email filter rules.">
+                      <Info className="w-3 h-3 text-slate-400 cursor-help shrink-0" />
+                    </Tooltip>
+                  </div>
+
+                  {/* Mode Selector Toggle */}
+                  <div className="flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200/60 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setCriteriaType("prompt")}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                        criteriaType === "prompt"
+                          ? "bg-white text-primary shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>AI Prompt</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCriteriaType("filters")}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                        criteriaType === "filters"
+                          ? "bg-white text-primary shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      <Filter className="w-3 h-3" />
+                      <span>Email Filters</span>
+                    </button>
+                  </div>
                 </div>
-                <textarea
-                  rows={2}
-                  placeholder="Describe criteria when this label should be applied to incoming emails..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 resize-none shadow-2xs font-sans"
-                />
+
+                {/* CRITERIA OPTION 1: AI PROMPT */}
+                {criteriaType === "prompt" && (
+                  <div className="space-y-1.5 pt-0.5">
+                    <textarea
+                      rows={2}
+                      placeholder="Describe criteria when this label should be applied to incoming emails..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 resize-none shadow-2xs font-sans"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Ava AI will automatically evaluate incoming emails against this prompt to classify and tag them.
+                    </p>
+                  </div>
+                )}
+
+                {/* CRITERIA OPTION 2: EMAIL FILTERS (Exact match to screenshot 2) */}
+                {criteriaType === "filters" && (
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2.5 text-xs animate-in fade-in duration-150">
+                    {/* From */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">From</span>
+                      <input
+                        type="text"
+                        value={fromFilter}
+                        onChange={(e) => setFromFilter(e.target.value)}
+                        placeholder="e.g. billing@vendor.com or @company.com"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                      />
+                    </div>
+
+                    {/* To */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">To</span>
+                      <input
+                        type="text"
+                        value={toFilter}
+                        onChange={(e) => setToFilter(e.target.value)}
+                        placeholder="e.g. care@mantracare.com"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Subject */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Subject</span>
+                      <input
+                        type="text"
+                        value={subjectFilter}
+                        onChange={(e) => setSubjectFilter(e.target.value)}
+                        placeholder="e.g. Urgent, Invoice, Lab Results, Appointment"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Has the words */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Has the words</span>
+                      <input
+                        type="text"
+                        value={hasWordsFilter}
+                        onChange={(e) => setHasWordsFilter(e.target.value)}
+                        placeholder="e.g. emergency, payment, prescription"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Doesn't have */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Doesn't have</span>
+                      <input
+                        type="text"
+                        value={doesntHaveFilter}
+                        onChange={(e) => setDoesntHaveFilter(e.target.value)}
+                        placeholder="e.g. unsubscribe, newsletter, digest"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Size */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Size</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={sizeComparison}
+                          onChange={(e) => setSizeComparison(e.target.value as any)}
+                          className="px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:border-primary cursor-pointer shadow-2xs"
+                        >
+                          <option value="greater_than">greater than</option>
+                          <option value="less_than">less than</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          value={sizeValue}
+                          onChange={(e) => setSizeValue(e.target.value)}
+                          placeholder="e.g. 10"
+                          className="w-20 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs"
+                        />
+                        <select
+                          value={sizeUnit}
+                          onChange={(e) => setSizeUnit(e.target.value as any)}
+                          className="px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:border-primary cursor-pointer shadow-2xs"
+                        >
+                          <option value="MB">MB</option>
+                          <option value="KB">KB</option>
+                          <option value="Bytes">Bytes</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Date within */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Date within</span>
+                      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                        <select
+                          value={dateWithin}
+                          onChange={(e) => setDateWithin(e.target.value)}
+                          className="px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:border-primary cursor-pointer shadow-2xs"
+                        >
+                          <option value="1 day">1 day</option>
+                          <option value="3 days">3 days</option>
+                          <option value="1 week">1 week</option>
+                          <option value="2 weeks">2 weeks</option>
+                          <option value="1 month">1 month</option>
+                          <option value="2 months">2 months</option>
+                          <option value="6 months">6 months</option>
+                          <option value="1 year">1 year</option>
+                        </select>
+                        <input
+                          type="date"
+                          value={dateSpecific}
+                          onChange={(e) => setDateSpecific(e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 font-medium shadow-2xs cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Search in */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-1 sm:gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Search</span>
+                      <select
+                        value={searchFolder}
+                        onChange={(e) => setSearchFolder(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:border-primary cursor-pointer shadow-2xs"
+                      >
+                        <option value="All Mail">All Mail</option>
+                        <option value="Inbox">Inbox</option>
+                        <option value="Starred">Starred</option>
+                        <option value="Sent Mail">Sent Mail</option>
+                        <option value="Drafts">Drafts</option>
+                        <option value="Spam">Spam</option>
+                        <option value="Trash">Trash</option>
+                      </select>
+                    </div>
+
+                    {/* Has attachment & Reset */}
+                    <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hasAttachment}
+                          onChange={(e) => setHasAttachment(e.target.checked)}
+                          className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                          <Paperclip className="w-3 h-3 text-slate-400" />
+                          <span>Has attachment</span>
+                        </div>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFromFilter("");
+                          setToFilter("");
+                          setSubjectFilter("");
+                          setHasWordsFilter("");
+                          setDoesntHaveFilter("");
+                          setSizeValue("");
+                          setDateSpecific("");
+                          setHasAttachment(false);
+                          toast.info("Filter fields cleared");
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -461,86 +768,131 @@ export default function LabelRuleDrawer({
                 </Tooltip>
               </div>
             </div>
-            <ChevronDown
-              className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                draftingDropdownOpen ? "rotate-180" : ""
-              }`}
-            />
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  autoDraftEnabled
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {autoDraftEnabled ? "On" : "Off"}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  draftingDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
           </button>
 
           {draftingDropdownOpen && (
             <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-              {/* Drafting Instructions */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <label
-                      className="text-xs font-semibold text-slate-700"
+              {/* Enable Auto-Reply Drafting Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-xs font-bold text-slate-900"
                       style={{ fontFamily: "DM Sans, sans-serif" }}
                     >
-                      Drafting Instructions
-                    </label>
-                    <Tooltip text="Direct prompt guidelines for how the AI should compose suggested replies.">
+                      Enable Auto-Reply Drafting
+                    </span>
+                    <Tooltip text="When enabled, Ava automatically drafts AI responses for incoming emails matching this label.">
                       <Info className="w-3 h-3 text-slate-400 cursor-help" />
                     </Tooltip>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    {draftingRule.length}/1000
-                  </span>
+                  <p className="text-[11px] text-slate-400">
+                    Automatically draft AI responses based on instructions below
+                  </p>
                 </div>
-                <textarea
-                  rows={3}
-                  maxLength={1000}
-                  placeholder="How should the AI compose the reply? e.g. Maintain polite clinical empathy, answer query directly, include booking link..."
-                  value={draftingRule}
-                  onChange={(e) => setDraftingRule(e.target.value)}
-                  className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 shadow-2xs resize-none font-sans leading-relaxed"
-                />
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={autoDraftEnabled}
+                    onChange={(e) => setAutoDraftEnabled(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                </label>
               </div>
 
-              {/* Assign Signature */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <label
-                      className="text-xs font-semibold text-slate-700"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      Assign Signature
-                    </label>
-                    <Tooltip text="Select the email signature automatically attached to AI replies for this mailbox.">
-                      <Info className="w-3 h-3 text-slate-400 cursor-help" />
-                    </Tooltip>
+              {autoDraftEnabled && (
+                <>
+                  {/* Drafting Instructions */}
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-1.5 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          className="text-xs font-semibold text-slate-700"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          Drafting Instructions
+                        </label>
+                        <Tooltip text="Direct prompt guidelines for how the AI should compose suggested replies.">
+                          <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                        </Tooltip>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {draftingRule.length}/1000
+                      </span>
+                    </div>
+                    <textarea
+                      rows={3}
+                      maxLength={1000}
+                      placeholder="How should the AI compose the reply? e.g. Maintain polite clinical empathy, answer query directly, include booking link..."
+                      value={draftingRule}
+                      onChange={(e) => setDraftingRule(e.target.value)}
+                      className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 shadow-2xs resize-none font-sans leading-relaxed"
+                    />
                   </div>
-                  <span className="text-[10px] font-medium text-slate-400">
-                    {connectedEmailAccount === "all" ? "All Accounts" : connectedEmailAccount}
-                  </span>
-                </div>
 
-                <div className="relative">
-                  <select
-                    value={assignedSignatureId}
-                    onChange={(e) => setAssignedSignatureId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary font-medium text-slate-800 shadow-2xs cursor-pointer appearance-none pr-8"
-                  >
-                    <option value="none">None (No signature)</option>
-                    {filteredSignatures.map((sig) => (
-                      <option key={sig.id} value={sig.id}>
-                        {sig.title} ({sig.user})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
-                    <PenLine className="w-3.5 h-3.5" />
-                  </div>
-                </div>
+                  {/* Assign Signature */}
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          className="text-xs font-semibold text-slate-700"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          Assign Signature
+                        </label>
+                        <Tooltip text="Select the email signature automatically attached to AI replies for this mailbox.">
+                          <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                        </Tooltip>
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-400">
+                        {connectedEmailAccount === "all" ? "All Accounts" : connectedEmailAccount}
+                      </span>
+                    </div>
 
-                {assignedSignatureId !== "none" && (
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-600 font-mono whitespace-pre-line leading-relaxed">
-                    {filteredSignatures.find((s) => s.id === assignedSignatureId)?.body || ""}
+                    <div className="relative">
+                      <select
+                        value={assignedSignatureId}
+                        onChange={(e) => setAssignedSignatureId(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary font-medium text-slate-800 shadow-2xs cursor-pointer appearance-none pr-8"
+                      >
+                        <option value="none">None (No signature)</option>
+                        {filteredSignatures.map((sig) => (
+                          <option key={sig.id} value={sig.id}>
+                            {sig.title} ({sig.user})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                        <PenLine className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+
+                    {assignedSignatureId !== "none" && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-600 font-mono whitespace-pre-line leading-relaxed">
+                        {filteredSignatures.find((s) => s.id === assignedSignatureId)?.body || ""}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           )}
         </div>

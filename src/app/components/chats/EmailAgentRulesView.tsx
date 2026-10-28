@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { UserPlus, CornerUpRight, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
+import { UserPlus, CornerUpRight, Pencil, SlidersHorizontal, Trash2, Filter, Sparkles } from "lucide-react";
 import { useEmailAgentStore, EmailLabel } from "../../../lib/emailAgentStore";
 import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../ui/TableComponent";
 import LabelRuleDrawer from "./LabelRuleDrawer";
@@ -162,12 +162,25 @@ export default function EmailAgentRulesView({
     },
     {
       id: "description",
-      header: "CLASSIFICATION TRIGGER (DESCRIPTION)",
+      header: "CLASSIFICATION TRIGGER (CRITERIA)",
       align: "left",
       render: (row) => (
-        <span className="text-xs text-slate-600 line-clamp-2" title={row.description}>
-          {row.description || "—"}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {row.criteriaType === "filters" ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+              <Filter className="w-2.5 h-2.5" />
+              <span>Filters</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+              <Sparkles className="w-2.5 h-2.5" />
+              <span>AI</span>
+            </span>
+          )}
+          <span className="text-xs text-slate-600 truncate" title={row.description}>
+            {row.description || "—"}
+          </span>
+        </div>
       ),
     },
     {

@@ -12,6 +12,21 @@
 
 import { useState, useEffect } from "react";
 
+export interface EmailLabelFilterRules {
+  from?: string;
+  to?: string;
+  subject?: string;
+  hasWords?: string;
+  doesntHave?: string;
+  sizeComparison?: "greater_than" | "less_than";
+  sizeValue?: string;
+  sizeUnit?: "MB" | "KB" | "Bytes";
+  dateWithin?: string;
+  dateSpecific?: string;
+  searchFolder?: string;
+  hasAttachment?: boolean;
+}
+
 export interface EmailLabel {
   id: string;
   name: string;
@@ -21,6 +36,9 @@ export interface EmailLabel {
   isPredefined?: boolean;
   connectedEmailAccount?: string;
   assignedSignatureId?: string;
+  // Criteria Mode & Filters
+  criteriaType?: "prompt" | "filters";
+  filterRules?: EmailLabelFilterRules;
   // Drafting rule
   draftingRule?: string;
   autoDraftEnabled?: boolean;
