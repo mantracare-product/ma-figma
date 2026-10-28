@@ -7932,7 +7932,7 @@ export default function Settings() {
                                     setShowMailboxModal(true);
                                   }}
                                 >
-                                  Authentication
+                                  Connect
                                 </Button>
                               )
                             ) : integration.category === "sms" ? (
@@ -11804,28 +11804,21 @@ export default function Settings() {
           onClose={() => setShowMailboxModal(false)}
           title={
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-base text-foreground">Mailbox Integration</span>
+              <span className="font-semibold text-base text-foreground">Mailbox Settings</span>
               <span className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">📌</span>
             </div>
           }
           footer={
-            <div className="flex items-center gap-3 w-full">
-              <button
-                type="button"
-                onClick={() => setShowMailboxModal(false)}
-                className="flex-1 px-4 py-2 border border-border text-xs font-semibold rounded-lg hover:bg-muted transition-colors uppercase tracking-wider"
-              >
-                Cancel
-              </button>
+            <div className="flex items-center justify-end w-full">
               <button
                 type="button"
                 onClick={() => {
                   setIntegrations(integrations.map((i) => i.id === selectedMailboxProvider ? { ...i, connected: true } : i));
                   setShowMailboxModal(false);
                 }}
-                className="flex-1 px-4 py-2 bg-[#2FC6F6] hover:bg-[#20B5E4] text-white text-xs font-semibold rounded-lg transition-colors uppercase tracking-wider shadow-sm"
+                className="px-5 py-2 bg-[#2FC6F6] hover:bg-[#20B5E4] text-white text-xs font-semibold rounded-lg transition-colors uppercase tracking-wider shadow-sm cursor-pointer"
               >
-                Save
+                Done
               </button>
             </div>
           }
@@ -11833,145 +11826,6 @@ export default function Settings() {
           <div className="space-y-6 text-sm text-foreground">
             {/* Multiple Accounts Management Section */}
             <MailboxAccountsSection initialProvider={selectedMailboxProvider} />
-
-            {/* Email & CRM Integration Checkboxes */}
-            <div className="pt-2 space-y-4">
-              {/* 1. Sync emails with CRM */}
-              <div className="space-y-1">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={syncEmailsWithCrm}
-                    onChange={(e) => setSyncEmailsWithCrm(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 accent-red-600 border-border focus:ring-0 mt-0.5 cursor-pointer shrink-0"
-                  />
-                  <div>
-                    <span className="text-sm text-foreground">
-                      Sync emails with CRM for:{" "}
-                      <span className="inline-flex items-center text-[#0070BA] dark:text-[#2FC6F6] underline decoration-dotted font-normal cursor-pointer relative">
-                        <select
-                          value={syncEmailsWithCrmRange}
-                          onChange={(e) => setSyncEmailsWithCrmRange(e.target.value)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full text-foreground bg-background"
-                        >
-                          <option value="3 days">3 days</option>
-                          <option value="1 week">1 week</option>
-                          <option value="2 weeks">2 weeks</option>
-                          <option value="1 month">1 month</option>
-                          <option value="all time">all time</option>
-                        </select>
-                        <span>{syncEmailsWithCrmRange}</span>
-                        <svg className="w-3.5 h-3.5 ml-1 inline-block text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </span>
-                    </span>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      Emails received within the selected time period will be added to the CRM and made available to everyone with sufficient permissions.
-                    </p>
-                  </div>
-                </label>
-              </div>
-
-              {/* 2. Assign emails from known contacts */}
-              <div>
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={assignEmailsToResponsible}
-                    onChange={(e) => setAssignEmailsToResponsible(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 accent-red-600 border-border focus:ring-0 mt-0.5 cursor-pointer shrink-0"
-                  />
-                  <span className="text-sm text-foreground">
-                    Assign emails from known contacts to assigned responsible persons
-                  </span>
-                </label>
-              </div>
-
-              {/* 3. Create contacts using attached vCard */}
-              <div>
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={createContactsUsingVCard}
-                    onChange={(e) => setCreateContactsUsingVCard(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 accent-red-600 border-border focus:ring-0 mt-0.5 cursor-pointer shrink-0"
-                  />
-                  <span className="text-sm text-foreground">
-                    Create contacts using attached vCard
-                  </span>
-                </label>
-              </div>
-
-              {/* 4. When a first email is received from a new address */}
-              <div className="space-y-1">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={createOnIncomingEmail}
-                    onChange={(e) => setCreateOnIncomingEmail(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 accent-red-600 border-border focus:ring-0 mt-0.5 cursor-pointer shrink-0"
-                  />
-                  <div>
-                    <span className="text-sm text-foreground">
-                      When a first email is received from a new address, create:{" "}
-                      <span className="inline-flex items-center text-[#0070BA] dark:text-[#2FC6F6] underline decoration-dotted font-normal cursor-pointer relative">
-                        <select
-                          value={incomingCreateType}
-                          onChange={(e) => setIncomingCreateType(e.target.value as any)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full text-foreground bg-background"
-                        >
-                          <option value="Lead">Lead</option>
-                          <option value="Contact">Contact</option>
-                          <option value="Deal">Deal</option>
-                        </select>
-                        <span>{incomingCreateType}</span>
-                        <svg className="w-3.5 h-3.5 ml-1 inline-block text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </span>
-                    </span>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      CRM items created from emails will be made available to everyone with sufficient permissions.
-                    </p>
-                  </div>
-                </label>
-              </div>
-
-              {/* 5. When a first email is sent to a new address */}
-              <div className="space-y-1">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={createOnOutgoingEmail}
-                    onChange={(e) => setCreateOnOutgoingEmail(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 accent-red-600 border-border focus:ring-0 mt-0.5 cursor-pointer shrink-0"
-                  />
-                  <div>
-                    <span className="text-sm text-foreground">
-                      When a first email is sent to a new address, create:{" "}
-                      <span className="inline-flex items-center text-[#0070BA] dark:text-[#2FC6F6] underline decoration-dotted font-normal cursor-pointer relative">
-                        <select
-                          value={outgoingCreateType}
-                          onChange={(e) => setOutgoingCreateType(e.target.value as any)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full text-foreground bg-background"
-                        >
-                          <option value="Contact">Contact</option>
-                          <option value="Lead">Lead</option>
-                        </select>
-                        <span>{outgoingCreateType}</span>
-                        <svg className="w-3.5 h-3.5 ml-1 inline-block text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </span>
-                    </span>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      CRM items created from emails will be made available to everyone with sufficient permissions.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
           </div>
         </Drawer>
 

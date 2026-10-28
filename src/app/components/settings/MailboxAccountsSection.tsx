@@ -127,43 +127,58 @@ export default function MailboxAccountsSection({
                   </div>
                 </div>
 
-                {/* Right: Authentication Button and Remove */}
+                {/* Right: Connected Status, Disconnect / Connect Button and Remove */}
                 <div className="flex items-center gap-2 shrink-0">
+                  {isConnected ? (
+                    <>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Connected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleAccountStatus(account.id);
+                          toast.success(`Disconnected ${account.email}`);
+                        }}
+                        className="px-3 py-1 text-xs font-semibold rounded-lg text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        Disconnect
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        Disconnected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleAccountStatus(account.id);
+                          toast.success(`Connected ${account.email} successfully`);
+                        }}
+                        className="px-3.5 py-1 text-xs font-bold rounded-lg bg-[#2FC6F6] hover:bg-[#20B5E4] text-white transition-colors cursor-pointer shadow-2xs"
+                      >
+                        Connect
+                      </button>
+                    </>
+                  )}
+
+                  {/* Remove Button */}
                   <button
                     type="button"
                     onClick={() => {
-                      toggleAccountStatus(account.id);
-                      toast.success(
-                        isConnected
-                          ? `Disconnected ${account.email}`
-                          : `Authenticated ${account.email} successfully`
-                      );
+                      if (confirm(`Remove account ${account.email}?`)) {
+                        removeAccount(account.id);
+                        toast.success(`Removed account ${account.email}`);
+                      }
                     }}
-                    className={`px-4 py-2 text-xs font-bold rounded tracking-wider uppercase transition-colors shadow-2xs whitespace-nowrap cursor-pointer ${
-                      isConnected
-                        ? "bg-[#2FC6F6] hover:bg-[#20B5E4] text-white"
-                        : "bg-muted text-foreground hover:bg-muted/80 border border-border"
-                    }`}
+                    className="p-1.5 text-muted-foreground hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                    title="Remove Account"
                   >
-                    {isConnected ? "AUTHENTICATION" : "AUTHENTICATE"}
+                    <Trash2 className="w-4 h-4" />
                   </button>
-
-                  {/* Remove Button if multiple accounts exist */}
-                  {displayedAccounts.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Remove account ${account.email}?`)) {
-                          removeAccount(account.id);
-                          toast.success(`Removed account ${account.email}`);
-                        }
-                      }}
-                      className="p-1.5 text-muted-foreground hover:text-red-500 rounded transition-colors cursor-pointer"
-                      title="Remove Account"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
                 </div>
               </div>
             </div>

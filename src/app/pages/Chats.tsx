@@ -2722,7 +2722,7 @@ export default function Chats() {
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
                       <Settings className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Mailbox connection</span>
+                      <span>Mailbox settings</span>
                     </button>
                     <button
                       type="button"
