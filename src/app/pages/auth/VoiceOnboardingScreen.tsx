@@ -20,7 +20,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AnimatedAvatar, AvatarState } from "../../../reception/avatar/components/AnimatedAvatar";
+import CenteredOnboardingShell from "./CenteredOnboardingShell";
 import { INITIAL_CATEGORIES } from "../../../data/industryReferenceData";
 import {
   getStoredProcesses,
@@ -28,7 +28,8 @@ import {
   PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
 import { WhisperAudioRecorder } from "../../../reception/lib/whisperRecorder";
-import logo from "@/imports/ma_logo-1.png";
+
+export type AvatarState = 'idle' | 'speaking' | 'listening' | 'thinking' | 'success' | 'apologetic';
 
 export interface UploadedDoc {
   id: string;
@@ -1471,91 +1472,10 @@ export const VoiceOnboardingScreen: React.FC<VoiceOnboardingProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col lg:flex-row bg-[#0D131B] text-white overflow-hidden select-none">
-      {/* ─────────────────────────────────────────────────────────────
-          LEFT SIDE: AVATAR STAGE (UNTOUCHED)
-      ───────────────────────────────────────────────────────────── */}
-      <section
-        className="w-full lg:w-1/2 h-[45vh] lg:h-full relative flex flex-col justify-between overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 shrink-0"
-        style={{
-          background: "linear-gradient(145deg, #0d141e 0%, #151e2b 45%, #1f2d3f 100%)",
-        }}
-      >
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-blue-600/15 rounded-full blur-[110px] pointer-events-none" />
-
-        <div className="relative z-20 w-full flex items-center justify-between p-6 sm:p-8 shrink-0">
-          <div className="flex items-center gap-3">
-            <img
-              src={logo}
-              alt="MantraAssist"
-              className="h-7 w-auto drop-shadow-md"
-              style={{ filter: "brightness(0) invert(1)" }}
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-            <span className="hidden sm:inline-block h-4 w-px bg-white/20" />
-            <span
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-medium text-slate-300"
-              style={{ fontFamily: "Inter, sans-serif" }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-              Voice Onboarding Specialist
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
-            style={{ fontFamily: "Inter, sans-serif" }}
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back</span>
-          </button>
-        </div>
-
-        <AnimatedAvatar
-          state={avatarState}
-          avatarName="Aria"
-          thinkingMessage={thinkingMessage}
-          className="flex-1 w-full min-h-0"
-        />
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          RIGHT SIDE: CONVERSATION PANEL
-      ───────────────────────────────────────────────────────────── */}
-      <section className="w-full lg:w-1/2 h-[55vh] lg:h-full flex flex-col bg-white text-slate-900 overflow-hidden relative">
-        <header className="h-16 px-6 sm:px-8 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white z-20 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h2
-                className="text-sm font-bold text-slate-900 leading-tight truncate max-w-[200px] sm:max-w-xs"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                {orgName || "Your Organization"}
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                {recordRef.current.category} · Live AI Voice Setup
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onSwitchToTyping}
-            className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
-            style={{ fontFamily: "Inter, sans-serif" }}
-            title="Exit voice mode and finish via typing"
-          >
-            <span>Switch to typing</span>
-            <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
-          </button>
-        </header>
+    <CenteredOnboardingShell
+      maxWidth="max-w-[680px]"
+      cardClassName="!p-0 h-[calc(100dvh-96px)] sm:h-[min(720px,calc(100vh-140px))] flex flex-col overflow-hidden"
+    >
 
         {micNotice && (
           <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3 shrink-0 z-10">
@@ -1928,27 +1848,51 @@ export const VoiceOnboardingScreen: React.FC<VoiceOnboardingProps> = ({
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white border-t border-slate-200 shrink-0 shadow-xs">
-          <form onSubmit={handleTextSubmit} className="flex items-center gap-2 sm:gap-3">
+        {/* Controls bar with Voice Orb Mic Button & Navigation */}
+        <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 shrink-0 shadow-xs">
+          <form onSubmit={handleTextSubmit} className="flex items-center gap-2.5 sm:gap-3">
+            {/* 44px Voice Orb Mic Button with speaking, listening, thinking, and muted states */}
             <button
               type="button"
               onClick={toggleMute}
-              className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs ${
+              className={`relative w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs select-none ${
                 isMuted || !isMicAvailable
-                  ? "bg-slate-200 text-slate-500 hover:bg-slate-300"
+                  ? "bg-slate-300 text-slate-600 hover:bg-slate-400"
+                  : avatarState === "speaking"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-4 ring-blue-400/30"
                   : avatarState === "listening"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 animate-pulse"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-4 ring-blue-400/25 animate-pulse"
                   : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
               }`}
               title={isMuted ? "Click to unmute microphone" : "Click to mute microphone"}
             >
+              {!isMuted && avatarState === "speaking" && (
+                <span className="absolute inset-0 rounded-full bg-blue-500/25 animate-ping pointer-events-none" />
+              )}
+
               {isMuted || !isMicAvailable ? (
-                <MicOff className="w-4.5 h-4.5" />
+                <MicOff className="w-4.5 h-4.5 text-slate-600" />
+              ) : avatarState === "speaking" ? (
+                <div className="flex items-center justify-center gap-[2.5px] h-4">
+                  <span className="w-0.5 h-3 bg-white rounded-full animate-bounce" style={{ animationDuration: "600ms", animationDelay: "0ms" }} />
+                  <span className="w-0.5 h-4 bg-white rounded-full animate-bounce" style={{ animationDuration: "600ms", animationDelay: "150ms" }} />
+                  <span className="w-0.5 h-2.5 bg-white rounded-full animate-bounce" style={{ animationDuration: "600ms", animationDelay: "300ms" }} />
+                  <span className="w-0.5 h-3.5 bg-white rounded-full animate-bounce" style={{ animationDuration: "600ms", animationDelay: "450ms" }} />
+                </div>
+              ) : avatarState === "listening" ? (
+                <Mic className="w-4.5 h-4.5 text-white" />
+              ) : avatarState === "thinking" ? (
+                <div className="flex items-center justify-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDuration: "800ms", animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDuration: "800ms", animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDuration: "800ms", animationDelay: "300ms" }} />
+                </div>
               ) : (
-                <Mic className="w-4.5 h-4.5" />
+                <Sparkles className="w-4.5 h-4.5 text-white" />
               )}
             </button>
 
+            {/* Compact 40px Input */}
             <div className="relative flex-1">
               <input
                 type="text"
@@ -1959,14 +1903,14 @@ export const VoiceOnboardingScreen: React.FC<VoiceOnboardingProps> = ({
                     ? "Type your reply here..."
                     : "Speak or type your answer..."
                 }
-                className="w-full pl-4 pr-11 py-3 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-full text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 focus:border-blue-500 shadow-2xs transition-all"
+                className="w-full h-10 pl-3.5 pr-10 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-full text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 shadow-2xs transition-all"
                 style={{ fontFamily: "Inter, sans-serif" }}
               />
 
               <button
                 type="submit"
                 disabled={!typedInput.trim()}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#182230] hover:bg-black text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#182230] hover:bg-black text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                 title="Send message"
               >
                 <Send className="w-3.5 h-3.5" />
@@ -1974,23 +1918,48 @@ export const VoiceOnboardingScreen: React.FC<VoiceOnboardingProps> = ({
             </div>
           </form>
 
-          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1">
-            <span>
-              {isMuted
-                ? "Microphone muted. You can type above."
-                : "Listening automatically. Speak naturally or type."}
-            </span>
-            <button
-              type="button"
-              onClick={onSwitchToTyping}
-              className="text-slate-500 hover:text-blue-600 underline cursor-pointer"
-            >
-              Switch to typing setup
-            </button>
+          {/* Helper line below input: state label + helper text on left, switch and back links on right */}
+          <div className="flex items-center justify-between text-[12px] text-slate-500 mt-2 px-1">
+            <div className="flex items-center gap-2 truncate">
+              <span className="font-medium text-slate-700">
+                {isMuted || !isMicAvailable
+                  ? "Muted"
+                  : avatarState === "speaking"
+                  ? "Speaking"
+                  : avatarState === "listening"
+                  ? "Listening"
+                  : avatarState === "thinking"
+                  ? (thinkingMessage || "Thinking")
+                  : "Muted"}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="text-slate-400 truncate">
+                {isMuted || !isMicAvailable
+                  ? "Type your reply above"
+                  : "Speak naturally or type your answer"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 text-[12px]">
+              <button
+                type="button"
+                onClick={onSwitchToTyping}
+                className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+              >
+                Switch to Fill quick form
+              </button>
+              <span className="text-slate-300">·</span>
+              <button
+                type="button"
+                onClick={onBack}
+                className="text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+            </div>
           </div>
         </div>
-      </section>
-    </div>
+    </CenteredOnboardingShell>
   );
 };
 

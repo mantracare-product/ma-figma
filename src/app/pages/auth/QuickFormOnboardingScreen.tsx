@@ -19,7 +19,7 @@ import {
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
-import logo from "@/imports/ma_logo-1.png";
+import CenteredOnboardingShell from "./CenteredOnboardingShell";
 import { INITIAL_CATEGORIES } from "../../../data/industryReferenceData";
 import {
   UploadedDoc,
@@ -279,7 +279,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         </div>
       )}
 
-      {helperText && <p className="text-[13px] text-slate-500 mb-2 leading-relaxed">{helperText}</p>}
+      {helperText && <p className="text-[12px] text-slate-500 mb-2 leading-relaxed">{helperText}</p>}
 
       {/* Trigger Button */}
       <button
@@ -289,7 +289,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-required={required ? "true" : undefined}
-        className={`w-full min-h-[44px] px-3.5 py-2 bg-white border rounded-[12px] text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+        className={`w-full min-h-[44px] sm:min-h-[40px] px-3.5 py-1.5 sm:py-2 bg-white border rounded-[12px] text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
           error
             ? "border-rose-400 focus:ring-2 focus:ring-rose-500/20"
             : isOpen
@@ -301,7 +301,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         <div className="flex-1 min-w-0">
           {isMulti && Array.isArray(value) ? (
             value.length === 0 ? (
-              <span className="text-slate-400 text-sm">{placeholder}</span>
+              <span className="text-slate-400 text-[13px]">{placeholder}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5 py-0.5">
                 {value.map((item) => (
@@ -846,172 +846,19 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
     }
   };
 
-  // Circular progress calculations
-  const radius = 14;
+  // Circular progress calculations (36px ring)
+  const radius = 13;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (completedCount / 5) * circumference;
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-gray-50 to-white text-slate-900 select-none">
-      {/* ─────────────────────────────────────────────────────────────
-          LEFT SIDE: BRAND MARKETING PANEL (Identical to Onboarding)
-      ───────────────────────────────────────────────────────────── */}
-      <div
-        className="hidden lg:flex lg:w-1/2 relative overflow-hidden shrink-0"
-        style={{
-          background: "linear-gradient(135deg, #141B24 0%, #1c2736 50%, #2A3A4D 100%)",
-        }}
-      >
-        <div className="relative z-10 flex flex-col justify-between w-full h-full p-10 xl:p-14 text-white">
-          <div className="flex items-center gap-3">
-            <img
-              src={logo}
-              alt="MantraAssist"
-              className="h-8 w-auto drop-shadow-md"
-              style={{ filter: "brightness(0) invert(1)" }}
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          </div>
-
-          <div className="my-auto py-6 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 backdrop-blur-sm rounded-full mb-6">
-              <div className="w-1.5 h-1.5 bg-[#3B82F6] rounded-full animate-pulse" />
-              <span className="text-white text-xs font-semibold tracking-wide" style={{ fontFamily: "Inter, sans-serif" }}>
-                AI Workforce Platform
-              </span>
-            </div>
-
-            <h1
-              className="font-bold text-white text-3xl sm:text-4xl xl:text-[46px] 2xl:text-[52px] leading-[1.15] tracking-tight mb-4"
-              style={{ fontFamily: "Inter, sans-serif", fontWeight: 800 }}
-            >
-              The AI{" "}
-              <span className="text-[#3B82F6] underline decoration-2 underline-offset-8 decoration-[#3B82F6]">
-                Workforce
-              </span>
-              <br />
-              for Every Business.
-            </h1>
-
-            <p className="text-[#D6DCE5] text-sm sm:text-base leading-relaxed mb-8 max-w-xl" style={{ fontFamily: "Inter, sans-serif" }}>
-              From customer conversations to daily operations, MantraAssist automates what slows you down, so you can focus on growth.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-8">
-              <div
-                className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                style={{ background: "rgba(255, 255, 255, 0.06)", boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)" }}
-              >
-                <div>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                    <Zap className="w-4.5 h-4.5 text-[#3B82F6]" />
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">OMNICHANNEL</div>
-                  <h3 className="text-sm font-bold text-white mb-1.5" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Customer Conversations
-                  </h3>
-                  <p className="text-xs text-[#D6DCE5] leading-relaxed" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Automates conversations over voice, email, text, and chat with natural-language AI.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                style={{ background: "rgba(255, 255, 255, 0.06)", boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)" }}
-              >
-                <div>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                    <Calendar className="w-4.5 h-4.5 text-[#3B82F6]" />
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">SCHEDULING</div>
-                  <h3 className="text-sm font-bold text-white mb-1.5" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Smart Scheduling
-                  </h3>
-                  <p className="text-xs text-[#D6DCE5] leading-relaxed" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Books and manages appointments dynamically, syncing with your existing calendars.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                style={{ background: "rgba(255, 255, 255, 0.06)", boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)" }}
-              >
-                <div>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                    <Share2 className="w-4.5 h-4.5 text-[#3B82F6]" />
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">INTEGRATIONS</div>
-                  <h3 className="text-sm font-bold text-white mb-1.5" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Seamless Integrations
-                  </h3>
-                  <p className="text-xs text-[#D6DCE5] leading-relaxed" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Real-time, secure data flow with your CRM, helpdesk, and the tools you already use.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="p-4 px-5 rounded-[20px] border border-white/8 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-4"
-              style={{ background: "rgba(255, 255, 255, 0.06)", boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)" }}
-            >
-              <div className="flex items-center gap-4 sm:gap-6 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#3B82F6]/15 border border-[#3B82F6]/20 shrink-0">
-                  <TrendingUp className="w-4.5 h-4.5 text-[#3B82F6]" />
-                </div>
-                <div className="flex items-center gap-4 sm:gap-6">
-                  <div>
-                    <div className="text-[10px] uppercase font-bold tracking-wider text-[#8E9EB5]">EFFICIENCY GAIN</div>
-                    <div className="text-lg font-extrabold text-white flex items-center gap-1 leading-tight">
-                      40% <span className="text-[#3B82F6] text-sm">↑</span>
-                    </div>
-                  </div>
-                  <div className="h-7 w-px bg-white/10 shrink-0" />
-                  <div>
-                    <div className="text-[10px] uppercase font-bold tracking-wider text-[#8E9EB5]">TIME SAVED</div>
-                    <div className="text-lg font-extrabold text-white leading-tight">
-                      12.5 <span className="text-xs font-normal text-[#D6DCE5]">hrs/wk</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => window.open("https://mantracare.com/request-demo", "_blank")}
-                className="px-4 py-2 rounded-full border border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                <span>Request a Demo</span>
-                <ArrowRight className="w-3.5 h-3.5 text-[#3B82F6]" />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-[#8E9EB5]" style={{ fontFamily: "Inter, sans-serif" }}>
-            <span>English</span>
-            <span className="text-white/20">•</span>
-            <span>Accessibility</span>
-            <span className="text-white/20">•</span>
-            <span>Privacy</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          RIGHT SIDE: CLEAN ACCORDION ONBOARDING (Vertically Centered)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:px-12 overflow-y-auto min-h-screen bg-gradient-to-br from-gray-50/70 to-white">
-        <div className="w-full max-w-xl my-auto py-8">
-            {/* Header: Title + Subtitle + Circular Progress Ring (Blue on Slate) */}
-            <div className="flex items-start justify-between gap-4 mb-7">
+    <CenteredOnboardingShell maxWidth="max-w-[640px]">
+            {/* Header: Title + Subtitle + Circular Progress Ring (Blue on Slate, 36px) */}
+            <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <h2
-                  className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-1.5"
-                  style={{ fontFamily: "Inter, sans-serif", fontWeight: 700 }}
+                  className="text-2xl font-semibold text-slate-900 tracking-tight mb-1"
+                  style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   Tell us about your practice
                 </h2>
@@ -1020,24 +867,24 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                 </p>
               </div>
 
-              {/* Circular Progress Ring (Blue on Slate-200) */}
-              <div className="flex items-center justify-center shrink-0 mt-1" title={`${completedCount} of 5 sections complete`}>
-                <div className="relative w-11 h-11 flex items-center justify-center">
-                  <svg className="w-11 h-11 transform -rotate-90">
+              {/* Circular Progress Ring (36px) */}
+              <div className="flex items-center justify-center shrink-0 mt-0.5" title={`${completedCount} of 5 sections complete`}>
+                <div className="relative w-9 h-9 flex items-center justify-center">
+                  <svg className="w-9 h-9 transform -rotate-90">
                     <circle
-                      cx="22"
-                      cy="22"
+                      cx="18"
+                      cy="18"
                       r={radius}
                       stroke="#e2e8f0"
-                      strokeWidth="3"
+                      strokeWidth="2.5"
                       fill="transparent"
                     />
                     <circle
-                      cx="22"
-                      cy="22"
+                      cx="18"
+                      cy="18"
                       r={radius}
                       stroke="#2563eb"
-                      strokeWidth="3"
+                      strokeWidth="2.5"
                       fill="transparent"
                       strokeDasharray={circumference}
                       strokeDashoffset={strokeDashoffset}
@@ -1046,7 +893,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     />
                   </svg>
                   <span
-                    className="absolute text-[11px] font-bold text-slate-700"
+                    className="absolute text-[10px] font-bold text-slate-700"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
                     {completedCount}/5
@@ -1057,14 +904,14 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
 
             {/* Skeleton Loading on Mount */}
             {isPreloading ? (
-              <div className="space-y-3.5 animate-pulse">
+              <div className="space-y-2.5 animate-pulse">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="h-20 bg-slate-100 rounded-2xl border border-slate-200/60" />
+                  <div key={i} className="h-16 bg-slate-100 rounded-2xl border border-slate-200/60" />
                 ))}
               </div>
             ) : (
-              /* ── Accordion Cards (One soft card per section, 12px gap) ── */
-              <div className="space-y-3.5 pb-10" role="region" aria-label="Practice setup form">
+              /* ── Accordion Cards (One soft card per section, 10px gap) ── */
+              <div className="space-y-2.5 pb-6" role="region" aria-label="Practice setup form">
                 {/* ─────────────────────────────────────────────────────────────
                     SECTION 1: INDUSTRY *
                 ───────────────────────────────────────────────────────────── */}
@@ -1074,7 +921,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     onClick={() => toggleSection("industry")}
                     aria-expanded={openSection === "industry"}
                     aria-controls="section-1-content"
-                    className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -1111,7 +958,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                   </button>
 
                   {openSection === "industry" && (
-                    <div id="section-1-content" className="px-5 sm:px-6 pb-6 pt-1 border-t border-slate-100 space-y-4 animate-fadeIn">
+                    <div id="section-1-content" className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5 border-t border-slate-100 space-y-3.5 animate-fadeIn">
                       <CustomDropdown
                         label="Industry"
                         options={industryOptions}
@@ -1176,7 +1023,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     onClick={() => toggleSection("requirements")}
                     aria-expanded={openSection === "requirements"}
                     aria-controls="section-2-content"
-                    className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -1211,7 +1058,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                   </button>
 
                   {openSection === "requirements" && (
-                    <div id="section-2-content" className="px-5 sm:px-6 pb-6 pt-1 border-t border-slate-100 space-y-4 animate-fadeIn">
+                    <div id="section-2-content" className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5 border-t border-slate-100 space-y-3.5 animate-fadeIn">
                       <CustomDropdown
                         label="What would you like help with"
                         helperText="Pick everything that feels like a pain point today."
@@ -1245,7 +1092,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     onClick={() => toggleSection("team_capacity")}
                     aria-expanded={openSection === "team_capacity"}
                     aria-controls="section-3-content"
-                    className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -1280,7 +1127,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                   </button>
 
                   {openSection === "team_capacity" && (
-                    <div id="section-3-content" className="px-5 sm:px-6 pb-6 pt-1 border-t border-slate-100 space-y-4 animate-fadeIn">
+                    <div id="section-3-content" className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5 border-t border-slate-100 space-y-4 animate-fadeIn">
                       <CustomDropdown
                         label="Team size"
                         options={teamSizeOptions}
@@ -1391,7 +1238,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     onClick={() => toggleSection("locations")}
                     aria-expanded={openSection === "locations"}
                     aria-controls="section-4-content"
-                    className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -1426,7 +1273,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                   </button>
 
                   {openSection === "locations" && (
-                    <div id="section-4-content" className="px-5 sm:px-6 pb-6 pt-1 border-t border-slate-100 space-y-4 animate-fadeIn">
+                    <div id="section-4-content" className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5 border-t border-slate-100 space-y-4 animate-fadeIn">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <label className="block text-[13px] font-semibold text-slate-800">
@@ -1571,7 +1418,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                     onClick={() => toggleSection("knowledge_base")}
                     aria-expanded={openSection === "knowledge_base"}
                     aria-controls="section-5-content"
-                    className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors cursor-pointer select-none"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -1604,7 +1451,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
                   </button>
 
                   {openSection === "knowledge_base" && (
-                    <div id="section-5-content" className="px-5 sm:px-6 pb-6 pt-1 border-t border-slate-100 space-y-4 animate-fadeIn">
+                    <div id="section-5-content" className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5 border-t border-slate-100 space-y-3.5 animate-fadeIn">
                       <div>
                         <p className="text-[13px] font-semibold text-slate-800 mb-0.5">Give your agent more context</p>
                         <p className="text-[13px] text-slate-500 mb-3">
@@ -1659,23 +1506,23 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
               </div>
             )}
 
-          {/* Bottom Actions: Centered Button + Back / Voice Links matching Onboarding screens */}
-          <div className="pt-8 flex flex-col items-center space-y-3.5">
+          {/* Bottom Actions: Compact Centered Button + Back / Voice Links */}
+          <div className="pt-3 flex flex-col items-center space-y-2.5">
             <button
               type="button"
               onClick={handleFinishSetup}
-              className="w-80 max-w-full py-4 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-base font-semibold rounded-full shadow-md shadow-slate-900/15 hover:shadow-lg hover:shadow-slate-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full max-w-[280px] h-10 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
               <span>Finish setup</span>
-              <Check className="w-4.5 h-4.5 text-blue-400 stroke-[2.5]" />
+              <Check className="w-4 h-4 text-blue-400 stroke-[2.5]" />
             </button>
 
-            <div className="flex items-center gap-4 text-xs font-medium" style={{ fontFamily: "Inter, sans-serif" }}>
+            <div className="flex items-center gap-3 text-[12px] font-medium" style={{ fontFamily: "Inter, sans-serif" }}>
               <button
                 type="button"
                 onClick={onBack}
-                className="text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer py-1"
+                className="text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 cursor-pointer py-0.5"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -1686,7 +1533,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
               <button
                 type="button"
                 onClick={onSwitchToVoice}
-                className="text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 cursor-pointer py-1"
+                className="text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 cursor-pointer py-0.5"
                 title="Switch to AI voice assistant setup"
               >
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
@@ -1694,9 +1541,7 @@ export const QuickFormOnboardingScreen: React.FC<QuickFormOnboardingProps> = ({
               </button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+    </CenteredOnboardingShell>
   );
 };
 
