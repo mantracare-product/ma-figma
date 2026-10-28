@@ -153,6 +153,10 @@ export const router = createBrowserRouter([
     Component: Login,
   },
   {
+    path: "/verify",
+    Component: Login,
+  },
+  {
     path: "/signup",
     Component: Signup,
   },
