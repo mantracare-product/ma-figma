@@ -138,10 +138,13 @@ export default function StepParametersFields({
     | "triggerConditionSingle"
     | "triggerConditionMulti"
     | "triggerConditionDynamic"
+    | "assignProcessFieldToken"
   >("monitoredFields");
   const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
   const [targetTriggerConditionIndex, setTargetTriggerConditionIndex] = useState<number | null>(null);
   const [targetFieldUpdateIndex, setTargetFieldUpdateIndex] = useState<number | null>(null);
+  const [targetProcessFieldKey, setTargetProcessFieldKey] = useState<string | null>(null);
+  const [optionalFieldsExpanded, setOptionalFieldsExpanded] = useState(false);
 
   const getFieldDefByKey = (key: string) => {
     if (!key) return null;
@@ -586,6 +589,20 @@ export default function StepParametersFields({
           fieldSource: fieldDef?.module || params.fieldSource || "system",
         });
       }
+    } else if (fieldModalMode === "assignProcessFieldToken") {
+      if (targetProcessFieldKey && selectedKeys.length > 0) {
+        const chosenKey = selectedKeys[0];
+        const token = `{{${chosenKey}}}`;
+        const currentVal = (params.processFields || {})[targetProcessFieldKey] || "";
+        const nextVal = currentVal ? `${currentVal} ${token}` : token;
+        onChange({
+          processFields: {
+            ...(params.processFields || {}),
+            [targetProcessFieldKey]: nextVal,
+          },
+        });
+        setTargetProcessFieldKey(null);
+      }
     }
     setIsFieldRegistryModalOpen(false);
   };
@@ -1001,6 +1018,201 @@ export default function StepParametersFields({
             <Plus className="w-3.5 h-3.5" /> Add Blank
           </button>
         </div>
+      </div>
+    );
+  };
+
+
+  const renderProcessFieldsCardList = (
+    proc: any,
+    targetModule: "process" | "appointment" | "invoice",
+    currentStageVal?: string
+  ) => {
+    if (!proc) return null;
+
+    const allModFields = getAllFields(targetModule);
+    const matchingProcFields = allModFields.filter((f) => {
+      if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all") || f.processIds.includes("*")) {
+        return true;
+      }
+      return proc && (f.processIds.includes(proc.id) || f.processIds.includes(proc.name));
+    });
+
+    const requiredFields = matchingProcFields.filter((f) => {
+      if (f.required) return true;
+      if (f.requiredStages && currentStageVal) {
+        if (f.requiredStages.includes(currentStageVal) || f.requiredStages.includes("*")) return true;
+      }
+      if (targetModule === "process" && ["deal_name", "title", "client_name"].includes(f.key)) {
+        return true;
+      }
+      return false;
+    });
+
+    const otherFields = matchingProcFields.filter(
+      (f) => !requiredFields.some((rf) => rf.key === f.key)
+    );
+
+    const processFieldValues: Record<string, any> = params.processFields || {};
+
+    const handleFieldValueChange = (fieldKey: string, val: any) => {
+      onChange({
+        processFields: {
+          ...processFieldValues,
+          [fieldKey]: val,
+        },
+      });
+    };
+
+    const handleOpenFieldModal = (fieldKey: string) => {
+      setTargetProcessFieldKey(fieldKey);
+      setFieldModalMode("assignProcessFieldToken");
+      setIsFieldRegistryModalOpen(true);
+    };
+
+    const renderFieldCard = (f: any, isRequired: boolean) => {
+      const val = processFieldValues[f.key] ?? "";
+
+      return (
+        <div
+          key={f.key}
+          className={`p-3.5 bg-white border rounded-xl space-y-2.5 transition-all shadow-2xs hover:shadow-xs ${
+            isRequired
+              ? "border-slate-200/90 hover:border-blue-300"
+              : "border-slate-200/80 hover:border-slate-300"
+          }`}
+        >
+          {/* Card Header */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="text-xs font-bold text-slate-800 truncate"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {f.label}
+              </span>
+              {isRequired && (
+                <span className="text-red-500 font-bold text-xs" title="Mandatory field">*</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200/80 font-mono">
+                {f.inputType || "text"}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenFieldModal(f.key)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Select field from registry modal"
+              >
+                <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                <span>Select Field</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card Input */}
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={val}
+              onChange={(e) => handleFieldValueChange(f.key, e.target.value)}
+              placeholder={
+                isRequired
+                  ? `Enter value or click "Select Field" for ${f.label.toLowerCase()}...`
+                  : `Optional value for ${f.label.toLowerCase()}...`
+              }
+              className={`w-full pl-3 pr-8 py-2 text-xs border rounded-lg bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none transition-all ${
+                isRequired && !val
+                  ? "border-amber-300/80 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              }`}
+            />
+            {val ? (
+              <button
+                type="button"
+                onClick={() => handleFieldValueChange(f.key, "")}
+                className="absolute right-2 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Clear field value"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-4 pt-1">
+        {/* REQUIRED FIELDS SECTION */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between pb-0.5">
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-bold text-slate-800 uppercase tracking-wider"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Required Fields
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200/70 leading-none">
+                Must be filled
+              </span>
+              <InfoTooltip text="Mandatory fields that must be populated when enrolling into or moving to this stage." />
+            </div>
+            <span className="text-[11px] text-slate-400 font-semibold">
+              {requiredFields.length} field{requiredFields.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          {requiredFields.length === 0 ? (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
+              No mandatory required fields configured for this workflow.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {requiredFields.map((f) => renderFieldCard(f, true))}
+            </div>
+          )}
+        </div>
+
+        {/* OPTIONAL FIELDS DROPDOWN */}
+        {otherFields.length > 0 && (
+          <div className="pt-3 border-t border-slate-200/80 space-y-2.5">
+            <button
+              type="button"
+              onClick={() => setOptionalFieldsExpanded(!optionalFieldsExpanded)}
+              className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="text-xs font-bold text-slate-800 uppercase tracking-wider group-hover:text-blue-600 transition-colors"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Optional Fields
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 leading-none">
+                  {otherFields.length} optional
+                </span>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <InfoTooltip text="Optionally populate or update additional workflow fields when this action executes." />
+                </div>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 shrink-0 ${
+                  optionalFieldsExpanded ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {optionalFieldsExpanded && (
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1 pt-1">
+                {otherFields.map((f) => renderFieldCard(f, false))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -2417,6 +2629,85 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {/* ASSIGN PROCESS ACTION STEP */}
+            {(stepKey === "assign_process" || stepKey === "assign-process") && (() => {
+              const clientProcesses = effectiveProcesses.filter(
+                (p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes"
+              );
+              const effectiveClientProcesses = clientProcesses.length > 0
+                ? clientProcesses
+                : getStoredProcesses().filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+
+              const selectedProcId = params.processId || effectiveClientProcesses[0]?.id || "";
+              const selectedProc = effectiveClientProcesses.find((p: any) => p.id === selectedProcId) || effectiveClientProcesses[0];
+              const stages = selectedProc?.stages || [];
+              const currentStageVal = params.stageId || stages[0]?.id || stages[0]?.name || "";
+
+              return (
+                <div className="space-y-4">
+                  {/* 1. Choose Process */}
+                  {renderField(
+                    "Choose Process",
+                    <select
+                      value={selectedProcId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        const targetProc = effectiveClientProcesses.find((p: any) => p.id === nextId);
+                        const firstStage = targetProc?.stages?.[0];
+                        onChange({
+                          processId: nextId,
+                          processName: targetProc?.name || "",
+                          stageId: firstStage?.id || firstStage?.name || "",
+                          stageName: firstStage?.name || "",
+                          stepDetailProcess: nextId,
+                          stepDetailStage: firstStage?.id || firstStage?.name || "",
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      <option value="">Select process...</option>
+                      {effectiveClientProcesses.map((p: any) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* 2. Choose Stage */}
+                  {selectedProc && renderField(
+                    "Choose Stage",
+                    <select
+                      value={currentStageVal}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const targetStage = stages.find((s: any) => s.id === val || s.name === val);
+                        onChange({
+                          stageId: val,
+                          stageName: targetStage?.name || val,
+                          stepDetailStage: val,
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      {stages.length === 0 ? (
+                        <option value="">No stages defined for this process</option>
+                      ) : (
+                        stages.map((s: any) => (
+                          <option key={s.id || s.name} value={s.id || s.name}>
+                            {s.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  )}
+
+                  {/* 3. Process Fields Mapping Hierarchy */}
+                  {selectedProc && renderProcessFieldsCardList(selectedProc, "process", currentStageVal)}
+                </div>
+              );
+            })()}
+
             {(stepKey === "update_to_stage" || stepKey === "update-stage" || stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (() => {
               const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";
 
@@ -2595,6 +2886,9 @@ export default function StepParametersFields({
                               <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                             </label>
                           </div>
+
+                          {/* Fields to be Updated on Stage Transition */}
+                          {selectedClientProc && renderProcessFieldsCardList(selectedClientProc, "process", currentClientStageVal)}
                         </>
                       )}
                     </>
@@ -2660,6 +2954,9 @@ export default function StepParametersFields({
                           )}
                         </select>
                       )}
+
+                      {/* Fields to be Updated for Appointment */}
+                      {selectedApptProc && renderProcessFieldsCardList(selectedApptProc, "appointment", currentApptStageVal)}
                     </>
                   )}
 
@@ -2723,6 +3020,9 @@ export default function StepParametersFields({
                           )}
                         </select>
                       )}
+
+                      {/* Fields to be Updated for Invoice */}
+                      {selectedInvProc && renderProcessFieldsCardList(selectedInvProc, "invoice", currentInvStageVal)}
                     </>
                   )}
                 </div>
@@ -4080,7 +4380,8 @@ export default function StepParametersFields({
             fieldModalMode === "fieldUpdateSingle" ||
             fieldModalMode === "genericCondition" ||
             fieldModalMode === "conditionNodeSingle" ||
-            fieldModalMode === "triggerConditionSingle"
+            fieldModalMode === "triggerConditionSingle" ||
+            fieldModalMode === "assignProcessFieldToken"
           }
           initialSelectedKeys={
             fieldModalMode === "monitoredFields"
@@ -4099,7 +4400,9 @@ export default function StepParametersFields({
           }
           onApply={handleFieldRegistryApply}
           title={
-            fieldModalMode === "monitoredFields"
+            fieldModalMode === "assignProcessFieldToken"
+              ? "Select Field from Registry"
+              : fieldModalMode === "monitoredFields"
               ? "Select Fields to Watch"
               : fieldModalMode === "fieldConditionSingle" || fieldModalMode === "conditionNodeSingle"
               ? "Select Condition Field"

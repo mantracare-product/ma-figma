@@ -853,6 +853,29 @@ export function getEntityProcesses(
     : (entityType !== "client" && DEFAULT_ENTITY_PROCESSES[entityType] ? [DEFAULT_ENTITY_PROCESSES[entityType]] : []);
 }
 
+export function getWorkflowsForModule(module: string, allProcesses: Process[]): Process[] {
+  if (module === "process") {
+    return allProcesses.filter((p) => !p.entityType || p.entityType === "client");
+  }
+  if (module === "appointment") {
+    const list = allProcesses.filter((p) => p.entityType === "appointment");
+    return list.length > 0 ? list : (DEFAULT_ENTITY_PROCESSES.appointment ? [DEFAULT_ENTITY_PROCESSES.appointment] : []);
+  }
+  if (module === "invoice") {
+    const list = allProcesses.filter((p) => p.entityType === "invoice");
+    return list.length > 0 ? list : (DEFAULT_ENTITY_PROCESSES.invoice ? [DEFAULT_ENTITY_PROCESSES.invoice] : []);
+  }
+  if (module === "claim") {
+    const list = allProcesses.filter((p) => p.entityType === "claim" || p.entityType === "insurance");
+    if (list.length > 0) return list;
+    const defaults: Process[] = [];
+    if (DEFAULT_ENTITY_PROCESSES.claim) defaults.push(DEFAULT_ENTITY_PROCESSES.claim);
+    if (DEFAULT_ENTITY_PROCESSES.insurance) defaults.push(DEFAULT_ENTITY_PROCESSES.insurance);
+    return defaults;
+  }
+  return [];
+}
+
 export const DEMO_PATIENT_PORTAL_PROCESS_ID = "demo-patient-care-journey";
 
 export const DEMO_PATIENT_PORTAL_PROCESS: Process = {

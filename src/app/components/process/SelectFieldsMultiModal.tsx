@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, ChevronDown, X, Check } from "lucide-react";
 import {
@@ -7,8 +7,11 @@ import {
   MODULE_NOUN,
   FieldModule,
   isFieldMatchingOrg,
+  isFieldMatchingContactCategory,
   ScopingRule,
 } from "../../context/FieldRegistryContext";
+import { getStoredProcesses, getWorkflowsForModule } from "../../../lib/useProcessStore";
+import { useContactCategories } from "../../../lib/contactCategoriesStore";
 
 export interface SelectFieldsMultiModalProps {
   isOpen: boolean;
@@ -34,8 +37,14 @@ export default function SelectFieldsMultiModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>(initialSelectedKeys);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-
+    
   const { getAllFields } = useFieldRegistry();
+  const allProcesses = useMemo(() => getStoredProcesses(), []);
+  const [selectedWorkflowByModule, setSelectedWorkflowByModule] = useState<Record<string, string>>({});
+  const [openWorkflowDropdownModule, setOpenWorkflowDropdownModule] = useState<string | null>(null);
+  const contactCategories = useContactCategories();
+  const [selectedContactCategory, setSelectedContactCategory] = useState<string>("all");
+  const [showContactCategoryDropdown, setShowContactCategoryDropdown] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -76,7 +85,24 @@ export default function SelectFieldsMultiModal({
           })
         : allModuleFields;
 
-      const fields = scopedFields.filter(
+      const isClient = module === "client";
+      const clientFiltered = (isClient && selectedContactCategory && selectedContactCategory !== "all")
+        ? scopedFields.filter((f) => isFieldMatchingContactCategory(f, selectedContactCategory))
+        : scopedFields;
+
+      const isWorkflowModule = ["process", "appointment", "invoice", "claim"].includes(module);
+      const targetWorkflow = selectedWorkflowByModule[module];
+
+      const workflowFiltered = (isWorkflowModule && targetWorkflow && targetWorkflow !== "all")
+        ? clientFiltered.filter((f) => {
+            if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all") || f.processIds.includes("*")) {
+              return true;
+            }
+            return f.processIds.includes(targetWorkflow);
+          })
+        : clientFiltered;
+
+      const fields = workflowFiltered.filter(
         (f) =>
           f.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
           f.key.toLowerCase().includes(searchQuery.toLowerCase())
@@ -187,23 +213,178 @@ export default function SelectFieldsMultiModal({
                 className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white"
               >
                 <div className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50/70 hover:bg-slate-100/70 transition-colors border-b border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(group.module)}
-                    className="flex items-center gap-2 text-left flex-1 cursor-pointer"
-                  >
-                    <span
-                      className="text-[11px] font-bold text-slate-700 uppercase tracking-wider"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
+                  <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(group.module)}
+                      className="flex items-center gap-1.5 text-left cursor-pointer hover:text-blue-600 transition-colors"
                     >
-                      {group.label} ({group.fields.length})
-                    </span>
-                    {selectedCountInGroup > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 leading-none">
-                        {selectedCountInGroup} selected
+                      <span
+                        className="text-[11px] font-bold text-slate-700 uppercase tracking-wider"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {group.label} ({group.fields.length})
                       </span>
-                    )}
-                  </button>
+                      {selectedCountInGroup > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 leading-none">
+                          {selectedCountInGroup} selected
+                        </span>
+                      )}
+                    </button>
+
+                    {group.module === "client" && (() => {
+                      const currentCat = selectedContactCategory || "all";
+                      return (
+                        <>
+                          <span className="text-slate-300 font-light text-xs">|</span>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowContactCategoryDropdown(!showContactCategoryDropdown);
+                              }}
+                              className="h-6 px-2 bg-white border border-slate-200 rounded-md text-[10px] font-semibold text-slate-700 flex items-center gap-1 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <span className="text-slate-400 font-normal">Category:</span>
+                              <span className="max-w-[100px] truncate text-blue-600 font-bold">
+                                {currentCat === "all" ? "All Categories" : currentCat}
+                              </span>
+                              <ChevronDown className={`w-2.5 h-2.5 text-slate-400 transition-transform ${showContactCategoryDropdown ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {showContactCategoryDropdown && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-[10001]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowContactCategoryDropdown(false);
+                                  }}
+                                />
+                                <div
+                                  className="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[10002] py-1 max-h-48 overflow-y-auto"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedContactCategory("all");
+                                      setShowContactCategoryDropdown(false);
+                                    }}
+                                    className={`w-full text-left px-2.5 py-1 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                      currentCat === "all" ? "bg-blue-50 text-blue-600 font-bold" : "text-slate-700 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    <span>All Categories</span>
+                                    {currentCat === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                  </button>
+
+                                  {contactCategories.map((cat) => (
+                                    <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedContactCategory(cat);
+                                        setShowContactCategoryDropdown(false);
+                                      }}
+                                      className={`w-full text-left px-2.5 py-1 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                        currentCat === cat ? "bg-blue-50 text-blue-600 font-bold" : "text-slate-700 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <span className="truncate">{cat}</span>
+                                      {currentCat === cat && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {["process", "appointment", "invoice", "claim"].includes(group.module) && (() => {
+                      const workflows = getWorkflowsForModule(group.module, allProcesses);
+                      const currentWfId = selectedWorkflowByModule[group.module] || "all";
+                      const currentWf = workflows.find((w) => w.id === currentWfId);
+                      const labelText = currentWfId === "all" ? (group.module === "process" ? "All Processes" : "All Workflows") : (currentWf?.name || currentWfId);
+
+                      return (
+                        <>
+                          <span className="text-slate-300 font-light text-xs">|</span>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenWorkflowDropdownModule(openWorkflowDropdownModule === group.module ? null : group.module);
+                              }}
+                              className="h-6 px-2 bg-white border border-slate-200 rounded-md text-[10px] font-semibold text-slate-700 flex items-center gap-1 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <span className="text-slate-400 font-normal">
+                                {group.module === "process" ? "Process:" : "Workflow:"}
+                              </span>
+                              <span className="max-w-[100px] truncate text-blue-600 font-bold">
+                                {labelText}
+                              </span>
+                              <ChevronDown className={`w-2.5 h-2.5 text-slate-400 transition-transform ${openWorkflowDropdownModule === group.module ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {openWorkflowDropdownModule === group.module && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-[10001]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenWorkflowDropdownModule(null);
+                                  }}
+                                />
+                                <div
+                                  className="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[10002] py-1 max-h-48 overflow-y-auto"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedWorkflowByModule((prev) => ({ ...prev, [group.module]: "all" }));
+                                      setOpenWorkflowDropdownModule(null);
+                                    }}
+                                    className={`w-full text-left px-2.5 py-1 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                      currentWfId === "all" ? "bg-blue-50 text-blue-600 font-bold" : "text-slate-700 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    <span>{group.module === "process" ? "All Processes" : "All Workflows"}</span>
+                                    {currentWfId === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                  </button>
+
+                                  {workflows.map((wf) => {
+                                    const isSel = currentWfId === wf.id;
+                                    return (
+                                      <button
+                                        key={wf.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedWorkflowByModule((prev) => ({ ...prev, [group.module]: wf.id }));
+                                          setOpenWorkflowDropdownModule(null);
+                                        }}
+                                        className={`w-full text-left px-2.5 py-1 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                          isSel ? "bg-blue-50 text-blue-600 font-bold" : "text-slate-700 hover:bg-slate-50"
+                                        }`}
+                                      >
+                                        <span className="truncate">{wf.name}</span>
+                                        {isSel && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
 
                   <div className="flex items-center gap-2">
                     {!singleSelect && (

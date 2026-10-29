@@ -81,7 +81,7 @@ type NodeType =
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
-  | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process" | "update-stage"
+  | "assign-process" | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process" | "update-stage"
   | "book-appointment" | "reschedule-appointment" | "cancel-appointment"
   | "generate-invoice" | "generate-document" | "send-payment" | "send-invoice"
   | "webhook" | "api"
@@ -138,6 +138,8 @@ interface FlowBuilderTabProps {
   isAdmin?: boolean;
   onScopingRulesChange?: (rules: ScopingRule[]) => void;
   initialStepIdToConfigure?: string;
+  hideHowItWorks?: boolean;
+  initialHasChosenTrigger?: boolean;
 }
 
 export interface TriggerCatalogItem {
@@ -165,6 +167,7 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "send-email": "email",
   "send-sms": "sms",
   "send-whatsapp": "whatsapp",
+  "assign-process": "assign_process",
   "field-update": "fieldupdate",
   "assign-responsible": "assignhuman",
   "move-stage": "stagemovement",
@@ -196,6 +199,7 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "send-email": "mail",
   "send-sms": "messagesquare",
   "send-whatsapp": "messagecircle",
+  "assign-process": "workflow",
   "field-update": "edit",
   "assign-responsible": "usercheck",
   "move-stage": "gitbranch",
@@ -254,6 +258,7 @@ const NODE_CATEGORIES = [
     label: "Data & Assignment",
     icon: <Settings2 className="w-3.5 h-3.5" />,
     nodes: [
+      { type: "assign-process" as NodeType, label: "Assign Process", icon: <Workflow className="w-4 h-4" />, desc: "Enroll record into a process workflow, choose stage, and populate required process fields" },
       { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update record attributes or custom field values" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member to handle this record" },
       { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data payload via webhook" },
@@ -436,6 +441,7 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
 };
 
 function getNodeIcon(type: NodeType) {
+  if (type === "assign-process" || (type as string) === "assign_process") return <Workflow className="w-4 h-4" />;
   if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
   if (type === "generate-document") return <FileText className="w-4 h-4" />;
   if (type === "send-payment") return <CreditCard className="w-4 h-4" />;
@@ -445,9 +451,116 @@ function getNodeIcon(type: NodeType) {
 }
 
 function getNodeLabel(type: NodeType) {
+  if (type === "assign-process" || (type as string) === "assign_process") return "Assign Process";
   if (type === "generate-document") return "Generate Document";
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
   return all.find((n) => n.type === type)?.label ?? type;
+}
+
+function getNodeDesc(type: NodeType): string {
+  const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
+  return all.find((n) => n.type === type)?.desc ?? "";
+}
+
+function getNodeSubtitle(
+  node: FlowNode,
+  effectiveProcesses: { id: string; name: string; stages?: { id: string; name: string }[] }[],
+  stageName: string,
+  processName: string,
+  activeTriggerItem?: TriggerCatalogItem
+): string {
+  if (node.type === "start") {
+    return node.config?.triggerDescription || activeTriggerItem?.desc || (node.config?.scope === "global" ? (node.config?.triggerEvent || "Rule entry point") : `Process: ${stageName ? stageName : processName}`);
+  }
+  if (node.type === "end") {
+    return "Terminate workflow execution";
+  }
+  if (node.type === "generate-invoice") {
+    if (node.config?.billFor === "choose") {
+      return `Custom (${(node.config?.selectedServices || []).length} items)`;
+    }
+    if (node.config?.billFor === "client") return "Client's services";
+    if (node.config?.billFor === "appointment") return "Appointment's service";
+    return "Generate draft invoice";
+  }
+  if (node.type === "send-payment") {
+    return node.config?.paymentMethod ? `Via ${node.config.paymentMethod}` : "Payment link & checkout";
+  }
+  if (node.type === "send-invoice") {
+    return "Send invoice statement";
+  }
+  if (node.type === "generate-document") {
+    return node.config?.templateName || "Generate document from template";
+  }
+  if (node.type === "assign-process" || node.stepKey === "assign_process") {
+    const pName = node.config?.processName || (effectiveProcesses.find((p: any) => p.id === (node.config?.processId || node.config?.stepDetailProcess))?.name) || "Select Process";
+    const sName = node.config?.stageName || node.config?.stepDetailStage || "Select Stage";
+    return `${pName} → ${sName}`;
+  }
+  if (node.type === "update-stage" || node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") {
+    const entity = node.config?.stageEntity || node.config?.entityType || "processes";
+    if (entity === "appointment") {
+      const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
+      const sName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
+      return procDisplay ? `${procDisplay} → ${sName}` : `Appointment → ${sName}`;
+    }
+    if (entity === "invoice") {
+      const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
+      const sName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
+      return procDisplay ? `${procDisplay} → ${sName}` : `Invoice → ${sName}`;
+    }
+    const targetProc = effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId));
+    const targetStage = targetProc?.stages?.find(s => s.id === (node.config?.stepDetailStage || node.config?.stageId) || s.name === (node.config?.stepDetailStage || node.config?.stageId));
+    const procDisplay = targetProc?.name || node.config?.processName;
+    const sDisplay = targetStage?.name || node.config?.stageName;
+    if (sDisplay && procDisplay) return `${procDisplay} → ${sDisplay}`;
+    if (sDisplay) return `Stage: ${sDisplay}`;
+    if (procDisplay) return `Process: ${procDisplay}`;
+    return "Update to stage";
+  }
+  if (node.type === "parallel") {
+    return `Runs ${(node.config?.branches || []).length} branches concurrently`;
+  }
+  if (node.type === "condition") {
+    if (node.config?.conditionSummary) return node.config.conditionSummary;
+    if (node.config?.value) return `${node.config.fieldSource || "field"} · ${node.config.operator || "="} · ${node.config.value}`;
+    return "Gate step behind condition";
+  }
+  if (node.type === "wait") {
+    return `Wait ${node.config?.delayValue ?? node.config?.duration ?? 5} ${node.config?.delayUnit ?? node.config?.unit ?? "minutes"}`;
+  }
+  if (node.type === "send-email") {
+    return node.config?.subject ? `Subject: ${node.config.subject}` : "Send an email";
+  }
+  if (node.type === "send-sms") {
+    return node.config?.smsMessage ? node.config.smsMessage : "Send an SMS notification";
+  }
+  if (node.type === "send-whatsapp") {
+    return node.config?.whatsappMessage || "Send WhatsApp message";
+  }
+  if (node.type === "call-transfer" || node.type === "call-transfer-human" || node.type === "call-transfer-ai") {
+    return node.config?.callActionPhoneNumber ? `${node.config.callActionCountryCode || ""} ${node.config.callActionPhoneNumber}` : "Transfer active call";
+  }
+  if (node.type === "field-update") {
+    if (node.config?.fieldName) return `Set ${node.config.fieldName} = ${node.config.fieldValue || "value"}`;
+    return "Update record attributes";
+  }
+  if (node.type === "assign-responsible") {
+    return node.config?.assigneeName ? `To: ${node.config.assigneeName}` : "Assign team member";
+  }
+  if (node.type === "book-appointment") {
+    return "Schedule a new appointment";
+  }
+  if (node.type === "reschedule-appointment") {
+    return "Reschedule existing appointment";
+  }
+  if (node.type === "cancel-appointment") {
+    return "Cancel appointment";
+  }
+  if (node.config?.description) {
+    return node.config.description;
+  }
+  return getNodeDesc(node.type);
 }
 
 function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) {
@@ -582,6 +695,8 @@ export default function FlowBuilderTab({
   isAdmin = false,
   onScopingRulesChange,
   initialStepIdToConfigure,
+  hideHowItWorks = false,
+  initialHasChosenTrigger,
 }: FlowBuilderTabProps) {
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   // Drawer execution/timing controls (seeded on openConfig)
@@ -717,12 +832,23 @@ export default function FlowBuilderTab({
 
   // UI state
   const [search, setSearch] = useState("");
-  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  const [hasChosenTrigger, setHasChosenTrigger] = useState<boolean>(() => {
+    if (initialHasChosenTrigger !== undefined) return initialHasChosenTrigger;
+    return Boolean(workflowSteps && workflowSteps.length > 0);
+  });
+  const [openTriggerCategoryId, setOpenTriggerCategoryId] = useState<string | null>("stage");
+  const [openActionCategoryId, setOpenActionCategoryId] = useState<string | null>("logic");
+
+  useEffect(() => {
+    if (initialHasChosenTrigger !== undefined) {
+      setHasChosenTrigger(initialHasChosenTrigger);
+    }
+  }, [initialHasChosenTrigger]);
   const [configNode, setConfigNode] = useState<FlowNode | null>(null);
   const [showVariableModal, setShowVariableModal] = useState(false);
   const [activeVarSetter, setActiveVarSetter] = useState<((v: string) => void) | null>(null);
   const [showFlowBuilderHelp, setShowFlowBuilderHelp] = useState(false);
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState(true);
+
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -735,11 +861,8 @@ export default function FlowBuilderTab({
   const NODE_Y_SPACING = 140;
 
   const focusTriggersCategory = () => {
-    setCollapsedCats((prev) => {
-      const next = new Set(prev);
-      next.delete("triggers");
-      return next;
-    });
+    setHasChosenTrigger(false);
+    setOpenTriggerCategoryId(activeTriggerItem?.triggerType || "stage");
     if (sidebarRef.current) {
       sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -1566,6 +1689,82 @@ export default function FlowBuilderTab({
     nodes: cat.nodes.filter((n) => !q || n.label.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q)),
   })).filter((cat) => cat.nodes.length > 0);
 
+    const triggerCategories = useMemo(() => {
+    return scope === "stage"
+      ? [
+          {
+            id: "stage",
+            type: "stage",
+            label: "Stage Triggers",
+            desc: "On stage entry or exit",
+            icon: <GitBranch className="w-4 h-4 text-blue-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
+          },
+          {
+            id: "client",
+            type: "client",
+            label: "Client Triggers",
+            desc: "Profile creation & updates",
+            icon: <User className="w-4 h-4 text-emerald-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+          },
+          {
+            id: "appointment",
+            type: "appointment",
+            label: "Appointment Triggers",
+            desc: "Booking, rescheduling, completion",
+            icon: <Calendar className="w-4 h-4 text-purple-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+          },
+        ]
+      : [
+          {
+            id: "stage",
+            type: "stage",
+            label: "Stage Triggers",
+            desc: "Stage entered or exited",
+            icon: <GitBranch className="w-4 h-4 text-blue-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
+          },
+          {
+            id: "field_update",
+            type: "field_update",
+            label: "Field Update Triggers",
+            desc: "Monitored field value updates",
+            icon: <Sliders className="w-4 h-4 text-indigo-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerType === "field_update") || allTriggers[0],
+          },
+          {
+            id: "client",
+            label: "Client Triggers",
+            desc: "Created, updated, product assigned",
+            icon: <User className="w-4 h-4 text-emerald-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+          },
+          {
+            id: "appointment",
+            label: "Appointment Triggers",
+            desc: "Booked, rescheduled, completed",
+            icon: <Calendar className="w-4 h-4 text-purple-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+          },
+          {
+            id: "invoice",
+            label: "Invoice Triggers",
+            desc: "Invoice created or paid",
+            icon: <Receipt className="w-4 h-4 text-amber-600" />,
+            defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice") || allTriggers[0],
+          },
+        ];
+  }, [allTriggers, scope]);
+
+  const filteredTriggerCategories = useMemo(() => {
+    if (!q) return triggerCategories;
+    return triggerCategories.filter(
+      (c) => c.label.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)
+    );
+  }, [triggerCategories, q]);
+
   // ── Config drawer ─────────────────────────────────────────────────────────────
 
   const openConfig = (node: FlowNode) => {
@@ -1782,6 +1981,8 @@ export default function FlowBuilderTab({
         });
       }
       toast.success(`Trigger configured: "${newLabel}"`);
+      setHasChosenTrigger(true);
+      setOpenActionCategoryId("logic");
       setConfigNode(null);
       return;
     }
@@ -1857,355 +2058,238 @@ export default function FlowBuilderTab({
 
       {/* ── LEFT: Overview & Node Library ──────────────────────────────────── */}
       <div className="w-80 bg-card border-r border-border flex flex-col flex-shrink-0 overflow-hidden">
-        {/* Overview Section */}
-        <div className="p-3 border-b border-border bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              type="button"
-              onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
-              className="flex items-center gap-1.5 text-left cursor-pointer group flex-1"
-            >
-              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
-                Overview
-              </span>
-              {isOverviewExpanded ? (
-                <ChevronUp className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
-              )}
-            </button>
-            <span
-              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ml-2 ${
-                automationStatus === "draft"
-                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
-              }`}
-            >
-              {automationStatus === "draft" ? "Draft" : "Active"}
-            </span>
-          </div>
-
-
-          {isOverviewExpanded && (
-            <div className="space-y-3 mt-2.5 max-h-[360px] overflow-y-auto pr-1">
-              {/* Automation Name */}
-              <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                  Automation Name
-                </label>
-                <input
-                  type="text"
-                  value={automationName}
-                  onChange={(e) => onAutomationNameChange?.(e.target.value)}
-                  placeholder="e.g. Appointment Booking and Invoice"
-                  className="w-full px-2.5 py-1.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={automationDescription}
-                  onChange={(e) => onAutomationDescriptionChange?.(e.target.value)}
-                  placeholder="Explain what this automation accomplishes..."
-                  rows={2}
-                  className="w-full px-2.5 py-1.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                  Status
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onAutomationStatusChange?.("active")}
-                    className={`flex-1 py-1 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                      automationStatus === "active"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
-                    Active
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onAutomationStatusChange?.("draft")}
-                    className={`flex-1 py-1 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                      automationStatus === "draft"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
-                    Draft
-                  </button>
-                </div>
-              </div>
-
-              {/* Admin Scope (Only when isAdmin === true) */}
-              {isAdmin && (
-                <div className="pt-2 border-t border-border">
-                  <AdminControlAccordion
-                    scopingRules={scopingRules || []}
-                    onScopingRulesChange={(newRules) => onScopingRulesChange?.(newRules)}
-                    defaultAdminControlOpen={false}
-                    defaultScopeOpen={false}
-                    defaultPermissionsOpen={false}
-                    scopeTooltip="Define tenant scope rules. Visibility by tenant industry category, industries, and locations."
-                    permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
-                    className="w-full text-xs"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Search */}
-        <div className="p-3 border-b border-border">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add a Step</span>
-            <InfoTooltip text="Click any trigger below to set the starting point of this workflow. Click any action step to add it to the workflow." />
-          </div>
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search steps & triggers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-input-background border border-input rounded-lg text-xs"
+        {/* Admin Scope (Only when isAdmin === true) */}
+        {isAdmin && (
+          <div className="p-3 border-b border-border bg-card/60">
+            <AdminControlAccordion
+              scopingRules={scopingRules || []}
+              onScopingRulesChange={(newRules) => onScopingRulesChange?.(newRules)}
+              defaultAdminControlOpen={false}
+              defaultScopeOpen={false}
+              defaultPermissionsOpen={false}
+              scopeTooltip="Define tenant scope rules. Visibility by tenant industry category, industries, and locations."
+              permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+              className="w-full text-xs"
             />
           </div>
-        </div>
+        )}
 
-        {/* Category list */}
-        <div ref={sidebarRef} className="flex-1 overflow-y-auto">
-          {/* Triggers Category List (Sidebar shows only categories) */}
-          {(() => {
-            const triggerCategories: Array<{
-              id: string;
-              type: string;
-              label: string;
-              desc: string;
-              icon: React.ReactNode;
-              defaultTrigger: TriggerCatalogItem;
-            }> = scope === "stage"
-              ? [
-                  {
-                    id: "stage",
-                    type: "stage",
-                    label: "Stage Triggers",
-                    desc: "On stage entry or exit",
-                    icon: <GitBranch className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
-                  },
-                  {
-                    id: "client",
-                    type: "client",
-                    label: "Client Triggers",
-                    desc: "Profile creation & updates",
-                    icon: <User className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
-                  },
-                  {
-                    id: "appointment",
-                    type: "appointment",
-                    label: "Appointment Triggers",
-                    desc: "Booking, rescheduling, completion",
-                    icon: <Calendar className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
-                  },
-                ]
-              : [
-                  {
-                    id: "stage",
-                    type: "stage",
-                    label: "Stage Triggers",
-                    desc: "Stage entered or exited",
-                    icon: <GitBranch className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
-                  },
-                  {
-                    id: "field_update",
-                    type: "field_update",
-                    label: "Field Update Triggers",
-                    desc: "Monitored field value updates",
-                    icon: <Sliders className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "field_update") || allTriggers[0],
-                  },
-                  {
-                    id: "client",
-                    type: "client",
-                    label: "Client Triggers",
-                    desc: "Created, updated, product assigned",
-                    icon: <User className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
-                  },
-                  {
-                    id: "appointment",
-                    type: "appointment",
-                    label: "Appointment Triggers",
-                    desc: "Booked, rescheduled, completed",
-                    icon: <Calendar className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
-                  },
-                  {
-                    id: "invoice",
-                    type: "invoice",
-                    label: "Invoice Triggers",
-                    desc: "Invoice created or paid",
-                    icon: <Receipt className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice") || allTriggers[0],
-                  },
-                ];
-
-            return (
-              <div className="border-b border-border/60">
+        {!hasChosenTrigger ? (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Select Trigger Header & Search */}
+            <div className="p-3 border-b border-border flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Select Trigger</span>
+                  <InfoTooltip text="Choose a trigger event to start your automation flow. Each automation starts with one trigger." />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setCollapsedCats((s) => {
-                    const n = new Set(s);
-                    n.has("triggers") ? n.delete("triggers") : n.add("triggers");
-                    return n;
-                  })}
-                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setHasChosenTrigger(true);
+                    setOpenActionCategoryId("logic");
+                  }}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Proceed to add actions"
                 >
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Triggers</span>
-                  </div>
-                  {collapsedCats.has("triggers")
-                    ? <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                    : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+                  <span>Proceed to Actions →</span>
                 </button>
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search trigger categories..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-input-background border border-input rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </div>
 
-                {!collapsedCats.has("triggers") && (
-                  <div className="pb-2 px-2 space-y-1.5">
-                    {triggerCategories.map((cat) => {
-                      const isActiveCategory = activeTriggerItem?.triggerType === cat.type;
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => {
-                            selectTrigger(cat.defaultTrigger);
-                            const startNode = nodes.find((n) => n.type === "start");
-                            const baseNode = startNode || {
-                              id: "start",
-                              type: "start" as const,
-                              label: cat.defaultTrigger.label,
-                              x: 300,
-                              y: 80,
-                              config: {},
-                            };
-                            openConfig({
-                              ...baseNode,
-                              label: cat.defaultTrigger.label,
-                              config: {
-                                ...baseNode.config,
-                                category: cat.type,
-                                triggerType: cat.type,
-                                selectedEvent: cat.defaultTrigger.triggerEvent,
-                                triggerEvent: cat.defaultTrigger.triggerEvent,
-                                triggerLabel: cat.defaultTrigger.label,
-                                triggerDescription: cat.defaultTrigger.desc,
-                                triggerIconKey: cat.defaultTrigger.iconKey,
-                              },
-                            });
-                          }}
-                          className={`w-full text-left flex items-start gap-2.5 p-2 rounded-xl border transition-all cursor-pointer ${
-                            isActiveCategory
-                              ? "bg-primary/10 border-primary/40 text-primary shadow-2xs"
-                              : "bg-card border-border/60 hover:bg-muted/40 hover:border-border text-foreground/90"
-                          }`}
-                        >
-                          <div className={`p-1.5 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 ${
-                            isActiveCategory
-                              ? "bg-primary/20 border-primary/30 text-primary"
-                              : "bg-muted/50 border-border/40 text-muted-foreground"
-                          }`}>
-                            {cat.icon}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1">
-                              <p className={`text-xs font-semibold truncate ${isActiveCategory ? "text-primary" : "text-foreground"}`}>
-                                {cat.label}
-                              </p>
-                              {isActiveCategory && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">
-                                  Selected
-                                </span>
-                              )}
+            {/* Trigger Category Cards List */}
+            <div ref={sidebarRef} className="flex-1 overflow-y-auto p-2.5 space-y-2">
+              {filteredTriggerCategories.map((cat) => {
+                const isActiveCategory = activeTriggerItem?.triggerType === cat.type;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      selectTrigger(cat.defaultTrigger);
+                      const startNode = nodes.find((n) => n.type === "start");
+                      const baseNode = startNode || {
+                        id: "start",
+                        type: "start" as const,
+                        label: cat.defaultTrigger.label,
+                        x: 300,
+                        y: 80,
+                        config: {},
+                      };
+                      openConfig({
+                        ...baseNode,
+                        label: cat.defaultTrigger.label,
+                        config: {
+                          ...baseNode.config,
+                          category: cat.type,
+                          triggerType: cat.type,
+                          selectedEvent: cat.defaultTrigger.triggerEvent,
+                          triggerEvent: cat.defaultTrigger.triggerEvent,
+                          triggerLabel: cat.defaultTrigger.label,
+                          triggerDescription: cat.defaultTrigger.desc,
+                          triggerIconKey: cat.defaultTrigger.iconKey,
+                        },
+                      });
+                    }}
+                    className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
+                      isActiveCategory
+                        ? "bg-blue-50/80 border-blue-400 text-blue-900 shadow-2xs"
+                        : "bg-card border-border/80 hover:bg-muted/40 hover:border-border text-foreground/90"
+                    }`}
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-full border flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform ${
+                        isActiveCategory
+                          ? "bg-blue-100 border-blue-300 text-blue-600"
+                          : "bg-blue-50/80 border-blue-100/80 text-blue-600"
+                      }`}
+                    >
+                      {cat.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-xs font-semibold truncate ${isActiveCategory ? "text-blue-700" : "text-foreground group-hover:text-blue-600 transition-colors"}`}>
+                          {cat.label}
+                        </p>
+                        {isActiveCategory ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 leading-none">
+                            Selected
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 group-hover:text-blue-600 transition-colors">
+                            <span>Configure</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {cat.desc}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Proceed to Actions Footer */}
+            <div className="p-3 border-t border-border bg-card/60 flex flex-col gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setHasChosenTrigger(true);
+                  setOpenActionCategoryId("logic");
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <span>Proceed to Add Actions</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <p className="text-[10px] text-center text-muted-foreground truncate">
+                Selected: <span className="font-semibold text-foreground">{activeTriggerItem?.label || "Trigger"}</span>
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Add Actions Header & Search */}
+            <div className="p-3 border-b border-border flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Add Actions</span>
+                  <InfoTooltip text="Click any action below to add it to your workflow canvas." />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasChosenTrigger(false);
+                    if (sidebarRef.current) sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Return to trigger selection"
+                >
+                  <span>← Change Trigger</span>
+                </button>
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search action steps..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-input-background border border-input rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* Action Categories Accordion (Only one open at a time) */}
+            <div ref={sidebarRef} className="flex-1 overflow-y-auto">
+              {filteredCats.map((cat) => {
+                const isCatOpen = q ? true : openActionCategoryId === cat.id;
+                return (
+                  <div key={cat.id} className="border-b border-border/60">
+                    <button
+                      type="button"
+                      onClick={() => setOpenActionCategoryId((prev) => (prev === cat.id ? null : cat.id))}
+                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {cat.icon}
+                        {cat.label}
+                      </div>
+                      {isCatOpen ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+
+                    {isCatOpen && (
+                      <div className="pb-3 px-2.5 space-y-2">
+                        {cat.nodes.map((node) => (
+                          <button
+                            key={node.type}
+                            type="button"
+                            onClick={() => addNode(node.type)}
+                            className="w-full text-left flex items-start gap-2.5 p-2.5 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 transition-all cursor-pointer shadow-2xs group"
+                          >
+                            <div className="w-9 h-9 rounded-full bg-blue-50/80 border border-blue-100/80 flex items-center justify-center shrink-0 mt-0.5 text-blue-600 group-hover:scale-105 transition-transform">
+                              {node.icon}
                             </div>
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              {cat.desc}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="text-xs font-semibold text-foreground group-hover:text-blue-600 transition-colors truncate">
+                                  {node.label}
+                                </p>
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 group-hover:text-blue-600 transition-colors">
+                                  <span>+ Add</span>
+                                  <ChevronRight className="w-3 h-3" />
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                {node.desc}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Action Categories */}
-          {filteredCats.map((cat) => {
-            const collapsed = collapsedCats.has(cat.id);
-            return (
-              <div key={cat.id} className="border-b border-border/60">
-                <button
-                  type="button"
-                  onClick={() => setCollapsedCats((s) => {
-                    const n = new Set(s);
-                    n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id);
-                    return n;
-                  })}
-                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {cat.icon}
-                    {cat.label}
-                  </div>
-                  {collapsed
-                    ? <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                    : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-                </button>
-
-                {!collapsed && (
-                  <div className="pb-2 px-2 space-y-1">
-                    {cat.nodes.map((node) => (
-                      <button
-                        key={node.type}
-                        type="button"
-                        onClick={() => addNode(node.type)}
-                        className="w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-primary/5 hover:text-primary transition-colors group cursor-pointer"
-                      >
-                        <span className="flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
-                          {node.icon}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">{node.label}</p>
-                          <p className="text-[10px] text-muted-foreground truncate leading-tight">{node.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── CENTER: Canvas ─────────────────────────────────────────────────── */}
@@ -2273,8 +2357,12 @@ export default function FlowBuilderTab({
             >
               <Hand className="w-4 h-4" />
             </button>
-            <div className="w-px h-4 bg-border mx-1" />
-            <HowItWorksButton label="How Flow Builder Works" onClick={() => setShowFlowBuilderHelp(true)} />
+            {!hideHowItWorks && (
+              <>
+                <div className="w-px h-4 bg-border mx-1" />
+                <HowItWorksButton label="How Flow Builder Works" onClick={() => setShowFlowBuilderHelp(true)} />
+              </>
+            )}
             <Button
               variant="primary"
               size="sm"
@@ -2538,6 +2626,9 @@ export default function FlowBuilderTab({
 
 
             {/* Nodes */}
+            {/* First Action Placeholder if no steps yet */}
+
+            
             {nodes.map((node) => {
               const style = NODE_STYLE[node.type] || NODE_STYLE.start;
               const ports = getOutputPorts(node);
@@ -2684,7 +2775,7 @@ export default function FlowBuilderTab({
                     </div>
                   ) : (
                     <div
-                      className={`rounded-xl border-2 ${style.bg} ${style.border} shadow-sm transition-all select-none ${
+                      className={`rounded-2xl border-2 ${style.bg} ${style.border} shadow-sm transition-all select-none ${
                         isTargetNode
                           ? "ring-2 ring-primary ring-offset-2 border-primary bg-primary/10 shadow-lg cursor-pointer scale-[1.02]"
                           : isStart
@@ -2696,7 +2787,7 @@ export default function FlowBuilderTab({
                       style={{ minHeight: NODE_H }}
                       onClick={isStart && !isTargetNode ? focusTriggersCategory : undefined}
                     >
-                      <div className="px-3 py-2.5 flex items-start gap-2.5">
+                      <div className="px-3.5 py-3 flex items-start gap-2.5">
                         <div className={`flex-shrink-0 mt-0.5 ${style.text}`}>
                           {isStart ? (
                             getTriggerIconComponent(node.config?.triggerIconKey || activeTriggerItem?.iconKey || triggerIconKey, node.config?.triggerType || activeTriggerItem?.triggerType || triggerType)
@@ -2725,68 +2816,12 @@ export default function FlowBuilderTab({
                             )}
                           </div>
 
-                          {/* Subtitle / context description */}
-                          {isStart && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              {node.config?.triggerDescription || activeTriggerItem?.desc || (node.config?.scope === "global" ? (node.config?.triggerEvent || "Rule entry point") : `Process: ${processName}`)}
-                            </p>
-                          )}
-                          {node.type === "generate-invoice" && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              {node.config?.billFor === "choose"
-                                ? `Custom (${(node.config?.selectedServices || []).length} items)`
-                                : node.config?.billFor === "client"
-                                ? "Client's services"
-                                : "Appointment's service"}
-                            </p>
-                          )}
-                          {node.type === "send-payment" && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              Payment link & checkout
-                            </p>
-                          )}
-                          {node.type === "send-invoice" && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              Send invoice statement
-                            </p>
-                          )}
-                          {(node.type === "update-stage" || node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (() => {
-                            const entity = node.config?.stageEntity || node.config?.entityType || "processes";
-                            if (entity === "appointment") {
-                              const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
-                              const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
-                              return (
-                                <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                  {procDisplay ? `${procDisplay} → ${stageName}` : `Appointment → ${stageName}`}
-                                </p>
-                              );
-                            }
-                            if (entity === "invoice") {
-                              const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
-                              const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
-                              return (
-                                <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                  {procDisplay ? `${procDisplay} → ${stageName}` : `Invoice → ${stageName}`}
-                                </p>
-                              );
-                            }
-                            const targetProc = effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId));
-                            const targetStage = targetProc?.stages?.find(s => s.id === (node.config?.stepDetailStage || node.config?.stageId) || s.name === (node.config?.stepDetailStage || node.config?.stageId));
-                            const procDisplay = targetProc?.name || node.config?.processName;
-                            const stageDisplay = targetStage?.name || node.config?.stageName;
-                            return (
-                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                {stageDisplay && procDisplay ? `${procDisplay} → ${stageDisplay}` :
-                                 stageDisplay ? `Stage: ${stageDisplay}` :
-                                 procDisplay ? `Process: ${procDisplay}` : "Update to stage"}
-                              </p>
-                            );
-                          })()}
+                          {/* Subtitle / context description matching trigger node UI */}
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            {getNodeSubtitle(node, effectiveProcesses, stageName, processName, activeTriggerItem)}
+                          </p>
                           {node.type === "parallel" && (
-                            <div className="mt-1 flex items-center justify-between gap-1">
-                              <p className="text-[10px] text-muted-foreground truncate">
-                                Runs {(node.config.branches || []).length} branches concurrently
-                              </p>
+                            <div className="mt-1 flex items-center justify-end">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2800,25 +2835,6 @@ export default function FlowBuilderTab({
                                 <Plus className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          )}
-                          {node.type === "condition" && (node.config.conditionSummary || node.config.value) && (
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              {node.config.conditionSummary || `${node.config.fieldSource} · ${node.config.operator} · ${node.config.value}`}
-                            </p>
-                          )}
-                          {node.type === "wait" && (
-                            <p className="text-[10px] text-muted-foreground">
-                              Wait {node.config.delayValue ?? node.config.duration ?? 5} {node.config.delayUnit ?? node.config.unit ?? "minutes"}
-                            </p>
-                          )}
-                          {node.type === "send-email" && node.config.subject && (
-                            <p className="text-[10px] text-muted-foreground truncate">{node.config.subject}</p>
-                          )}
-                          {node.type === "send-sms" && node.config.smsMessage && (
-                            <p className="text-[10px] text-muted-foreground truncate">{node.config.smsMessage}</p>
-                          )}
-                          {(node.type === "call-transfer" || node.type === "call-transfer-human") && node.config.callActionPhoneNumber && (
-                            <p className="text-[10px] text-muted-foreground truncate">{node.config.callActionCountryCode} {node.config.callActionPhoneNumber}</p>
                           )}
                         </div>
 
@@ -2839,6 +2855,20 @@ export default function FlowBuilderTab({
                         )}
                       </div>
 
+                      {/* Start node proceed to action hint */}
+                      {isStart && !hasChosenTrigger && (
+                        <div
+                          className="px-3 pb-2 text-[10px] text-blue-600 font-semibold cursor-pointer hover:underline flex items-center gap-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHasChosenTrigger(true);
+                            setOpenActionCategoryId("logic");
+                            if (sidebarRef.current) sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                        >
+                          <span>+ Proceed to Add Actions →</span>
+                        </div>
+                      )}
                       {/* Config hint */}
                       {!isStart && !isEnd && isSelected && node.type !== "parallel" && (
                         <div
@@ -3090,7 +3120,8 @@ export default function FlowBuilderTab({
       />
 
       {/* How It Works — Flow Builder */}
-      <HowItWorksModal
+      {!hideHowItWorks && (
+        <HowItWorksModal
         isOpen={showFlowBuilderHelp}
         onClose={() => setShowFlowBuilderHelp(false)}
         title="How Flow Builder Works"
@@ -3104,6 +3135,7 @@ export default function FlowBuilderTab({
         ]}
         guideUrl="/guide/process-settings#flow-builder-canvas"
       />
+      )}
     </div>
   );
 }

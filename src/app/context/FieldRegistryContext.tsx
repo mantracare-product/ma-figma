@@ -579,6 +579,8 @@ export interface FieldDefinition {
   };
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
   contactCategories?: string[]; // Contact categories (e.g. ["Lead", "Client", "Supplier", "Vendor"] or custom user categories)
+  category?: string;          // Assigned category for the field (for appointment, invoice, claim, process, etc.)
+  categories?: string[];      // Multiple assigned categories
   processIds?: string[];      // Assigned process template IDs (for module="process")
   requiredStages?: string[];  // Specific stage names/IDs this field is required for (for module="process" when required=true)
   isReusable?: boolean;        // Reusable across other modules (global field)
