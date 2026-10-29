@@ -9,9 +9,12 @@ export type StageTrigger = {
 };
 
 export type EventTriggerType =
-  | "appointment"
+  | "process"
   | "client"
+  | "appointment"
   | "invoice"
+  | "call"
+  | "ai"
   | "insurance"
   | "stage"
   | "field_update";
@@ -88,72 +91,62 @@ export interface GlobalTriggerDefinition {
 
 export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
   {
+    type: "process",
+    label: "Process",
+    description: "Trigger when a process workflow record is created or updated",
+    iconKey: "workflow",
+    events: [
+      { event: "process.created", label: "Process created", description: "Fires when a new process workflow record is created" },
+      { event: "process.updated", label: "Process updated", description: "Fires when a process workflow record is updated" },
+    ],
+  },
+  {
     type: "client",
     label: "Client",
-    description: "Trigger when client records are created, updated, or products are assigned",
+    description: "Trigger when a client record is created or updated",
     iconKey: "user",
     events: [
       { event: "client.created", label: "Client created", description: "New client record added from any intake source" },
-      { event: "client.updated", label: "Client updated", description: "Client demographic or medical records change" },
-      { event: "client.product_assigned", label: "Assign Product", description: "Product or service is assigned to client in client profile" },
-      { event: "client.deleted", label: "Client deleted", description: "Client record is archived or removed" },
+      { event: "client.updated", label: "Client updated", description: "Client demographic or record details change" },
     ],
   },
   {
     type: "appointment",
     label: "Appointment",
-    description: "Trigger when a clinic appointment is booked, changed, or completed",
+    description: "Trigger when an appointment is created or updated",
     iconKey: "calendar",
     events: [
-      { event: "appointment.booked", label: "Appointment booked", description: "A time slot is confirmed for a client" },
-      { event: "appointment.rescheduled", label: "Appointment rescheduled", description: "An existing booking time or date is updated" },
-      { event: "appointment.cancelled", label: "Appointment cancelled", description: "A booking is cancelled by client or clinic" },
-      { event: "appointment.completed", label: "Appointment completed", description: "Consultation or clinical service concludes" },
-      { event: "appointment.no_show", label: "No-show", description: "Client fails to attend scheduled session without notice" },
+      { event: "appointment.created", label: "Appointment created", description: "A time slot or booking is created for a client" },
+      { event: "appointment.updated", label: "Appointment updated", description: "An existing booking time, date, or status is updated" },
     ],
   },
   {
     type: "invoice",
     label: "Invoice",
-    description: "Trigger on billing statements, payments, and overdue statuses",
+    description: "Trigger when an invoice is created or updated",
     iconKey: "receipt",
     events: [
-      { event: "invoice.created", label: "Invoice created", description: "New billing invoice is created as draft" },
-      { event: "invoice.sent", label: "Invoice sent", description: "Invoice is emailed, SMS'd, or dispatched to client" },
-      { event: "invoice.viewed", label: "Invoice viewed", description: "Client opens online payment link" },
-      { event: "invoice.partially_paid", label: "Partially paid", description: "Installment or partial amount received" },
-      { event: "invoice.paid", label: "Invoice paid", description: "Full balance collected and settled" },
-      { event: "invoice.overdue", label: "Invoice overdue", description: "Due date elapsed without complete payment" },
-      { event: "invoice.voided", label: "Invoice voided", description: "Invoice cancelled or written off" },
+      { event: "invoice.created", label: "Invoice created", description: "New billing invoice is created or drafted" },
+      { event: "invoice.updated", label: "Invoice updated", description: "Invoice details, items, or payment status are modified" },
     ],
   },
   {
-    type: "insurance",
-    label: "Insurance",
-    description: "Trigger on insurance eligibility checks and coverage updates",
-    iconKey: "shieldcheck",
+    type: "call",
+    label: "Call",
+    description: "Trigger when a call session is created or updated",
+    iconKey: "phone",
     events: [
-      { event: "insurance.verified", label: "Eligibility verified", description: "Policy benefits confirmed active with co-pay" },
-      { event: "insurance.failed", label: "Verification failed", description: "Policy expired, inactive, or rejected by payer" },
+      { event: "call.created", label: "Call created", description: "A new inbound or outbound call session is initiated" },
+      { event: "call.updated", label: "Call updated", description: "Call recording, transcript, analysis, or status is modified" },
     ],
   },
   {
-    type: "stage",
-    label: "Stage",
-    description: "Trigger when a record enters or leaves a specific stage",
-    iconKey: "gitbranch",
+    type: "ai",
+    label: "AI",
+    description: "Trigger when an AI prompt condition or natural language instruction is matched",
+    iconKey: "sparkles",
     events: [
-      { event: "stage.entered", label: "Stage entered", description: "Record transitions into the selected process stage" },
-      { event: "stage.exited", label: "Stage exited", description: "Record transitions out of the selected process stage" },
-    ],
-  },
-  {
-    type: "field_update",
-    label: "Field Update",
-    description: "Trigger when monitored fields are modified on a record",
-    iconKey: "sliders",
-    events: [
-      { event: "field.updated", label: "Field updated", description: "Monitored field value is modified on record" },
+      { event: "ai.prompt", label: "AI Prompt Trigger", description: "Fires when prompt condition or natural language instruction evaluates to true" },
     ],
   },
 ];

@@ -8,6 +8,7 @@ export function isParallelStep(step: WorkflowStep): boolean {
   return (
     step.kind === "parallel" ||
     step.stepKey === "parallel" ||
+    step.stepKey === "condition" ||
     (Array.isArray(step.branches) && step.branches.length > 0)
   );
 }
@@ -17,6 +18,89 @@ export function isParallelStep(step: WorkflowStep): boolean {
  */
 export function ensureValidBranches(step: WorkflowStep): WorkflowStep {
   if (!isParallelStep(step)) return step;
+
+  if (step.stepKey === "condition") {
+    const existingBranches = Array.isArray(step.branches) ? [...step.branches] : [];
+    const baseId = step.id || `condition-${Date.now()}`;
+    const rawCases = Array.isArray(step.params?.cases) && step.params.cases.length > 0 ? step.params.cases : null;
+
+    // Find or preserve Else branch
+    const elseBranchId = step.params?.elseBranchId || `${baseId}-else`;
+    const existingElse = existingBranches.find(
+      (b) => b.id === elseBranchId || b.id === "else" || b.id.endsWith("-else") || b.name === "Else"
+    );
+    const elseBranch: AutomationBranch = {
+      id: existingElse?.id || elseBranchId,
+      name: "Else",
+      steps: Array.isArray(existingElse?.steps) ? existingElse.steps.map(ensureValidBranches) : [],
+    };
+
+    let caseBranches: AutomationBranch[] = [];
+    if (rawCases && rawCases.length > 0) {
+      caseBranches = rawCases.map((c, idx) => {
+        const caseId = c.id || `${baseId}-case-${idx + 1}`;
+        const existing = existingBranches.find(
+          (b) => b.id === caseId || b.name === c.name || (idx === 0 && (b.id.endsWith("-case-1") || b.name === "Case 1"))
+        );
+        return {
+          id: caseId,
+          name: c.name || `Case ${idx + 1}`,
+          steps: Array.isArray(existing?.steps) ? existing.steps.map(ensureValidBranches) : [],
+        };
+      });
+    } else if (existingBranches.length > 0) {
+      const nonElse = existingBranches.filter(
+        (b) => b.id !== elseBranch.id && b.id !== "else" && !b.id.endsWith("-else") && b.name !== "Else"
+      );
+      if (nonElse.length > 0) {
+        caseBranches = nonElse.map((b, idx) => ({
+          id: b.id || `${baseId}-case-${idx + 1}`,
+          name: b.name || `Case ${idx + 1}`,
+          steps: Array.isArray(b.steps) ? b.steps.map(ensureValidBranches) : [],
+        }));
+      } else {
+        caseBranches = [
+          {
+            id: `${baseId}-case-1`,
+            name: "Case 1",
+            steps: [],
+          },
+        ];
+      }
+    } else {
+      caseBranches = [
+        {
+          id: `${baseId}-case-1`,
+          name: "Case 1",
+          steps: [],
+        },
+      ];
+    }
+
+    const branches = [...caseBranches, elseBranch];
+
+    return {
+      ...step,
+      kind: "parallel",
+      stepKey: "condition",
+      iconKey: "split",
+      name: step.name || "Condition",
+      description: step.description || "Evaluate condition cases and branch execution",
+      branches,
+      params: {
+        ...(step.params || {}),
+        elseBranchId: elseBranch.id,
+        cases:
+          rawCases ||
+          caseBranches.map((cb) => ({
+            id: cb.id,
+            name: cb.name,
+            matchLogic: "AND",
+            conditions: [],
+          })),
+      },
+    };
+  }
 
   const existingBranches = Array.isArray(step.branches) ? [...step.branches] : [];
   const baseId = step.id || `parallel-${Date.now()}`;
@@ -300,6 +384,43 @@ export function addBranchToStep(steps: WorkflowStep[], parallelStepId: string): 
     for (const s of list) {
       if (s.id === parallelStepId && isParallelStep(s)) {
         s.branches = s.branches || [];
+        if (s.stepKey === "condition") {
+          const elseIdx = s.branches.findIndex((b) => b.id === "else" || b.id.endsWith("-else") || b.name === "Else");
+          const caseCount = elseIdx !== -1 ? elseIdx : s.branches.length;
+          const newCaseId = `${s.id}-case-${caseCount + 1}-${Date.now().toString(36).substring(4)}`;
+          const newCaseName = `Case ${caseCount + 1}`;
+          const newBranch = {
+            id: newCaseId,
+            name: newCaseName,
+            steps: [],
+          };
+          if (elseIdx !== -1) {
+            s.branches.splice(elseIdx, 0, newBranch);
+          } else {
+            s.branches.push(newBranch);
+          }
+          if (s.params) {
+            s.params.cases = s.params.cases || [];
+            s.params.cases.push({
+              id: newCaseId,
+              name: newCaseName,
+              matchLogic: "AND",
+              conditions: [
+                {
+                  id: `cond-${Date.now()}`,
+                  field: "",
+                  fieldLabel: "",
+                  fieldSource: "client",
+                  operator: "Equal To",
+                  valueType: "static",
+                  value: "",
+                  logicOp: "AND",
+                }
+              ]
+            });
+          }
+          return true;
+        }
         const nextIdx = s.branches.length + 1;
         s.branches.push({
           id: `${s.id}-b${Date.now()}-${nextIdx}`,
@@ -339,6 +460,24 @@ export function removeBranchFromStep(
     for (const s of list) {
       if (s.id === parallelStepId && isParallelStep(s)) {
         s.branches = s.branches || [];
+        if (s.stepKey === "condition") {
+          const isElse = branchId === "else" || branchId.endsWith("-else") || s.branches.find((b) => b.id === branchId)?.name === "Else";
+          if (isElse) {
+            reason = "The Else fallback branch cannot be deleted.";
+            return true;
+          }
+          const caseBranches = s.branches.filter((b) => !(b.id === "else" || b.id.endsWith("-else") || b.name === "Else"));
+          if (caseBranches.length <= 1) {
+            reason = "A Condition node must have at least 1 Case plus the Else branch.";
+            return true;
+          }
+          s.branches = s.branches.filter((b) => b.id !== branchId);
+          if (s.params && Array.isArray(s.params.cases)) {
+            s.params.cases = s.params.cases.filter((c) => c.id !== branchId);
+          }
+          success = true;
+          return true;
+        }
         if (s.branches.length <= 2) {
           reason = "A Parallel node must have at least 2 branches.";
           return true;

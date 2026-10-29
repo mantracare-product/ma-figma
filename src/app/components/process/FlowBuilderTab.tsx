@@ -12,6 +12,7 @@ import VariableSelectorModal from "./VariableSelectorModal";
 import type { WorkflowStep } from "../../types/workflow";
 import {
   isParallelStep,
+  ensureValidBranches,
   createParallelStep,
   appendStepToTree,
   deleteStepFromTree,
@@ -78,6 +79,7 @@ const getStepFirstNodeId = (step: WorkflowStep): string => {
 type NodeType =
   | "start" | "end" | "overview"
   | "condition" | "wait" | "parallel" | "empty-branch"
+  | "create-appointment" | "create-client" | "create-process"
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
@@ -156,6 +158,9 @@ export interface TriggerCatalogItem {
 
 // ─── Reverse mapping: NodeType → stepKey ─────────────────────────────────────
 const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
+  "create-appointment": "create_appointment",
+  "create-client": "create_client",
+  "create-process": "create_process",
   "condition": "condition",
   "wait": "wait",
   "call-transfer": "callaction",
@@ -188,6 +193,9 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
 };
 
 const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
+  "create-appointment": "calendar",
+  "create-client": "user",
+  "create-process": "workflow",
   "condition": "split",
   "wait": "clock",
   "call-transfer": "phonecall",
@@ -233,14 +241,37 @@ const NODE_CATEGORIES = [
     ],
   },
   {
+    id: "crm-entities",
+    label: "Create CRM Entities",
+    icon: <Plus className="w-3.5 h-3.5" />,
+    nodes: [
+      {
+        type: "create-appointment" as NodeType,
+        label: "Create Appointment",
+        icon: <Calendar className="w-4 h-4" />,
+        desc: "Create and schedule a new appointment record in CRM",
+      },
+      {
+        type: "create-client" as NodeType,
+        label: "Create Client",
+        icon: <User className="w-4 h-4" />,
+        desc: "Create a new contact or client record in CRM",
+      },
+      {
+        type: "create-process" as NodeType,
+        label: "Create Process",
+        icon: <Workflow className="w-4 h-4" />,
+        desc: "Create and enroll a record into a process workflow",
+      },
+    ],
+  },
+  {
     id: "records",
     label: "Records & Billing",
     icon: <CreditCard className="w-3.5 h-3.5" />,
     nodes: [
       { type: "generate-invoice" as NodeType, label: "Generate Invoice", icon: <FileText className="w-4 h-4" />, desc: "Generate draft invoice for appointment (strictly idempotent)" },
       { type: "generate-document" as NodeType, label: "Generate Document", icon: <FileText className="w-4 h-4" />, desc: "Generate document from template for client, process, appointment, or invoice" },
-      { type: "send-payment" as NodeType, label: "Send Payment", icon: <CreditCard className="w-4 h-4" />, desc: "Send payment link or invoice checkout request" },
-      { type: "send-invoice" as NodeType, label: "Send Invoice", icon: <FileText className="w-4 h-4" />, desc: "Send invoice link to client via preferred channel" },
     ],
   },
   {
@@ -258,8 +289,6 @@ const NODE_CATEGORIES = [
     label: "Data & Assignment",
     icon: <Settings2 className="w-3.5 h-3.5" />,
     nodes: [
-      { type: "assign-process" as NodeType, label: "Assign Process", icon: <Workflow className="w-4 h-4" />, desc: "Enroll record into a process workflow, choose stage, and populate required process fields" },
-      { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update record attributes or custom field values" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member to handle this record" },
       { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data payload via webhook" },
     ],
@@ -267,146 +296,126 @@ const NODE_CATEGORIES = [
 ];
 
 export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: string): TriggerCatalogItem[] => {
-  if (scope === "global") {
-    return [
-      {
-        id: "trig-global-stage-entry",
-        triggerType: "stage",
-        triggerEvent: "stage.entered",
-        label: "Stage Entered",
-        desc: "Fires when a record moves into a selected stage",
-        icon: <GitBranch className="w-4 h-4" />,
-        iconKey: "gitbranch",
-      },
-      {
-        id: "trig-global-stage-exit",
-        triggerType: "stage",
-        triggerEvent: "stage.exited",
-        label: "Stage Exited",
-        desc: "Fires when a record moves out of a selected stage",
-        icon: <GitBranch className="w-4 h-4" />,
-        iconKey: "gitbranch",
-      },
-      {
-        id: "trig-global-field-update",
-        triggerType: "field_update",
-        triggerEvent: "field.updated",
-        label: "Field Update",
-        desc: "Fires when monitored fields on a record are updated",
-        icon: <Sliders className="w-4 h-4" />,
-        iconKey: "sliders",
-      },
-      {
-        id: "trig-client-created",
-        triggerType: "client",
-        triggerEvent: "client.created",
-        label: "Client Created",
-        desc: "Fires when a new client record is added",
-        icon: <User className="w-4 h-4" />,
-        iconKey: "user",
-      },
-      {
-        id: "trig-client-updated",
-        triggerType: "client",
-        triggerEvent: "client.updated",
-        label: "Client Updated",
-        desc: "Fires when client details are modified",
-        icon: <User className="w-4 h-4" />,
-        iconKey: "user",
-      },
-      {
-        id: "trig-client-product-assigned",
-        triggerType: "client",
-        triggerEvent: "client.product_assigned",
-        label: "Assign Product",
-        desc: "Fires when a product or service is assigned to a client",
-        icon: <Briefcase className="w-4 h-4" />,
-        iconKey: "briefcase",
-      },
-      {
-        id: "trig-appt-booked",
-        triggerType: "appointment",
-        triggerEvent: "appointment.booked",
-        label: "Appointment Booked",
-        desc: "Fires when a time slot is confirmed",
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
+  return [
+    // Process Triggers
+    {
+      id: "trig-process-created",
+      triggerType: "process",
+      triggerEvent: "process.created",
+      label: "Process Created",
+      desc: "Fires when a new process workflow is enrolled or created",
+      icon: <Workflow className="w-4 h-4" />,
+      iconKey: "workflow",
+    },
+    {
+      id: "trig-process-updated",
+      triggerType: "process",
+      triggerEvent: "process.updated",
+      label: "Process Updated",
+      desc: "Fires when a process workflow record or stage is updated",
+      icon: <Workflow className="w-4 h-4" />,
+      iconKey: "workflow",
+    },
 
-      {
-        id: "trig-appt-rescheduled",
-        triggerType: "appointment",
-        triggerEvent: "appointment.rescheduled",
-        label: "Appointment Rescheduled",
-        desc: "Fires when appointment time is changed",
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
-      {
-        id: "trig-appt-cancelled",
-        triggerType: "appointment",
-        triggerEvent: "appointment.cancelled",
-        label: "Appointment Cancelled",
-        desc: "Fires when an appointment is cancelled",
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
-      {
-        id: "trig-appt-completed",
-        triggerType: "appointment",
-        triggerEvent: "appointment.completed",
-        label: "Appointment Completed",
-        desc: "Fires when an appointment or consultation concludes successfully",
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
-      {
-        id: "trig-inv-created",
-        triggerType: "invoice",
-        triggerEvent: "invoice.created",
-        label: "Invoice Created",
-        desc: "Fires when a billing invoice is drafted",
-        icon: <Receipt className="w-4 h-4" />,
-        iconKey: "receipt",
-      },
-      {
-        id: "trig-inv-paid",
-        triggerType: "invoice",
-        triggerEvent: "invoice.paid",
-        label: "Invoice Paid",
-        desc: "Fires when invoice payment is collected",
-        icon: <CreditCard className="w-4 h-4" />,
-        iconKey: "receipt",
-      },
-    ];
-  } else {
-    // Stage Scope — Stage Enter/Exit and Check-In Triggers
-    return [
-      {
-        id: "trig-stage-entry",
-        triggerType: "stage",
-        triggerEvent: "stage.entry",
-        label: `On Entry: ${stageName}`,
-        desc: `Fires when record moves into "${stageName}"`,
-        icon: <GitBranch className="w-4 h-4" />,
-        iconKey: "gitbranch",
-      },
-      {
-        id: "trig-stage-exit",
-        triggerType: "stage",
-        triggerEvent: "stage.exit",
-        label: `On Exit: ${stageName}`,
-        desc: `Fires when record moves out of "${stageName}"`,
-        icon: <GitBranch className="w-4 h-4" />,
-        iconKey: "gitbranch",
-      },
-    ];
-  }
+    // Client Triggers
+    {
+      id: "trig-client-created",
+      triggerType: "client",
+      triggerEvent: "client.created",
+      label: "Client Created",
+      desc: "Fires when a new client record is added to CRM",
+      icon: <User className="w-4 h-4" />,
+      iconKey: "user",
+    },
+    {
+      id: "trig-client-updated",
+      triggerType: "client",
+      triggerEvent: "client.updated",
+      label: "Client Updated",
+      desc: "Fires when existing client profile details or fields are modified",
+      icon: <User className="w-4 h-4" />,
+      iconKey: "user",
+    },
+
+    // Appointment Triggers
+    {
+      id: "trig-appointment-created",
+      triggerType: "appointment",
+      triggerEvent: "appointment.created",
+      label: "Appointment Created",
+      desc: "Fires when a new appointment booking is scheduled",
+      icon: <Calendar className="w-4 h-4" />,
+      iconKey: "calendar",
+    },
+    {
+      id: "trig-appointment-updated",
+      triggerType: "appointment",
+      triggerEvent: "appointment.updated",
+      label: "Appointment Updated",
+      desc: "Fires when appointment details or schedule are updated",
+      icon: <Calendar className="w-4 h-4" />,
+      iconKey: "calendar",
+    },
+
+    // Invoice Triggers
+    {
+      id: "trig-invoice-created",
+      triggerType: "invoice",
+      triggerEvent: "invoice.created",
+      label: "Invoice Created",
+      desc: "Fires when a new billing invoice is created or drafted",
+      icon: <Receipt className="w-4 h-4" />,
+      iconKey: "receipt",
+    },
+    {
+      id: "trig-invoice-updated",
+      triggerType: "invoice",
+      triggerEvent: "invoice.updated",
+      label: "Invoice Updated",
+      desc: "Fires when an invoice record or status is modified",
+      icon: <Receipt className="w-4 h-4" />,
+      iconKey: "receipt",
+    },
+
+    // Call Triggers
+    {
+      id: "trig-call-created",
+      triggerType: "call",
+      triggerEvent: "call.created",
+      label: "Call Created",
+      desc: "Fires when a new call session is initiated or logged",
+      icon: <Phone className="w-4 h-4" />,
+      iconKey: "phone",
+    },
+    {
+      id: "trig-call-updated",
+      triggerType: "call",
+      triggerEvent: "call.updated",
+      label: "Call Updated",
+      desc: "Fires when call metadata, transcript, or status updates",
+      icon: <Phone className="w-4 h-4" />,
+      iconKey: "phone",
+    },
+
+    // AI Triggers
+    {
+      id: "trig-ai-prompt",
+      triggerType: "ai",
+      triggerEvent: "ai.prompt",
+      label: "AI Prompt Trigger",
+      desc: "Fires when prompt evaluation or natural language condition matches",
+      icon: <Sparkles className="w-4 h-4" />,
+      iconKey: "sparkles",
+    },
+  ];
 };
 
 // ─── Node visual config ───────────────────────────────────────────────────────
 
 const NODE_STYLE: Record<string, { bg: string; border: string; text: string; icon?: string }> = {
+  "create-appointment": { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-400", text: "text-teal-700 dark:text-teal-400" },
+  "create-client":      { bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-400", text: "text-blue-700 dark:text-blue-400" },
+  "create-process":     { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   start:                 { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
   end:                   { bg: "bg-red-50 dark:bg-red-900/20",     border: "border-red-400",     text: "text-red-700 dark:text-red-400" },
   condition:             { bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-400", text: "text-violet-700 dark:text-violet-400" },
@@ -441,6 +450,9 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
 };
 
 function getNodeIcon(type: NodeType) {
+  if (type === "create-appointment") return <Calendar className="w-4 h-4" />;
+  if (type === "create-client") return <User className="w-4 h-4" />;
+  if (type === "create-process") return <Workflow className="w-4 h-4" />;
   if (type === "assign-process" || (type as string) === "assign_process") return <Workflow className="w-4 h-4" />;
   if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
   if (type === "generate-document") return <FileText className="w-4 h-4" />;
@@ -451,6 +463,9 @@ function getNodeIcon(type: NodeType) {
 }
 
 function getNodeLabel(type: NodeType) {
+  if (type === "create-appointment") return "Create Appointment";
+  if (type === "create-client") return "Create Client";
+  if (type === "create-process") return "Create Process";
   if (type === "assign-process" || (type as string) === "assign_process") return "Assign Process";
   if (type === "generate-document") return "Generate Document";
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
@@ -521,10 +536,28 @@ function getNodeSubtitle(
   if (node.type === "parallel") {
     return `Runs ${(node.config?.branches || []).length} branches concurrently`;
   }
+  if (node.type === "create-appointment") {
+    const timing = node.config?.scheduleOffsetValue !== undefined
+      ? `${node.config.scheduleOffsetValue} ${(node.config.scheduleOffsetUnit || "days").replace("_", " ")} ${node.config.scheduleDirection || "after"}`
+      : "";
+    return node.config?.serviceName
+      ? `Appt: ${node.config.serviceName}${timing ? ` • ${timing}` : ""}`
+      : (timing ? `Appt • ${timing}` : "Create & schedule appointment");
+  }
+  if (node.type === "create-client") return node.config?.name || node.config?.clientName ? `Client: ${node.config.name || node.config.clientName}` : "Create new CRM client record";
+  if (node.type === "create-process") return node.config?.processName ? `Enroll in ${node.config.processName}` : "Create & enroll in process";
   if (node.type === "condition") {
+    const cases = node.config?.cases || [];
+    if (cases.length > 0) {
+      return `${cases.length} Case${cases.length > 1 ? "s" : ""} + Else`;
+    }
+    const branches = node.config?.branches || [];
+    if (branches.length > 0) {
+      const caseCount = Math.max(1, branches.length - 1);
+      return `${caseCount} Case${caseCount > 1 ? "s" : ""} + Else`;
+    }
     if (node.config?.conditionSummary) return node.config.conditionSummary;
-    if (node.config?.value) return `${node.config.fieldSource || "field"} · ${node.config.operator || "="} · ${node.config.value}`;
-    return "Gate step behind condition";
+    return "Evaluate condition cases";
   }
   if (node.type === "wait") {
     return `Wait ${node.config?.delayValue ?? node.config?.duration ?? 5} ${node.config?.delayUnit ?? node.config?.unit ?? "minutes"}`;
@@ -564,17 +597,19 @@ function getNodeSubtitle(
 }
 
 function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) {
+  if (triggerIconKey === "workflow" || triggerType === "process") return <Workflow className="w-4 h-4" />;
   if (triggerIconKey === "calendar" || triggerType === "appointment") return <Calendar className="w-4 h-4" />;
   if (triggerIconKey === "receipt" || triggerType === "invoice") return <Receipt className="w-4 h-4" />;
+  if (triggerIconKey === "phone" || triggerType === "call") return <Phone className="w-4 h-4" />;
+  if (triggerIconKey === "sparkles" || triggerType === "ai") return <Sparkles className="w-4 h-4" />;
+  if (triggerIconKey === "user" || triggerType === "client") return <User className="w-4 h-4" />;
   if (triggerIconKey === "briefcase" || triggerIconKey === "product") return <Briefcase className="w-4 h-4" />;
   if (triggerIconKey === "creditcard") return <CreditCard className="w-4 h-4" />;
-  if (triggerIconKey === "phone" || triggerType === "call") return <Phone className="w-4 h-4" />;
-  if (triggerIconKey === "user" || triggerType === "client") return <User className="w-4 h-4" />;
   if (triggerIconKey === "shieldcheck" || triggerType === "insurance") return <ShieldCheck className="w-4 h-4" />;
   if (triggerIconKey === "filetext" || triggerType === "document") return <FileText className="w-4 h-4" />;
   if (triggerIconKey === "webhook" || triggerType === "webhook") return <Webhook className="w-4 h-4" />;
   if (triggerIconKey === "zap" || triggerType === "zap") return <Zap className="w-4 h-4" />;
-  return <GitBranch className="w-4 h-4" />;
+  return <Workflow className="w-4 h-4" />;
 }
 
 // Connection line colors by port
@@ -592,6 +627,12 @@ const PORT_LABEL: Record<string, string> = {
 };
 
 const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
+  create_appointment: "create-appointment",
+  "create-appointment": "create-appointment",
+  create_client: "create-client",
+  "create-client": "create-client",
+  create_process: "create-process",
+  "create-process": "create-process",
   wait: "wait",
   delay: "wait",
   condition: "condition",
@@ -715,7 +756,7 @@ export default function FlowBuilderTab({
       if (scope === "stage" && triggerEvent === "exit") return "stage.exit";
       return triggerEvent;
     }
-    return scope === "global" ? "stage.entered" : "stage.entry";
+    return "process.created";
   });
 
   useEffect(() => {
@@ -751,11 +792,11 @@ export default function FlowBuilderTab({
       y: 80,
       config: {
         scope,
-        triggerType: activeTriggerItem?.triggerType || triggerType || (scope === "global" ? "stage" : "stage"),
-        triggerEvent: activeTriggerItem?.triggerEvent || triggerEvent || (scope === "global" ? "stage.entered" : "stage.entry"),
+        triggerType: activeTriggerItem?.triggerType || triggerType || "process",
+        triggerEvent: activeTriggerItem?.triggerEvent || triggerEvent || "process.created",
         triggerLabel: activeTriggerItem?.label || triggerLabel || defaultStartLabel,
         triggerDescription: activeTriggerItem?.desc || triggerDescription,
-        triggerIconKey: activeTriggerItem?.iconKey || triggerIconKey,
+        triggerIconKey: activeTriggerItem?.iconKey || triggerIconKey || "workflow",
         processName,
         stageName,
       },
@@ -1084,7 +1125,7 @@ export default function FlowBuilderTab({
       return;
     }
 
-    // Condition node creates a dedicated condition step on the canvas with its own rule configuration
+    // Condition node creates a dedicated condition step with Case branches and Else connector
     if (type === "condition") {
       const stepKey = "condition";
       const catalogEntry = NODE_CATEGORIES
@@ -1092,18 +1133,48 @@ export default function FlowBuilderTab({
         .find(n => n.type === type);
 
       const newStepId = `${stepKey}-${Date.now()}`;
+      const case1Id = `${newStepId}-case-1`;
+      const elseId = `${newStepId}-else`;
+      const initialBranches = [
+        { id: case1Id, name: "Case 1", steps: [] },
+        { id: elseId, name: "Else", steps: [] }
+      ];
+      const initialCases = [
+        {
+          id: case1Id,
+          name: "Case 1",
+          matchLogic: "AND" as const,
+          conditions: [
+            {
+              id: `cond-${Date.now()}-1`,
+              field: "",
+              fieldLabel: "",
+              fieldSource: "client",
+              operator: "Equal To",
+              valueType: "static" as const,
+              value: "",
+              logicOp: "AND" as const,
+            }
+          ]
+        }
+      ];
+
       const newStep: WorkflowStep = {
         id: newStepId,
         name: getNodeLabel(type),
-        description: catalogEntry?.desc ?? "Gate flow execution behind field conditions",
+        description: catalogEntry?.desc ?? "Evaluate condition cases and branch execution",
         iconKey: "split",
+        kind: "parallel",
         stepKey,
         trigger: "stage",
         executionType: "wait",
         delayValue: 0,
         delayUnit: "Minute",
+        branches: initialBranches,
         params: {
-          conditionRules: [],
+          cases: initialCases,
+          elseBranchId: elseId,
+          conditionsEnabled: true,
         },
       };
 
@@ -1129,6 +1200,7 @@ export default function FlowBuilderTab({
           y: 200,
           config: {
             ...newStep.params,
+            branches: initialBranches,
             sourceStepId: newStepId,
             autoGenerated: true,
           },
@@ -1286,7 +1358,40 @@ export default function FlowBuilderTab({
   // ── Port positions ────────────────────────────────────────────────────────────
 
   const getOutputPorts = (node: FlowNode): Array<{ port: string; label: string; branchId?: string }> => {
-    if (node.type === "condition") return [{ port: "default", label: "" }];
+    if (node.type === "condition") {
+      const branches = node.config?.branches;
+      const cases = node.config?.cases;
+
+      if (Array.isArray(cases) && cases.length > 0) {
+        const ports = cases.map((c: any, i: number) => ({
+          port: `branch-${i}`,
+          label: c.name || `Case ${i + 1}`,
+          branchId: c.id,
+        }));
+        ports.push({
+          port: `branch-${cases.length}`,
+          label: "Else",
+          branchId: node.config?.elseBranchId || `${node.id}-else`,
+        });
+        return ports;
+      }
+
+      if (Array.isArray(branches) && branches.length > 0) {
+        return branches.map((b: any, i: number) => {
+          const isElse = b.id === "else" || b.id.endsWith("-else") || b.name === "Else";
+          return {
+            port: `branch-${i}`,
+            label: b.name || (isElse ? "Else" : `Case ${i + 1}`),
+            branchId: b.id,
+          };
+        });
+      }
+
+      return [
+        { port: "branch-0", label: "Case 1", branchId: `${node.id}-case-1` },
+        { port: "branch-1", label: "Else", branchId: `${node.id}-else` },
+      ];
+    }
     if (node.type === "parallel") {
       const branches = node.config.branches || [];
       if (branches.length > 0) {
@@ -1690,73 +1795,57 @@ export default function FlowBuilderTab({
   })).filter((cat) => cat.nodes.length > 0);
 
     const triggerCategories = useMemo(() => {
-    return scope === "stage"
-      ? [
-          {
-            id: "stage",
-            type: "stage",
-            label: "Stage Triggers",
-            desc: "On stage entry or exit",
-            icon: <GitBranch className="w-4 h-4 text-blue-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
-          },
-          {
-            id: "client",
-            type: "client",
-            label: "Client Triggers",
-            desc: "Profile creation & updates",
-            icon: <User className="w-4 h-4 text-emerald-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
-          },
-          {
-            id: "appointment",
-            type: "appointment",
-            label: "Appointment Triggers",
-            desc: "Booking, rescheduling, completion",
-            icon: <Calendar className="w-4 h-4 text-purple-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
-          },
-        ]
-      : [
-          {
-            id: "stage",
-            type: "stage",
-            label: "Stage Triggers",
-            desc: "Stage entered or exited",
-            icon: <GitBranch className="w-4 h-4 text-blue-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
-          },
-          {
-            id: "field_update",
-            type: "field_update",
-            label: "Field Update Triggers",
-            desc: "Monitored field value updates",
-            icon: <Sliders className="w-4 h-4 text-indigo-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerType === "field_update") || allTriggers[0],
-          },
-          {
-            id: "client",
-            label: "Client Triggers",
-            desc: "Created, updated, product assigned",
-            icon: <User className="w-4 h-4 text-emerald-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
-          },
-          {
-            id: "appointment",
-            label: "Appointment Triggers",
-            desc: "Booked, rescheduled, completed",
-            icon: <Calendar className="w-4 h-4 text-purple-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
-          },
-          {
-            id: "invoice",
-            label: "Invoice Triggers",
-            desc: "Invoice created or paid",
-            icon: <Receipt className="w-4 h-4 text-amber-600" />,
-            defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice") || allTriggers[0],
-          },
-        ];
-  }, [allTriggers, scope]);
+    return [
+      {
+        id: "process",
+        type: "process",
+        label: "Process Triggers",
+        desc: "Created or updated",
+        icon: <Workflow className="w-4 h-4 text-indigo-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "process" && t.triggerEvent === "process.created") || allTriggers[0],
+      },
+      {
+        id: "client",
+        type: "client",
+        label: "Client Triggers",
+        desc: "Created or updated",
+        icon: <User className="w-4 h-4 text-emerald-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "client" && t.triggerEvent === "client.created") || allTriggers[0],
+      },
+      {
+        id: "appointment",
+        type: "appointment",
+        label: "Appointment Triggers",
+        desc: "Created or updated",
+        icon: <Calendar className="w-4 h-4 text-purple-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "appointment" && t.triggerEvent === "appointment.created") || allTriggers[0],
+      },
+      {
+        id: "invoice",
+        type: "invoice",
+        label: "Invoice Triggers",
+        desc: "Created or updated",
+        icon: <Receipt className="w-4 h-4 text-amber-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice" && t.triggerEvent === "invoice.created") || allTriggers[0],
+      },
+      {
+        id: "call",
+        type: "call",
+        label: "Call Triggers",
+        desc: "Created or updated",
+        icon: <Phone className="w-4 h-4 text-blue-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "call" && t.triggerEvent === "call.created") || allTriggers[0],
+      },
+      {
+        id: "ai",
+        type: "ai",
+        label: "AI Triggers",
+        desc: "Prompt condition",
+        icon: <Sparkles className="w-4 h-4 text-purple-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "ai" && t.triggerEvent === "ai.prompt") || allTriggers[0],
+      },
+    ];
+  }, [allTriggers]);
 
   const filteredTriggerCategories = useMemo(() => {
     if (!q) return triggerCategories;
@@ -1770,29 +1859,21 @@ export default function FlowBuilderTab({
   const openConfig = (node: FlowNode) => {
     if (node.type === "start") {
       const activeItem = allTriggers.find(t =>
-        t.triggerEvent === (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) ||
-        (t.triggerEvent === "stage.entered" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.entry") ||
-        (t.triggerEvent === "stage.exited" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.exit") ||
-        (t.triggerEvent === "stage.entry" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.entered") ||
-        (t.triggerEvent === "stage.exit" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.exited")
+        t.triggerEvent === (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent)
       ) || allTriggers[0];
-      const trigCategory = node.config?.category || node.config?.triggerType || activeItem?.triggerType || (scope === "global" ? (node.config?.triggerEvent?.startsWith("stage") ? "stage" : node.config?.triggerEvent === "field.updated" ? "field_update" : "client") : "stage");
+      const trigCategory = node.config?.category || node.config?.triggerType || activeItem?.triggerType || "process";
       const trigEvent = node.config?.selectedEvent || node.config?.triggerEvent || activeItem?.triggerEvent || (
-        trigCategory === "stage" ? (scope === "stage" ? "stage.entry" : "stage.entered") :
-        trigCategory === "field_update" ? "field.updated" :
-        trigCategory === "client" ? "client.created" :
-        trigCategory === "invoice" ? "invoice.created" :
-        "appointment.booked"
+        trigCategory === "ai" ? "ai.prompt" : `${trigCategory}.created`
       );
       const trigItem = allTriggers.find(t => t.triggerEvent === trigEvent) || activeItem;
       const trigLabel = node.config?.triggerLabel || trigItem?.label || node.label || "Trigger";
       const trigDesc = node.config?.triggerDescription || trigItem?.desc || "";
-      const trigIconKey = node.config?.triggerIconKey || trigItem?.iconKey || "zap";
+      const trigIconKey = node.config?.triggerIconKey || trigItem?.iconKey || "workflow";
 
       const targetProc = effectiveProcesses.find(p => p.id === currentProcessId || p.name === processName);
       const targetStage = targetProc?.stages?.find((s: any) => s.name === stageName || s.id === stageName);
-      const defaultProcessId = (scope === "stage" && targetProc) ? targetProc.id : (node.config?.triggerProcessId || "all");
-      const defaultProcessName = (scope === "stage" && targetProc) ? targetProc.name : (node.config?.triggerProcessName || "Any Process");
+      const defaultProcessId = (scope === "stage" && targetProc) ? targetProc.id : ((node.config?.triggerProcessId && node.config.triggerProcessId !== "all") ? node.config.triggerProcessId : (effectiveProcesses[0]?.id || ""));
+      const defaultProcessName = (scope === "stage" && targetProc) ? targetProc.name : ((node.config?.triggerProcessName && node.config.triggerProcessName !== "Any Process") ? node.config.triggerProcessName : (effectiveProcesses[0]?.name || ""));
       const defaultStageId = (scope === "stage" && targetStage) ? targetStage.id : (node.config?.triggerStageId || "all");
       const defaultStageName = (scope === "stage" && targetStage) ? targetStage.name : (node.config?.triggerStageName || "Any Stage");
 
@@ -1878,6 +1959,7 @@ export default function FlowBuilderTab({
           ...(isWait ? { delayValue: waitVal, delayUnit: waitUnit } : {}),
           ...(realStep.params ?? {}),
           ...(realNode.config ?? {}),
+          branches: realStep.branches ?? realNode.config?.branches,
           sourceStepId: realStep.id,
           autoGenerated: true,
         }
@@ -1973,7 +2055,7 @@ export default function FlowBuilderTab({
       if (onTriggerChange) {
         onTriggerChange({
           type: (catalogItem?.triggerType || trigCategory || (selectedEvent?.startsWith("stage") ? "stage" : "client")) as any,
-          event: selectedEvent || "stage.entered",
+          event: selectedEvent || "process.created",
           label: newLabel,
           description: newDesc,
           iconKey: newIconKey,
@@ -1982,7 +2064,7 @@ export default function FlowBuilderTab({
       }
       toast.success(`Trigger configured: "${newLabel}"`);
       setHasChosenTrigger(true);
-      setOpenActionCategoryId("logic");
+      setOpenActionCategoryId("crm-entities");
       setConfigNode(null);
       return;
     }
@@ -1998,6 +2080,22 @@ export default function FlowBuilderTab({
       const finalDelayVal = isWait ? (configNode.config?.delayValue ?? drawerDelayValue) : drawerDelayValue;
       const finalDelayUnit = isWait ? (configNode.config?.delayUnit ?? drawerDelayUnit) : drawerDelayUnit;
       const finalConnectAfterId = drawerTrigger !== "incall" && drawerExecType === "wait" ? drawerConnectAfterId : undefined;
+      let updatedBranches = configNode.config?.branches ?? stepCtx.step.branches;
+      if (configNode.stepKey === "condition") {
+        const condStep: WorkflowStep = {
+          ...stepCtx.step,
+          stepKey: "condition",
+          kind: "parallel",
+          branches: updatedBranches,
+          params: {
+            ...(stepCtx.step.params ?? {}),
+            ...params,
+          },
+        };
+        const validated = ensureValidBranches(condStep);
+        updatedBranches = validated.branches;
+      }
+      const isBranching = configNode.stepKey === "condition" || configNode.stepKey === "parallel" || (updatedBranches && updatedBranches.length > 0);
       const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
         name: configNode.label || stepCtx.step.name,
         trigger: drawerTrigger,
@@ -2005,6 +2103,7 @@ export default function FlowBuilderTab({
         delayValue: finalDelayVal,
         delayUnit: finalDelayUnit,
         connectAfterId: finalConnectAfterId,
+        ...(isBranching ? { branches: updatedBranches, kind: "parallel" } : {}),
         params: {
           ...(stepCtx.step.params ?? {}),
           ...params,
@@ -2019,15 +2118,52 @@ export default function FlowBuilderTab({
 
   const patchConfig = (patch: Record<string, any>) => {
     if (!configNode) return;
+    const targetStepId = (configNode.config?.sourceStepId || configNode.config?.syntheticFor || configNode.id) as string;
+    const nextLabel = patch.name || patch.automationName || configNode.label;
+
     setConfigNode((prev) => {
       if (!prev) return prev;
-      const nextLabel = patch.name || patch.automationName || prev.label;
       return {
         ...prev,
         label: nextLabel,
         config: { ...prev.config, ...patch },
       };
     });
+
+    if (configNode.stepKey === "condition" && (patch.cases !== undefined || patch.branches !== undefined)) {
+      setNodes((prevNodes) =>
+        prevNodes.map((n) => {
+          if (n.id === targetStepId || n.id === configNode.id) {
+            return {
+              ...n,
+              label: nextLabel,
+              config: {
+                ...n.config,
+                ...patch,
+              },
+            };
+          }
+          return n;
+        })
+      );
+
+      if (onWorkflowStepsChange) {
+        const stepCtx = findStepInTree(workflowSteps, targetStepId);
+        if (stepCtx) {
+          const updatedBranches = patch.branches || stepCtx.step.branches;
+          const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
+            branches: updatedBranches,
+            kind: "parallel",
+            stepKey: "condition",
+            params: {
+              ...(stepCtx.step.params ?? {}),
+              ...patch,
+            },
+          });
+          onWorkflowStepsChange(updatedSteps);
+        }
+      }
+    }
     if (configNode.stepKey === "automation_overview" || configNode.type === "overview" || configNode.id === "automation_overview") {
       if (patch.name !== undefined && onAutomationNameChange) onAutomationNameChange(patch.name);
       if (patch.automationName !== undefined && onAutomationNameChange) onAutomationNameChange(patch.automationName);
@@ -2087,7 +2223,7 @@ export default function FlowBuilderTab({
                   type="button"
                   onClick={() => {
                     setHasChosenTrigger(true);
-                    setOpenActionCategoryId("logic");
+                    setOpenActionCategoryId("crm-entities");
                   }}
                   className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
                   title="Proceed to add actions"
@@ -2187,7 +2323,7 @@ export default function FlowBuilderTab({
                 type="button"
                 onClick={() => {
                   setHasChosenTrigger(true);
-                  setOpenActionCategoryId("logic");
+                  setOpenActionCategoryId("crm-entities");
                 }}
                 className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
@@ -2414,7 +2550,9 @@ export default function FlowBuilderTab({
                 if (!fromNode || !toNode) return null;
                 const from = getPortXY(conn.fromId, conn.fromPort, false);
                 const to = getPortXY(conn.toId, "default", true);
-                const color = PORT_COLOR[conn.fromPort] || "#6366f1";
+                const fromBranchIdx = parseInt((conn.fromPort || "").replace("branch-", ""), 10);
+                const isElseConn = !isNaN(fromBranchIdx) && fromNode?.config?.branches?.[fromBranchIdx]?.name === "Else";
+                const color = isElseConn ? "#d97706" : (PORT_COLOR[conn.fromPort] || "#6366f1");
                 const label = PORT_LABEL[conn.fromPort] || "";
                 const midX = (from.x + to.x) / 2;
                 const midY = (from.y + to.y) / 2;
@@ -2729,50 +2867,75 @@ export default function FlowBuilderTab({
 
                   {/* Card */}
                   {node.type === "empty-branch" ? (
-                    <div
-                      className={`rounded-xl border-2 border-dashed p-3 transition-all cursor-pointer select-none ${
-                        isSelected || selectedBranchId === node.config.branchId
-                          ? "border-purple-500 bg-purple-50/70 ring-2 ring-purple-300 shadow-md"
-                          : "border-purple-300/80 bg-purple-50/20 hover:border-purple-400 hover:bg-purple-50/40 shadow-xs"
-                      }`}
-                      style={{ minHeight: NODE_H }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedId(node.id);
-                        setSelectedBranchId(node.config.branchId);
-                        toast.info(`Selected ${node.config.branchName || "Branch"}. Click an action from sidebar to add to this branch.`);
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                          <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wide truncate">
-                            {node.config.branchName || "Branch"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[9px] text-gray-400 font-medium">(Empty)</span>
-                          {node.config?.sourceParallelStepId && node.config?.branchId && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveBranch(node.config.sourceParallelStepId, node.config.branchId);
-                              }}
-                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Delete branch"
-                              aria-label="Delete branch"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                    (() => {
+                      const isElse = Boolean(node.config.isElse || node.config.branchName === "Else");
+                      const isCase = Boolean(node.config.isConditionCase);
+                      const activeTheme = isElse
+                        ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-300 shadow-md"
+                        : isCase
+                        ? "border-violet-500 bg-violet-50/80 ring-2 ring-violet-300 shadow-md"
+                        : "border-purple-500 bg-purple-50/70 ring-2 ring-purple-300 shadow-md";
+                      const defaultTheme = isElse
+                        ? "border-amber-300/80 bg-amber-50/20 hover:border-amber-400 hover:bg-amber-50/40 shadow-xs"
+                        : isCase
+                        ? "border-violet-300/80 bg-violet-50/20 hover:border-violet-400 hover:bg-violet-50/40 shadow-xs"
+                        : "border-purple-300/80 bg-purple-50/20 hover:border-purple-400 hover:bg-purple-50/40 shadow-xs";
+
+                      const dotColor = isElse ? "bg-amber-500" : isCase ? "bg-violet-500" : "bg-purple-500";
+                      const headerTextColor = isElse ? "text-amber-800" : isCase ? "text-violet-800" : "text-purple-800";
+                      const actionTextColor = isElse ? "text-amber-700" : isCase ? "text-violet-700" : "text-purple-700";
+                      const iconColor = isElse ? "text-amber-600" : isCase ? "text-violet-600" : "text-purple-600";
+
+                      return (
+                        <div
+                          className={`rounded-xl border-2 border-dashed p-3 transition-all cursor-pointer select-none ${
+                            isSelected || selectedBranchId === node.config.branchId ? activeTheme : defaultTheme
+                          }`}
+                          style={{ minHeight: NODE_H }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(node.id);
+                            setSelectedBranchId(node.config.branchId);
+                            toast.info(`Selected ${node.config.branchName || "Branch"}. Click an action from sidebar to add to this branch.`);
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                              <span className={`text-[11px] font-bold uppercase tracking-wide truncate ${headerTextColor}`}>
+                                {isElse ? "Else" : (node.config.branchName || "Branch")}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[9px] text-gray-400 font-medium">(Empty)</span>
+                              {!isElse && node.config?.sourceParallelStepId && node.config?.branchId && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveBranch(node.config.sourceParallelStepId, node.config.branchId);
+                                  }}
+                                  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Delete branch"
+                                  aria-label="Delete branch"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {isElse && (
+                            <p className="text-[9px] text-amber-600/90 font-medium mb-1 truncate">
+                              Runs if no cases match
+                            </p>
                           )}
+                          <div className={`flex items-center gap-1.5 text-xs font-semibold py-0.5 ${actionTextColor}`}>
+                            <Plus className={`w-3.5 h-3.5 ${iconColor}`} />
+                            <span className="text-[11px]">Click to add step</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-purple-700 font-semibold py-0.5">
-                        <Plus className="w-3.5 h-3.5 text-purple-600" />
-                        <span className="text-[11px]">Click to add step</span>
-                      </div>
-                    </div>
+                      );
+                    })()
                   ) : (
                     <div
                       className={`rounded-2xl border-2 ${style.bg} ${style.border} shadow-sm transition-all select-none ${
@@ -2862,7 +3025,7 @@ export default function FlowBuilderTab({
                           onClick={(e) => {
                             e.stopPropagation();
                             setHasChosenTrigger(true);
-                            setOpenActionCategoryId("logic");
+                            setOpenActionCategoryId("crm-entities");
                             if (sidebarRef.current) sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
                           }}
                         >
@@ -2888,7 +3051,7 @@ export default function FlowBuilderTab({
 
                   {/* Output ports (bottom) */}
                   {!isEnd && (
-                    <div style={{ position: "absolute", bottom: -12, left: 0, width: "100%", display: "flex", justifyContent: "space-around", zIndex: 20 }}>
+                    <div style={{ position: "absolute", bottom: -12, left: 0, width: "100%", display: "flex", justifyContent: "space-evenly", zIndex: 20 }}>
                       {ports.map((p, i) => {
                         const isSourceActive = drawingConn?.fromId === node.id && drawingConn?.fromPort === p.port;
                         return (
@@ -2938,8 +3101,8 @@ export default function FlowBuilderTab({
                                 width: isSourceActive ? 16 : 13,
                                 height: isSourceActive ? 16 : 13,
                                 borderRadius: "50%",
-                                background: isSourceActive ? (PORT_COLOR[p.port] || "#6366f1") : "white",
-                                border: `2px solid ${PORT_COLOR[p.port] || "#6366f1"}`,
+                                background: isSourceActive ? (p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1")) : "white",
+                                border: `2px solid ${p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1")}`,
                                 transition: "all 0.15s ease",
                               }}
                               className={isSourceActive ? "ring-4 ring-primary/40 shadow-md scale-110" : "hover:scale-125"}
@@ -2952,7 +3115,7 @@ export default function FlowBuilderTab({
                                 transform: "translateX(-50%)",
                                 fontSize: 8,
                                 fontWeight: 700,
-                                color: PORT_COLOR[p.port] || "#6366f1",
+                                color: p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1"),
                                 whiteSpace: "nowrap",
                                 pointerEvents: "none",
                               }}>

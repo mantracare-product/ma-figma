@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
-  User, PhoneForwarded, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap
+  User, PhoneForwarded, Phone, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
+  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Workflow, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap, CornerDownRight
 } from "lucide-react";
+import { toast } from "sonner";
+import type { ConditionCase, ConditionCaseRule } from "../../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import VariableSelectorModal from "./VariableSelectorModal";
 import SelectFieldsMultiModal from "./SelectFieldsMultiModal";
@@ -114,6 +116,14 @@ export default function StepParametersFields({
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
 
   const [parametersSectionExpanded, setParametersSectionExpanded] = useState(true);
+  const [collapsedCases, setCollapsedCases] = useState<Record<string, boolean>>({});
+
+  const toggleCaseCollapse = (caseKey: string) => {
+    setCollapsedCases((prev) => ({
+      ...prev,
+      [caseKey]: !prev[caseKey],
+    }));
+  };
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [whatsappCampaigns, setWhatsappCampaigns] = useState<any[]>([]);
 
@@ -135,12 +145,18 @@ export default function StepParametersFields({
     | "conditionNodeSingle"
     | "conditionNodeMulti"
     | "conditionNodeDynamic"
+    | "caseConditionSingle"
+    | "caseConditionMulti"
+    | "caseConditionDynamic"
     | "triggerConditionSingle"
     | "triggerConditionMulti"
     | "triggerConditionDynamic"
     | "assignProcessFieldToken"
+    | "aiTriggerPromptToken"
   >("monitoredFields");
   const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
+  const [targetCaseIndex, setTargetCaseIndex] = useState<number | null>(null);
+  const [targetCaseConditionIndex, setTargetCaseConditionIndex] = useState<number | null>(null);
   const [targetTriggerConditionIndex, setTargetTriggerConditionIndex] = useState<number | null>(null);
   const [targetFieldUpdateIndex, setTargetFieldUpdateIndex] = useState<number | null>(null);
   const [targetProcessFieldKey, setTargetProcessFieldKey] = useState<string | null>(null);
@@ -275,125 +291,157 @@ export default function StepParametersFields({
     fieldSource: string | undefined,
     value: any,
     onValChange: (newVal: any) => void,
-    placeholder = "Enter value..."
+    placeholder = "Enter value...",
+    extraTrailingAction?: React.ReactNode
   ) => {
     const fieldDef = getFieldDefByKey(fieldKey);
     const options = getFieldOptions(fieldDef, fieldKey, fieldSource);
 
-    if (options.length > 0) {
-      return (
-        <select
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
-        >
-          <option value="">Select option...</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      );
-    }
+    const renderInputNode = () => {
+      if (options.length > 0) {
+        return (
+          <select
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          >
+            <option value="">Select option...</option>
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        );
+      }
 
-    const inputType = fieldDef?.inputType || "text";
+      const inputType = fieldDef?.inputType || "text";
 
-    if (inputType === "date") {
+      if (inputType === "date") {
+        return (
+          <input
+            type="date"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
+      if (inputType === "date_time") {
+        return (
+          <input
+            type="datetime-local"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
+      if (inputType === "time") {
+        return (
+          <input
+            type="time"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
+      if (inputType === "number" || inputType === "rating") {
+        return (
+          <input
+            type="number"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            placeholder={placeholder}
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
+      if (inputType === "money") {
+        const symbol = CURRENCY_SYMBOLS[fieldDef?.currency || "USD"] || "$";
+        return (
+          <div className="relative flex items-center w-full">
+            <span className="absolute left-3 text-xs font-semibold text-gray-500">{symbol}</span>
+            <input
+              type="number"
+              step="0.01"
+              value={value ?? ""}
+              onChange={(e) => onValChange(e.target.value)}
+              placeholder="0.00"
+              className={`w-full pl-7 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+                extraTrailingAction ? "pr-9" : "pr-3"
+              }`}
+            />
+          </div>
+        );
+      }
+
+      if (inputType === "email") {
+        return (
+          <input
+            type="email"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            placeholder="name@example.com"
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
+      if (inputType === "tel") {
+        return (
+          <input
+            type="tel"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            placeholder="+1 (555) 000-0000"
+            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              extraTrailingAction ? "pr-9" : ""
+            }`}
+          />
+        );
+      }
+
       return (
         <input
-          type="date"
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-        />
-      );
-    }
-
-    if (inputType === "date_time") {
-      return (
-        <input
-          type="datetime-local"
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-        />
-      );
-    }
-
-    if (inputType === "time") {
-      return (
-        <input
-          type="time"
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-        />
-      );
-    }
-
-    if (inputType === "number" || inputType === "rating") {
-      return (
-        <input
-          type="number"
+          type="text"
           value={value ?? ""}
           onChange={(e) => onValChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+          className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            extraTrailingAction ? "pr-9" : ""
+          }`}
         />
       );
-    }
+    };
 
-    if (inputType === "money") {
-      const symbol = CURRENCY_SYMBOLS[fieldDef?.currency || "USD"] || "$";
+    if (extraTrailingAction) {
       return (
-        <div className="relative flex items-center">
-          <span className="absolute left-3 text-xs font-semibold text-gray-500">{symbol}</span>
-          <input
-            type="number"
-            step="0.01"
-            value={value ?? ""}
-            onChange={(e) => onValChange(e.target.value)}
-            placeholder="0.00"
-            className="w-full pl-7 pr-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-          />
+        <div className="relative flex items-center w-full">
+          {renderInputNode()}
+          <div className="absolute right-2 flex items-center">{extraTrailingAction}</div>
         </div>
       );
     }
 
-    if (inputType === "email") {
-      return (
-        <input
-          type="email"
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          placeholder="name@example.com"
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-        />
-      );
-    }
-
-    if (inputType === "tel") {
-      return (
-        <input
-          type="tel"
-          value={value ?? ""}
-          onChange={(e) => onValChange(e.target.value)}
-          placeholder="+1 (555) 000-0000"
-          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-        />
-      );
-    }
-
-    return (
-      <input
-        type="text"
-        value={value ?? ""}
-        onChange={(e) => onValChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
-      />
-    );
+    return renderInputNode();
   };
 
   const handleFieldRegistryApply = (selectedKeys: string[]) => {
@@ -460,6 +508,67 @@ export default function StepParametersFields({
             : c
         );
         onChange({ conditions: updated, triggerConditions: updated });
+      }
+    } else if (fieldModalMode === "caseConditionSingle") {
+      if (targetCaseIndex !== null && targetCaseConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const nextCases = conditionCases.map((c, cIdx) => {
+          if (cIdx !== targetCaseIndex) return c;
+          const nextConds = c.conditions.map((cond, condIdx) => {
+            if (condIdx !== targetCaseConditionIndex) return cond;
+            return {
+              ...cond,
+              field: key,
+              fieldLabel: fieldDef?.label || key,
+              fieldSource: fieldDef?.module || cond.fieldSource || "client",
+              value: "",
+            };
+          });
+          return { ...c, conditions: nextConds };
+        });
+        updateCases(nextCases);
+      }
+    } else if (fieldModalMode === "caseConditionMulti") {
+      if (targetCaseIndex !== null && selectedKeys.length > 0) {
+        const newConds = selectedKeys.map((key) => {
+          const fieldDef = getFieldDefByKey(key);
+          return {
+            id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            field: key,
+            fieldLabel: fieldDef?.label || key,
+            fieldSource: fieldDef?.module || "client",
+            operator: "Equal To",
+            valueType: "static" as const,
+            value: "",
+            logicOp: "AND" as const,
+          };
+        });
+        const nextCases = conditionCases.map((c, cIdx) => {
+          if (cIdx !== targetCaseIndex) return c;
+          return { ...c, conditions: [...c.conditions, ...newConds] };
+        });
+        updateCases(nextCases);
+      }
+    } else if (fieldModalMode === "caseConditionDynamic") {
+      if (targetCaseIndex !== null && targetCaseConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const nextCases = conditionCases.map((c, cIdx) => {
+          if (cIdx !== targetCaseIndex) return c;
+          const nextConds = c.conditions.map((cond, condIdx) => {
+            if (condIdx !== targetCaseConditionIndex) return cond;
+            return {
+              ...cond,
+              valueType: "dynamic" as const,
+              dynamicField: key,
+              dynamicFieldLabel: fieldDef?.label || key,
+              dynamicFieldSource: fieldDef?.module || "client",
+            };
+          });
+          return { ...c, conditions: nextConds };
+        });
+        updateCases(nextCases);
       }
     } else if (fieldModalMode === "triggerConditionDynamic") {
       if (targetTriggerConditionIndex !== null && selectedKeys.length > 0) {
@@ -589,7 +698,18 @@ export default function StepParametersFields({
           fieldSource: fieldDef?.module || params.fieldSource || "system",
         });
       }
-    } else if (fieldModalMode === "assignProcessFieldToken") {
+    } else if (fieldModalMode === "aiTriggerPromptToken") {
+      if (selectedKeys.length > 0) {
+        const chosenKey = selectedKeys[0];
+        const token = `{{${chosenKey}}}`;
+        const currentPrompt = params.prompt || params.aiTriggerPrompt || "";
+        const nextPrompt = currentPrompt ? `${currentPrompt} ${token}` : token;
+        onChange({
+          prompt: nextPrompt,
+          aiTriggerPrompt: nextPrompt,
+        });
+      }
+    } else if (fieldModalMode === "assignProcessFieldToken" || fieldModalMode === "aiTriggerPromptToken") {
       if (targetProcessFieldKey && selectedKeys.length > 0) {
         const chosenKey = selectedKeys[0];
         const token = `{{${chosenKey}}}`;
@@ -1022,6 +1142,706 @@ export default function StepParametersFields({
     );
   };
 
+  const stepId = params.sourceStepId || params.id || "condition";
+
+  // Derive condition cases from params
+  const conditionCases: ConditionCase[] = useMemo(() => {
+    if (Array.isArray(params.cases) && params.cases.length > 0) {
+      return params.cases;
+    }
+    // Backward compatibility from flat conditions
+    if (Array.isArray(params.conditions) && params.conditions.length > 0) {
+      return [
+        {
+          id: `${stepId}-case-1`,
+          name: "Case 1",
+          matchLogic: (params.matchLogic === "any" || params.matchLogic === "OR") ? "OR" : "AND",
+          conditions: params.conditions.map((c: any) => ({
+            id: c.id || `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            field: c.field || "",
+            fieldLabel: c.fieldLabel || "",
+            fieldSource: c.fieldSource || "client",
+            operator: c.operator || "Equal To",
+            valueType: c.valueType || "static",
+            value: c.value ?? "",
+            dynamicField: c.dynamicField || "",
+            dynamicFieldLabel: c.dynamicFieldLabel || "",
+            dynamicFieldSource: c.dynamicFieldSource || "",
+            logicOp: (c.logicOp === "OR" ? "OR" : "AND") as "AND" | "OR",
+          })),
+        }
+      ];
+    }
+    return [
+      {
+        id: `${stepId}-case-1`,
+        name: "Case 1",
+        matchLogic: "AND",
+        conditions: [
+          {
+            id: `cond-1`,
+            field: "",
+            fieldLabel: "",
+            fieldSource: "client",
+            operator: "Equal To",
+            valueType: "static",
+            value: "",
+            logicOp: "AND",
+          }
+        ]
+      }
+    ];
+  }, [params.cases, params.conditions, params.matchLogic, stepId]);
+
+  const updateCases = (nextCases: ConditionCase[]) => {
+    const currentBranches: any[] = Array.isArray(params.branches) ? params.branches : [];
+    const elseBranchId = params.elseBranchId || `${stepId}-else`;
+
+    // Find existing else branch to preserve its steps
+    const existingElse = currentBranches.find(
+      (b: any) => b.id === elseBranchId || b.id === "else" || b.id.endsWith("-else") || b.name === "Else"
+    ) || {
+      id: elseBranchId,
+      name: "Else",
+      steps: [],
+    };
+
+    // For each case, map to branch preserving existing steps
+    const caseBranches = nextCases.map((c, idx) => {
+      const existing = currentBranches.find((b: any) => b.id === c.id);
+      return {
+        id: c.id,
+        name: c.name || `Case ${idx + 1}`,
+        steps: existing?.steps || [],
+      };
+    });
+
+    const newBranches = [...caseBranches, existingElse];
+
+    onChange({
+      cases: nextCases,
+      branches: newBranches,
+      branchCount: newBranches.length,
+      elseBranchId: existingElse.id,
+      conditionsEnabled: true,
+      conditions: nextCases[0]?.conditions || [],
+    });
+  };
+
+  const handleAddCase = () => {
+    const nextIdx = conditionCases.length + 1;
+    const newCaseId = `${stepId}-case-${nextIdx}-${Date.now().toString(36).substring(4)}`;
+    const newCase: ConditionCase = {
+      id: newCaseId,
+      name: `Case ${nextIdx}`,
+      matchLogic: "AND",
+      conditions: [
+        {
+          id: `cond-${Date.now()}-1`,
+          field: "",
+          fieldLabel: "",
+          fieldSource: "client",
+          operator: "Equal To",
+          valueType: "static",
+          value: "",
+          logicOp: "AND",
+        }
+      ]
+    };
+    updateCases([...conditionCases, newCase]);
+  };
+
+  const handleRemoveCase = (caseIndex: number) => {
+    if (conditionCases.length <= 1) {
+      toast.error("Condition must have at least 1 Case plus the Else branch.");
+      return;
+    }
+    const nextCases = conditionCases.filter((_, idx) => idx !== caseIndex);
+    updateCases(nextCases);
+  };
+
+  const handleRenameCase = (caseIndex: number, newName: string) => {
+    const nextCases = conditionCases.map((c, idx) =>
+      idx === caseIndex ? { ...c, name: newName } : c
+    );
+    updateCases(nextCases);
+  };
+
+  const handleToggleCaseLogic = (caseIndex: number, logic: "AND" | "OR") => {
+    const nextCases = conditionCases.map((c, idx) =>
+      idx === caseIndex ? { ...c, matchLogic: logic } : c
+    );
+    updateCases(nextCases);
+  };
+
+  const handleToggleConditionLogicOp = (caseIndex: number, condIndex: number, forcedOp?: "AND" | "OR") => {
+    const nextCases = conditionCases.map((c, cIdx) => {
+      if (cIdx !== caseIndex) return c;
+      const nextConds: ConditionCaseRule[] = c.conditions.map((cond, condIdx) => {
+        if (condIdx !== condIndex) return cond;
+        const nextOp: "AND" | "OR" = forcedOp || (cond.logicOp === "OR" ? "AND" : "OR");
+        return { ...cond, logicOp: nextOp };
+      });
+      return { ...c, conditions: nextConds };
+    });
+    updateCases(nextCases);
+  };
+
+  const handleAddConditionToCase = (caseIndex: number) => {
+    const newCond: ConditionCaseRule = {
+      id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      field: "",
+      fieldLabel: "",
+      fieldSource: "client",
+      operator: "Equal To",
+      valueType: "static",
+      value: "",
+      logicOp: "AND",
+    };
+    const nextCases = conditionCases.map((c, idx) =>
+      idx === caseIndex ? { ...c, conditions: [...c.conditions, newCond] } : c
+    );
+    updateCases(nextCases);
+  };
+
+  const handleRemoveConditionFromCase = (caseIndex: number, condIndex: number) => {
+    const targetCase = conditionCases[caseIndex];
+    if (targetCase.conditions.length <= 1) {
+      toast.error("Each case must have at least 1 condition rule.");
+      return;
+    }
+    const nextCases = conditionCases.map((c, idx) => {
+      if (idx !== caseIndex) return c;
+      return {
+        ...c,
+        conditions: c.conditions.filter((_, i) => i !== condIndex),
+      };
+    });
+    updateCases(nextCases);
+  };
+
+  const handleUpdateConditionInCase = (
+    caseIndex: number,
+    condIndex: number,
+    patch: Partial<ConditionCaseRule>
+  ) => {
+    const nextCases = conditionCases.map((c, cIdx) => {
+      if (cIdx !== caseIndex) return c;
+      const nextConds = c.conditions.map((cond, condIdx) => {
+        if (condIdx !== condIndex) return cond;
+        return { ...cond, ...patch };
+      });
+      return { ...c, conditions: nextConds };
+    });
+    updateCases(nextCases);
+  };
+
+  const renderConditionCasesBuilder = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+              <Split className="w-4 h-4 text-blue-600" />
+              <span>Condition Cases</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Each case branches execution independently. Unmatched runs flow to Else.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleAddCase}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Case</span>
+          </button>
+        </div>
+
+        {/* Case Cards List */}
+        <div className="space-y-4">
+          {conditionCases.map((caseItem, caseIndex) => {
+            const caseNumber = caseIndex + 1;
+            const caseKey = caseItem.id || `case-${caseIndex}`;
+            const isCollapsed = Boolean(collapsedCases[caseKey]);
+
+            return (
+              <div
+                key={caseKey}
+                className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden"
+              >
+                {/* Collapsible Case Header */}
+                <div
+                  onClick={() => toggleCaseCollapse(caseKey)}
+                  className="flex items-center justify-between gap-2 p-3 bg-slate-50/80 border-b border-slate-200/70 cursor-pointer select-none hover:bg-slate-100/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-transform"
+                      aria-label={isCollapsed ? "Expand case" : "Collapse case"}
+                    >
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isCollapsed ? "-rotate-90" : "rotate-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-white text-slate-700 border border-slate-200 shrink-0 shadow-2xs">
+                      CASE {caseNumber}
+                    </span>
+                    <input
+                      type="text"
+                      value={caseItem.name || `Case ${caseNumber}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => handleRenameCase(caseIndex, e.target.value)}
+                      placeholder={`Case ${caseNumber} Name...`}
+                      className="px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg focus:border-blue-500 focus:bg-white outline-none w-44 truncate"
+                    />
+                    <span className="text-[11px] text-slate-500 font-medium ml-1">
+                      • {caseItem.conditions.length} condition{caseItem.conditions.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {/* Delete Case button */}
+                    {conditionCases.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCase(caseIndex)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title={`Delete Case ${caseNumber}`}
+                        aria-label={`Delete Case ${caseNumber}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Collapsible Content */}
+                {!isCollapsed && (
+                  <div className="p-4 space-y-3.5 bg-white">
+                    {/* Conditions in this Case */}
+                    <div className="space-y-3">
+                  {caseItem.conditions.map((cond, condIdx) => {
+                    const fieldDef = getFieldDefByKey(cond.field);
+                    const operators = getOperatorsForField(fieldDef);
+                    const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
+                    const isDynamic = cond.valueType === "dynamic" && Boolean(cond.dynamicField);
+                    const dynamicFieldDef = cond.dynamicField ? getFieldDefByKey(cond.dynamicField) : null;
+                    const isNotLast = condIdx < caseItem.conditions.length - 1;
+
+                    return (
+                      <React.Fragment key={cond.id || `cond-${condIdx}`}>
+                        <div className="border border-slate-200 rounded-xl bg-slate-50/40 p-3.5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              Condition #{condIdx + 1}
+                            </span>
+                            {caseItem.conditions.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveConditionFromCase(caseIndex, condIdx)}
+                                className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer font-medium"
+                              >
+                                <Trash2 className="w-3 h-3" /> Remove
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Primary Field Selection */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                Primary Field
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetCaseIndex(caseIndex);
+                                  setTargetCaseConditionIndex(condIdx);
+                                  setFieldModalMode("caseConditionSingle");
+                                  setIsFieldRegistryModalOpen(true);
+                                }}
+                                className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                              >
+                                {cond.field ? "Change Field" : "Select Field"}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetCaseIndex(caseIndex);
+                                setTargetCaseConditionIndex(condIdx);
+                                setFieldModalMode("caseConditionSingle");
+                                setIsFieldRegistryModalOpen(true);
+                              }}
+                              className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
+                            >
+                              {cond.field ? (
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                                    {cond.fieldSource || fieldDef?.module || "field"}
+                                  </span>
+                                  <span className="font-semibold text-slate-900 truncate">
+                                    {cond.fieldLabel || fieldDef?.label || cond.field}
+                                  </span>
+                                  <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">Select field...</span>
+                              )}
+                              <Sliders className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
+                            </button>
+                          </div>
+
+                          {/* Operator */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                              Operator
+                            </label>
+                            <select
+                              value={cond.operator || "Equal To"}
+                              onChange={(e) => handleUpdateConditionInCase(caseIndex, condIdx, { operator: e.target.value })}
+                              className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
+                            >
+                              {operators.map((op) => (
+                                <option key={op.value} value={op.value}>
+                                  {op.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Comparison Value (Matching Field Type by Default) */}
+                          {!isNullaryOp && (
+                            <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                  Comparison Value
+                                </label>
+                                {isDynamic && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateConditionInCase(caseIndex, condIdx, {
+                                        valueType: "static",
+                                        dynamicField: "",
+                                        dynamicFieldLabel: "",
+                                        dynamicFieldSource: "",
+                                      })
+                                    }
+                                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                                  >
+                                    Clear field
+                                  </button>
+                                )}
+                              </div>
+
+                              {isDynamic && cond.dynamicField ? (
+                                <div className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-blue-200 rounded-xl bg-blue-50/40 text-left">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                                      {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
+                                    </span>
+                                    <span className="font-semibold text-slate-900 truncate">
+                                      {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
+                                    </span>
+                                    <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setTargetCaseIndex(caseIndex);
+                                        setTargetCaseConditionIndex(condIdx);
+                                        setFieldModalMode("caseConditionDynamic");
+                                        setIsFieldRegistryModalOpen(true);
+                                      }}
+                                      className="p-1 rounded text-blue-600 hover:text-blue-700 hover:bg-blue-100/60 cursor-pointer transition-colors"
+                                      title="Select field"
+                                      aria-label="Select field"
+                                    >
+                                      <Sliders className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleUpdateConditionInCase(caseIndex, condIdx, {
+                                          valueType: "static",
+                                          dynamicField: "",
+                                          dynamicFieldLabel: "",
+                                          dynamicFieldSource: "",
+                                        })
+                                      }
+                                      className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                                      title="Clear and switch to static value"
+                                      aria-label="Clear"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                renderFieldValueInput(
+                                  cond.field,
+                                  cond.fieldSource || fieldDef?.module,
+                                  cond.value,
+                                  (newVal) => handleUpdateConditionInCase(caseIndex, condIdx, { value: newVal, valueType: "static" }),
+                                  "Enter value...",
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTargetCaseIndex(caseIndex);
+                                      setTargetCaseConditionIndex(condIdx);
+                                      setFieldModalMode("caseConditionDynamic");
+                                      setIsFieldRegistryModalOpen(true);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                    title="Select field from modal"
+                                    aria-label="Select field"
+                                  >
+                                    <Sliders className="w-3.5 h-3.5" />
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Match Dropdown between conditions */}
+                        {isNotLast && (
+                          <div className="flex items-center gap-2 my-2.5 justify-center">
+                            <div className="h-px bg-slate-200 flex-1" />
+                            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Match
+                              </span>
+                              <select
+                                value={cond.logicOp || caseItem.matchLogic || "AND"}
+                                onChange={(e) => {
+                                  const op = e.target.value as "AND" | "OR";
+                                  handleToggleConditionLogicOp(caseIndex, condIdx, op);
+                                }}
+                                className="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer"
+                              >
+                                <option value="AND">ALL (AND)</option>
+                                <option value="OR">ANY (OR)</option>
+                              </select>
+                            </div>
+                            <div className="h-px bg-slate-200 flex-1" />
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* Case Actions */}
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCaseIndex(caseIndex);
+                      setFieldModalMode("caseConditionMulti");
+                      setIsFieldRegistryModalOpen(true);
+                    }}
+                    className="flex-1 py-2 text-xs border border-dashed border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Select Fields</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddConditionToCase(caseIndex)}
+                    className="flex-1 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Condition</span>
+                  </button>
+                </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom Add Case */}
+        <button
+          type="button"
+          onClick={handleAddCase}
+          className="w-full py-2.5 text-xs font-semibold border-2 border-dashed border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+        >
+          <Plus className="w-3.5 h-3.5 text-slate-500" />
+          <span>Add Another Case</span>
+        </button>
+      </div>
+    );
+  };
+
+
+  const renderTriggerConfigEditor = () => {
+    const activeCategory = (params.category || (
+      params.selectedEvent?.startsWith("process") ? "process" :
+      params.selectedEvent?.startsWith("client") ? "client" :
+      params.selectedEvent?.startsWith("appointment") ? "appointment" :
+      params.selectedEvent?.startsWith("invoice") ? "invoice" :
+      params.selectedEvent?.startsWith("call") ? "call" :
+      params.selectedEvent?.startsWith("ai") ? "ai" :
+      "process"
+    )).toLowerCase();
+
+    const currentEvent = params.selectedEvent || (activeCategory === "ai" ? "ai.prompt" : `${activeCategory}.created`);
+
+    const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
+      process: [
+        { event: "process.created", label: "Created", desc: "Fires when a new process workflow is enrolled or created", iconKey: "workflow" },
+        { event: "process.updated", label: "Updated", desc: "Fires when an existing process workflow record or stage is updated", iconKey: "workflow" },
+      ],
+      client: [
+        { event: "client.created", label: "Created", desc: "Fires when a new client record is added to CRM", iconKey: "user" },
+        { event: "client.updated", label: "Updated", desc: "Fires when client profile details or fields are modified", iconKey: "user" },
+      ],
+      appointment: [
+        { event: "appointment.created", label: "Created", desc: "Fires when a new appointment booking is created", iconKey: "calendar" },
+        { event: "appointment.updated", label: "Updated", desc: "Fires when appointment details or schedule are updated", iconKey: "calendar" },
+      ],
+      invoice: [
+        { event: "invoice.created", label: "Created", desc: "Fires when a billing invoice is created or drafted", iconKey: "receipt" },
+        { event: "invoice.updated", label: "Updated", desc: "Fires when an invoice record or status is modified", iconKey: "receipt" },
+      ],
+      call: [
+        { event: "call.created", label: "Created", desc: "Fires when a new call session is initiated or logged", iconKey: "phone" },
+        { event: "call.updated", label: "Updated", desc: "Fires when call metadata, transcript, or status updates", iconKey: "phone" },
+      ],
+      ai: [
+        { event: "ai.prompt", label: "AI Prompt Trigger", desc: "Fires when prompt evaluation matches", iconKey: "sparkles" },
+      ],
+    };
+
+    const currentOptions = triggerOptionsByCategory[activeCategory] || triggerOptionsByCategory.process;
+
+    const handleEventSelect = (opt: { event: string; label: string; desc: string; iconKey: string }) => {
+      onChange({
+        selectedEvent: opt.event,
+        triggerEvent: opt.event,
+        triggerLabel: opt.label === "Created" ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Created` : opt.label === "Updated" ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Updated` : opt.label,
+        triggerDescription: opt.desc,
+        triggerIconKey: opt.iconKey,
+      });
+    };
+
+    const selectedProcId = (params.triggerProcessId && params.triggerProcessId !== "all")
+      ? params.triggerProcessId
+      : (effectiveProcesses[0]?.id || "");
+
+    return (
+      <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 shadow-xs space-y-5">
+        {/* Process Filter MUST be above Created or Updated */}
+        {activeCategory === "process" && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+              Choose Process <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={selectedProcId}
+              onChange={(e) => {
+                const pId = e.target.value;
+                const proc = effectiveProcesses.find((p: any) => p.id === pId);
+                onChange({
+                  triggerProcessId: pId,
+                  triggerProcessName: proc?.name || "",
+                });
+              }}
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+            >
+              {effectiveProcesses.map((proc: any) => (
+                <option key={proc.id} value={proc.id}>
+                  {proc.name} {proc.entityType ? `(${proc.entityType})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Events: For Non-AI Categories: ONLY Created or Updated */}
+        {activeCategory !== "ai" ? (
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Event: Created or Updated
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              {currentOptions.map((opt) => {
+                const isSelected = currentEvent === opt.event;
+                return (
+                  <div
+                    key={opt.event}
+                    onClick={() => handleEventSelect(opt)}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                      isSelected
+                        ? "bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-2xs"
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <div
+                      className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                        isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
+                      }`}
+                    >
+                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold ${isSelected ? "text-blue-900" : "text-slate-900"}`}>
+                        {opt.label}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {opt.desc}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* Clean Prompt Adding Area */
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Trigger Prompt <span className="text-rose-500">*</span>
+                </label>
+                <InfoTooltip text="Specify natural language conditions for the AI to evaluate. When met, this automation triggers." />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFieldModalMode("aiTriggerPromptToken");
+                  setIsFieldRegistryModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Select Field</span>
+              </button>
+            </div>
+            <textarea
+              rows={4}
+              value={params.prompt || params.aiTriggerPrompt || ""}
+              onChange={(e) => onChange({ prompt: e.target.value, aiTriggerPrompt: e.target.value })}
+              placeholder="e.g. Trigger when client requests urgent prescription refill, or expresses intent to cancel contract..."
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-y"
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
   const renderProcessFieldsCardList = (
     proc: any,
@@ -1303,26 +2123,30 @@ export default function StepParametersFields({
 
   return (
     <div className="space-y-6 text-left">
-      {/* ───────────── CONDITIONS EDITOR (Trigger Config) ───────────── */}
-      {stepKey === "trigger_config" && (
-        <div className="w-full rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-          {renderConditionRulesBuilder("Trigger Conditions")}
+      {/* ───────────── TRIGGER CONFIGURATION EDITOR ───────────── */}
+      {stepKey === "trigger_config" && renderTriggerConfigEditor()}
+
+            {/* ───────────── CONDITION STEP (Cases rendered directly without outer Parameters accordion) ───────────── */}
+      {stepKey === "condition" && (
+        <div className="w-full">
+          {renderConditionCasesBuilder()}
         </div>
       )}
 
-            {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
-      <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-        <div
-          onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
-          className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
-        >
-          <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-            Parameters
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 text-muted-foreground transition-transform ${parametersSectionExpanded ? "rotate-180" : ""}`}
-          />
-        </div>
+      {/* ───────────── PARAMETERS FIELDS ACCORDION (For other steps) ───────────── */}
+      {stepKey !== "condition" && stepKey !== "trigger_config" && (
+        <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+          <div
+            onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
+            className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
+          >
+            <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+              Parameters
+            </span>
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground transition-transform ${parametersSectionExpanded ? "rotate-180" : ""}`}
+            />
+          </div>
 
         {parametersSectionExpanded && (
           <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
@@ -2630,7 +3454,7 @@ export default function StepParametersFields({
             )}
 
             {/* ASSIGN PROCESS ACTION STEP */}
-            {(stepKey === "assign_process" || stepKey === "assign-process") && (() => {
+            {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process") && (() => {
               const clientProcesses = effectiveProcesses.filter(
                 (p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes"
               );
@@ -3149,6 +3973,359 @@ export default function StepParametersFields({
                 )}
               </div>
             )}
+
+            {/* ───────────── CREATE APPOINTMENT (CRM Entity) ───────────── */}
+            {(stepKey === "create_appointment" || stepKey === "create-appointment") && (() => {
+              const services = MOCK_SERVICES || [];
+              const selectedServiceId = params.serviceId || services[0]?.id || "";
+              const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
+              const appointmentTitle = params.title ?? (selectedService ? `${selectedService.name} Appointment` : "New Appointment");
+
+              return (
+                <div className="space-y-4">
+                  {/* Service Selection */}
+                  {renderField(
+                    "Service / Appointment Type",
+                    <select
+                      value={selectedServiceId}
+                      onChange={(e) => {
+                        const sId = e.target.value;
+                        const s = services.find((srv) => srv.id === sId);
+                        onChange({
+                          serviceId: sId,
+                          serviceName: s?.name || "",
+                          servicePrice: s?.price || 0,
+                          title: appointmentTitle || `${s?.name || "New"} Appointment`,
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 transition-colors font-medium text-slate-800"
+                    >
+                      <option value="">Select service...</option>
+                      {services.map((srv) => (
+                        <option key={srv.id} value={srv.id}>
+                          {srv.name} (${srv.price})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Appointment Title */}
+                  {renderField(
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700">Appointment Title</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetProcessFieldKey("title");
+                          setFieldModalMode("assignProcessFieldToken");
+                          setIsFieldRegistryModalOpen(true);
+                        }}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                      >
+                        Select Field
+                      </button>
+                    </div>,
+                    <input
+                      type="text"
+                      value={params.title ?? ""}
+                      onChange={(e) => onChange({ title: e.target.value })}
+                      placeholder="e.g. Initial Consultation - {{client_name}}"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  )}
+
+                  {/* Logical Date & Time Scheduling */}
+                  <div className="space-y-3 p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="text-xs font-semibold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Appointment Schedule (Date & Time) <span className="text-rose-500">*</span>
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                        Logical Timing
+                      </span>
+                    </div>
+
+                    {/* Offset Value + Unit + Direction */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Time Amount</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={params.scheduleOffsetValue ?? 1}
+                          onChange={(e) => onChange({ scheduleOffsetValue: Math.max(0, parseInt(e.target.value) || 0) })}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Time Unit</label>
+                        <select
+                          value={params.scheduleOffsetUnit || "days"}
+                          onChange={(e) => onChange({ scheduleOffsetUnit: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="hours">Hours</option>
+                          <option value="days">Days</option>
+                          <option value="business_days">Business Days</option>
+                          <option value="weeks">Weeks</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Timing</label>
+                        <select
+                          value={params.scheduleDirection || "after"}
+                          onChange={(e) => onChange({ scheduleDirection: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="after">After</option>
+                          <option value="before">Before</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Relative Baseline / Anchor */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-semibold text-slate-600">
+                          Relative To (Reference Event)
+                        </label>
+                        {params.scheduleAnchor === "field_token" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetProcessFieldKey("scheduleAnchorField");
+                              setFieldModalMode("assignProcessFieldToken");
+                              setIsFieldRegistryModalOpen(true);
+                            }}
+                            className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                          >
+                            Select Date Field
+                          </button>
+                        )}
+                      </div>
+                      <select
+                        value={params.scheduleAnchor || "client_created"}
+                        onChange={(e) => onChange({ scheduleAnchor: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="client_created">Client Created (Intake Date)</option>
+                        <option value="process_enrolled">Process Enrolled Date</option>
+                        <option value="stage_entered">Stage Entered Date</option>
+                        <option value="execution_time">Automation Execution Time (Now)</option>
+                        <option value="field_token">Custom Record Date Field...</option>
+                      </select>
+                      {params.scheduleAnchor === "field_token" && (
+                        <input
+                          type="text"
+                          value={params.scheduleAnchorField || ""}
+                          onChange={(e) => onChange({ scheduleAnchorField: e.target.value })}
+                          placeholder="e.g. {{client.date_of_birth}} or {{process.due_date}}"
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-500"
+                        />
+                      )}
+                    </div>
+
+
+                  </div>
+
+                  {/* Appointment Method / Location */}
+                  {renderField(
+                    "Location / Method",
+                    <select
+                      value={params.locationType || "in-person"}
+                      onChange={(e) => onChange({ locationType: e.target.value })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="in-person">In-Person Clinic</option>
+                      <option value="video">Telehealth / Video Call</option>
+                      <option value="phone">Phone Call</option>
+                    </select>
+                  )}
+
+                  {/* Assigned Provider */}
+                  {renderField(
+                    "Assigned Provider / Staff",
+                    <select
+                      value={params.assignedTo || ""}
+                      onChange={(e) => onChange({ assignedTo: e.target.value })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">Any Available Staff</option>
+                      {availableEmployees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ───────────── CREATE CLIENT (CRM Entity) ───────────── */}
+            {(stepKey === "create_client" || stepKey === "create-client") && (() => {
+              return (
+                <div className="space-y-4">
+                  {/* Client Full Name */}
+                  {renderField(
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700">Client / Contact Name *</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetProcessFieldKey("name");
+                          setFieldModalMode("assignProcessFieldToken");
+                          setIsFieldRegistryModalOpen(true);
+                        }}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                      >
+                        Select Field
+                      </button>
+                    </div>,
+                    <input
+                      type="text"
+                      value={params.name ?? params.clientName ?? ""}
+                      onChange={(e) => onChange({ name: e.target.value, clientName: e.target.value })}
+                      placeholder="e.g. John Doe or {{lead_name}}"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  )}
+
+                  {/* Phone & Email */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      {renderField(
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-700">Phone Number</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetProcessFieldKey("phone");
+                              setFieldModalMode("assignProcessFieldToken");
+                              setIsFieldRegistryModalOpen(true);
+                            }}
+                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                          >
+                            Select Field
+                          </button>
+                        </div>,
+                        <input
+                          type="tel"
+                          value={params.phone ?? ""}
+                          onChange={(e) => onChange({ phone: e.target.value })}
+                          placeholder="+1 (555) 000-0000"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      {renderField(
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-700">Email Address</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetProcessFieldKey("email");
+                              setFieldModalMode("assignProcessFieldToken");
+                              setIsFieldRegistryModalOpen(true);
+                            }}
+                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                          >
+                            Select Field
+                          </button>
+                        </div>,
+                        <input
+                          type="email"
+                          value={params.email ?? ""}
+                          onChange={(e) => onChange({ email: e.target.value })}
+                          placeholder="client@example.com"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contact Type & Lead Source */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      {renderField(
+                        "Contact Type",
+                        <select
+                          value={params.contactType || "Lead"}
+                          onChange={(e) => onChange({ contactType: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="Lead">Lead</option>
+                          <option value="Prospect">Prospect</option>
+                          <option value="Client">Client</option>
+                          <option value="Patient">Patient</option>
+                          <option value="Customer">Customer</option>
+                          <option value="VIP">VIP</option>
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      {renderField(
+                        "Lead Source",
+                        <select
+                          value={params.leadSource || "Website"}
+                          onChange={(e) => onChange({ leadSource: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="Website">Website Form</option>
+                          <option value="Inbound Call">Inbound Call</option>
+                          <option value="Referral">Referral</option>
+                          <option value="Ad Campaign">Ad Campaign</option>
+                          <option value="Social Media">Social Media</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Company / Organization */}
+                  {renderField(
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700">Company / Organization</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetProcessFieldKey("company");
+                          setFieldModalMode("assignProcessFieldToken");
+                          setIsFieldRegistryModalOpen(true);
+                        }}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                      >
+                        Select Field
+                      </button>
+                    </div>,
+                    <input
+                      type="text"
+                      value={params.company ?? ""}
+                      onChange={(e) => onChange({ company: e.target.value })}
+                      placeholder="e.g. Acme Corp or {{company_name}}"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  )}
+
+                  {/* Responsible Person / Assigned To */}
+                  {renderField(
+                    "Responsible Person",
+                    <select
+                      value={params.assignedTo || ""}
+                      onChange={(e) => onChange({ assignedTo: e.target.value })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">Select team member...</option>
+                      {availableEmployees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              );
+            })()}
 
             {(stepKey === "scheduleappointment" || stepKey === "book-appointment" || stepKey === "reschedule-appointment" || stepKey === "cancel-appointment") && (
               <div className="space-y-4">
@@ -3751,7 +4928,7 @@ export default function StepParametersFields({
             )}
 
             {/* ───────────── CONDITION NODE RULES ───────────── */}
-            {stepKey === "condition" && renderConditionRulesBuilder("Condition Rules")}
+            {stepKey === "condition" && renderConditionCasesBuilder()}
 
             {stepKey === "wait" && (
               <div className="space-y-4">
@@ -3799,360 +4976,6 @@ export default function StepParametersFields({
                 )}
               </div>
             )}
-
-            {/* ───────────── TRIGGER CONFIGURATION ───────────── */}
-            {stepKey === "trigger_config" && (() => {
-              const currentScope = params.scope || "global";
-              const isStageScope = currentScope === "stage" || params.category === "stage";
-              const activeCategory = params.category || (isStageScope ? "stage" : (params.selectedEvent === "field.updated" ? "field_update" : params.selectedEvent?.startsWith("stage") ? "stage" : "client"));
-              const currentEvent = params.selectedEvent || (
-                activeCategory === "stage" ? (isStageScope ? "stage.entry" : "stage.entered") :
-                activeCategory === "field_update" ? "field.updated" :
-                activeCategory === "client" ? "client.created" :
-                activeCategory === "appointment" ? "appointment.booked" :
-                activeCategory === "invoice" ? "invoice.created" :
-                "client.created"
-              );
-
-              const storedServices = getStoredServices();
-              const monitoredFields: string[] = Array.isArray(params.monitoredFields) ? params.monitoredFields : [];
-
-              const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
-                stage: [
-                  {
-                    event: isStageScope ? "stage.entry" : "stage.entered",
-                    label: isStageScope ? "On Stage Entry" : "Stage Entered",
-                    desc: isStageScope ? "Runs when record moves into this stage" : "Fires when a record moves into a selected stage",
-                    iconKey: "gitbranch",
-                  },
-                  {
-                    event: isStageScope ? "stage.exit" : "stage.exited",
-                    label: isStageScope ? "On Stage Exit" : "Stage Exited",
-                    desc: isStageScope ? "Runs when record moves out of this stage" : "Fires when a record moves out of a selected stage",
-                    iconKey: "gitbranch",
-                  },
-                ],
-                field_update: [
-                  {
-                    event: "field.updated",
-                    label: "Field Updated",
-                    desc: "Fires when monitored fields on a record are updated",
-                    iconKey: "sliders",
-                  },
-                ],
-                client: [
-                  { event: "client.created", label: "Client Created", desc: "Fires when a new client record is added to the system", iconKey: "user" },
-                  { event: "client.updated", label: "Client Updated", desc: "Fires when existing client details or fields are modified", iconKey: "user" },
-                  { event: "client.product_assigned", label: "Assign Product", desc: "Fires when a product or service is assigned to this client in their profile", iconKey: "briefcase" },
-                ],
-                appointment: [
-                  { event: "appointment.booked", label: "Appointment Booked", desc: "Fires when a time slot is confirmed for a client", iconKey: "calendar" },
-                  { event: "appointment.rescheduled", label: "Appointment Rescheduled", desc: "Fires when an appointment date or time is modified", iconKey: "calendar" },
-                  { event: "appointment.cancelled", label: "Appointment Cancelled", desc: "Fires when an appointment is cancelled or marked void", iconKey: "calendar" },
-                  { event: "appointment.completed", label: "Appointment Completed", desc: "Fires when an appointment or consultation concludes successfully", iconKey: "calendar" },
-                ],
-                invoice: [
-                  { event: "invoice.created", label: "Invoice Created", desc: "Fires when a billing invoice is drafted or issued", iconKey: "receipt" },
-                  { event: "invoice.paid", label: "Invoice Paid", desc: "Fires when payment is recorded and settled for an invoice", iconKey: "receipt" },
-                ],
-              };
-
-              const currentOptions = triggerOptionsByCategory[activeCategory] || triggerOptionsByCategory.client;
-
-              const handleCategoryChange = (newCat: string) => {
-                const defaults = triggerOptionsByCategory[newCat] || triggerOptionsByCategory.client;
-                const firstOption = defaults[0];
-                onChange({
-                  category: newCat,
-                  selectedEvent: firstOption.event,
-                  triggerLabel: firstOption.label,
-                  triggerDescription: firstOption.desc,
-                  triggerIconKey: firstOption.iconKey,
-                });
-              };
-
-              const handleEventSelect = (opt: { event: string; label: string; desc: string; iconKey: string }) => {
-                onChange({
-                  selectedEvent: opt.event,
-                  triggerLabel: opt.label,
-                  triggerDescription: opt.desc,
-                  triggerIconKey: opt.iconKey,
-                });
-              };
-
-              const handleAddMonitoredField = (token: string) => {
-                const cleanKey = token.replace(/[{}]/g, "").trim();
-                if (!monitoredFields.includes(cleanKey)) {
-                  onChange({ monitoredFields: [...monitoredFields, cleanKey] });
-                }
-              };
-
-              const handleRemoveMonitoredField = (fieldKey: string) => {
-                onChange({ monitoredFields: monitoredFields.filter((f) => f !== fieldKey) });
-              };
-
-              return (
-                <div className="space-y-5">
-                  {/* Respective Trigger Options (Categories already selected in sidebar) */}
-                  {currentOptions.length > 1 && (
-                    <div className="space-y-2">
-                      <label
-                        className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        Select Trigger ({activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1).replace("_", " ")})
-                      </label>
-                      <div className="space-y-2">
-                        {currentOptions.map((opt) => {
-                          const isSelected =
-                            currentEvent === opt.event ||
-                            (opt.event === "stage.entered" && (currentEvent === "stage.entry" || currentEvent === "entry")) ||
-                            (opt.event === "stage.exited" && (currentEvent === "stage.exit" || currentEvent === "exit")) ||
-                            (opt.event === "stage.entry" && (currentEvent === "stage.entered" || currentEvent === "entry")) ||
-                            (opt.event === "stage.exit" && (currentEvent === "stage.exited" || currentEvent === "exit"));
-                          return (
-                            <div
-                              key={opt.event}
-                              onClick={() => handleEventSelect(opt)}
-                              className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                                isSelected
-                                  ? "bg-blue-50/70 border-blue-500 ring-1 ring-blue-500 shadow-2xs"
-                                  : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
-                              }`}
-                            >
-                              <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
-                              }`}>
-                                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p
-                                  className={`text-xs font-semibold ${isSelected ? "text-blue-900" : "text-slate-900"}`}
-                                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                                >
-                                  {opt.label}
-                                </p>
-                                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                                  {opt.desc}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Specific Trigger Sub-Parameters */}
-                  {activeCategory === "stage" && (
-                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <GitBranch className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs font-semibold text-blue-900">Stage Filter Options</span>
-                      </div>
-                      {renderField("Process Filter",
-                        <select
-                          value={params.triggerProcessId || "all"}
-                          disabled={isStageScope || params.scope === "stage"}
-                          onChange={(e) => {
-                            const pId = e.target.value;
-                            const proc = effectiveProcesses.find((p: any) => p.id === pId);
-                            onChange({
-                              triggerProcessId: pId,
-                              triggerProcessName: proc?.name || "Any Process",
-                              triggerStageId: "all",
-                              triggerStageName: "Any Stage",
-                            });
-                          }}
-                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                        >
-                          <option value="all">Any Process</option>
-                          {effectiveProcesses.map((proc: any) => (
-                            <option key={proc.id} value={proc.id}>
-                              {proc.name} {proc.entityType ? `(${proc.entityType})` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {(() => {
-                        const selectedProc = effectiveProcesses.find((p: any) => p.id === params.triggerProcessId);
-                        const stages = selectedProc?.stages || [];
-                        const isStageLocked = isStageScope || params.scope === "stage";
-                        return renderField("Stage Filter",
-                          <select
-                            value={params.triggerStageId || "all"}
-                            disabled={isStageLocked || !params.triggerProcessId || params.triggerProcessId === "all"}
-                            onChange={(e) => {
-                              const sId = e.target.value;
-                              const stg = stages.find((s: any) => s.id === sId);
-                              onChange({
-                                triggerStageId: sId,
-                                triggerStageName: stg?.name || "Any Stage",
-                              });
-                            }}
-                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="all">
-                              {params.triggerProcessId && params.triggerProcessId !== "all"
-                                ? "Any Stage in this Process"
-                                : "Select a process to specify a stage"}
-                            </option>
-                            {stages.map((stg: any) => (
-                              <option key={stg.id} value={stg.id}>
-                                {stg.name}
-                              </option>
-                            ))}
-                          </select>
-                        );
-                      })()}
-                      <p className="text-[11px] text-blue-700">
-                        {currentEvent === "stage.exited" || currentEvent === "stage.exit"
-                          ? "This automation fires whenever a record transitions out of the selected stage."
-                          : "This automation fires whenever a record transitions into the selected stage."}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Field Update Sub-Parameters */}
-                  {activeCategory === "field_update" && (
-                    <div className="p-4 bg-[#fafafa] rounded-2xl border border-slate-200 space-y-4">
-                      {/* Monitored Fields Header */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div
-                            className="flex items-center gap-1.5 text-xs font-bold text-slate-900"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          >
-                            <Sliders className="w-4 h-4 text-blue-600" />
-                            <span>Monitored Fields</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            Select client & record fields that will trigger this automation
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFieldModalMode("monitoredFields");
-                            setIsFieldRegistryModalOpen(true);
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Select Fields</span>
-                        </button>
-                      </div>
-
-                      {/* Monitored Fields Tags */}
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-semibold text-slate-700">Fields to Watch</label>
-                        {monitoredFields.length === 0 ? (
-                          <div className="p-3 bg-white border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
-                            No specific fields selected. <strong>Triggers on ANY field update.</strong>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-xl">
-                            {monitoredFields.map((fld) => (
-                              <span
-                                key={fld}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-xs font-medium border border-blue-200"
-                              >
-                                <code className="font-mono text-[11px]">{fld}</code>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveMonitoredField(fld)}
-                                  className="text-blue-500 hover:text-blue-800 cursor-pointer ml-0.5"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Trigger Parameter (Evaluation Logic) Dropdown */}
-                      <div className="space-y-1.5">
-                        <label
-                          className="block text-xs font-semibold text-slate-800"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          Trigger Parameter (Evaluation Logic)
-                        </label>
-                        <select
-                          value={params.matchLogic || "any"}
-                          onChange={(e) => onChange({ matchLogic: e.target.value })}
-                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          <option value="any">
-                            Any Field Updated — Triggers when ANY of the watched fields is changed
-                          </option>
-                          <option value="all">
-                            All Fields Updated — Triggers only when ALL watched fields are changed
-                          </option>
-                        </select>
-                        <p className="text-[11px] text-slate-500" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {(params.matchLogic || "any") === "any"
-                            ? "Triggers when ANY of the watched fields is changed"
-                            : "Triggers only when ALL watched fields are changed"}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Specific Trigger Sub-Parameters */}
-                  {currentEvent === "client.product_assigned" && (
-                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <Briefcase className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs font-semibold text-blue-900">Assign Product Filter</span>
-                      </div>
-                      {renderField("Target Product / Service",
-                        <select
-                          value={params.selectedProductId || "all"}
-                          onChange={(e) => onChange({ selectedProductId: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
-                        >
-                          <option value="all">Any Product or Service assigned</option>
-                          {storedServices.map((svc) => (
-                            <option key={svc.id} value={String(svc.id)}>
-                              {svc.name} (${svc.price})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <p className="text-[11px] text-blue-700">
-                        When this product is assigned in the Client Profile, this trigger activates and can feed invoice generation.
-                      </p>
-                    </div>
-                  )}
-
-                  {activeCategory === "invoice" && (
-                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <Receipt className="w-4 h-4 text-gray-700" />
-                        <span className="text-xs font-semibold text-gray-900">Invoice Filter</span>
-                      </div>
-                      {renderField("Payment Mode Filter",
-                        <select
-                          value={params.invoicePaymentMode || "all"}
-                          onChange={(e) => onChange({ invoicePaymentMode: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
-                        >
-                          <option value="all">Any Payment Mode</option>
-                          <option value="Online / Link">Online / Payment Link</option>
-                          <option value="Bank Transfer">Bank Transfer</option>
-                          <option value="Card on File">Card on File</option>
-                          <option value="Cash / POS">Cash / POS Terminal</option>
-                        </select>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
 
             {/* ───────────── GENERATE DOCUMENT AUTOMATION STEP ───────────── */}
             {(stepKey === "generate_document" || stepKey === "generate-document") && (() => {
@@ -4369,6 +5192,7 @@ export default function StepParametersFields({
           </div>
         )}
       </div>
+      )}
 
       {/* Root Field Registry Modal (Shared across Trigger, Conditions, and Field Updates) */}
       {isFieldRegistryModalOpen && (
@@ -4380,12 +5204,18 @@ export default function StepParametersFields({
             fieldModalMode === "fieldUpdateSingle" ||
             fieldModalMode === "genericCondition" ||
             fieldModalMode === "conditionNodeSingle" ||
+            fieldModalMode === "caseConditionSingle" ||
+            fieldModalMode === "caseConditionDynamic" ||
             fieldModalMode === "triggerConditionSingle" ||
             fieldModalMode === "assignProcessFieldToken"
           }
           initialSelectedKeys={
             fieldModalMode === "monitoredFields"
               ? (Array.isArray(params.monitoredFields) ? params.monitoredFields : [])
+              : fieldModalMode === "caseConditionSingle" && targetCaseIndex !== null && targetCaseConditionIndex !== null && conditionCases[targetCaseIndex]?.conditions[targetCaseConditionIndex]?.field
+              ? [conditionCases[targetCaseIndex].conditions[targetCaseConditionIndex].field]
+              : fieldModalMode === "caseConditionDynamic" && targetCaseIndex !== null && targetCaseConditionIndex !== null && conditionCases[targetCaseIndex]?.conditions[targetCaseConditionIndex]?.dynamicField
+              ? [conditionCases[targetCaseIndex].conditions[targetCaseConditionIndex].dynamicField]
               : fieldModalMode === "conditionNodeSingle" && targetConditionIndex !== null && conditionRules[targetConditionIndex]?.field
               ? [conditionRules[targetConditionIndex].field]
               : fieldModalMode === "triggerConditionSingle" && targetTriggerConditionIndex !== null && triggerConditions[targetTriggerConditionIndex]?.field
@@ -4401,33 +5231,41 @@ export default function StepParametersFields({
           onApply={handleFieldRegistryApply}
           title={
             fieldModalMode === "assignProcessFieldToken"
-              ? "Select Field from Registry"
+              ? "Select Field"
               : fieldModalMode === "monitoredFields"
               ? "Select Fields to Watch"
+              : fieldModalMode === "caseConditionSingle"
+              ? "Select Field"
+              : fieldModalMode === "caseConditionMulti"
+              ? "Select Fields"
+              : fieldModalMode === "caseConditionDynamic"
+              ? "Select Field"
               : fieldModalMode === "fieldConditionSingle" || fieldModalMode === "conditionNodeSingle"
-              ? "Select Condition Field"
+              ? "Select Field"
               : fieldModalMode === "triggerConditionSingle"
-              ? "Select Trigger Condition Field"
+              ? "Select Field"
               : fieldModalMode === "triggerConditionMulti"
-              ? "Add Trigger Conditions from Registry"
+              ? "Select Fields"
               : fieldModalMode === "fieldConditionMulti" || fieldModalMode === "conditionNodeMulti"
-              ? "Add Field Conditions from Registry"
+              ? "Select Fields"
               : fieldModalMode === "fieldUpdateSingle"
               ? "Select Field to Update"
               : fieldModalMode === "fieldUpdateMulti"
-              ? "Add Field Updates from Registry"
-              : "Select Condition Field"
+              ? "Select Fields to Update"
+              : "Select Field"
           }
           subtitle={
             fieldModalMode === "monitoredFields"
               ? "Choose fields that will trigger this automation when updated"
+              : fieldModalMode.includes("caseCondition")
+              ? "Choose fields to evaluate in this condition case"
               : fieldModalMode.includes("triggerCondition")
               ? "Choose fields to filter when this trigger activates"
               : fieldModalMode.includes("Condition")
-              ? "Choose fields from the registry to evaluate in conditions"
+              ? "Choose fields to evaluate in conditions"
               : fieldModalMode.includes("Update")
-              ? "Choose fields from the registry to update when this step runs"
-              : "Select field from registry"
+              ? "Choose fields to update when this step runs"
+              : "Select field"
           }
           scopingRules={scopingRules}
         />

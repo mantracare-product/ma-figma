@@ -74,7 +74,7 @@ export function normalizeWorkflowTree(
 
   // Detect parallel steps in rawSteps
   rawSteps.forEach((s) => {
-    if (s.stepKey === "parallel" || s.kind === "parallel") {
+    if (s.stepKey === "parallel" || s.kind === "parallel" || s.stepKey === "condition") {
       if (!parallelMap.has(s.id)) {
         parallelMap.set(s.id, {
           id: s.id,

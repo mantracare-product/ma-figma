@@ -39,12 +39,9 @@ export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "scheduleappointment", name: "Schedule Appointment", desc: "Book or schedule an appointment for this client/contact.", iconKey: "calendar", cats: ["all", "records", "workflow"], popular: true },
   { key: "generate_invoice", name: "Generate Invoice", desc: "Generate invoice in Draft for appointment or record (strictly idempotent).", iconKey: "filetext", cats: ["all", "records"], popular: true },
   { key: "generate_document", name: "Generate Document", desc: "Generate document from template for client, process, appointment, or invoice.", iconKey: "filetext", cats: ["all", "records"], popular: true },
-  { key: "send_payment", name: "Send Payment", desc: "Send payment link or invoice checkout request via client's preferred channel.", iconKey: "creditcard", cats: ["all", "records", "communication"], popular: false },
   { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
   { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
   { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-  { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
-  { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
   { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this record.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
   { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
 ];
