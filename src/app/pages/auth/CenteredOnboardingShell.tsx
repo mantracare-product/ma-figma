@@ -8,6 +8,7 @@ export interface CenteredOnboardingShellProps {
   showLogo?: boolean;
   showFooter?: boolean;
   noCard?: boolean;
+  headerBadge?: React.ReactNode;
 }
 
 export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = ({
@@ -17,6 +18,7 @@ export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = (
   showLogo = true,
   showFooter = true,
   noCard = false,
+  headerBadge,
 }) => {
   return (
     <div
@@ -27,9 +29,9 @@ export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = (
       }}
     >
       <div className="w-full flex flex-col items-center my-auto">
-        {/* Centered Logo above the card - increased size as requested */}
+        {/* Centered Logo above the card */}
         {showLogo && (
-          <div className="mb-6 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center">
             <img
               src={logo}
               alt="MantraAssist"
@@ -38,6 +40,16 @@ export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = (
                 e.currentTarget.style.display = "none";
               }}
             />
+            {headerBadge ? (
+              <div
+                className="mt-4 flex items-center justify-center max-w-full px-4"
+                style={{ marginBottom: "20px" }}
+              >
+                {headerBadge}
+              </div>
+            ) : (
+              <div className="mb-6" />
+            )}
           </div>
         )}
 

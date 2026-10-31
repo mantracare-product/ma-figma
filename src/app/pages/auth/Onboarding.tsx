@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
-import confetti from "canvas-confetti";
 import { useOrganization } from "../../context/OrganizationContext";
 import { useHowItWorks } from "../../context/HowItWorksContext";
 import { useAuth } from "../../context/AuthContext";
@@ -26,6 +25,7 @@ import {
   Calendar,
   Layers,
   FileCheck2,
+  Globe,
 } from "lucide-react";
 import CenteredOnboardingShell from "./CenteredOnboardingShell";
 import { UploadedDoc, formatBytes } from "./onboardingHelpers";
@@ -253,6 +253,72 @@ function ProgressRing({ currentStep, totalSteps = 5 }: { currentStep: number; to
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHARED WEBSITE DETECTED CAPSULE (Brand Blue, Above Card)
+// ─────────────────────────────────────────────────────────────
+export function WebsiteDetectedCapsule({
+  websiteDisplay,
+}: {
+  websiteDisplay: string;
+}) {
+  return (
+    <div
+      className="inline-flex items-center h-7 px-3 rounded-full text-[12px] bg-[#EFF8FF] border border-[#CFE6F7] shadow-2xs max-w-[calc(100vw-32px)] select-none whitespace-nowrap shrink-0"
+      style={{ height: "28px" }}
+    >
+      {/* Sparkle icon (14px) + label in brand blue, medium weight, 6px gap */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Sparkles className="w-3.5 h-3.5 text-[#1456F0] shrink-0" />
+        <span className="font-medium text-[#1456F0]">Detected from website</span>
+      </div>
+
+      {/* Thin 1px vertical divider with equal spacing on both sides */}
+      <span className="w-px h-3 bg-[#CFE6F7] mx-2.5 shrink-0" aria-hidden="true" />
+
+      {/* Globe icon (14px) + URL in muted slate gray, regular weight, 6px gap, truncated at ~280px */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <span className="text-slate-500 font-normal truncate max-w-[140px] xs:max-w-[200px] sm:max-w-[280px]">
+          {websiteDisplay}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// REUSABLE STEP HEADER (Card Heading & Progress Ring)
+// ─────────────────────────────────────────────────────────────
+function StepHeader({
+  title,
+  subtitle,
+  currentStep,
+}: {
+  title: string;
+  subtitle: string;
+  currentStep: number;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="min-w-0 flex-1">
+        <h2
+          className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          {title}
+        </h2>
+        <p
+          className="text-[13px] text-slate-500 leading-normal"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          {subtitle}
+        </p>
+      </div>
+      <ProgressRing currentStep={currentStep} totalSteps={5} />
     </div>
   );
 }
@@ -568,6 +634,20 @@ export default function Onboarding() {
     localStorage.getItem("login_email") ||
     "";
 
+  // Organization Website detected from Signup
+  const signupWebsite = (() => {
+    const fromState = (location.state as any)?.website;
+    if (fromState && typeof fromState === "string" && fromState.trim()) return fromState.trim();
+    const fromStorage = localStorage.getItem("signup_website");
+    if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+    return "https://www.acmehealthclinic.com";
+  })();
+
+  const cleanWebsiteDisplay =
+    signupWebsite.startsWith("http://") || signupWebsite.startsWith("https://")
+      ? signupWebsite
+      : `https://${signupWebsite}`;
+
   // Step state: 1 to 5
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
@@ -576,7 +656,7 @@ export default function Onboarding() {
   const [buildProgress, setBuildProgress] = useState(0);
   const [activeBuildStage, setActiveBuildStage] = useState(0);
 
-  // ── Step 1: About your organization (All details pre-filled) ──
+  // ── Step 1: About your organization (All details pre-filled from website) ──
   const [orgName, setOrgName] = useState(() => {
     const saved = localStorage.getItem("active_organization_name");
     if (saved && saved.trim()) return saved;
@@ -593,7 +673,7 @@ export default function Onboarding() {
           domain.toLowerCase()
         )
       ) {
-        return domain.charAt(0).toUpperCase() + domain.slice(1) + " Health";
+        return domain.charAt(0).toUpperCase() + domain.slice(1) + " Health Clinic";
       }
     }
     return "Acme Health Clinic";
@@ -610,13 +690,12 @@ export default function Onboarding() {
     }
   }, [selectedIndustry]);
 
-  // ── Step 2: About your location (Card dropdowns + Image 2 Operating Hours) ──
-  // Location name and operating hours are pre-filled, address is empty as requested
+  // ── Step 2: About your location (Card dropdowns pre-filled) ──
   const [locations, setLocations] = useState<LocationEntry[]>([
     {
       id: "loc-1",
       name: "Main Clinic",
-      address: "",
+      address: "100 Medical Center Blvd, Suite 250, San Francisco, CA 94102",
       operatingDays: ["MON", "TUE", "WED", "THU", "FRI"],
       opensAt: "09:00",
       closesAt: "17:00",
@@ -624,32 +703,62 @@ export default function Onboarding() {
     },
   ]);
 
-  // ── Step 3: Product and service (Card dropdowns pre-filled) ──
+  // ── Step 3: Product and service (Card dropdowns pre-filled with sample clinical services) ──
   const [servicesList, setServicesList] = useState<ServiceEntry[]>([
     {
       id: "srv-1",
       name: "General Consultation",
-      description: "30 mins",
-      isExpanded: true,
+      description: "Comprehensive medical review, clinical examination, and treatment plan (30 mins)",
+      isExpanded: false,
     },
     {
       id: "srv-2",
       name: "Follow-up Visit",
-      description: "15 mins",
+      description: "Progress evaluation, lab results consultation, and prescription refills (15 mins)",
+      isExpanded: false,
+    },
+    {
+      id: "srv-3",
+      name: "Telehealth Video Consult",
+      description: "Secure virtual consultation for triage, non-emergency care, and remote diagnosis (20 mins)",
+      isExpanded: false,
+    },
+    {
+      id: "srv-4",
+      name: "Annual Health Checkup",
+      description: "Full preventive health assessment, diagnostic panels, and lifestyle consultation (45 mins)",
       isExpanded: false,
     },
   ]);
 
-  // ── Step 4: About your team (All Dropdowns) ──
-  // Pre-filled except requirements which starts empty as requested ("except the requirement details")
+  // ── Step 4: About your team (All Dropdowns pre-filled) ──
   const [selectedTeamSize, setSelectedTeamSize] = useState("2–5");
   const [selectedCallVolume, setSelectedCallVolume] = useState("25–100 a day");
-  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([]);
+  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([
+    "AI Front Desk & Phone Reception",
+    "Smart Scheduling & Reminders",
+  ]);
   const [selectedIntl, setSelectedIntl] = useState("No");
   const [selectedPhone, setSelectedPhone] = useState("Use a number from MantraAssist");
 
-  // ── Step 5: Knowledge base (Documents only) ──
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  // ── Step 5: Knowledge base (Pre-created organization & services policy documents) ──
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([
+    {
+      id: "kb-1",
+      name: "Acme_Health_Organization_Overview_&_Hours.pdf",
+      sizeLabel: "1.8 MB",
+    },
+    {
+      id: "kb-2",
+      name: "Clinical_Services_Pricing_&_Treatment_Guide.pdf",
+      sizeLabel: "2.4 MB",
+    },
+    {
+      id: "kb-3",
+      name: "Patient_Intake_Cancellation_&_Billing_Policies.docx",
+      sizeLabel: "840 KB",
+    },
+  ]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─────────────────────────────────────────────────────────────
@@ -802,15 +911,6 @@ export default function Onboarding() {
   };
 
   const finalizePracticeSetup = () => {
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 65,
-        origin: { y: 0.6 },
-        colors: ["#182230", "#2563EB", "#10B981", "#38BDF8"],
-      });
-    } catch {}
-
     const cleanOrgName = orgName.trim() || "My Organization";
     const primaryLoc = locations[0] || {
       name: "Main Location",
@@ -908,6 +1008,12 @@ export default function Onboarding() {
       showLogo={!isBuildingPractice}
       showFooter={!isBuildingPractice}
       noCard={isBuildingPractice}
+      headerBadge={
+        !isBuildingPractice &&
+        (step === 1 || step === 2 || step === 3 || step === 5) ? (
+          <WebsiteDetectedCapsule websiteDisplay={cleanWebsiteDisplay} />
+        ) : undefined
+      }
     >
       <div className={isBuildingPractice ? "w-full flex flex-col items-center justify-center min-h-[50vh]" : "w-full"}>
         {/* ─────────────────────────────────────────────────────────────
@@ -1053,23 +1159,11 @@ export default function Onboarding() {
                 }}
                 className="space-y-4 sm:space-y-4.5"
               >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <h2
-                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      About your organization
-                    </h2>
-                    <p
-                      className="text-[13px] text-slate-500 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      We'll tailor your AI workflows to your business.
-                    </p>
-                  </div>
-                  <ProgressRing currentStep={1} totalSteps={5} />
-                </div>
+                <StepHeader
+                  title="About your organization"
+                  subtitle="We'll tailor your AI workflows to your business."
+                  currentStep={1}
+                />
 
                 {/* 1. Organization name (Pre-filled) */}
                 <div>
@@ -1149,23 +1243,11 @@ export default function Onboarding() {
                 }}
                 className="space-y-4 sm:space-y-4.5"
               >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <h2
-                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      About your location
-                    </h2>
-                    <p
-                      className="text-[13px] text-slate-500 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Manage clinic locations, addresses, and operating hours.
-                    </p>
-                  </div>
-                  <ProgressRing currentStep={2} totalSteps={5} />
-                </div>
+                <StepHeader
+                  title="About your location"
+                  subtitle="Manage clinic locations, addresses, and operating hours."
+                  currentStep={2}
+                />
 
                 {/* Location Card Dropdowns List */}
                 <div className="space-y-3">
@@ -1394,23 +1476,11 @@ export default function Onboarding() {
                 }}
                 className="space-y-4 sm:space-y-4.5"
               >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <h2
-                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Product and service
-                    </h2>
-                    <p
-                      className="text-[13px] text-slate-500 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Add the services and treatments your team provides.
-                    </p>
-                  </div>
-                  <ProgressRing currentStep={3} totalSteps={5} />
-                </div>
+                <StepHeader
+                  title="Product and service"
+                  subtitle="Add the services and treatments your team provides."
+                  currentStep={3}
+                />
 
                 {/* Services Card Dropdowns List (Pre-filled) */}
                 <div className="space-y-3">
@@ -1549,7 +1619,7 @@ export default function Onboarding() {
             )}
 
             {/* ─────────────────────────────────────────────────────────────
-                STEP 4: ABOUT YOUR TEAM (All Dropdowns, Subtexts Removed)
+                STEP 4: YOUR WORKSPACE (Row Structure matching Org Step)
                 ───────────────────────────────────────────────────────────── */}
             {step === 4 && (
               <form
@@ -1557,7 +1627,7 @@ export default function Onboarding() {
                   e.preventDefault();
                   if (selectedRequirements.length === 0) {
                     toast.error(
-                      "Please select at least one option under 'What are you looking for'"
+                      "Please select what MantraAssist should handle for you"
                     );
                     return;
                   }
@@ -1565,51 +1635,40 @@ export default function Onboarding() {
                 }}
                 className="space-y-4 sm:space-y-4.5"
               >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <h2
-                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      About your team
-                    </h2>
-                    <p
-                      className="text-[13px] text-slate-500 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Configure team capacity, call routing, and automation requirements.
-                    </p>
-                  </div>
-                  <ProgressRing currentStep={4} totalSteps={5} />
+                <StepHeader
+                  title="Your workspace"
+                  subtitle="Tell us how your practice runs so we can set up your workspace."
+                  currentStep={4}
+                />
+
+                {/* Row 1: Team size & Call volume side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+                  <CustomDropdown
+                    label="How big is your team?"
+                    options={["Just me (1)", "2–5", "6–10", "11–25", "25+"]}
+                    value={selectedTeamSize}
+                    onChange={(val) => setSelectedTeamSize(val)}
+                    required
+                  />
+
+                  <CustomDropdown
+                    label="How many calls do you get in a day?"
+                    options={[
+                      "Under 25 a day",
+                      "25–100 a day",
+                      "100–300 a day",
+                      "300+ a day",
+                      "Not sure",
+                    ]}
+                    value={selectedCallVolume}
+                    onChange={(val) => setSelectedCallVolume(val)}
+                    required
+                  />
                 </div>
 
-                {/* 1. Team Size Dropdown (Pre-filled, No Subtext) */}
+                {/* Row 2: What should MantraAssist handle for you? */}
                 <CustomDropdown
-                  label="Team size"
-                  options={["Just me (1)", "2–5", "6–10", "11–25", "25+"]}
-                  value={selectedTeamSize}
-                  onChange={(val) => setSelectedTeamSize(val)}
-                  required
-                />
-
-                {/* 2. Approximate Call Volume Dropdown (Pre-filled, Subtext Removed) */}
-                <CustomDropdown
-                  label="Approximate call volume"
-                  options={[
-                    "Under 25 a day",
-                    "25–100 a day",
-                    "100–300 a day",
-                    "300+ a day",
-                    "Not sure",
-                  ]}
-                  value={selectedCallVolume}
-                  onChange={(val) => setSelectedCallVolume(val)}
-                  required
-                />
-
-                {/* 3. What Are You Looking For (Starts Empty, Subtext Removed) */}
-                <CustomDropdown
-                  label="What are you looking for"
+                  label="What should MantraAssist handle for you?"
                   placeholder="Select options..."
                   isMulti
                   options={[
@@ -1623,26 +1682,27 @@ export default function Onboarding() {
                   required
                 />
 
-                {/* 4. International Calls Dropdown (Pre-filled, Subtext Removed) */}
-                <CustomDropdown
-                  label="International calls"
-                  options={["Yes", "No", "Not sure"]}
-                  value={selectedIntl}
-                  onChange={(val) => setSelectedIntl(val)}
-                  required
-                />
+                {/* Row 3: International calls & Phone number side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+                  <CustomDropdown
+                    label="Do you take international calls?"
+                    options={["Yes", "No", "Not sure"]}
+                    value={selectedIntl}
+                    onChange={(val) => setSelectedIntl(val)}
+                    required
+                  />
 
-                {/* 5. Phone Number Dropdown (Pre-filled, Subtext Removed) */}
-                <CustomDropdown
-                  label="Phone number"
-                  options={[
-                    "Use a number from MantraAssist",
-                    "Use my own number",
-                  ]}
-                  value={selectedPhone}
-                  onChange={(val) => setSelectedPhone(val)}
-                  required
-                />
+                  <CustomDropdown
+                    label="Which number should we use?"
+                    options={[
+                      "Use a number from MantraAssist",
+                      "Use my own number",
+                    ]}
+                    value={selectedPhone}
+                    onChange={(val) => setSelectedPhone(val)}
+                    required
+                  />
+                </div>
 
                 {/* Bottom Actions */}
                 <div className="pt-4 flex items-center justify-between">
@@ -1672,24 +1732,12 @@ export default function Onboarding() {
                 STEP 5: KNOWLEDGE BASE (Documents Only, Clean & Focused)
                 ───────────────────────────────────────────────────────────── */}
             {step === 5 && (
-              <div className="space-y-5">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <h2
-                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Knowledge base
-                    </h2>
-                    <p
-                      className="text-[13px] text-slate-500 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      If anything is left, upload your documents so your AI knows your practice.
-                    </p>
-                  </div>
-                  <ProgressRing currentStep={5} totalSteps={5} />
-                </div>
+              <div className="space-y-4 sm:space-y-4.5">
+                <StepHeader
+                  title="Knowledge base"
+                  subtitle="Add your practice documents so your AI knows how you work."
+                  currentStep={5}
+                />
 
                 {/* Document Upload Area */}
                 <div>
@@ -1704,43 +1752,53 @@ export default function Onboarding() {
 
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-8 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-50 rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center text-center group"
+                    className="p-7 sm:p-8 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-50 rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center text-center group"
                   >
-                    <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform shadow-2xs">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform shadow-2xs">
                       <FileUp className="w-5 h-5" />
                     </div>
-                    <div className="text-sm font-semibold text-slate-800">
-                      Click to browse or drag and drop guidelines
+                    <div className="text-[13px] sm:text-sm font-semibold text-slate-800">
+                      Click to upload or drag and drop documents
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                      Upload fee sheets, clinic policies, intake forms, or FAQs (PDF, DOCX, TXT)
+                      PDF, DOCX, or TXT up to 25 MB
                     </div>
                   </div>
 
-                  {/* Uploaded Documents List with Small Gray Delete Buttons */}
+                  {/* Pre-created & Uploaded Documents List */}
                   {uploadedDocs.length > 0 && (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-700 px-0.5">
+                        <span>Practice documents ({uploadedDocs.length})</span>
+                        <span className="text-[11px] font-normal text-slate-400">
+                          From your website
+                        </span>
+                      </div>
                       {uploadedDocs.map((doc) => (
                         <div
                           key={doc.id}
-                          className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs shadow-2xs"
+                          className="p-3 bg-white border border-slate-200/90 rounded-xl flex items-center justify-between gap-3 text-xs shadow-2xs hover:border-slate-300 transition-colors"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <FileText className="w-4 h-4 text-slate-500 shrink-0" />
-                            <span className="font-semibold text-slate-800 truncate">
-                              {doc.name}
-                            </span>
-                            <span className="text-[11px] text-slate-400 shrink-0">
-                              ({doc.sizeLabel})
-                            </span>
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-800 truncate">
+                                {doc.name}
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-0.5">
+                                {doc.sizeLabel}
+                              </div>
+                            </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => handleRemoveDoc(doc.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                             title="Remove document"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
