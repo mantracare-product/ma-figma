@@ -9,6 +9,7 @@ export interface CenteredOnboardingShellProps {
   showFooter?: boolean;
   noCard?: boolean;
   headerBadge?: React.ReactNode;
+  reserveHeaderSpace?: boolean;
 }
 
 export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = ({
@@ -19,6 +20,7 @@ export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = (
   showFooter = true,
   noCard = false,
   headerBadge,
+  reserveHeaderSpace = false,
 }) => {
   return (
     <div
@@ -43,10 +45,12 @@ export const CenteredOnboardingShell: React.FC<CenteredOnboardingShellProps> = (
             {headerBadge ? (
               <div
                 className="mt-4 flex items-center justify-center max-w-full px-4"
-                style={{ marginBottom: "20px" }}
+                style={{ marginBottom: "28px" }}
               >
                 {headerBadge}
               </div>
+            ) : reserveHeaderSpace ? (
+              <div style={{ height: "72px" }} />
             ) : (
               <div className="mb-6" />
             )}

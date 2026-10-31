@@ -261,8 +261,10 @@ function ProgressRing({ currentStep, totalSteps = 5 }: { currentStep: number; to
 // SHARED WEBSITE DETECTED CAPSULE (Brand Blue, Above Card)
 // ─────────────────────────────────────────────────────────────
 export function WebsiteDetectedCapsule({
+  label = "Fetched from",
   websiteDisplay,
 }: {
+  label?: string;
   websiteDisplay: string;
 }) {
   return (
@@ -273,7 +275,7 @@ export function WebsiteDetectedCapsule({
       {/* Sparkle icon (14px) + label in brand blue, medium weight, 6px gap */}
       <div className="flex items-center gap-1.5 shrink-0">
         <Sparkles className="w-3.5 h-3.5 text-[#1456F0] shrink-0" />
-        <span className="font-medium text-[#1456F0]">Detected from website</span>
+        <span className="font-medium text-[#1456F0]">{label}</span>
       </div>
 
       {/* Thin 1px vertical divider with equal spacing on both sides */}
@@ -1011,9 +1013,13 @@ export default function Onboarding() {
       headerBadge={
         !isBuildingPractice &&
         (step === 1 || step === 2 || step === 3 || step === 5) ? (
-          <WebsiteDetectedCapsule websiteDisplay={cleanWebsiteDisplay} />
+          <WebsiteDetectedCapsule
+            label={step === 5 ? "Prepared from" : "Fetched from"}
+            websiteDisplay={cleanWebsiteDisplay}
+          />
         ) : undefined
       }
+      reserveHeaderSpace={!isBuildingPractice}
     >
       <div className={isBuildingPractice ? "w-full flex flex-col items-center justify-center min-h-[50vh]" : "w-full"}>
         {/* ─────────────────────────────────────────────────────────────
