@@ -20,6 +20,7 @@ export default function Signup() {
   const prefill = (location.state as any) || {};
 
   const [email, setEmail] = useState(prefill.email || "");
+  const [website, setWebsite] = useState(prefill.website || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,6 +31,11 @@ export default function Signup() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim() || !emailRegex.test(email.trim())) {
       toast.error("Please enter a valid organization email address");
+      return;
+    }
+
+    if (!website.trim()) {
+      toast.error("Please enter your organization website");
       return;
     }
 
@@ -44,12 +50,18 @@ export default function Signup() {
       setLoading(false);
       const cleanEmail = email.trim().toLowerCase();
 
+      const cleanWebsite = website.trim();
+
       localStorage.setItem("verify_origin", "signup");
       localStorage.setItem("login_email", cleanEmail);
+      if (cleanWebsite) {
+        localStorage.setItem("signup_website", cleanWebsite);
+      }
       localStorage.setItem(
         "user_data",
         JSON.stringify({
           email: cleanEmail,
+          website: cleanWebsite,
           role: "SystemAdmin",
         })
       );
@@ -58,6 +70,7 @@ export default function Signup() {
       navigate("/verify", {
         state: {
           email: cleanEmail,
+          website: cleanWebsite,
           from: "signup",
         },
       });
@@ -358,7 +371,25 @@ export default function Signup() {
                 />
               </div>
 
-              {/* 2. Password */}
+              {/* 2. Organization website */}
+              <div>
+                <label
+                  className="block text-sm font-semibold mb-2 text-slate-800"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Organization website
+                </label>
+                <input
+                  type="text"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  placeholder="Enter your organization website here"
+                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                />
+              </div>
+
+              {/* 3. Password */}
               <div>
                 <label
                   className="block text-sm font-semibold mb-2 text-slate-800"

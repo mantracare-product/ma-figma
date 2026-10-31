@@ -1,29 +1,34 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
+import confetti from "canvas-confetti";
 import { useOrganization } from "../../context/OrganizationContext";
 import { useHowItWorks } from "../../context/HowItWorksContext";
 import { useAuth } from "../../context/AuthContext";
 import {
-  CheckCircle,
-  Calendar,
-  TrendingUp,
-  ArrowRight,
-  Zap,
-  Share2,
-  Globe,
-  FileText,
-  Sparkles,
   Building2,
-  Mic,
-  MessageSquare,
+  Building,
+  MapPin,
+  Clock,
+  Sparkles,
+  ArrowRight,
   ArrowLeft,
   ChevronDown,
+  Check,
+  X,
+  Plus,
+  Trash2,
+  FileText,
+  FileUp,
+  Search,
+  Headphones,
+  Calendar,
+  Layers,
+  FileCheck2,
 } from "lucide-react";
 import CenteredOnboardingShell from "./CenteredOnboardingShell";
-import VoiceOnboardingScreen from "./VoiceOnboardingScreen";
-import QuickFormOnboardingScreen from "./QuickFormOnboardingScreen";
-import { CollectedOnboardingData } from "./onboardingHelpers";
+import { UploadedDoc, formatBytes } from "./onboardingHelpers";
 import {
   getStoredProcesses,
   saveStoredProcesses,
@@ -53,6 +58,504 @@ export const COUNTRIES = [
   "Other",
 ];
 
+export const INDUSTRY_OPTIONS = [
+  "Healthcare & Clinic",
+  "Dental Practice",
+  "Wellness & Therapy",
+  "Veterinary Care",
+  "Legal & Advisory",
+  "Home & Field Services",
+  "IT & Tech",
+  "Other Business",
+];
+
+export const CATEGORY_SPECIALTIES: Record<string, string[]> = {
+  "Healthcare & Clinic": [
+    "General Physician",
+    "Dentist",
+    "Dermatologist",
+    "Cardiologist",
+    "Pediatrician",
+    "Therapist / Mental Health",
+    "Orthopedic",
+    "Gynecologist / OBGYN",
+    "Ophthalmologist",
+    "ENT Specialist",
+    "Physical Therapy",
+    "Diagnostics",
+  ],
+  "Dental Practice": [
+    "General Dentist",
+    "Orthodontist",
+    "Periodontist",
+    "Endodontist",
+    "Pediatric Dentist",
+    "Oral Surgeon",
+  ],
+  "Wellness & Therapy": [
+    "Psychologist",
+    "Licensed Counselor",
+    "Life & Health Coach",
+    "Chiropractor",
+    "Acupuncturist",
+    "Nutritionist",
+  ],
+  "Veterinary Care": [
+    "Small Animal Clinic",
+    "General Veterinary",
+    "Emergency Pet Hospital",
+    "Equine / Large Animal",
+    "Exotic Animals",
+  ],
+  "Legal & Advisory": [
+    "Law Firm",
+    "Accounting & CPA",
+    "Financial Advisory",
+    "Estate Planning",
+    "Tax Consulting",
+  ],
+  "Home & Field Services": [
+    "HVAC & Climate",
+    "Plumbing",
+    "Electrical",
+    "Roofing & Construction",
+    "Cleaning Services",
+  ],
+  "IT & Tech": [
+    "Software & SaaS",
+    "IT Support & Managed Services",
+    "Cybersecurity",
+    "Web & App Development",
+  ],
+  "Other Business": [
+    "Consulting",
+    "Retail & Commerce",
+    "Automotive",
+    "Custom Service",
+  ],
+};
+
+const ALL_DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+export const PRACTICE_BUILD_STATUSES = [
+  "your organization",
+  "Workspace",
+  "Knowledge",
+  "Schedule",
+  "AI Reception",
+];
+
+// ─────────────────────────────────────────────────────────────
+// TYPEWRITER ANIMATION COMPONENT ("Setting up " is fixed)
+// ─────────────────────────────────────────────────────────────
+function TypewriterStatus({
+  onWordChange,
+}: {
+  onWordChange?: (wordIndex: number) => void;
+}) {
+  const [wordIdx, setWordIdx] = useState(0);
+  const [text, setText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    onWordChange?.(wordIdx);
+  }, [wordIdx, onWordChange]);
+
+  useEffect(() => {
+    const currentWord = PRACTICE_BUILD_STATUSES[wordIdx];
+    const isLastWord = wordIdx === PRACTICE_BUILD_STATUSES.length - 1;
+
+    let timeout: any;
+
+    if (!isDeleting) {
+      if (text.length < currentWord.length) {
+        timeout = setTimeout(() => {
+          setText(currentWord.slice(0, text.length + 1));
+        }, 36);
+      } else if (!isLastWord) {
+        timeout = setTimeout(() => {
+          setIsDeleting(true);
+        }, 620);
+      }
+    } else {
+      if (text.length > 0) {
+        timeout = setTimeout(() => {
+          setText(currentWord.slice(0, text.length - 1));
+        }, 20);
+      } else {
+        setIsDeleting(false);
+        setWordIdx((prev) => Math.min(prev + 1, PRACTICE_BUILD_STATUSES.length - 1));
+      }
+    }
+
+    return () => clearTimeout(timeout);
+  }, [text, isDeleting, wordIdx]);
+
+  return (
+    <div className="flex items-center justify-center text-sm sm:text-base font-medium text-slate-600 mt-9 tracking-tight select-none">
+      <span>Setting up&nbsp;</span>
+      <span className="font-semibold text-slate-900 inline-flex items-center">
+        {text}
+        <span className="inline-block w-[2px] h-4.5 bg-slate-900 ml-1 animate-pulse" />
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CIRCULAR PROGRESS RING (Top-Right Corner on Each Step)
+// ─────────────────────────────────────────────────────────────
+function ProgressRing({ currentStep, totalSteps = 5 }: { currentStep: number; totalSteps?: number }) {
+  const size = 46;
+  const strokeWidth = 3.5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = currentStep / totalSteps;
+  const strokeDashoffset = circumference - progress * circumference;
+
+  return (
+    <div className="flex items-center gap-2 shrink-0">
+      <div
+        className="relative flex items-center justify-center shrink-0"
+        style={{ width: size, height: size }}
+        title={`Step ${currentStep} of ${totalSteps}`}
+      >
+        <svg className="w-full h-full -rotate-90 transform" viewBox={`0 0 ${size} ${size}`}>
+          {/* Background circle track */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#F1F5F9"
+            strokeWidth={strokeWidth}
+            fill="transparent"
+          />
+          {/* Progress circle stroke in slate-900 / dark primary brand color */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#182230"
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className="transition-all duration-500 ease-out"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+          <span
+            className="text-[12px] font-bold text-slate-800 leading-none"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
+            {currentStep}/{totalSteps}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// REUSABLE PREMIUM CUSTOM DROPDOWN (Single & Multi-Select)
+// ─────────────────────────────────────────────────────────────
+interface CustomDropdownProps {
+  label?: string;
+  helperText?: string;
+  placeholder?: string;
+  options: string[];
+  value: string | string[];
+  onChange: (val: any) => void;
+  isMulti?: boolean;
+  required?: boolean;
+}
+
+const CustomDropdown: React.FC<CustomDropdownProps> = ({
+  label,
+  helperText,
+  placeholder = "Select an option",
+  options,
+  value,
+  onChange,
+  isMulti = false,
+  required = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    showAbove: boolean;
+  }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    showAbove: false,
+  });
+
+  const updatePosition = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const showAbove = spaceBelow < 250 && rect.top > 250;
+      setCoords({
+        top: showAbove ? rect.top - 6 : rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+        showAbove,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      const handleScrollOrResize = () => updatePosition();
+      window.addEventListener("scroll", handleScrollOrResize, true);
+      window.addEventListener("resize", handleScrollOrResize);
+      return () => {
+        window.removeEventListener("scroll", handleScrollOrResize, true);
+        window.removeEventListener("resize", handleScrollOrResize);
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        setIsOpen(false);
+        setSearchQuery("");
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isOpen]);
+
+  const filteredOptions = options.filter((opt) =>
+    opt.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  );
+
+  const isSelected = (opt: string) => {
+    if (isMulti && Array.isArray(value)) {
+      return value.includes(opt);
+    }
+    return value === opt;
+  };
+
+  const handleSelectOption = (opt: string) => {
+    if (isMulti && Array.isArray(value)) {
+      if (value.includes(opt)) {
+        onChange(value.filter((item) => item !== opt));
+      } else {
+        onChange([...value, opt]);
+      }
+    } else {
+      onChange(opt);
+      setIsOpen(false);
+      setSearchQuery("");
+    }
+  };
+
+  const handleRemoveChip = (e: React.MouseEvent, opt: string) => {
+    e.stopPropagation();
+    if (isMulti && Array.isArray(value)) {
+      onChange(value.filter((item) => item !== opt));
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {label && (
+        <label
+          className="block text-[13px] font-semibold text-slate-800 mb-1.5"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          {label}
+          {required && <span className="text-slate-400 font-normal ml-0.5">*</span>}
+        </label>
+      )}
+
+      {helperText && (
+        <p className="text-[12px] text-slate-500 mb-2 leading-relaxed">
+          {helperText}
+        </p>
+      )}
+
+      {/* Trigger Button */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => {
+          updatePosition();
+          setIsOpen(!isOpen);
+        }}
+        className={`w-full min-h-[44px] px-3.5 py-2 bg-white border rounded-xl text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+          isOpen
+            ? "border-slate-800 ring-2 ring-slate-900/10"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+        style={{ fontFamily: "Inter, sans-serif" }}
+      >
+        <div className="flex-1 min-w-0">
+          {isMulti && Array.isArray(value) ? (
+            value.length === 0 ? (
+              <span className="text-slate-400 text-sm">{placeholder}</span>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 py-0.5">
+                {value.map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200"
+                  >
+                    <span>{item}</span>
+                    <span
+                      onClick={(e) => handleRemoveChip(e, item)}
+                      className="p-0.5 hover:text-rose-600 rounded cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )
+          ) : typeof value === "string" && value ? (
+            <span className="text-sm font-medium text-slate-900 truncate block">
+              {value}
+            </span>
+          ) : (
+            <span className="text-slate-400 text-sm">{placeholder}</span>
+          )}
+        </div>
+
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 shrink-0 transform transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-slate-800" : ""
+          }`}
+        />
+      </button>
+
+      {/* Dropdown Menu Portaled to Document Body */}
+      {isOpen &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998] sm:hidden bg-slate-900/30"
+              onClick={() => setIsOpen(false)}
+            />
+            <div
+              ref={menuRef}
+              style={{
+                position: "fixed",
+                top:
+                  typeof window !== "undefined" && window.innerWidth < 640
+                    ? undefined
+                    : coords.showAbove
+                    ? undefined
+                    : `${coords.top}px`,
+                bottom:
+                  typeof window !== "undefined" && window.innerWidth < 640
+                    ? 0
+                    : coords.showAbove
+                    ? `${Math.max(10, window.innerHeight - coords.top)}px`
+                    : undefined,
+                left:
+                  typeof window !== "undefined" && window.innerWidth < 640
+                    ? 0
+                    : `${coords.left}px`,
+                width:
+                  typeof window !== "undefined" && window.innerWidth < 640
+                    ? "100%"
+                    : `${coords.width}px`,
+                zIndex: 9999,
+                fontFamily: "Inter, sans-serif",
+              }}
+              className="bg-white rounded-t-2xl sm:rounded-xl border border-slate-200 shadow-2xl overflow-hidden py-1 max-h-[70vh] sm:max-h-64 flex flex-col"
+            >
+              {options.length > 7 && (
+                <div className="p-2 border-b border-slate-100 shrink-0">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+                {filteredOptions.length === 0 ? (
+                  <div className="px-3.5 py-3 text-xs text-slate-400 text-center">
+                    No matching options
+                  </div>
+                ) : (
+                  filteredOptions.map((opt) => {
+                    const selected = isSelected(opt);
+                    return (
+                      <div
+                        key={opt}
+                        onClick={() => handleSelectOption(opt)}
+                        className={`px-3.5 py-2.5 flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-colors ${
+                          selected
+                            ? "bg-slate-100 text-slate-900 font-semibold"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="truncate pr-2">{opt}</span>
+                        {selected && (
+                          <Check className="w-4 h-4 text-slate-900 shrink-0 stroke-[2.5]" />
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// DATA INTERFACES FOR LOCATIONS & SERVICES
+// ─────────────────────────────────────────────────────────────
+export interface LocationEntry {
+  id: string;
+  name: string;
+  address: string;
+  operatingDays: string[];
+  opensAt: string;
+  closesAt: string;
+  isExpanded: boolean;
+}
+
+export interface ServiceEntry {
+  id: string;
+  name: string;
+  description: string;
+  isExpanded: boolean;
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,76 +567,291 @@ export default function Onboarding() {
     (location.state as any)?.email ||
     localStorage.getItem("login_email") ||
     "";
-  const userName = (location.state as any)?.name || "";
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [orgName, setOrgName] = useState("");
+  // Step state: 1 to 5
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+
+  // ── Crazy SaaS Loader State (Setting up your practice) ──
+  const [isBuildingPractice, setIsBuildingPractice] = useState(false);
+  const [buildProgress, setBuildProgress] = useState(0);
+  const [activeBuildStage, setActiveBuildStage] = useState(0);
+
+  // ── Step 1: About your organization (All details pre-filled) ──
+  const [orgName, setOrgName] = useState(() => {
+    const saved = localStorage.getItem("active_organization_name");
+    if (saved && saved.trim()) return saved;
+
+    const email =
+      (location.state as any)?.email ||
+      localStorage.getItem("login_email") ||
+      "";
+    if (email && email.includes("@")) {
+      const domain = email.split("@")[1].split(".")[0];
+      if (
+        domain &&
+        !["gmail", "yahoo", "hotmail", "outlook", "icloud"].includes(
+          domain.toLowerCase()
+        )
+      ) {
+        return domain.charAt(0).toUpperCase() + domain.slice(1) + " Health";
+      }
+    }
+    return "Acme Health Clinic";
+  });
   const [country, setCountry] = useState("United States");
-  const [mode, setMode] = useState<"website" | "description">("website");
-  const [websiteUrl, setWebsiteUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [setupMethod, setSetupMethod] = useState<"voice" | "type">("voice");
-  const [loading, setLoading] = useState(false);
+  const [selectedIndustry, setSelectedIndustry] = useState("Healthcare & Clinic");
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState("General Physician");
 
-  // Validate step 1 and advance to step 2
-  const handleStep1Submit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!orgName.trim()) {
-      toast.error("Please enter your organization name");
-      return;
+  // Keep category specialty in sync when industry changes
+  useEffect(() => {
+    const specs = CATEGORY_SPECIALTIES[selectedIndustry] || [];
+    if (specs.length > 0 && !specs.includes(selectedServiceCategory)) {
+      setSelectedServiceCategory(specs[0]);
     }
+  }, [selectedIndustry]);
 
-    if (!country.trim()) {
-      toast.error("Please select your country");
-      return;
-    }
+  // ── Step 2: About your location (Card dropdowns + Image 2 Operating Hours) ──
+  // Location name and operating hours are pre-filled, address is empty as requested
+  const [locations, setLocations] = useState<LocationEntry[]>([
+    {
+      id: "loc-1",
+      name: "Main Clinic",
+      address: "",
+      operatingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+      opensAt: "09:00",
+      closesAt: "17:00",
+      isExpanded: true,
+    },
+  ]);
 
-    if (mode === "website" && !websiteUrl.trim()) {
-      toast.error("Please enter your organization's website URL");
-      return;
-    }
+  // ── Step 3: Product and service (Card dropdowns pre-filled) ──
+  const [servicesList, setServicesList] = useState<ServiceEntry[]>([
+    {
+      id: "srv-1",
+      name: "General Consultation",
+      description: "30 mins",
+      isExpanded: true,
+    },
+    {
+      id: "srv-2",
+      name: "Follow-up Visit",
+      description: "15 mins",
+      isExpanded: false,
+    },
+  ]);
 
-    if (mode === "description" && !description.trim()) {
-      toast.error("Please provide a brief description of your organization");
-      return;
-    }
+  // ── Step 4: About your team (All Dropdowns) ──
+  // Pre-filled except requirements which starts empty as requested ("except the requirement details")
+  const [selectedTeamSize, setSelectedTeamSize] = useState("2–5");
+  const [selectedCallVolume, setSelectedCallVolume] = useState("25–100 a day");
+  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([]);
+  const [selectedIntl, setSelectedIntl] = useState("No");
+  const [selectedPhone, setSelectedPhone] = useState("Use a number from MantraAssist");
 
-    setStep(2);
+  // ── Step 5: Knowledge base (Documents only) ──
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ─────────────────────────────────────────────────────────────
+  // STEP 2: LOCATION HANDLERS
+  // ─────────────────────────────────────────────────────────────
+  const handleAddLocation = () => {
+    const newLoc: LocationEntry = {
+      id: `loc-${Date.now()}`,
+      name: `Location ${locations.length + 1}`,
+      address: "",
+      operatingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+      opensAt: "09:00",
+      closesAt: "17:00",
+      isExpanded: true,
+    };
+    // Collapse others and expand new one
+    setLocations((prev) => [
+      ...prev.map((l) => ({ ...l, isExpanded: false })),
+      newLoc,
+    ]);
   };
 
-  // Shared completion handler for both Voice and Quick Form onboarding
-  const handleCollectedDataComplete = (
-    collectedData: CollectedOnboardingData,
-    method: "voice" | "form"
-  ) => {
-    const cleanOrgName = orgName.trim();
-    const cleanWebsite = websiteUrl.trim();
-    const cleanDesc = description.trim();
+  const handleToggleLocationExpand = (id: string) => {
+    setLocations((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, isExpanded: !l.isExpanded } : l))
+    );
+  };
+
+  const handleUpdateLocation = (id: string, updates: Partial<LocationEntry>) => {
+    setLocations((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, ...updates } : l))
+    );
+  };
+
+  const handleRemoveLocation = (id: string) => {
+    if (locations.length <= 1) {
+      toast.info("At least one location is required.");
+      return;
+    }
+    setLocations((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const handleToggleDay = (locId: string, day: string) => {
+    setLocations((prev) =>
+      prev.map((l) => {
+        if (l.id !== locId) return l;
+        const exists = l.operatingDays.includes(day);
+        const nextDays = exists
+          ? l.operatingDays.filter((d) => d !== day)
+          : [...l.operatingDays, day];
+        return { ...l, operatingDays: nextDays };
+      })
+    );
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // STEP 3: SERVICES HANDLERS
+  // ─────────────────────────────────────────────────────────────
+  const handleAddServiceCard = () => {
+    const newSrv: ServiceEntry = {
+      id: `srv-${Date.now()}`,
+      name: `Service ${servicesList.length + 1}`,
+      description: "",
+      isExpanded: true,
+    };
+    setServicesList((prev) => [
+      ...prev.map((s) => ({ ...s, isExpanded: false })),
+      newSrv,
+    ]);
+  };
+
+  const handleToggleServiceExpand = (id: string) => {
+    setServicesList((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, isExpanded: !s.isExpanded } : s))
+    );
+  };
+
+  const handleUpdateService = (id: string, updates: Partial<ServiceEntry>) => {
+    setServicesList((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+  };
+
+  const handleRemoveServiceCard = (id: string) => {
+    if (servicesList.length <= 1) {
+      toast.info("At least one service is required.");
+      return;
+    }
+    setServicesList((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // STEP 5: DOCUMENT UPLOAD HANDLERS
+  // ─────────────────────────────────────────────────────────────
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newDocs: UploadedDoc[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      newDocs.push({
+        id: `doc-${Date.now()}-${i}`,
+        name: file.name,
+        sizeLabel: formatBytes(file.size),
+      });
+    }
+
+    setUploadedDocs((prev) => [...prev, ...newDocs]);
+    toast.success(`Uploaded ${newDocs.length} document(s)`);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveDoc = (id: string) => {
+    setUploadedDocs((prev) => prev.filter((d) => d.id !== id));
+    toast.info("Document removed");
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // COMPLETION & CRAZY SAAS LOADER TRIGGER
+  // ─────────────────────────────────────────────────────────────
+  const handleLaunchPracticeBuilding = () => {
+    setIsBuildingPractice(true);
+    setBuildProgress(5);
+    setActiveBuildStage(0);
+
+    const startTime = Date.now();
+    const duration = 6500; // Increased animation duration: 6.5s
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      setBuildProgress(pct);
+
+      if (pct >= 84) {
+        setActiveBuildStage(4);
+      } else if (pct >= 64) {
+        setActiveBuildStage(3);
+      } else if (pct >= 42) {
+        setActiveBuildStage(2);
+      } else if (pct >= 20) {
+        setActiveBuildStage(1);
+      }
+
+      if (pct >= 100) {
+        clearInterval(interval);
+        finalizePracticeSetup();
+      }
+    }, 40);
+  };
+
+  const finalizePracticeSetup = () => {
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 65,
+        origin: { y: 0.6 },
+        colors: ["#182230", "#2563EB", "#10B981", "#38BDF8"],
+      });
+    } catch {}
+
+    const cleanOrgName = orgName.trim() || "My Organization";
+    const primaryLoc = locations[0] || {
+      name: "Main Location",
+      address: "",
+      operatingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+      opensAt: "09:00",
+      closesAt: "17:00",
+    };
+
+    const formattedLocations = locations.map((loc) =>
+      loc.address.trim()
+        ? `${loc.name}: ${loc.address.trim()} (${loc.operatingDays.join(", ")}, ${loc.opensAt}–${loc.closesAt})`
+        : `${loc.name} (${loc.operatingDays.join(", ")}, ${loc.opensAt}–${loc.closesAt})`
+    );
+
+    const formattedServices = servicesList
+      .map((s) => (s.description ? `${s.name} (${s.description})` : s.name))
+      .filter((s) => s.trim().length > 0);
+
+    const savedWebsite = localStorage.getItem("signup_website") || "";
 
     const newOrgData = {
       name: cleanOrgName,
-      industry: collectedData.industry || "Healthcare",
-      industryCategory: collectedData.confirmedCategory,
-      locations:
-        collectedData.locations.length > 0
-          ? collectedData.locations
-          : [collectedData.primaryLocation || "Main Location"],
-      primaryLocation: collectedData.primaryLocation || undefined,
-      operatingHours: collectedData.operatingHours || undefined,
+      industry: selectedIndustry,
+      industryCategory: selectedServiceCategory,
+      locations: formattedLocations,
+      primaryLocation: primaryLoc.name,
+      operatingHours: `${primaryLoc.operatingDays.join(", ")}: ${primaryLoc.opensAt}–${primaryLoc.closesAt}`,
       country: country.trim() || "United States",
       currency: "USD",
       email: userEmail || "contact@mantraassist.com",
       phone: "+1 (555) 123-4567",
       status: "Active" as const,
-      website: mode === "website" ? cleanWebsite : undefined,
-      description: mode === "description" ? cleanDesc : undefined,
-      callVolume: collectedData.callVolume || undefined,
-      internationalCalls: collectedData.internationalCalls,
-      teamSize: collectedData.teamSize,
-      primaryRequirements: collectedData.requirements,
-      uploadedDocuments: collectedData.uploadedDocuments,
-      telephonyChoice: collectedData.telephony || undefined,
+      website: savedWebsite || undefined,
+      services: formattedServices,
+      callVolume: selectedCallVolume,
+      internationalCalls: selectedIntl === "Yes",
+      teamSize: selectedTeamSize,
+      primaryRequirements: selectedRequirements,
+      telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+      uploadedDocuments: uploadedDocs,
     };
 
     try {
@@ -152,9 +870,13 @@ export default function Onboarding() {
         ) {
           return {
             ...p,
-            industryCategory: collectedData.confirmedCategory,
-            connectedToAiReceptionist: collectedData.requirements.includes("AI Reception"),
-            receptionEnabled: collectedData.requirements.includes("AI Reception"),
+            industryCategory: selectedServiceCategory,
+            connectedToAiReceptionist: selectedRequirements.includes(
+              "AI Front Desk & Phone Reception"
+            ),
+            receptionEnabled: selectedRequirements.includes(
+              "AI Front Desk & Phone Reception"
+            ),
           };
         }
         return p;
@@ -167,381 +889,891 @@ export default function Onboarding() {
 
     localStorage.setItem("user_organization", JSON.stringify(newOrgData));
     localStorage.setItem("active_organization_name", cleanOrgName);
-    localStorage.setItem("onboarding_setup_method", method);
+    localStorage.setItem("onboarding_complete", "true");
     localStorage.removeItem("verify_origin");
     login();
 
-    toast.success(
-      method === "voice"
-        ? "Voice setup complete! Welcome to MantraAssist."
-        : "Practice setup complete! Welcome to MantraAssist."
-    );
-    navigate("/", { replace: true });
-
     setTimeout(() => {
-      triggerAutoOpen();
-    }, 500);
+      toast.success("Practice setup complete! Welcome to MantraAssist.");
+      navigate("/", { replace: true });
+      setTimeout(() => {
+        triggerAutoOpen();
+      }, 500);
+    }, 600);
   };
-
-  const handleStep2Submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (setupMethod === "voice") {
-      setStep(3);
-      return;
-    }
-    setStep(4);
-  };
-
-  if (step === 3) {
-    return (
-      <VoiceOnboardingScreen
-        orgName={orgName}
-        country={country}
-        mode={mode}
-        websiteUrl={websiteUrl}
-        description={description}
-        userEmail={userEmail}
-        onComplete={(collectedData: CollectedOnboardingData) =>
-          handleCollectedDataComplete(collectedData, "voice")
-        }
-        onSwitchToTyping={() => {
-          setSetupMethod("type");
-          setStep(4);
-          toast.info("Switched to quick form setup.");
-        }}
-        onBack={() => setStep(2)}
-      />
-    );
-  }
-
-  if (step === 4) {
-    return (
-      <QuickFormOnboardingScreen
-        orgName={orgName}
-        country={country}
-        mode={mode}
-        websiteUrl={websiteUrl}
-        description={description}
-        userEmail={userEmail}
-        onComplete={(collectedData: CollectedOnboardingData) =>
-          handleCollectedDataComplete(collectedData, "form")
-        }
-        onSwitchToVoice={() => {
-          setSetupMethod("voice");
-          setStep(3);
-          toast.info("Switched to voice setup.");
-        }}
-        onBack={() => setStep(2)}
-      />
-    );
-  }
 
   return (
-    <CenteredOnboardingShell maxWidth="max-w-[560px]">
-      <div className="w-full">
-        {/* Header */}
-        <div className="mb-5">
-          <h2
-            className="text-2xl font-semibold mb-1 text-slate-900 tracking-tight"
-            style={{ fontFamily: "Inter, sans-serif" }}
-          >
-            {step === 1
-              ? "About your organization"
-              : "How would you like to set up?"}
-          </h2>
-          <p
-            className="text-[13px] text-slate-500 leading-normal"
-            style={{ fontFamily: "Inter, sans-serif" }}
-          >
-            {step === 1
-              ? "We'll tailor your AI workflows to your business."
-              : "Talk it through with our AI assistant, or answer a few questions by typing."}
-          </p>
-        </div>
-
-        {/* Form */}
-        {step === 1 ? (
-          /* ── SCREEN 2: ABOUT YOUR ORGANIZATION ── */
-          <form onSubmit={handleStep1Submit} className="space-y-4">
-            {/* 1. Organization name */}
-            <div>
-              <label
-                className="block text-[13px] font-semibold mb-1.5 text-slate-800"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Organization name
-              </label>
-              <div className="relative">
-                <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="e.g. Acme Health Clinic"
-                  className="w-full h-10 pl-10 pr-3.5 bg-white border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-3 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                  autoFocus
+    <CenteredOnboardingShell
+      maxWidth={isBuildingPractice ? "max-w-none" : "max-w-[680px]"}
+      showLogo={!isBuildingPractice}
+      showFooter={!isBuildingPractice}
+      noCard={isBuildingPractice}
+    >
+      <div className={isBuildingPractice ? "w-full flex flex-col items-center justify-center min-h-[50vh]" : "w-full"}>
+        {/* ─────────────────────────────────────────────────────────────
+            CLEAN LIGHT-MODE SAAS CREATION LOADER (SCALED UP & TYPEWRITER)
+            ───────────────────────────────────────────────────────────── */}
+        {isBuildingPractice ? (
+          <div className="select-none animate-fadeIn flex flex-col items-center justify-center my-auto">
+            {/* The Loader: Scaled-up, crisp, minimal, light-mode executive SaaS styling */}
+            <div className="relative w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[460px] md:h-[460px] flex items-center justify-center select-none">
+              {/* Dynamic SVG Connection Beams */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                {/* Center to Top (Workspace) */}
+                <line
+                  x1="50%"
+                  y1="50%"
+                  x2="50%"
+                  y2="15%"
+                  stroke={activeBuildStage >= 1 ? "#64748B" : "#E2E8F0"}
+                  strokeWidth={activeBuildStage >= 1 ? "1.5" : "1"}
+                  strokeDasharray="3 3"
+                  className="transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 />
-              </div>
-            </div>
+                {/* Center to Left (Knowledge) */}
+                <line
+                  x1="50%"
+                  y1="50%"
+                  x2="14%"
+                  y2="50%"
+                  stroke={activeBuildStage >= 2 ? "#64748B" : "#E2E8F0"}
+                  strokeWidth={activeBuildStage >= 2 ? "1.5" : "1"}
+                  strokeDasharray="3 3"
+                  className="transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                />
+                {/* Center to Right (Schedule) */}
+                <line
+                  x1="50%"
+                  y1="50%"
+                  x2="86%"
+                  y2="50%"
+                  stroke={activeBuildStage >= 3 ? "#64748B" : "#E2E8F0"}
+                  strokeWidth={activeBuildStage >= 3 ? "1.5" : "1"}
+                  strokeDasharray="3 3"
+                  className="transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                />
+                {/* Center to Bottom (AI Reception) */}
+                <line
+                  x1="50%"
+                  y1="50%"
+                  x2="50%"
+                  y2="85%"
+                  stroke={activeBuildStage >= 4 ? "#64748B" : "#E2E8F0"}
+                  strokeWidth={activeBuildStage >= 4 ? "1.5" : "1"}
+                  strokeDasharray="3 3"
+                  className="transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                />
+              </svg>
 
-            {/* 2. Country */}
-            <div>
-              <label
-                className="block text-[13px] font-semibold mb-1.5 text-slate-800"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Country
-              </label>
-              <div className="relative">
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-[13px] appearance-none focus:outline-none focus:ring-3 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-800 hover:border-slate-300 shadow-2xs pr-10 cursor-pointer"
-                  style={{ fontFamily: "Inter, sans-serif" }}
+              {/* Concentric Rotating Precision Rings (Light mode, scaled up) */}
+              <div className="relative w-56 h-56 sm:w-68 sm:h-68 md:w-76 md:h-76 flex items-center justify-center">
+                {/* Outer rotating dashed ring */}
+                <div className="absolute inset-0 border border-dashed border-slate-300 rounded-full animate-[spin_24s_linear_infinite]" />
+                {/* Middle counter-rotating dashed ring */}
+                <div className="absolute inset-6 border border-dashed border-slate-200 rounded-full animate-[spin_32s_linear_infinite_reverse]" />
+                {/* Inner subtle guideline circle */}
+                <div className="absolute inset-13 border border-slate-200/60 rounded-full" />
+
+                {/* Center core icon: clean, crisp, executive slate */}
+                <div
+                  className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-[22px] bg-[#182230] text-white flex items-center justify-center shadow-[0_8px_24px_rgba(24,34,48,0.16)] animate-bounce"
+                  style={{ animationDuration: "2.6s" }}
                 >
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
+                  <Building2 className="w-8 h-8 sm:w-9 sm:h-9 text-white stroke-[1.8]" />
+                </div>
 
-            {/* 3. Website or description (Header + Toggle in front) */}
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <label
-                  className="block text-[13px] font-semibold text-slate-800"
-                  style={{ fontFamily: "Inter, sans-serif" }}
+                {/* 4 Orbiting Satellite Nodes: Light mode, crisp SaaS pill styling */}
+                {/* Top: Workspace */}
+                <div
+                  className={`absolute -top-5 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs sm:text-[13px] font-semibold border transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center gap-2 shadow-xs ${
+                    activeBuildStage >= 1
+                      ? "bg-white border-slate-300 text-slate-900 shadow-sm"
+                      : "bg-white/70 border-slate-200/80 text-slate-400"
+                  }`}
                 >
-                  Website or description
-                </label>
+                  <Layers className={`w-4 h-4 transition-colors duration-500 ${activeBuildStage >= 1 ? "text-blue-600" : "text-slate-400"}`} />
+                  <span>Workspace</span>
+                </div>
 
-                {/* Mode Selector Toggle: Website vs Description */}
-                <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-full border border-slate-200 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => setMode("website")}
-                    className={`px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
-                      mode === "website"
-                        ? "bg-white text-slate-900 shadow-2xs font-semibold"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Website</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("description")}
-                    className={`px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
-                      mode === "description"
-                        ? "bg-white text-slate-900 shadow-2xs font-semibold"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Description</span>
-                  </button>
+                {/* Left: Knowledge */}
+                <div
+                  className={`absolute -left-16 sm:-left-20 md:-left-22 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full text-xs sm:text-[13px] font-semibold border transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center gap-2 shadow-xs ${
+                    activeBuildStage >= 2
+                      ? "bg-white border-slate-300 text-slate-900 shadow-sm"
+                      : "bg-white/70 border-slate-200/80 text-slate-400"
+                  }`}
+                >
+                  <FileCheck2 className={`w-4 h-4 transition-colors duration-500 ${activeBuildStage >= 2 ? "text-emerald-600" : "text-slate-400"}`} />
+                  <span>Knowledge</span>
+                </div>
+
+                {/* Right: Schedule */}
+                <div
+                  className={`absolute -right-14 sm:-right-18 md:-right-20 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full text-xs sm:text-[13px] font-semibold border transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center gap-2 shadow-xs ${
+                    activeBuildStage >= 3
+                      ? "bg-white border-slate-300 text-slate-900 shadow-sm"
+                      : "bg-white/70 border-slate-200/80 text-slate-400"
+                  }`}
+                >
+                  <Calendar className={`w-4 h-4 transition-colors duration-500 ${activeBuildStage >= 3 ? "text-indigo-600" : "text-slate-400"}`} />
+                  <span>Schedule</span>
+                </div>
+
+                {/* Bottom: AI Reception */}
+                <div
+                  className={`absolute -bottom-5 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs sm:text-[13px] font-semibold border transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center gap-2 shadow-xs ${
+                    activeBuildStage >= 4
+                      ? "bg-white border-slate-300 text-slate-900 shadow-sm"
+                      : "bg-white/70 border-slate-200/80 text-slate-400"
+                  }`}
+                >
+                  <Headphones className={`w-4 h-4 transition-colors duration-500 ${activeBuildStage >= 4 ? "text-sky-600" : "text-slate-400"}`} />
+                  <span>AI Reception</span>
                 </div>
               </div>
+            </div>
 
-              {/* Dynamic Input based on Mode */}
-              {mode === "website" ? (
-                <div className="space-y-1">
-                  <div className="relative">
-                    <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="url"
-                      value={websiteUrl}
-                      onChange={(e) => setWebsiteUrl(e.target.value)}
-                      placeholder="yourwebsite.com"
-                      className="w-full h-10 pl-10 pr-3.5 bg-white border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-3 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+            {/* Status line with "Setting up " fixed + typewriter animation on the component */}
+            <TypewriterStatus onWordChange={(idx) => setActiveBuildStage(idx)} />
+          </div>
+        ) : (
+          <>
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 1: ABOUT YOUR ORGANIZATION (Pre-filled)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 1 && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!orgName.trim()) {
+                    toast.error("Please enter your organization name");
+                    return;
+                  }
+                  setStep(2);
+                }}
+                className="space-y-4 sm:space-y-4.5"
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h2
+                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
                       style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      About your organization
+                    </h2>
+                    <p
+                      className="text-[13px] text-slate-500 leading-normal"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      We'll tailor your AI workflows to your business.
+                    </p>
+                  </div>
+                  <ProgressRing currentStep={1} totalSteps={5} />
+                </div>
+
+                {/* 1. Organization name (Pre-filled) */}
+                <div>
+                  <label
+                    className="block text-[13px] font-semibold mb-1.5 text-slate-800"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    Organization name *
+                  </label>
+                  <div className="relative">
+                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      placeholder="e.g. Acme Health Clinic"
+                      className="w-full h-11 pl-10 pr-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                      autoFocus
                     />
                   </div>
-                  <p className="text-[12px] text-slate-500 leading-normal pl-1">
-                    We'll read your public pages to set up your AI and knowledge base.
-                  </p>
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  <textarea
-                    rows={3}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Briefly describe what your organization does and the services you offer."
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-3 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs resize-none"
+
+                {/* 2. Country (Pre-filled) */}
+                <CustomDropdown
+                  label="Country"
+                  options={COUNTRIES}
+                  value={country}
+                  onChange={(val) => setCountry(val)}
+                  required
+                />
+
+                {/* 3. Industry (Pre-filled) */}
+                <CustomDropdown
+                  label="Industry"
+                  options={INDUSTRY_OPTIONS}
+                  value={selectedIndustry}
+                  onChange={(val) => setSelectedIndustry(val)}
+                  required
+                />
+
+                {/* 4. Primary Service & Specialty (Pre-filled) */}
+                <CustomDropdown
+                  label="Primary service & category"
+                  options={CATEGORY_SPECIALTIES[selectedIndustry] || []}
+                  value={selectedServiceCategory}
+                  onChange={(val) => setSelectedServiceCategory(val)}
+                  required
+                />
+
+                {/* Bottom Actions */}
+                <div className="pt-4 flex items-center justify-end">
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] sm:text-sm font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                     style={{ fontFamily: "Inter, sans-serif" }}
-                  />
-                  <p className="text-[12px] text-slate-500 leading-normal pl-1">
-                    We'll use this to set up your AI and knowledge base.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Section: Centered "Next" Button */}
-            <div className="pt-3 flex flex-col items-center">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full max-w-[280px] h-10 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                <span>Next</span>
-                <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
-              </button>
-            </div>
-          </form>
-        ) : (
-          /* ── SCREEN 1: HOW WOULD YOU LIKE TO SET UP? ── */
-          <form onSubmit={handleStep2Submit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3">
-              {/* Option 1: Talk to our AI assistant */}
-              <div
-                onClick={() => setSetupMethod("voice")}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                  setupMethod === "voice"
-                    ? "border-blue-600 bg-blue-50/30"
-                    : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                      setupMethod === "voice"
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
                   >
-                    <Mic className="w-4 h-4" />
-                  </div>
+                    <span>Next</span>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
+              </form>
+            )}
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-[13px] font-semibold text-slate-900"
-                        style={{ fontFamily: "Inter, sans-serif" }}
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 2: ABOUT YOUR LOCATION (Card Dropdowns + Image 2 Operating Hours)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 2 && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (locations.length === 0 || !locations[0].name.trim()) {
+                    toast.error("Please provide at least one location name");
+                    return;
+                  }
+                  setStep(3);
+                }}
+                className="space-y-4 sm:space-y-4.5"
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h2
+                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      About your location
+                    </h2>
+                    <p
+                      className="text-[13px] text-slate-500 leading-normal"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Manage clinic locations, addresses, and operating hours.
+                    </p>
+                  </div>
+                  <ProgressRing currentStep={2} totalSteps={5} />
+                </div>
+
+                {/* Location Card Dropdowns List */}
+                <div className="space-y-3">
+                  {locations.map((loc, idx) => (
+                    <div
+                      key={loc.id}
+                      className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs transition-all"
+                    >
+                      {/* Card Header (Click to toggle dropdown) */}
+                      <div
+                        onClick={() => handleToggleLocationExpand(loc.id)}
+                        className="p-3.5 sm:p-4 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/60 transition-colors cursor-pointer select-none"
                       >
-                        Talk to our AI assistant
-                      </span>
-                      <span className="px-2 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200/50">
-                        Fastest
-                      </span>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 text-slate-700">
+                            <Building className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 truncate">
+                              {loc.name || `Location ${idx + 1}`}
+                            </div>
+                            <div className="text-xs text-slate-400 truncate">
+                              {loc.address ? `${loc.address} · ` : ""}
+                              {loc.operatingDays.length > 0
+                                ? `${loc.operatingDays.length} days (${loc.opensAt}–${loc.closesAt})`
+                                : "Hours not set"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex items-center gap-1.5 shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* Small Gray Delete Button */}
+                          {locations.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLocation(loc.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete location"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleLocationExpand(loc.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <ChevronDown
+                              className={`w-4 h-4 transform transition-transform duration-200 ${
+                                loc.isExpanded ? "rotate-180 text-slate-800" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Card Body (When Dropdown is Expanded) */}
+                      {loc.isExpanded && (
+                        <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 bg-slate-50/30 animate-fadeIn">
+                          {/* Location Name (Pre-filled) */}
+                          <div>
+                            <label
+                              className="block text-[13px] font-semibold text-slate-800 mb-1.5"
+                              style={{ fontFamily: "Inter, sans-serif" }}
+                            >
+                              Location name *
+                            </label>
+                            <input
+                              type="text"
+                              value={loc.name}
+                              onChange={(e) =>
+                                handleUpdateLocation(loc.id, { name: e.target.value })
+                              }
+                              placeholder="e.g. Main Clinic, Downtown Branch"
+                              className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                            />
+                          </div>
+
+                          {/* Address / City & State (Empty for user to enter) */}
+                          <div>
+                            <label
+                              className="block text-[13px] font-semibold text-slate-800 mb-1.5"
+                              style={{ fontFamily: "Inter, sans-serif" }}
+                            >
+                              Address / City & State
+                            </label>
+                            <div className="relative">
+                              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="text"
+                                value={loc.address}
+                                onChange={(e) =>
+                                  handleUpdateLocation(loc.id, { address: e.target.value })
+                                }
+                                placeholder="e.g. 100 Medical Center Blvd, Suite 250, San Francisco, CA"
+                                className="w-full h-10 pl-9 pr-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                              />
+                            </div>
+                          </div>
+
+                          {/* ── IMAGE 2 EXACT OPERATING HOURS COMPONENT (Pre-filled) ── */}
+                          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-4.5 shadow-2xs space-y-3.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              OPERATING HOURS
+                            </div>
+
+                            {/* Operating Days: 7 Circular Buttons (Pre-filled MON-FRI) */}
+                            <div>
+                              <div className="text-xs font-semibold text-slate-700 mb-2">
+                                Operating Days
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {ALL_DAYS.map((day) => {
+                                  const isSelected = loc.operatingDays.includes(day);
+                                  return (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      onClick={() => handleToggleDay(loc.id, day)}
+                                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                                        isSelected
+                                          ? "bg-[#182230] text-white shadow-xs"
+                                          : "bg-white border border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                                      }`}
+                                    >
+                                      {day}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Opens At & Closes At (Pre-filled 09:00 - 17:00) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                  Opens At
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="time"
+                                    value={loc.opensAt}
+                                    onChange={(e) =>
+                                      handleUpdateLocation(loc.id, { opensAt: e.target.value })
+                                    }
+                                    className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 pr-10"
+                                  />
+                                  <Clock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                  Closes At
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="time"
+                                    value={loc.closesAt}
+                                    onChange={(e) =>
+                                      handleUpdateLocation(loc.id, { closesAt: e.target.value })
+                                    }
+                                    className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 pr-10"
+                                  />
+                                  <Clock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p
-                      className="text-[12px] text-slate-500 mt-0.5 leading-normal"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      A quick voice conversation, about 2 minutes.
-                    </p>
-                  </div>
-                </div>
+                  ))}
 
-                {/* Radio Indicator */}
-                <div
-                  className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-all shrink-0 ${
-                    setupMethod === "voice"
-                      ? "border-blue-600 bg-blue-600"
-                      : "border-slate-300 bg-white"
-                  }`}
-                >
-                  {setupMethod === "voice" && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                  )}
-                </div>
-              </div>
-
-              {/* Option 2: Fill quick form */}
-              <div
-                onClick={() => setSetupMethod("type")}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                  setupMethod === "type"
-                    ? "border-blue-600 bg-blue-50/30"
-                    : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                      setupMethod === "type"
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
+                  {/* + Add Location Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddLocation}
+                    className="w-full py-2.5 px-4 border border-dashed border-slate-300 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-100 rounded-xl text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <FileText className="w-4 h-4" />
-                  </div>
+                    <Plus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>+ Add location</span>
+                  </button>
+                </div>
 
-                  <div className="min-w-0">
-                    <span
-                      className="text-[13px] font-semibold text-slate-900"
+                {/* Bottom Actions */}
+                <div className="pt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="px-5 h-11 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[13px] font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] sm:text-sm font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <span>Next</span>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 3: PRODUCT AND SERVICE (Card Dropdowns Pre-filled)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 3 && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (servicesList.length === 0 || !servicesList[0].name.trim()) {
+                    toast.error("Please add at least one service name");
+                    return;
+                  }
+                  setStep(4);
+                }}
+                className="space-y-4 sm:space-y-4.5"
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h2
+                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
                       style={{ fontFamily: "Inter, sans-serif" }}
                     >
-                      Fill quick form
-                    </span>
+                      Product and service
+                    </h2>
                     <p
-                      className="text-[12px] text-slate-500 mt-0.5 leading-normal"
+                      className="text-[13px] text-slate-500 leading-normal"
                       style={{ fontFamily: "Inter, sans-serif" }}
                     >
-                      Answer a few quick sections at your own pace.
+                      Add the services and treatments your team provides.
                     </p>
                   </div>
+                  <ProgressRing currentStep={3} totalSteps={5} />
                 </div>
 
-                {/* Radio Indicator */}
-                <div
-                  className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-all shrink-0 ${
-                    setupMethod === "type"
-                      ? "border-blue-600 bg-blue-600"
-                      : "border-slate-300 bg-white"
-                  }`}
-                >
-                  {setupMethod === "type" && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                {/* Services Card Dropdowns List (Pre-filled) */}
+                <div className="space-y-3">
+                  {servicesList.map((srv, idx) => (
+                    <div
+                      key={srv.id}
+                      className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs transition-all"
+                    >
+                      {/* Card Header (Click to toggle dropdown) */}
+                      <div
+                        onClick={() => handleToggleServiceExpand(srv.id)}
+                        className="p-3.5 sm:p-4 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/60 transition-colors cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 text-slate-700">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 truncate">
+                              {srv.name || `Service ${idx + 1}`}
+                            </div>
+                            {srv.description && (
+                              <div className="text-xs text-slate-400 truncate">
+                                {srv.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex items-center gap-1.5 shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* Small Gray Delete Button */}
+                          {servicesList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveServiceCard(srv.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete service"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleServiceExpand(srv.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <ChevronDown
+                              className={`w-4 h-4 transform transition-transform duration-200 ${
+                                srv.isExpanded ? "rotate-180 text-slate-800" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Card Body (When Dropdown is Expanded) */}
+                      {srv.isExpanded && (
+                        <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3.5 bg-slate-50/30 animate-fadeIn">
+                          <div>
+                            <label
+                              className="block text-[13px] font-semibold text-slate-800 mb-1.5"
+                              style={{ fontFamily: "Inter, sans-serif" }}
+                            >
+                              Service name *
+                            </label>
+                            <input
+                              type="text"
+                              value={srv.name}
+                              onChange={(e) =>
+                                handleUpdateService(srv.id, { name: e.target.value })
+                              }
+                              placeholder="e.g. General Consultation, Follow-up Visit"
+                              className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                            />
+                          </div>
+
+                          <div>
+                            <label
+                              className="block text-[13px] font-semibold text-slate-800 mb-1.5"
+                              style={{ fontFamily: "Inter, sans-serif" }}
+                            >
+                              Description / Duration (optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={srv.description}
+                              onChange={(e) =>
+                                handleUpdateService(srv.id, { description: e.target.value })
+                              }
+                              placeholder="e.g. 30 mins, initial diagnostic assessment"
+                              className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* + Add Service Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddServiceCard}
+                    className="w-full py-2.5 px-4 border border-dashed border-slate-300 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-100 rounded-xl text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>+ Add service</span>
+                  </button>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="pt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="px-5 h-11 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[13px] font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] sm:text-sm font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <span>Next</span>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 4: ABOUT YOUR TEAM (All Dropdowns, Subtexts Removed)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 4 && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (selectedRequirements.length === 0) {
+                    toast.error(
+                      "Please select at least one option under 'What are you looking for'"
+                    );
+                    return;
+                  }
+                  setStep(5);
+                }}
+                className="space-y-4 sm:space-y-4.5"
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h2
+                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      About your team
+                    </h2>
+                    <p
+                      className="text-[13px] text-slate-500 leading-normal"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Configure team capacity, call routing, and automation requirements.
+                    </p>
+                  </div>
+                  <ProgressRing currentStep={4} totalSteps={5} />
+                </div>
+
+                {/* 1. Team Size Dropdown (Pre-filled, No Subtext) */}
+                <CustomDropdown
+                  label="Team size"
+                  options={["Just me (1)", "2–5", "6–10", "11–25", "25+"]}
+                  value={selectedTeamSize}
+                  onChange={(val) => setSelectedTeamSize(val)}
+                  required
+                />
+
+                {/* 2. Approximate Call Volume Dropdown (Pre-filled, Subtext Removed) */}
+                <CustomDropdown
+                  label="Approximate call volume"
+                  options={[
+                    "Under 25 a day",
+                    "25–100 a day",
+                    "100–300 a day",
+                    "300+ a day",
+                    "Not sure",
+                  ]}
+                  value={selectedCallVolume}
+                  onChange={(val) => setSelectedCallVolume(val)}
+                  required
+                />
+
+                {/* 3. What Are You Looking For (Starts Empty, Subtext Removed) */}
+                <CustomDropdown
+                  label="What are you looking for"
+                  placeholder="Select options..."
+                  isMulti
+                  options={[
+                    "AI Front Desk & Phone Reception",
+                    "Smart Scheduling & Reminders",
+                    "Clinical Scribe & Chart Notes",
+                    "Billing, Invoicing & RCM",
+                  ]}
+                  value={selectedRequirements}
+                  onChange={(val) => setSelectedRequirements(val)}
+                  required
+                />
+
+                {/* 4. International Calls Dropdown (Pre-filled, Subtext Removed) */}
+                <CustomDropdown
+                  label="International calls"
+                  options={["Yes", "No", "Not sure"]}
+                  value={selectedIntl}
+                  onChange={(val) => setSelectedIntl(val)}
+                  required
+                />
+
+                {/* 5. Phone Number Dropdown (Pre-filled, Subtext Removed) */}
+                <CustomDropdown
+                  label="Phone number"
+                  options={[
+                    "Use a number from MantraAssist",
+                    "Use my own number",
+                  ]}
+                  value={selectedPhone}
+                  onChange={(val) => setSelectedPhone(val)}
+                  required
+                />
+
+                {/* Bottom Actions */}
+                <div className="pt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="px-5 h-11 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[13px] font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] sm:text-sm font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <span>Next</span>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 5: KNOWLEDGE BASE (Documents Only, Clean & Focused)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 5 && (
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h2
+                      className="text-2xl sm:text-[26px] font-bold mb-1 text-slate-900 tracking-tight"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Knowledge base
+                    </h2>
+                    <p
+                      className="text-[13px] text-slate-500 leading-normal"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      If anything is left, upload your documents so your AI knows your practice.
+                    </p>
+                  </div>
+                  <ProgressRing currentStep={5} totalSteps={5} />
+                </div>
+
+                {/* Document Upload Area */}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.doc,.csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-8 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-50 rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center text-center group"
+                  >
+                    <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform shadow-2xs">
+                      <FileUp className="w-5 h-5" />
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      Click to browse or drag and drop guidelines
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Upload fee sheets, clinic policies, intake forms, or FAQs (PDF, DOCX, TXT)
+                    </div>
+                  </div>
+
+                  {/* Uploaded Documents List with Small Gray Delete Buttons */}
+                  {uploadedDocs.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {uploadedDocs.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                            <span className="font-semibold text-slate-800 truncate">
+                              {doc.name}
+                            </span>
+                            <span className="text-[11px] text-slate-400 shrink-0">
+                              ({doc.sizeLabel})
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDoc(doc.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Remove document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
+
+                {/* Bottom Actions - Clean "Complete and launch" Button */}
+                <div className="pt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(4)}
+                    className="px-5 h-11 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[13px] font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLaunchPracticeBuilding}
+                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-sm font-semibold rounded-full shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <span>Complete and launch</span>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Bottom Actions: Centered Button + Back Link */}
-            <div className="pt-3 flex flex-col items-center space-y-2.5">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full max-w-[280px] h-10 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-[13px] font-semibold rounded-full shadow-sm shadow-slate-900/10 hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                {loading ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <span>
-                      {setupMethod === "voice"
-                        ? "Start voice setup"
-                        : "Start quick form"}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="text-[12px] font-medium text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 cursor-pointer py-1"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back</span>
-              </button>
-            </div>
-          </form>
+            )}
+          </>
         )}
-
       </div>
     </CenteredOnboardingShell>
   );

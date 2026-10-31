@@ -124,11 +124,17 @@ export default function Login() {
       setLoading(false);
       toast.success("Verification successful! Welcome to MantraAssist.");
 
+      const signupWebsite =
+        (location.state as any)?.website ||
+        localStorage.getItem("signup_website") ||
+        "";
+
       navigate("/onboarding", {
         replace: true,
         state: {
           email: currentEmail,
           name: (location.state as any)?.name || formattedName,
+          website: signupWebsite,
         },
       });
     }, 450);
