@@ -10,6 +10,18 @@ export default function GuestRoute({ children }: GuestRouteProps) {
   const location = useLocation();
 
   if (isAuthenticated) {
+    const hasPricingParams =
+      location.pathname === "/signup" &&
+      (location.search.includes("category=") || location.search.includes("tier="));
+
+    if (hasPricingParams) {
+      localStorage.removeItem("active_invite_session");
+      localStorage.removeItem("user_organization");
+      localStorage.removeItem("onboarding_complete");
+      logout();
+      return <>{children}</>;
+    }
+
     const isSignup =
       (location.state as any)?.from === "signup" ||
       localStorage.getItem("verify_origin") === "signup";

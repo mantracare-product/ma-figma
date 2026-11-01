@@ -49,15 +49,18 @@ export default function Signup() {
       return;
     }
 
+    // Clear stale invite session when entering through public pricing flow
+    localStorage.removeItem("active_invite_session");
+
     const tierLower = tierParam.toLowerCase().trim();
-    let normalizedTier = "Starter";
-    if (tierLower === "growth" || tierLower === "pro" || tierLower === "professional") normalizedTier = "Growth";
-    else if (tierLower === "scale") normalizedTier = "Scale";
+    let normalizedTier: PlanTier = "Starter";
+    if (tierLower === "growth") normalizedTier = "Growth";
+    else if (tierLower === "scale" || tierLower === "pro" || tierLower === "professional") normalizedTier = "Professional";
     else if (tierLower === "custom" || tierLower === "enterprise") normalizedTier = "Custom";
+    else if (tierLower === "free") normalizedTier = "Free";
     else if (tierLower === "starter") normalizedTier = "Starter";
     else {
-      localStorage.removeItem("pricing_flow_selection");
-      return;
+      normalizedTier = "Starter";
     }
 
     // Validate plan against active plans from admin
@@ -72,17 +75,23 @@ export default function Signup() {
         (normalizedCategory === "AI RCM" && pCat.includes("rcm"));
       const tierMatch =
         pTier === normalizedTier.toLowerCase() ||
-        (normalizedTier === "Growth" && pTier === "professional");
+        (normalizedTier === "Professional" && (pTier === "professional" || pTier === "scale")) ||
+        (normalizedTier === "Growth" && pTier === "growth");
       return catMatch && tierMatch && p.isActive !== false;
     });
 
-    if (matchedPlan) {
+    const finalPlan =
+      matchedPlan ||
+      plans.find((p) => (p.category || "").toLowerCase().includes(catLower) && p.isActive !== false) ||
+      plans[0];
+
+    if (finalPlan) {
       const selection = {
         category: normalizedCategory,
-        tier: normalizedTier,
+        tier: finalPlan.tier,
         cycle: cycleParam === "yearly" ? "yearly" : "monthly",
-        planId: matchedPlan.id,
-        planName: matchedPlan.name,
+        planId: finalPlan.id,
+        planName: finalPlan.name,
       };
       localStorage.setItem("pricing_flow_selection", JSON.stringify(selection));
     } else {

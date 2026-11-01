@@ -768,20 +768,28 @@ export default function Onboarding() {
 
   // Check if user came from /pricing flow (Item 7 & 8)
   const pricingSelection = useMemo<PricingFlowSelection | null>(() => {
-    if (inviteSession) return null; // Invites bypass pricing flow
     try {
       const raw = localStorage.getItem("pricing_flow_selection");
       if (!raw) return null;
+      // If user came via pricing flow, clean stale invite session
+      localStorage.removeItem("active_invite_session");
       const parsed = JSON.parse(raw);
-      if (!parsed?.category || !parsed?.tier || !parsed?.planId) return null;
+      if (!parsed?.category || !parsed?.tier) return null;
       const plans = getStoredPlans();
-      const activeMatch = plans.find((p) => p.id === parsed.planId && p.isActive !== false);
+      let activeMatch = plans.find((p) => p.id === parsed.planId && p.isActive !== false);
+      if (!activeMatch) {
+        activeMatch = plans.find((p) => p.tier === parsed.tier && p.isActive !== false) || plans[0];
+      }
       if (!activeMatch) return null;
-      return parsed;
+      return {
+        ...parsed,
+        planId: activeMatch.id,
+        planName: activeMatch.name,
+      };
     } catch (err) {
       return null;
     }
-  }, [inviteSession]);
+  }, []);
 
   const isPricingFlow = Boolean(pricingSelection);
   const totalSteps = isPricingFlow ? 6 : 5;
