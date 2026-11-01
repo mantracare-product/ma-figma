@@ -351,9 +351,9 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ai-rec-scale",
-    name: "AI Receptionist Scale",
+    name: "AI Receptionist Professional",
     category: "AI Receptionist",
-    tier: "Scale",
+    tier: "Professional",
     targetCategory: "Healthcare",
     description: "Enterprise clinic networks with custom AI voice agents, SSO, dedicated SLA, and bespoke workflows.",
     includedSeats: 100,
@@ -471,9 +471,9 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ai-scribe-scale",
-    name: "AI Scribe Scale",
+    name: "AI Scribe Professional",
     category: "AI Scribe",
-    tier: "Scale",
+    tier: "Professional",
     targetCategory: "Healthcare",
     description: "Multi-specialty hospital dictation with tailored clinical vocabulary, dedicated SLA, and SSO.",
     includedSeats: 25,
@@ -588,9 +588,9 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ai-ehr-scale",
-    name: "AI EHR Scale",
+    name: "AI EHR Professional",
     category: "AI EHR",
-    tier: "Scale",
+    tier: "Professional",
     targetCategory: "Healthcare",
     description: "Enterprise hospital health network with unlimited workflows, custom intake forms, SSO, and SLA.",
     includedSeats: 100,
@@ -704,9 +704,9 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
   },
   {
     id: "plan-ai-rcm-scale",
-    name: "AI RCM Scale",
+    name: "AI RCM Professional",
     category: "AI RCM",
-    tier: "Scale",
+    tier: "Professional",
     targetCategory: "Healthcare",
     description: "End-to-end denial & AR management, custom billing rules, enterprise SSO, and dedicated SLA.",
     includedSeats: 100,
@@ -1302,8 +1302,15 @@ export function getStoredPlans(): IndustryPlan[] {
       }
       return INITIAL_INDUSTRY_PLANS;
     }
-    // Guarantee category is populated for every plan
+    // Guarantee category is populated for every plan and normalize Scale tier
     let updated = parsed.map((p) => {
+      if ((p.tier as any) === "Scale") {
+        p = {
+          ...p,
+          tier: "Professional",
+          name: p.name.replace(/\bScale\b/i, "Professional"),
+        };
+      }
       if (p.category) return p;
       const lower = p.name.toLowerCase();
       let cat: PlanCategory = "AI Receptionist";

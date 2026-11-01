@@ -65,9 +65,9 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
 
   // Accordion state - auto-expanded section containing active route
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    overview: false,
-    setup: true,
-    corporate: false,
+    corporate: true,
+    templates: true,
+    integrations: true,
     settings: false,
   });
 
@@ -101,24 +101,20 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
 
   const sections: NavSection[] = [
     {
-      id: "overview",
-      title: "OVERVIEW",
+      id: "corporate",
+      title: "CORPORATE",
       items: [
-        { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
-        { id: "subscriptions", label: "Billing & Subscriptions", icon: CreditCard, path: "/admin/billing" },
-        { id: "call-logs", label: "Calls logs", icon: PhoneCall, path: "/admin/call-logs" },
-        { id: "credits", label: "Credits & Packages", icon: Coins, path: "/admin/plans" },
-        { id: "usages", label: "Usages (LiveKit / Dogra, Cartesia)", icon: Activity, path: "/admin/usages" },
+        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
+        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
+        { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
       ],
     },
     {
-      id: "setup",
-      title: "SETUP",
+      id: "templates",
+      title: "TEMPLATES",
       items: [
-        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
         { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows" },
         { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
-        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
         { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
@@ -126,11 +122,11 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       ],
     },
     {
-      id: "corporate",
-      title: "CORPORATE",
+      id: "integrations",
+      title: "INTEGRATIONS",
       items: [
-        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
-        { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
+        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
+        { id: "integration", label: "Integration", icon: Blocks, path: "/admin/settings" },
       ],
     },
     {
@@ -138,7 +134,6 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "SETTINGS",
       items: [
         { id: "plans", label: "Plans & Credits", icon: CreditCard, path: "/admin/plans" },
-        { id: "integration", label: "Integration", icon: Blocks, path: "/admin/settings" },
         { id: "user-management", label: "User Management", icon: Users, path: "/admin/users" },
         { id: "logs", label: "Logs", icon: FileText, path: "/admin/logs" },
         { id: "campaigns", label: "Campaigns", icon: Megaphone, path: "/admin/campaigns" },

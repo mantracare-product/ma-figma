@@ -33,6 +33,7 @@ import {
   Check,
   ExternalLink,
   MoreVertical,
+  Settings,
   X,
   CreditCard,
   Lock,
@@ -963,7 +964,7 @@ export default function Organizations() {
               title="Actions"
               aria-label="Actions"
             >
-              <MoreVertical className="w-4 h-4" />
+              <Settings className="w-4 h-4" />
             </button>
           </div>
         );
