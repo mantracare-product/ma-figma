@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -25,6 +25,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT, type CallLog } from "../../lib/processLogsStore";
+import { isFreshWorkspace } from "../../lib/onboardingWorkspace";
 
 // Dates series matching reference UI (Jul 7 to Aug 13)
 const performanceData = [
@@ -113,6 +115,32 @@ export default function Overview() {
   const [filterStage, setFilterStage] = useState("All Stages");
   const [filterDate, setFilterDate] = useState("All Time");
   const [filterCallType, setFilterCallType] = useState("Call Type");
+
+  const [callLogs, setCallLogs] = useState<CallLog[]>(() => getStoredCallLogs());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCallLogs(getStoredCallLogs());
+    };
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleUpdate);
+    window.addEventListener("organizationChanged", handleUpdate);
+    window.addEventListener("mantra_organization_changed", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("organizationChanged", handleUpdate);
+      window.removeEventListener("mantra_organization_changed", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const isFresh = isFreshWorkspace();
+
+  const totalCalls = isFresh ? 0 : (callLogs.length > 0 ? callLogs.length : 573);
+  const completedCalls = isFresh ? 0 : (callLogs.length > 0 ? callLogs.filter(c => c.status === "Completed").length : 179);
+  const failedCalls = isFresh ? 0 : (callLogs.length > 0 ? callLogs.filter(c => c.status === "Failed").length : 21);
+  const successRate = totalCalls > 0 ? `${((completedCalls / totalCalls) * 100).toFixed(1)}%` : "0.0%";
+  const avgDuration = isFresh ? "0m 00s" : "0m 14s";
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -227,10 +255,10 @@ export default function Overview() {
                 className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                573
+                {totalCalls}
               </p>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                Across selected filters
+                {isFresh ? "No calls registered yet" : "Across selected filters"}
               </p>
             </div>
           </div>
@@ -248,10 +276,10 @@ export default function Overview() {
                 className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                179
+                {completedCalls}
               </p>
               <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-                31.2% success rate
+                {isFresh ? "0% success rate" : `${successRate}% success rate`}
               </p>
             </div>
           </div>
@@ -269,10 +297,10 @@ export default function Overview() {
                 className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                21
+                {failedCalls}
               </p>
               <p className="text-[11px] text-rose-500 font-semibold mt-0.5">
-                Requires attention
+                {isFresh ? "Clean record" : "Requires attention"}
               </p>
             </div>
           </div>
@@ -290,7 +318,7 @@ export default function Overview() {
                 className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                0m 14s
+                {avgDuration}
               </p>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                 Per successful call
@@ -323,9 +351,15 @@ export default function Overview() {
 
               {/* Growth Pill Badge */}
               <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                  ↗ +12.5% <span className="text-[10px] text-emerald-500 font-normal">GROWTH</span>
-                </span>
+                {isFresh && callLogs.length === 0 ? (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200/60 shadow-2xs">
+                    0% <span className="text-[10px] text-slate-400 font-normal">ACTIVITY</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
+                    ↗ +12.5% <span className="text-[10px] text-emerald-500 font-normal">GROWTH</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -341,43 +375,55 @@ export default function Overview() {
               </div>
             </div>
 
-            {/* Area Chart */}
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={performanceData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-                >
-                  <defs>
-                    <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#1456f0" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#1456f0" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#94a3b8"
-                    fontSize={10}
-                    angle={-45}
-                    textAnchor="end"
-                    interval={0}
-                    tickLine={false}
-                  />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                  <ChartTooltip content={<CustomPerformanceTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="totalVolume"
-                    stroke="#1456f0"
-                    strokeWidth={2.5}
-                    dot={{ r: 3, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 1.5 }}
-                    activeDot={{ r: 5, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 2 }}
-                    fill="url(#volumeGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {/* Area Chart or Clean Empty State */}
+            {isFresh && callLogs.length === 0 ? (
+              <div className="h-72 w-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#1456f0] flex items-center justify-center mb-3">
+                  <TrendingUp className="w-6 h-6 text-[#1456f0]/70" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-800">No Call Activity Recorded Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mt-1">
+                  Your workspace is clean and ready. When incoming or outbound AI calls occur, volume trends and success rates will be charted here in real-time.
+                </p>
+              </div>
+            ) : (
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={performanceData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                  >
+                    <defs>
+                      <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#1456f0" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#1456f0" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#94a3b8"
+                      fontSize={10}
+                      angle={-45}
+                      textAnchor="end"
+                      interval={0}
+                      tickLine={false}
+                    />
+                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                    <ChartTooltip content={<CustomPerformanceTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="totalVolume"
+                      stroke="#1456f0"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 1.5 }}
+                      activeDot={{ r: 5, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 2 }}
+                      fill="url(#volumeGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Call Distribution (Right Card ~35%) */}
@@ -391,52 +437,74 @@ export default function Overview() {
               </h3>
             </div>
 
-            {/* Donut Chart with Inner Total Counter */}
-            <div className="relative w-full h-56 flex items-center justify-center my-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={distributionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={95}
-                    paddingAngle={2}
-                    dataKey="value"
-                    strokeWidth={0}
+            {/* Donut Chart with Inner Total Counter or Empty State */}
+            {isFresh && callLogs.length === 0 ? (
+              <div className="relative w-full h-56 flex items-center justify-center my-2">
+                <div className="w-40 h-40 rounded-full border-4 border-dashed border-slate-200 flex flex-col items-center justify-center">
+                  <span
+                    className="text-3xl font-bold text-slate-300 tracking-tight"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    {distributionData.map((entry) => (
-                      <Cell key={entry.id} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span
-                  className="text-3xl font-bold text-[#222222] tracking-tight"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  573
-                </span>
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                  TOTAL CALLS
-                </span>
+                    0
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    TOTAL CALLS
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="relative w-full h-56 flex items-center justify-center my-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={distributionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={70}
+                      outerRadius={95}
+                      paddingAngle={2}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {distributionData.map((entry) => (
+                        <Cell key={entry.id} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span
+                    className="text-3xl font-bold text-[#222222] tracking-tight"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {totalCalls}
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    TOTAL CALLS
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Legend Pills Grid */}
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
-              {distributionData.map((item) => (
-                <div key={item.id} className="flex items-center gap-1.5 truncate">
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-slate-600 font-medium truncate">{item.name}</span>
-                </div>
-              ))}
-            </div>
+            {isFresh && callLogs.length === 0 ? (
+              <div className="pt-2 border-t border-slate-100 text-center text-xs text-slate-400">
+                Awaiting caller outcomes & stages
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
+                {distributionData.map((item) => (
+                  <div key={item.id} className="flex items-center gap-1.5 truncate">
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-slate-600 font-medium truncate">{item.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -459,17 +527,27 @@ export default function Overview() {
               <span className="text-xs font-semibold text-slate-400">Funnel Stages</span>
             </div>
 
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={conversionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="stage" stroke="#94a3b8" fontSize={10} interval={0} />
-                  <YAxis stroke="#94a3b8" fontSize={11} />
-                  <ChartTooltip />
-                  <Bar dataKey="value" fill="#1456f0" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {isFresh && callLogs.length === 0 ? (
+              <div className="h-56 w-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
+                <p className="text-xs font-bold text-slate-700">No Funnel Activity Yet</p>
+                <p className="text-[11px] text-slate-400 max-w-xs mt-0.5">
+                  Conversion stages will populate in real-time as callers navigate through AI dialogues.
+                </p>
+              </div>
+            ) : (
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={conversionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="stage" stroke="#94a3b8" fontSize={10} interval={0} />
+                    <YAxis stroke="#94a3b8" fontSize={11} />
+                    <ChartTooltip />
+                    <Bar dataKey="value" fill="#1456f0" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Performance Analysis */}
@@ -486,21 +564,39 @@ export default function Overview() {
               </h3>
             </div>
 
-            <div className="space-y-3">
-              <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100/60">
-                <p className="text-xs font-bold text-[#1456f0] mb-0.5">Peak Call Windows</p>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Call completion rates peak at <strong>86.4%</strong> between 2:00 PM and 4:30 PM across all timezones.
-                </p>
-              </div>
+            {isFresh && callLogs.length === 0 ? (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100/60">
+                  <p className="text-xs font-bold text-[#1456f0] mb-0.5">Fresh Workspace Ready</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Your practice setup is complete. Connect your phone number or launch an agent workflow to start tracking peak call windows.
+                  </p>
+                </div>
 
-              <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-100/60">
-                <p className="text-xs font-bold text-emerald-600 mb-0.5">Automated Workflows</p>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  AI Receptionist handled <strong>74% of initial intakes</strong> without human intervention needed.
-                </p>
+                <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-100/60">
+                  <p className="text-xs font-bold text-emerald-600 mb-0.5">AI Engine Primed</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Your services, business details, and knowledge base sources entered during onboarding are synchronized and ready to assist callers.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100/60">
+                  <p className="text-xs font-bold text-[#1456f0] mb-0.5">Peak Call Windows</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Call completion rates peak at <strong>86.4%</strong> between 2:00 PM and 4:30 PM across all timezones.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-100/60">
+                  <p className="text-xs font-bold text-emerald-600 mb-0.5">Automated Workflows</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    AI Receptionist handled <strong>74% of initial intakes</strong> without human intervention needed.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

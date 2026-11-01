@@ -22,6 +22,7 @@ import { addActivityEntry } from "./activityLog";
 import { flattenRuleSteps } from "./automationTree";
 import { getStoredDocumentTemplates } from "./documentTemplatesStore";
 import { saveClientDocument, getStoredClientDocuments, StoredClientDocument } from "./clientDocumentsStore";
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
 export interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -512,6 +513,14 @@ class InvoiceService {
   public getInvoices(): ClientInvoice[] {
     if (typeof window === "undefined") return INITIAL_INVOICES;
     try {
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        const raw = localStorage.getItem(`invoices_${signupOrgId}`);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((i) => !isSampleInvoice(i)) : [];
+      }
+
       const raw = localStorage.getItem(INVOICES_STORAGE_KEY);
       if (!raw) {
         this.saveInvoices(INITIAL_INVOICES);
@@ -527,7 +536,7 @@ class InvoiceService {
       }
       return INITIAL_INVOICES;
     } catch {
-      return INITIAL_INVOICES;
+      return [];
     }
   }
 
@@ -539,7 +548,13 @@ class InvoiceService {
   public saveInvoices(invoices: ClientInvoice[]): void {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
+      const serialized = JSON.stringify(invoices);
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        localStorage.setItem(`invoices_${signupOrgId}`, serialized);
+      } else {
+        localStorage.setItem(INVOICES_STORAGE_KEY, serialized);
+      }
       window.dispatchEvent(new CustomEvent(INVOICES_CHANGE_EVENT, { detail: invoices }));
       window.dispatchEvent(new Event("storage"));
     } catch (e) {

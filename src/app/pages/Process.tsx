@@ -1027,6 +1027,18 @@ export default function Process() {
   const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
 
   useEffect(() => {
+    const handleOrgChange = () => {
+      setProcesses(getStoredProcesses());
+    };
+    window.addEventListener("organizationChanged", handleOrgChange);
+    window.addEventListener("mantra_organization_changed", handleOrgChange);
+    return () => {
+      window.removeEventListener("organizationChanged", handleOrgChange);
+      window.removeEventListener("mantra_organization_changed", handleOrgChange);
+    };
+  }, []);
+
+  useEffect(() => {
     saveStoredProcesses(processes);
   }, [processes]);
 

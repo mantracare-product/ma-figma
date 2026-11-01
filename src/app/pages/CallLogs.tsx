@@ -508,10 +508,7 @@ export default function CallLogs() {
         process: log.process || deriveProcessFromStage(log.currentStage)
       }));
     } catch {
-      return initialCallLogs.map(log => ({
-        ...log,
-        process: log.process || deriveProcessFromStage(log.currentStage)
-      }));
+      return [];
     }
   });
 

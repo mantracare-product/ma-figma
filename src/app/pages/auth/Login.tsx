@@ -72,6 +72,21 @@ export default function Login() {
     }
 
     setLoading(true);
+
+    const savedOrgs = localStorage.getItem("mantra_organizations_v1");
+    if (savedOrgs) {
+      try {
+        const orgs = JSON.parse(savedOrgs);
+        const targetEmail = cleanEmail.toLowerCase();
+        const matched = orgs.find((o: any) => (o.email || "").toLowerCase() === targetEmail);
+        if (matched && matched.status === "Suspended") {
+          setLoading(false);
+          toast.error("This organization has been suspended. Please contact support.");
+          return;
+        }
+      } catch {}
+    }
+
     setTimeout(() => {
       login();
       const currentEmail = cleanEmail.toLowerCase();
@@ -89,6 +104,12 @@ export default function Login() {
         })
       );
 
+      if (localStorage.getItem("pending_onboarding_payment") === "true") {
+        setLoading(false);
+        navigate("/payment", { replace: true });
+        return;
+      }
+
       setLoading(false);
       toast.success("Welcome back to MantraAssist!");
       navigate("/", { replace: true });
@@ -104,6 +125,22 @@ export default function Login() {
     if (isVerifyingRef.current) return;
     isVerifyingRef.current = true;
     setLoading(true);
+
+    const currentEmail = (email || localStorage.getItem("login_email") || "user@example.com").toLowerCase();
+
+    const savedOrgs = localStorage.getItem("mantra_organizations_v1");
+    if (savedOrgs) {
+      try {
+        const orgs = JSON.parse(savedOrgs);
+        const matched = orgs.find((o: any) => (o.email || "").toLowerCase() === currentEmail);
+        if (matched && matched.status === "Suspended") {
+          setLoading(false);
+          isVerifyingRef.current = false;
+          toast.error("This organization has been suspended. Please contact support.");
+          return;
+        }
+      } catch {}
+    }
 
     setTimeout(() => {
       login();
@@ -128,6 +165,11 @@ export default function Login() {
         (location.state as any)?.website ||
         localStorage.getItem("signup_website") ||
         "";
+
+      if (localStorage.getItem("pending_onboarding_payment") === "true") {
+        navigate("/payment", { replace: true });
+        return;
+      }
 
       navigate("/onboarding", {
         replace: true,

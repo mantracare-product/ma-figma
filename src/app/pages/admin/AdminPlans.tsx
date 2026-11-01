@@ -1840,6 +1840,8 @@ export default function AdminPlans() {
                       >
                         <option value="Free">Free (Onboarding)</option>
                         <option value="Starter">Starter</option>
+                        <option value="Growth">Growth</option>
+                        <option value="Scale">Scale</option>
                         <option value="Professional">Professional</option>
                         <option value="Custom">Custom</option>
                       </select>

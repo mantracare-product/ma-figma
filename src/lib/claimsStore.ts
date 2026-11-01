@@ -1,3 +1,5 @@
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+
 export type ClaimStatus =
   | "Draft"
   | "Ready to Submit"
@@ -370,16 +372,24 @@ const SEED_CLAIMS: Claim[] = [
 
 export function getStoredClaims(): Claim[] {
   try {
-    const raw = localStorage.getItem(CLAIMS_STORAGE_KEY);
+    if (isFreshWorkspace()) {
+      const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+      const raw = typeof window !== "undefined" ? localStorage.getItem(`claims_${signupOrgId}`) : null;
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
+    const raw = typeof window !== "undefined" ? localStorage.getItem(CLAIMS_STORAGE_KEY) : null;
     if (!raw) {
       localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(SEED_CLAIMS));
       return SEED_CLAIMS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : SEED_CLAIMS;
+    return Array.isArray(parsed) ? parsed : SEED_CLAIMS;
   } catch (e) {
     console.warn("Failed to load claims from localStorage:", e);
-    return SEED_CLAIMS;
+    return [];
   }
 }
 
@@ -394,7 +404,10 @@ export function saveClaim(claim: Claim): void {
     updated = [claim, ...current];
   }
   try {
-    localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(updated));
+    const key = isFreshWorkspace()
+      ? `claims_${localStorage.getItem("signup_org_id") || "signup"}`
+      : CLAIMS_STORAGE_KEY;
+    localStorage.setItem(key, JSON.stringify(updated));
     window.dispatchEvent(new CustomEvent(CLAIMS_CHANGED_EVENT, { detail: claim }));
   } catch (e) {
     console.error("Failed to persist claim:", e);

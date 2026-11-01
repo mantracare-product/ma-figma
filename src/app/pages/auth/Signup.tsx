@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import GuestRoute from "../../components/auth/GuestRoute";
 import {
@@ -13,10 +13,12 @@ import {
   EyeOff,
 } from "lucide-react";
 import logo from "@/imports/ma_logo-1.png";
+import { getStoredPlans } from "../../../lib/plansBillingStore";
 
 export default function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const prefill = (location.state as any) || {};
 
   const [email, setEmail] = useState(prefill.email || "");
@@ -24,6 +26,76 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Handle plan selection from /pricing (Item 7)
+  useEffect(() => {
+    const categoryParam = searchParams.get("category");
+    const tierParam = searchParams.get("tier");
+    const cycleParam = searchParams.get("cycle") || "monthly";
+
+    if (!categoryParam || !tierParam) {
+      // If user navigated directly to /signup without pricing params, do not enforce pricing flow
+      return;
+    }
+
+    const catLower = categoryParam.toLowerCase().trim();
+    let normalizedCategory = "AI Receptionist";
+    if (catLower.includes("scribe")) normalizedCategory = "AI Scribe";
+    else if (catLower.includes("ehr")) normalizedCategory = "AI EHR";
+    else if (catLower.includes("rcm")) normalizedCategory = "AI RCM";
+    else if (catLower.includes("reception")) normalizedCategory = "AI Receptionist";
+    else {
+      localStorage.removeItem("pricing_flow_selection");
+      return;
+    }
+
+    const tierLower = tierParam.toLowerCase().trim();
+    let normalizedTier = "Starter";
+    if (tierLower === "growth" || tierLower === "pro" || tierLower === "professional") normalizedTier = "Growth";
+    else if (tierLower === "scale") normalizedTier = "Scale";
+    else if (tierLower === "custom" || tierLower === "enterprise") normalizedTier = "Custom";
+    else if (tierLower === "starter") normalizedTier = "Starter";
+    else {
+      localStorage.removeItem("pricing_flow_selection");
+      return;
+    }
+
+    // Validate plan against active plans from admin
+    const plans = getStoredPlans();
+    const matchedPlan = plans.find((p) => {
+      const pCat = (p.category || "").toLowerCase();
+      const pTier = (p.tier || "").toLowerCase();
+      const catMatch =
+        (normalizedCategory === "AI Receptionist" && pCat.includes("reception")) ||
+        (normalizedCategory === "AI Scribe" && pCat.includes("scribe")) ||
+        (normalizedCategory === "AI EHR" && pCat.includes("ehr")) ||
+        (normalizedCategory === "AI RCM" && pCat.includes("rcm"));
+      const tierMatch =
+        pTier === normalizedTier.toLowerCase() ||
+        (normalizedTier === "Growth" && pTier === "professional");
+      return catMatch && tierMatch && p.isActive !== false;
+    });
+
+    if (matchedPlan) {
+      const selection = {
+        category: normalizedCategory,
+        tier: normalizedTier,
+        cycle: cycleParam === "yearly" ? "yearly" : "monthly",
+        planId: matchedPlan.id,
+        planName: matchedPlan.name,
+      };
+      localStorage.setItem("pricing_flow_selection", JSON.stringify(selection));
+    } else {
+      localStorage.removeItem("pricing_flow_selection");
+    }
+  }, [searchParams]);
+
+  // Handle organization invite link (?invite=token) -> redirect to dedicated /invite screen
+  useEffect(() => {
+    const inviteParam = searchParams.get("invite") || searchParams.get("token");
+    if (!inviteParam) return;
+    navigate(`/invite?token=${inviteParam}`, { replace: true });
+  }, [searchParams, navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +123,25 @@ export default function Signup() {
       const cleanEmail = email.trim().toLowerCase();
 
       const cleanWebsite = website.trim();
+
+      // If invited organization, move status to "Onboarding" (Part 2, Item 4)
+      const activeInviteRaw = localStorage.getItem("active_invite_session");
+      if (activeInviteRaw) {
+        try {
+          const invite = JSON.parse(activeInviteRaw);
+          const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+          if (rawOrgs) {
+            const orgs = JSON.parse(rawOrgs);
+            const updated = orgs.map((o: any) =>
+              o.id === invite.orgId || o.inviteToken === invite.token || (o.email && o.email.toLowerCase() === cleanEmail)
+                ? { ...o, status: "Onboarding" }
+                : o
+            );
+            localStorage.setItem("mantra_organizations_v1", JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent("mantra_organization_changed"));
+          }
+        } catch {}
+      }
 
       localStorage.setItem("verify_origin", "signup");
       localStorage.setItem("login_email", cleanEmail);
@@ -364,7 +455,7 @@ export default function Signup() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your organization email here"
+                  placeholder="e.g. contact@eyemantra.com"
                   className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
                   style={{ fontFamily: "Inter, sans-serif" }}
                   autoFocus
@@ -383,7 +474,7 @@ export default function Signup() {
                   type="text"
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="Enter your organization website here"
+                  placeholder="e.g. https://www.eyemantra.com"
                   className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />

@@ -50,6 +50,7 @@ import {
   getSubscriptionDisplayPlanName,
   PLANS_BILLING_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
+import { formatCategoryWithPrefix } from "../../../lib/planRecommendation";
 import { useOrganization } from "../../context/OrganizationContext";
 
 interface WorkspaceBillingOverviewTabProps {
@@ -120,7 +121,14 @@ export default function WorkspaceBillingOverviewTab({
     sub?.status === "Active" ||
       (sub?.planName && sub.planName !== "No Plan Assigned")
   );
-  const planName = getSubscriptionDisplayPlanName(sub);
+  const freeCategory = formatCategoryWithPrefix(
+    activeOrganization?.default_category ||
+    sub?.activePlans?.[0]?.category ||
+    "AI Receptionist"
+  );
+  const planName = isFreePlan
+    ? `Free Plan · ${freeCategory}`
+    : getSubscriptionDisplayPlanName(sub);
   const currencySymbol = sub?.currencySymbol || "$";
   const planRate = isFreePlan ? "Free ($0)" : `${currencySymbol}${sub?.amount || 49}`;
   const isYearly = sub?.billingCycle === "yearly";

@@ -139,12 +139,16 @@ export default function Appointments() {
     window.addEventListener("storage", handleStoreChange);
     window.addEventListener("mantra_appointment_changed", handleStoreChange);
     window.addEventListener("mantra_appointments_changed", handleStoreChange);
+    window.addEventListener("organizationChanged", handleStoreChange);
+    window.addEventListener("mantra_organization_changed", handleStoreChange);
     return () => {
       window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
       window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
       window.removeEventListener("storage", handleStoreChange);
       window.removeEventListener("mantra_appointment_changed", handleStoreChange);
       window.removeEventListener("mantra_appointments_changed", handleStoreChange);
+      window.removeEventListener("organizationChanged", handleStoreChange);
+      window.removeEventListener("mantra_organization_changed", handleStoreChange);
     };
   }, []);
 

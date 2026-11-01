@@ -67,6 +67,8 @@ export default function Invoices() {
     window.addEventListener("mantra_invoices_changed", handleStoreChange);
     window.addEventListener("mantra_invoice_changed", handleStoreChange);
     window.addEventListener("mantra_payments_changed", handleStoreChange);
+    window.addEventListener("organizationChanged", handleStoreChange);
+    window.addEventListener("mantra_organization_changed", handleStoreChange);
     return () => {
       window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
       window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
@@ -74,6 +76,8 @@ export default function Invoices() {
       window.removeEventListener("mantra_invoices_changed", handleStoreChange);
       window.removeEventListener("mantra_invoice_changed", handleStoreChange);
       window.removeEventListener("mantra_payments_changed", handleStoreChange);
+      window.removeEventListener("organizationChanged", handleStoreChange);
+      window.removeEventListener("mantra_organization_changed", handleStoreChange);
     };
   }, []);
 

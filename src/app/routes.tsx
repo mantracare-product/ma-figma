@@ -52,7 +52,10 @@ const ManageTeamMember = withLazy(() => import("./pages/ManageTeamMember"));
 const Services = withLazy(() => import("./pages/Services"));
 const Appointments = withLazy(() => import("./pages/Appointments"));
 const Signup = withLazy(() => import("./pages/auth/Signup"));
+const InviteAcceptance = withLazy(() => import("./pages/auth/InviteAcceptance"));
+const PaymentScreen = withLazy(() => import("./pages/auth/PaymentScreen"));
 const Onboarding = withLazy(() => import("./pages/auth/Onboarding"));
+const Pricing = withLazy(() => import("./pages/Pricing"));
 const Chats = withLazy(() => import("./pages/Chats"));
 const NotFound = withLazy(() => import("./pages/NotFound"));
 const GuidePageRoute = withLazy(() => import("./pages/GuidePageRoute"));
@@ -158,8 +161,24 @@ export const router = createBrowserRouter([
     Component: Login,
   },
   {
+    path: "/pricing",
+    Component: Pricing,
+  },
+  {
     path: "/signup",
     Component: Signup,
+  },
+  {
+    path: "/invite",
+    Component: InviteAcceptance,
+  },
+  {
+    path: "/invite/:token",
+    Component: InviteAcceptance,
+  },
+  {
+    path: "/payment",
+    Component: PaymentScreen,
   },
   {
     path: "/onboarding",

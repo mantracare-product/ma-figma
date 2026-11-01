@@ -9,6 +9,7 @@
 import { useState, useEffect } from "react";
 import { initialClients as canonicalClients, type Client } from "../data/canonicalClients";
 import { getStoredProcesses, DEMO_PATIENT_PORTAL_PROCESS_ID } from "./useProcessStore";
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
 export type { Client };
 export const CLIENTS_STORE_EVENT = "clientsStore_updated";
@@ -26,11 +27,41 @@ if (typeof window !== "undefined" && "BroadcastChannel" in window) {
 
 export function getStoredClients(): Client[] {
   if (typeof window === "undefined") return canonicalClients;
+  const isFresh = isFreshWorkspace();
   try {
-    const saved = window.localStorage?.getItem(CLIENTS_STORAGE_KEY) || window.sessionStorage?.getItem(CLIENTS_STORAGE_KEY);
-    if (saved) {
+    if (isDemoMantraActive()) {
+      const demoSaved = window.localStorage?.getItem("clients_demo") || window.localStorage?.getItem(CLIENTS_STORAGE_KEY);
+      if (demoSaved) {
+        try {
+          const parsed = JSON.parse(demoSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+      return canonicalClients;
+    }
+
+    if (isFresh) {
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      const saved =
+        (activeOrgId && window.localStorage?.getItem(`clients_${activeOrgId}`)) ||
+        window.localStorage?.getItem("clients_signup") ||
+        null;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {}
+      }
+      return [];
+    }
+
+    const saved = window.localStorage?.getItem(CLIENTS_STORAGE_KEY) ?? window.sessionStorage?.getItem(CLIENTS_STORAGE_KEY);
+    if (saved !== null && saved !== undefined) {
       let parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
+        if (parsed.length === 0) {
+          return [];
+        }
         let changed = false;
         parsed = parsed.map((c: Client) => {
           const canonical = canonicalClients.find((cc) => cc.id === c.id);
@@ -87,14 +118,16 @@ export function getStoredClients(): Client[] {
           return c;
         });
 
-        // Ensure all canonical clients (including all 20 per category) are present
-        const existingIds = new Set(parsed.map((c: Client) => c.id));
-        canonicalClients.forEach((cc) => {
-          if (!existingIds.has(cc.id)) {
-            parsed.push(cc);
-            changed = true;
-          }
-        });
+        // Only ensure canonical clients if NOT in fresh account mode
+        if (!isFresh) {
+          const existingIds = new Set(parsed.map((c: Client) => c.id));
+          canonicalClients.forEach((cc) => {
+            if (!existingIds.has(cc.id)) {
+              parsed.push(cc);
+              changed = true;
+            }
+          });
+        }
 
         // Also ensure canonical contactType is respected for known canonical client records
         parsed = parsed.map((c: Client) => {
@@ -141,9 +174,17 @@ export function getStoredClients(): Client[] {
         return parsed;
       }
     }
+
+    if (isFresh) {
+      return [];
+    }
   } catch (err) {
     console.warn("Failed to parse clients from storage:", err);
   }
+
+  // If in fresh workspace mode, do not seed canonical clients
+  if (isFresh) return [];
+
   // Initialize storage with canonical clients if not present
   try {
     const serialized = JSON.stringify(canonicalClients);
@@ -159,6 +200,13 @@ export function saveStoredClients(clients: Client[]): void {
     const serialized = JSON.stringify(clients);
     window.localStorage?.setItem(CLIENTS_STORAGE_KEY, serialized);
     window.sessionStorage?.setItem(CLIENTS_STORAGE_KEY, serialized);
+    if (isFreshWorkspace()) {
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      if (activeOrgId) {
+        window.localStorage?.setItem(`clients_${activeOrgId}`, serialized);
+      }
+      window.localStorage?.setItem("clients_signup", serialized);
+    }
     window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: clients }));
     broadcastChannel?.postMessage({ type: CLIENTS_STORE_EVENT, count: clients.length });
   } catch (err) {
@@ -356,10 +404,14 @@ export function useClients() {
     };
 
     window.addEventListener(CLIENTS_STORE_EVENT, handleUpdate);
+    window.addEventListener("organizationChanged", handleUpdate);
+    window.addEventListener("mantra_organization_changed", handleUpdate);
     window.addEventListener("storage", handleUpdate);
 
     return () => {
       window.removeEventListener(CLIENTS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("organizationChanged", handleUpdate);
+      window.removeEventListener("mantra_organization_changed", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
   }, []);

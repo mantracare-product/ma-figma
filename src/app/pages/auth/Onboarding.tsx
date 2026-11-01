@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
@@ -26,6 +26,11 @@ import {
   Layers,
   FileCheck2,
   Globe,
+  CreditCard,
+  ShieldCheck,
+  Coins,
+  Users,
+  AlertCircle,
 } from "lucide-react";
 import CenteredOnboardingShell from "./CenteredOnboardingShell";
 import { UploadedDoc, formatBytes } from "./onboardingHelpers";
@@ -34,6 +39,23 @@ import {
   saveStoredProcesses,
   PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
+import { initializeFreshSignupWorkspace } from "../../../lib/onboardingWorkspace";
+import {
+  ALL_REQUIREMENT_NAMES,
+  computeDefaultCategory,
+  computeRecommendedTier,
+  REQUIREMENT_OPTIONS_BY_CATEGORY,
+  formatCategoryWithPrefix,
+  PlanCategoryType,
+  RecommendedTierType,
+  TIER_RANK,
+} from "../../../lib/planRecommendation";
+import {
+  assignFreePlanForCategory,
+  assignPlanToWorkspace,
+  getStoredPlans,
+  IndustryPlan,
+} from "../../../lib/plansBillingStore";
 
 export const COUNTRIES = [
   "United States",
@@ -299,10 +321,12 @@ function StepHeader({
   title,
   subtitle,
   currentStep,
+  totalSteps = 5,
 }: {
   title: string;
   subtitle: string;
   currentStep: number;
+  totalSteps?: number;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 mb-4">
@@ -320,7 +344,7 @@ function StepHeader({
           {subtitle}
         </p>
       </div>
-      <ProgressRing currentStep={currentStep} totalSteps={5} />
+      <ProgressRing currentStep={currentStep} totalSteps={totalSteps} />
     </div>
   );
 }
@@ -333,6 +357,7 @@ interface CustomDropdownProps {
   helperText?: string;
   placeholder?: string;
   options: string[];
+  groupedOptions?: Record<string, string[]>;
   value: string | string[];
   onChange: (val: any) => void;
   isMulti?: boolean;
@@ -344,6 +369,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   helperText,
   placeholder = "Select an option",
   options,
+  groupedOptions,
   value,
   onChange,
   isMulti = false,
@@ -416,6 +442,19 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   const filteredOptions = options.filter((opt) =>
     opt.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
+
+  const filteredGroupedOptions = useMemo(() => {
+    if (!groupedOptions) return null;
+    const query = searchQuery.toLowerCase().trim();
+    const result: Record<string, string[]> = {};
+    for (const [groupTitle, groupItems] of Object.entries(groupedOptions)) {
+      const matched = groupItems.filter((opt) => opt.toLowerCase().includes(query));
+      if (matched.length > 0) {
+        result[groupTitle] = matched;
+      }
+    }
+    return result;
+  }, [groupedOptions, searchQuery]);
 
   const isSelected = (opt: string) => {
     if (isMulti && Array.isArray(value)) {
@@ -570,7 +609,40 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
               )}
 
               <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
-                {filteredOptions.length === 0 ? (
+                {filteredGroupedOptions ? (
+                  Object.keys(filteredGroupedOptions).length === 0 ? (
+                    <div className="px-3.5 py-3 text-xs text-slate-400 text-center">
+                      No matching options
+                    </div>
+                  ) : (
+                    Object.entries(filteredGroupedOptions).map(([groupTitle, groupItems]) => (
+                      <div key={groupTitle} className="border-b border-slate-100 last:border-b-0">
+                        <div className="px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/90 sticky top-0 select-none border-b border-slate-100">
+                          {groupTitle}
+                        </div>
+                        {groupItems.map((opt) => {
+                          const selected = isSelected(opt);
+                          return (
+                            <div
+                              key={opt}
+                              onClick={() => handleSelectOption(opt)}
+                              className={`px-3.5 py-2.5 flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-colors ${
+                                selected
+                                  ? "bg-slate-100 text-slate-900 font-semibold"
+                                  : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span className="truncate pr-2">{opt}</span>
+                              {selected && (
+                                <Check className="w-4 h-4 text-slate-900 shrink-0 stroke-[2.5]" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))
+                  )
+                ) : filteredOptions.length === 0 ? (
                   <div className="px-3.5 py-3 text-xs text-slate-400 text-center">
                     No matching options
                   </div>
@@ -624,11 +696,44 @@ export interface ServiceEntry {
   isExpanded: boolean;
 }
 
+export interface PricingFlowSelection {
+  category: string;
+  tier: string;
+  cycle: "monthly" | "yearly";
+  planId: string;
+  planName?: string;
+}
+
+export function getPreselectedTeamSize(includedSeats: number): string {
+  if (includedSeats >= 50) return "25+";
+  if (includedSeats >= 25) return "11–25";
+  if (includedSeats >= 10) return "6–10";
+  if (includedSeats >= 5) return "2–5";
+  return "Just me (1)";
+}
+
+export function getPrefilledRequirementsForTier(category: string, tier: string, planFeatures?: string[]): string[] {
+  const normCat = formatCategoryWithPrefix(category) as PlanCategoryType;
+  const catOptions = REQUIREMENT_OPTIONS_BY_CATEGORY[normCat] || [];
+  const tierRank = TIER_RANK[tier as RecommendedTierType] || 1;
+
+  const matched = catOptions
+    .filter((opt) => (TIER_RANK[opt.minTier] || 1) <= tierRank)
+    .map((opt) => opt.name);
+
+  if (matched.length > 0) return matched;
+  if (planFeatures && planFeatures.length > 0) {
+    const fromPlan = planFeatures.filter((f) => ALL_REQUIREMENT_NAMES.includes(f));
+    if (fromPlan.length > 0) return fromPlan;
+  }
+  return catOptions.map((o) => o.name);
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const { addOrganization } = useOrganization();
+  const { addOrganization, updateOrganization, activeOrganization } = useOrganization();
   const { triggerAutoOpen } = useHowItWorks();
 
   const userEmail =
@@ -642,7 +747,7 @@ export default function Onboarding() {
     if (fromState && typeof fromState === "string" && fromState.trim()) return fromState.trim();
     const fromStorage = localStorage.getItem("signup_website");
     if (fromStorage && fromStorage.trim()) return fromStorage.trim();
-    return "https://www.acmehealthclinic.com";
+    return "https://www.eyemantra.com";
   })();
 
   const cleanWebsiteDisplay =
@@ -650,18 +755,68 @@ export default function Onboarding() {
       ? signupWebsite
       : `https://${signupWebsite}`;
 
-  // Step state: 1 to 5
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Check if user came from an Admin Invite link (Part 2, Item 4)
+  const inviteSession = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("active_invite_session");
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Check if user came from /pricing flow (Item 7 & 8)
+  const pricingSelection = useMemo<PricingFlowSelection | null>(() => {
+    if (inviteSession) return null; // Invites bypass pricing flow
+    try {
+      const raw = localStorage.getItem("pricing_flow_selection");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.category || !parsed?.tier || !parsed?.planId) return null;
+      const plans = getStoredPlans();
+      const activeMatch = plans.find((p) => p.id === parsed.planId && p.isActive !== false);
+      if (!activeMatch) return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }, [inviteSession]);
+
+  const isPricingFlow = Boolean(pricingSelection);
+  const totalSteps = isPricingFlow ? 6 : 5;
+
+  // Step state: 1 to 6 (Pricing flow adds Step 6 Payment screen)
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(() => {
+    try {
+      const raw = localStorage.getItem("pricing_flow_selection");
+      if (raw && !inviteSession && localStorage.getItem("pending_onboarding_payment") === "true") {
+        return 6;
+      }
+    } catch {}
+    return 1;
+  });
 
   // ── Crazy SaaS Loader State (Setting up your practice) ──
   const [isBuildingPractice, setIsBuildingPractice] = useState(false);
   const [buildProgress, setBuildProgress] = useState(0);
   const [activeBuildStage, setActiveBuildStage] = useState(0);
 
-  // ── Step 1: About your organization (All details pre-filled from website) ──
+  // ── Step 1: About your organization (All details pre-filled from website or invite) ──
   const [orgName, setOrgName] = useState(() => {
+    if (inviteSession?.confirmedData?.name) {
+      return inviteSession.confirmedData.name;
+    }
     const saved = localStorage.getItem("active_organization_name");
-    if (saved && saved.trim()) return saved;
+    if (
+      saved &&
+      saved.trim() &&
+      saved !== "Demo Mantra" &&
+      saved !== "Demo Mantra Care" &&
+      saved !== "Acme Health Clinic"
+    ) {
+      return saved;
+    }
 
     const email =
       (location.state as any)?.email ||
@@ -675,14 +830,24 @@ export default function Onboarding() {
           domain.toLowerCase()
         )
       ) {
-        return domain.charAt(0).toUpperCase() + domain.slice(1) + " Health Clinic";
+        return domain.charAt(0).toUpperCase() + domain.slice(1);
       }
     }
-    return "Acme Health Clinic";
+    return "Eye Mantra";
   });
-  const [country, setCountry] = useState("United States");
-  const [selectedIndustry, setSelectedIndustry] = useState("Healthcare & Clinic");
-  const [selectedServiceCategory, setSelectedServiceCategory] = useState("General Physician");
+  const [country, setCountry] = useState(() => {
+    return inviteSession?.confirmedData?.country || "India";
+  });
+  const [selectedIndustry, setSelectedIndustry] = useState(() => {
+    return inviteSession?.confirmedData?.industry || "Healthcare & Clinic";
+  });
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState(() => {
+    return (
+      inviteSession?.confirmedData?.specialty ||
+      inviteSession?.confirmedData?.serviceCategory ||
+      "Ophthalmologist"
+    );
+  });
 
   // Keep category specialty in sync when industry changes
   useEffect(() => {
@@ -693,72 +858,184 @@ export default function Onboarding() {
   }, [selectedIndustry]);
 
   // ── Step 2: About your location (Card dropdowns pre-filled) ──
-  const [locations, setLocations] = useState<LocationEntry[]>([
-    {
-      id: "loc-1",
-      name: "Main Clinic",
-      address: "100 Medical Center Blvd, Suite 250, San Francisco, CA 94102",
-      operatingDays: ["MON", "TUE", "WED", "THU", "FRI"],
-      opensAt: "09:00",
-      closesAt: "17:00",
-      isExpanded: true,
-    },
-  ]);
+  const [locations, setLocations] = useState<LocationEntry[]>(() => {
+    if (inviteSession?.confirmedData?.location) {
+      return [
+        {
+          id: "loc-1",
+          name: inviteSession.confirmedData.location,
+          address: inviteSession.confirmedData.locations?.[0] || "Main Clinic Address",
+          operatingDays: ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
+          opensAt: "09:00",
+          closesAt: "19:00",
+          isExpanded: true,
+        },
+      ];
+    }
+    return [
+      {
+        id: "loc-1",
+        name: "Eye Mantra Super Specialty Clinic",
+        address: "A-10, Paschim Vihar, New Delhi, 110063",
+        operatingDays: ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
+        opensAt: "09:00",
+        closesAt: "19:00",
+        isExpanded: true,
+      },
+    ];
+  });
 
-  // ── Step 3: Product and service (Card dropdowns pre-filled with sample clinical services) ──
-  const [servicesList, setServicesList] = useState<ServiceEntry[]>([
-    {
-      id: "srv-1",
-      name: "General Consultation",
-      description: "Comprehensive medical review, clinical examination, and treatment plan (30 mins)",
-      isExpanded: false,
-    },
-    {
-      id: "srv-2",
-      name: "Follow-up Visit",
-      description: "Progress evaluation, lab results consultation, and prescription refills (15 mins)",
-      isExpanded: false,
-    },
-    {
-      id: "srv-3",
-      name: "Telehealth Video Consult",
-      description: "Secure virtual consultation for triage, non-emergency care, and remote diagnosis (20 mins)",
-      isExpanded: false,
-    },
-    {
-      id: "srv-4",
-      name: "Annual Health Checkup",
-      description: "Full preventive health assessment, diagnostic panels, and lifestyle consultation (45 mins)",
-      isExpanded: false,
-    },
-  ]);
+  // ── Step 3: Product and service (Card dropdowns pre-filled) ──
+  const [servicesList, setServicesList] = useState<ServiceEntry[]>(() => {
+    if (
+      inviteSession?.confirmedData?.services &&
+      Array.isArray(inviteSession.confirmedData.services) &&
+      inviteSession.confirmedData.services.length > 0
+    ) {
+      return inviteSession.confirmedData.services.map((s: any, idx: number) => ({
+        id: String(s.id || `srv-${idx + 1}`),
+        name: s.name || `Service ${idx + 1}`,
+        description: s.description || "",
+        isExpanded: false,
+      }));
+    }
+    return [
+      {
+        id: "srv-1",
+        name: "Comprehensive Eye Examination",
+        description: "Complete visual acuity assessment, refraction, and dilated retina evaluation (30 mins)",
+        isExpanded: false,
+      },
+      {
+        id: "srv-2",
+        name: "Cataract Surgery Consultation",
+        description: "Pre-operative evaluation, advanced IOL lens selection, and surgeon consultation (45 mins)",
+        isExpanded: false,
+      },
+      {
+        id: "srv-3",
+        name: "LASIK & Refractive Evaluation",
+        description: "Corneal topography, pachymetry, and customized laser vision correction suitability (30 mins)",
+        isExpanded: false,
+      },
+      {
+        id: "srv-4",
+        name: "Glaucoma & Retina Screening",
+        description: "Intraocular pressure (IOP) measurement, optic disc tomography, and visual field testing (40 mins)",
+        isExpanded: false,
+      },
+    ];
+  });
 
-  // ── Step 4: About your team (All Dropdowns pre-filled) ──
-  const [selectedTeamSize, setSelectedTeamSize] = useState("2–5");
-  const [selectedCallVolume, setSelectedCallVolume] = useState("25–100 a day");
-  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([
-    "AI Front Desk & Phone Reception",
-    "Smart Scheduling & Reminders",
-  ]);
-  const [selectedIntl, setSelectedIntl] = useState("No");
-  const [selectedPhone, setSelectedPhone] = useState("Use a number from MantraAssist");
+  // ── Step 4: About your team (Pre-filled from plan or invite, Item 8 & Part 2 Item 4) ──
+  const [selectedTeamSize, setSelectedTeamSize] = useState(() => {
+    if (inviteSession?.confirmedData?.teamSize) {
+      return inviteSession.confirmedData.teamSize;
+    }
+    if (pricingSelection) {
+      const plan = getStoredPlans().find((p) => p.id === pricingSelection.planId);
+      return getPreselectedTeamSize(plan?.includedSeats || 8);
+    }
+    return "2–5";
+  });
+  const [selectedCallVolume, setSelectedCallVolume] = useState(() => {
+    if (inviteSession?.confirmedData?.callVolume) {
+      return inviteSession.confirmedData.callVolume;
+    }
+    return pricingSelection ? "" : "25–100 a day";
+  });
+  const [selectedRequirements, setSelectedRequirements] = useState<string[]>(() => {
+    if (
+      inviteSession?.confirmedData?.primaryRequirements &&
+      Array.isArray(inviteSession.confirmedData.primaryRequirements) &&
+      inviteSession.confirmedData.primaryRequirements.length > 0
+    ) {
+      return inviteSession.confirmedData.primaryRequirements;
+    }
+    if (pricingSelection) {
+      const plan = getStoredPlans().find((p) => p.id === pricingSelection.planId);
+      return getPrefilledRequirementsForTier(
+        pricingSelection.category,
+        pricingSelection.tier,
+        plan?.features
+      );
+    }
+    return [
+      "24/7 AI Receptionist",
+      "Appointment Scheduling & Reminders",
+    ];
+  });
+  const [selectedIntl, setSelectedIntl] = useState(() => {
+    if (inviteSession?.confirmedData?.internationalCalls !== undefined) {
+      return inviteSession.confirmedData.internationalCalls ? "Yes" : "No";
+    }
+    return pricingSelection ? "" : "No";
+  });
+  const [selectedPhone, setSelectedPhone] = useState(() => {
+    if (inviteSession?.confirmedData?.telephonyChoice) {
+      return inviteSession.confirmedData.telephonyChoice === "bring_own"
+        ? "Use my own number"
+        : "Use a number from MantraAssist";
+    }
+    return pricingSelection ? "" : "Use a number from MantraAssist";
+  });
+
+  // ── Step 6: Payment Screen State (Pricing Flow Only, Item 10 & 11) ──
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi">("card");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  const livePlan = useMemo(() => {
+    if (!pricingSelection) return null;
+    const plans = getStoredPlans();
+    return plans.find((p) => p.id === pricingSelection.planId) || null;
+  }, [pricingSelection]);
+
+  const inrPricing = useMemo(() => {
+    if (!livePlan) return null;
+    return (
+      livePlan.countryPricing?.find((cp) => cp.currency === "INR") ||
+      livePlan.countryPricing?.[0]
+    );
+  }, [livePlan]);
+
+  const amountDue = useMemo(() => {
+    if (!livePlan || !inrPricing) return 0;
+    return pricingSelection?.cycle === "yearly"
+      ? inrPricing.yearlyPrice
+      : inrPricing.monthlyPrice;
+  }, [livePlan, inrPricing, pricingSelection?.cycle]);
+
+  const handleQuickFillCard = () => {
+    setPaymentMethod("card");
+    setCardNumber("4532 8901 2345 6789");
+    setCardExpiry("12/28");
+    setCardCvv("888");
+    setCardName("Dr. Sarah Patel");
+    setPaymentError(null);
+  };
 
   // ── Step 5: Knowledge base (Pre-created organization & services policy documents) ──
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([
     {
       id: "kb-1",
-      name: "Acme_Health_Organization_Overview_&_Hours.pdf",
+      name: "Eye_Mantra_Clinical_Overview_&_Hours.pdf",
       sizeLabel: "1.8 MB",
     },
     {
       id: "kb-2",
-      name: "Clinical_Services_Pricing_&_Treatment_Guide.pdf",
+      name: "Eye_Care_Services_Pricing_&_Treatment_Guide.pdf",
       sizeLabel: "2.4 MB",
     },
     {
       id: "kb-3",
-      name: "Patient_Intake_Cancellation_&_Billing_Policies.docx",
-      sizeLabel: "840 KB",
+      name: "Patient_Eye_Care_Preparation_&_Insurance_Policy.pdf",
+      sizeLabel: "1.2 MB",
     },
   ]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -934,15 +1211,38 @@ export default function Onboarding() {
 
     const savedWebsite = localStorage.getItem("signup_website") || "";
 
+    const resolvedCategory =
+      selectedIndustry.toLowerCase().includes("health") ||
+      selectedIndustry.toLowerCase().includes("clinic") ||
+      selectedIndustry.toLowerCase().includes("dental")
+        ? "Healthcare"
+        : selectedIndustry;
+
+    const matchedCategory = inviteSession
+      ? (inviteSession.confirmedData?.assignedPlanCategory as PlanCategoryType) || "AI Receptionist"
+      : isPricingFlow && pricingSelection
+      ? (pricingSelection.category as PlanCategoryType)
+      : computeDefaultCategory(selectedRequirements);
+    const matchedTier = inviteSession
+      ? "Starter"
+      : isPricingFlow && pricingSelection
+      ? (pricingSelection.tier as RecommendedTierType)
+      : computeRecommendedTier(
+          matchedCategory,
+          selectedRequirements,
+          selectedTeamSize,
+          selectedCallVolume
+        );
+
     const newOrgData = {
       name: cleanOrgName,
-      industry: selectedIndustry,
-      industryCategory: selectedServiceCategory,
+      industry: selectedServiceCategory || selectedIndustry,
+      industryCategory: resolvedCategory,
       locations: formattedLocations,
       primaryLocation: primaryLoc.name,
       operatingHours: `${primaryLoc.operatingDays.join(", ")}: ${primaryLoc.opensAt}–${primaryLoc.closesAt}`,
-      country: country.trim() || "United States",
-      currency: "USD",
+      country: country.trim() || (isPricingFlow ? "India" : "United States"),
+      currency: isPricingFlow ? "INR" : "USD",
       email: userEmail || "contact@mantraassist.com",
       phone: "+1 (555) 123-4567",
       status: "Active" as const,
@@ -954,45 +1254,65 @@ export default function Onboarding() {
       primaryRequirements: selectedRequirements,
       telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
       uploadedDocuments: uploadedDocs,
+      default_category: matchedCategory,
+      recommended_tier: matchedTier,
     };
 
     try {
-      addOrganization(newOrgData);
-    } catch (err) {
-      console.warn("Could not add to context directly", err);
-    }
-
-    try {
-      const allProcs = getStoredProcesses();
-      const updatedProcs = allProcs.map((p) => {
-        if (
-          (p as any).categoryName === "Healthcare" ||
-          p.industryCategory === "Healthcare" ||
-          !p.industryCategory
-        ) {
-          return {
-            ...p,
-            industryCategory: selectedServiceCategory,
-            connectedToAiReceptionist: selectedRequirements.includes(
-              "AI Front Desk & Phone Reception"
-            ),
-            receptionEnabled: selectedRequirements.includes(
-              "AI Front Desk & Phone Reception"
-            ),
-          };
-        }
-        return p;
+      initializeFreshSignupWorkspace({
+        orgData: {
+          ...newOrgData,
+          skipFreePlan: isPricingFlow || Boolean(inviteSession),
+        },
+        locations,
+        services: servicesList,
+        uploadedDocs,
+        website: savedWebsite,
+        skipFreePlan: isPricingFlow || Boolean(inviteSession),
       });
-      saveStoredProcesses(updatedProcs);
-      window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-    } catch (e) {
-      console.warn("Process mapping notice:", e);
+      const currentOrgId =
+        inviteSession?.orgId ||
+        localStorage.getItem("mantra_active_org_id_v1") ||
+        localStorage.getItem("signup_org_id") ||
+        "demo";
+      if (inviteSession) {
+        assignPlanToWorkspace(currentOrgId, inviteSession.planId, "monthly", "INR");
+        try {
+          const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+          if (rawOrgs) {
+            const orgs = JSON.parse(rawOrgs);
+            const updated = orgs.map((o: any) =>
+              o.id === currentOrgId ||
+              o.inviteToken === inviteSession.token ||
+              (o.email && o.email.toLowerCase() === userEmail?.toLowerCase())
+                ? { ...o, status: "Active" }
+                : o
+            );
+            localStorage.setItem("mantra_organizations_v1", JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent("mantra_organization_changed"));
+          }
+        } catch {}
+        localStorage.removeItem("active_invite_session");
+      } else if (!isPricingFlow) {
+        assignFreePlanForCategory(currentOrgId, matchedCategory);
+      } else if (pricingSelection && livePlan) {
+        assignPlanToWorkspace(currentOrgId, livePlan.id, pricingSelection.cycle, "INR");
+      }
+    } catch (err) {
+      console.warn("Could not initialize fresh workspace directly", err);
+      try {
+        addOrganization(newOrgData);
+      } catch {}
     }
 
     localStorage.setItem("user_organization", JSON.stringify(newOrgData));
     localStorage.setItem("active_organization_name", cleanOrgName);
     localStorage.setItem("onboarding_complete", "true");
     localStorage.removeItem("verify_origin");
+    if (isPricingFlow) {
+      localStorage.removeItem("pricing_flow_selection");
+      localStorage.removeItem("pending_onboarding_payment");
+    }
     login();
 
     setTimeout(() => {
@@ -1004,6 +1324,15 @@ export default function Onboarding() {
     }, 600);
   };
 
+  // If user was invited from admin, setup is ALREADY done! Skip questions, show loader, and go to "/"
+  useEffect(() => {
+    const isCompleted = localStorage.getItem("onboarding_complete") === "true";
+    const isFromAdmin = Boolean(inviteSession) || Boolean((location.state as any)?.fromInvite);
+    if (isCompleted || isFromAdmin) {
+      handleLaunchPracticeBuilding();
+    }
+  }, [inviteSession, location.state]);
+
   return (
     <CenteredOnboardingShell
       maxWidth={isBuildingPractice ? "max-w-none" : "max-w-[680px]"}
@@ -1012,12 +1341,22 @@ export default function Onboarding() {
       noCard={isBuildingPractice}
       headerBadge={
         !isBuildingPractice &&
-        (step === 1 || step === 2 || step === 3 || step === 5) ? (
+        (isPricingFlow && step === 4 ? (
+          <div
+            className="inline-flex items-center h-7 px-3 rounded-full text-[12px] bg-[#EFF8FF] border border-[#CFE6F7] shadow-2xs select-none whitespace-nowrap shrink-0"
+            style={{ height: "28px" }}
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-[#1456F0] shrink-0" />
+              <span className="font-medium text-[#1456F0]">Pre-filled from your plan preference</span>
+            </div>
+          </div>
+        ) : (step === 1 || step === 2 || step === 3 || step === 5) ? (
           <WebsiteDetectedCapsule
             label={step === 5 ? "Prepared from" : "Fetched from"}
             websiteDisplay={cleanWebsiteDisplay}
           />
-        ) : undefined
+        ) : undefined)
       }
       reserveHeaderSpace={!isBuildingPractice}
     >
@@ -1169,6 +1508,7 @@ export default function Onboarding() {
                   title="About your organization"
                   subtitle="We'll tailor your AI workflows to your business."
                   currentStep={1}
+                  totalSteps={totalSteps}
                 />
 
                 {/* 1. Organization name (Pre-filled) */}
@@ -1253,6 +1593,7 @@ export default function Onboarding() {
                   title="About your location"
                   subtitle="Manage clinic locations, addresses, and operating hours."
                   currentStep={2}
+                  totalSteps={totalSteps}
                 />
 
                 {/* Location Card Dropdowns List */}
@@ -1486,6 +1827,7 @@ export default function Onboarding() {
                   title="Product and service"
                   subtitle="Add the services and treatments your team provides."
                   currentStep={3}
+                  totalSteps={totalSteps}
                 />
 
                 {/* Services Card Dropdowns List (Pre-filled) */}
@@ -1637,7 +1979,65 @@ export default function Onboarding() {
                     );
                     return;
                   }
-                  setStep(5);
+                  if (!selectedCallVolume) {
+                    toast.error("Please select how many calls you get in a day");
+                    return;
+                  }
+                  if (!selectedIntl) {
+                    toast.error("Please select if you take international calls");
+                    return;
+                  }
+                  if (!selectedPhone) {
+                    toast.error("Please select which phone number to use");
+                    return;
+                  }
+
+                  if (inviteSession) {
+                    if (activeOrganization?.id) {
+                      updateOrganization(activeOrganization.id, {
+                        default_category: inviteSession.confirmedData?.assignedPlanCategory || "AI Receptionist",
+                        recommended_tier: "Starter",
+                        primaryRequirements: selectedRequirements,
+                        teamSize: selectedTeamSize,
+                        callVolume: selectedCallVolume,
+                        internationalCalls: selectedIntl === "Yes",
+                        telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+                      });
+                    }
+                    setStep(5);
+                  } else if (isPricingFlow && pricingSelection) {
+                    if (activeOrganization?.id) {
+                      updateOrganization(activeOrganization.id, {
+                        default_category: pricingSelection.category,
+                        recommended_tier: pricingSelection.tier,
+                        primaryRequirements: selectedRequirements,
+                        teamSize: selectedTeamSize,
+                        callVolume: selectedCallVolume,
+                        internationalCalls: selectedIntl === "Yes",
+                        telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+                      });
+                    }
+                    setStep(5);
+                  } else {
+                    const matchedCategory = computeDefaultCategory(selectedRequirements);
+                    const matchedTier = computeRecommendedTier(
+                      matchedCategory,
+                      selectedRequirements,
+                      selectedTeamSize,
+                      selectedCallVolume
+                    );
+                    if (activeOrganization?.id) {
+                      updateOrganization(activeOrganization.id, {
+                        default_category: matchedCategory,
+                        recommended_tier: matchedTier,
+                        primaryRequirements: selectedRequirements,
+                        teamSize: selectedTeamSize,
+                        callVolume: selectedCallVolume,
+                      });
+                      assignFreePlanForCategory(activeOrganization.id, matchedCategory);
+                    }
+                    setStep(5);
+                  }
                 }}
                 className="space-y-4 sm:space-y-4.5"
               >
@@ -1645,6 +2045,7 @@ export default function Onboarding() {
                   title="Your workspace"
                   subtitle="Tell us how your practice runs so we can set up your workspace."
                   currentStep={4}
+                  totalSteps={totalSteps}
                 />
 
                 {/* Row 1: Team size & Call volume side by side */}
@@ -1677,12 +2078,7 @@ export default function Onboarding() {
                   label="What should MantraAssist handle for you?"
                   placeholder="Select options..."
                   isMulti
-                  options={[
-                    "AI Front Desk & Phone Reception",
-                    "Smart Scheduling & Reminders",
-                    "Clinical Scribe & Chart Notes",
-                    "Billing, Invoicing & RCM",
-                  ]}
+                  options={ALL_REQUIREMENT_NAMES}
                   value={selectedRequirements}
                   onChange={(val) => setSelectedRequirements(val)}
                   required
@@ -1743,6 +2139,7 @@ export default function Onboarding() {
                   title="Knowledge base"
                   subtitle="Add your practice documents so your AI knows how you work."
                   currentStep={5}
+                  totalSteps={totalSteps}
                 />
 
                 {/* Document Upload Area */}
@@ -1812,7 +2209,7 @@ export default function Onboarding() {
                   )}
                 </div>
 
-                {/* Bottom Actions - Clean "Complete and launch" Button */}
+                {/* Bottom Actions - "Continue to payment" in pricing flow or "Complete and launch" */}
                 <div className="pt-4 flex items-center justify-between">
                   <button
                     type="button"
@@ -1824,14 +2221,311 @@ export default function Onboarding() {
                     <span>Back</span>
                   </button>
 
+                  {isPricingFlow ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem("pending_onboarding_payment", "true");
+                        localStorage.setItem("active_organization_name", orgName.trim());
+                        navigate("/payment");
+                      }}
+                      className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-sm font-semibold rounded-full shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      <span>Continue to payment</span>
+                      <ArrowRight className="w-4 h-4 text-slate-300" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleLaunchPracticeBuilding}
+                      className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-sm font-semibold rounded-full shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      <span>Complete and launch</span>
+                      <ArrowRight className="w-4 h-4 text-slate-300" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                STEP 6: PAYMENT SCREEN (Pricing Flow Only, Items 10 & 11)
+                ───────────────────────────────────────────────────────────── */}
+            {step === 6 && isPricingFlow && (
+              <div className="space-y-4 sm:space-y-5 animate-fadeIn">
+                <StepHeader
+                  title="Payment"
+                  subtitle="Review your plan and pay to launch your workspace."
+                  currentStep={6}
+                  totalSteps={totalSteps}
+                />
+
+                {/* Order Summary Card */}
+                <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/70 to-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        Selected Plan
+                      </div>
+                      <div className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
+                        {pricingSelection?.category} · {pricingSelection?.tier}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl sm:text-2xl font-bold text-slate-900">
+                        ₹{amountDue.toLocaleString("en-IN")}
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-500 capitalize">
+                        {pricingSelection?.cycle === "yearly" ? "Billed yearly (20% off)" : "Billed monthly"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                      <Coins className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">
+                          {((pricingSelection?.cycle === "yearly"
+                            ? livePlan?.yearlyCredits
+                            : livePlan?.monthlyCredits) || 1000).toLocaleString("en-IN")}
+                        </span>
+                        <span className="text-slate-500 ml-1">credits / mo</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                      <Users className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">
+                          Up to {livePlan?.includedSeats || 8}
+                        </span>
+                        <span className="text-slate-500 ml-1">team members</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Gateway Form (Front-end prototype) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[13px] font-semibold text-slate-800">
+                      Payment method
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleQuickFillCard}
+                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                    >
+                      Fill demo card details
+                    </button>
+                  </div>
+
+                  {/* Method selector tabs */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("card");
+                        setPaymentError(null);
+                      }}
+                      className={`h-10 px-3 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        paymentMethod === "card"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>Credit / Debit Card</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("upi");
+                        setPaymentError(null);
+                      }}
+                      className={`h-10 px-3 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        paymentMethod === "upi"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span>UPI / Net Banking</span>
+                    </button>
+                  </div>
+
+                  {paymentError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{paymentError}</span>
+                    </div>
+                  )}
+
+                  {paymentMethod === "card" ? (
+                    <div className="space-y-3 p-4 rounded-2xl border border-slate-200 bg-white shadow-2xs">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Card number
+                        </label>
+                        <div className="relative">
+                          <CreditCard className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={cardNumber}
+                            onChange={(e) => {
+                              setCardNumber(e.target.value);
+                              setPaymentError(null);
+                            }}
+                            placeholder="4532 •••• •••• 6789"
+                            maxLength={19}
+                            className="w-full h-10 pl-9 pr-3.5 bg-white border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Expiry date
+                          </label>
+                          <input
+                            type="text"
+                            value={cardExpiry}
+                            onChange={(e) => {
+                              setCardExpiry(e.target.value);
+                              setPaymentError(null);
+                            }}
+                            placeholder="MM / YY"
+                            maxLength={5}
+                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            CVV
+                          </label>
+                          <input
+                            type="password"
+                            value={cardCvv}
+                            onChange={(e) => {
+                              setCardCvv(e.target.value);
+                              setPaymentError(null);
+                            }}
+                            placeholder="•••"
+                            maxLength={4}
+                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Cardholder name
+                        </label>
+                        <input
+                          type="text"
+                          value={cardName}
+                          onChange={(e) => {
+                            setCardName(e.target.value);
+                            setPaymentError(null);
+                          }}
+                          placeholder="Name on card"
+                          className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          UPI ID / VPA
+                        </label>
+                        <input
+                          type="text"
+                          value={upiId}
+                          onChange={(e) => {
+                            setUpiId(e.target.value);
+                            setPaymentError(null);
+                          }}
+                          placeholder="doctor@okhdfcbank"
+                          className="w-full h-10 px-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        A payment request will be sent to your UPI app (Google Pay, PhonePe, Paytm).
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 px-1">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>256-bit bank-grade encryption · Instant workspace activation</span>
+                  </div>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="pt-4 flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={handleLaunchPracticeBuilding}
-                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-sm font-semibold rounded-full shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    onClick={() => setStep(5)}
+                    disabled={isProcessingPayment}
+                    className="px-5 h-11 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[13px] font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    <span>Complete and launch</span>
-                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                    <ArrowLeft className="w-4 h-4 text-slate-500" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isProcessingPayment}
+                    onClick={() => {
+                      if (paymentMethod === "card") {
+                        if (!cardNumber.trim() || cardNumber.replace(/\s+/g, "").length < 12) {
+                          setPaymentError("Please enter a valid card number");
+                          return;
+                        }
+                        if (!cardExpiry.trim()) {
+                          setPaymentError("Please enter card expiry date (MM/YY)");
+                          return;
+                        }
+                        if (!cardCvv.trim() || cardCvv.length < 3) {
+                          setPaymentError("Please enter a valid CVV");
+                          return;
+                        }
+                        if (!cardName.trim()) {
+                          setPaymentError("Please enter the cardholder name");
+                          return;
+                        }
+                      } else {
+                        if (!upiId.trim() || !upiId.includes("@")) {
+                          setPaymentError("Please enter a valid UPI ID (e.g. name@bank)");
+                          return;
+                        }
+                      }
+
+                      setPaymentError(null);
+                      setIsProcessingPayment(true);
+                      setTimeout(() => {
+                        handleLaunchPracticeBuilding();
+                      }, 400);
+                    }}
+                    className="px-8 h-11 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-sm font-semibold rounded-full shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Processing payment...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Pay ₹{amountDue.toLocaleString("en-IN")} and launch</span>
+                        <ArrowRight className="w-4 h-4 text-slate-300" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -43,6 +43,7 @@ import {
   CartItem,
   PLAN_CATEGORIES,
   PlanCategory,
+  DEFAULT_COUNTRY_PRICING,
   getStoredPlans,
   getStoredCreditPackages,
   getStoredTeamMemberPacks,
@@ -61,6 +62,10 @@ import {
   PLANS_BILLING_CHANGED_EVENT,
   CART_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
+import {
+  normalizeCategoryToTabName,
+  isPlanMatchingRecommendedTier,
+} from "../../../lib/planRecommendation";
 import { useOrganization } from "../../context/OrganizationContext";
 
 export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHeader?: boolean } = {}) {
@@ -73,7 +78,22 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
 
   // Category filter state (strictly category-wise: "AI Receptionist", "AI Scribe", "EHR", "RCM")
-  const [selectedCategory, setSelectedCategory] = useState<string>(PLAN_CATEGORIES[0]);
+  // Preselect category tab that matches default_category on first open.
+  // Existing organizations with no saved answers open Plans on the first tab as it does today.
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    if (activeOrganization?.default_category) {
+      return normalizeCategoryToTabName(activeOrganization.default_category);
+    }
+    return PLAN_CATEGORIES[0];
+  });
+
+  useEffect(() => {
+    if (activeOrganization?.default_category) {
+      setSelectedCategory(normalizeCategoryToTabName(activeOrganization.default_category));
+    } else {
+      setSelectedCategory(PLAN_CATEGORIES[0]);
+    }
+  }, [activeOrganization?.id, activeOrganization?.default_category]);
 
   // Cart modal/slide-over state
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -131,10 +151,13 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   // Apply Scope-based visibility filtering & Tier positioning
   const scopedPlanItems = useMemo(() => {
     const available = getAvailablePlansForWorkspace(plans, {
-      id: activeOrganization.id,
-      industryCategory: activeOrganization.industryCategory,
-      country: activeOrganization.country || "United States",
-      currency: activeOrganization.currency || "USD",
+      id: activeOrganization?.id,
+      industryCategory: activeOrganization?.industryCategory,
+      industry: activeOrganization?.industry,
+      locations: activeOrganization?.locations || (activeOrganization?.location ? [activeOrganization.location] : []),
+      location: activeOrganization?.location,
+      country: activeOrganization?.country || activeOrganization?.location || "United States",
+      currency: activeOrganization?.currency || "USD",
     });
 
     // 1. Free plan is an onboarding plan and is NOT shown on the plans page
@@ -147,6 +170,29 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       visiblePlans = visiblePlans.filter(
         ({ plan }) => (plan.category || "").toLowerCase() === selectedCategory.toLowerCase()
       );
+    }
+
+    // Fallback: If strict scoping yielded 0 plans but active plans exist in the selected category,
+    // display all active plans for that category so the tenant workspace is never locked out
+    if (visiblePlans.length === 0 && plans.length > 0) {
+      const fallbackActive = plans
+        .filter((p) => p.isActive && !p.isInternalStaffOnly && (p.tier || "").toLowerCase() !== "free")
+        .filter((p) => !selectedCategory || (p.category || "").toLowerCase() === selectedCategory.toLowerCase());
+
+      if (fallbackActive.length > 0) {
+        const targetCountry = (activeOrganization?.country || activeOrganization?.location || "United States").trim().toLowerCase();
+        visiblePlans = fallbackActive.map((plan) => {
+          let pricing = plan.countryPricing.find((cp) => cp.country.trim().toLowerCase() === targetCountry) ||
+            plan.countryPricing.find((cp) => cp.country.toLowerCase().includes("united states") || cp.currency === "USD") ||
+            plan.countryPricing[0] ||
+            DEFAULT_COUNTRY_PRICING[0];
+          return {
+            plan,
+            pricing,
+            isIndustrySpecific: (plan.targetCategory || "Global").trim().toLowerCase() !== "global",
+          };
+        });
+      }
     }
 
     // 2. Tier decides the positioning of the cards: Starter > Professional > Enterprise > Custom
@@ -216,7 +262,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
         {/* Categories selector pills placed BEFORE monthly / yearly */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          {PLAN_CATEGORIES.map((cat) => {
+          {PLAN_CATEGORIES.filter((cat) => cat !== "Internal" && cat !== "Onboarding").map((cat) => {
             const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
             return (
               <button
@@ -298,19 +344,38 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
           const isPopular = plan.isPopular === true || (plan.isPopular as any) === "true";
           const planCategory = plan.category || "AI Receptionist";
 
+          // Recommended tag logic (Requirement 5 & 6)
+          const isDefaultCategoryTab = Boolean(activeOrganization?.default_category) &&
+            selectedCategory.toLowerCase() === normalizeCategoryToTabName(activeOrganization?.default_category).toLowerCase();
+          const isRecommended = isDefaultCategoryTab &&
+            Boolean(activeOrganization?.recommended_tier) &&
+            isPlanMatchingRecommendedTier(plan.tier, plan.name, activeOrganization?.recommended_tier);
+
           return (
             <div
               key={plan.id}
               className={`bg-white rounded-[28px] border-2 transition-all duration-200 p-7 flex flex-col justify-between relative shadow-2xs hover:shadow-md ${
                 isCurrentPlan
                   ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
+                  : isRecommended
+                  ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
                   : isPopular
                   ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.10)]"
                   : "border-slate-200/85 hover:border-slate-300"
               }`}
             >
-              {/* Highlight as Popular - Ribbon on Pricing Card */}
-              {isPopular && (
+              {/* Highlight as Recommended or Popular - Ribbon on Pricing Card */}
+              {isRecommended ? (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
+                  <span
+                    className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-[11px] font-bold bg-[#1E293B] text-white shadow-md border border-slate-700 tracking-wider uppercase whitespace-nowrap"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    Recommended
+                  </span>
+                </div>
+              ) : isPopular ? (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
                   <span
                     className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-[11px] font-bold bg-[#1E293B] text-white shadow-md border border-slate-700 tracking-wider uppercase whitespace-nowrap"
@@ -320,7 +385,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                     Popular
                   </span>
                 </div>
-              )}
+              ) : null}
 
               <div className="space-y-4">
                 {/* Plan Title & Description */}
