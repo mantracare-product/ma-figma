@@ -6,6 +6,27 @@ export interface AutomationBranch {
   steps: WorkflowStep[];
 }
 
+export interface ConditionCaseRule {
+  id: string;
+  field: string;
+  fieldLabel?: string;
+  fieldSource?: string;
+  operator: string;
+  valueType?: "static" | "dynamic";
+  value?: any;
+  dynamicField?: string;
+  dynamicFieldLabel?: string;
+  dynamicFieldSource?: string;
+  logicOp?: "AND" | "OR";
+}
+
+export interface ConditionCase {
+  id: string;
+  name: string;
+  matchLogic?: "AND" | "OR";
+  conditions: ConditionCaseRule[];
+}
+
 export type WorkflowStep = {
   id: string;
   name: string;

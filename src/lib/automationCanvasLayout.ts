@@ -114,23 +114,30 @@ export function computeTreeCanvasLayout(
       const step = seqSteps[i];
 
       if (isParallelStep(step)) {
-        // Parallel Branches node
+        // Parallel Branches or Condition Cases node
+        const isCondition = step.stepKey === "condition";
         const branches = step.branches || [];
         const branchWidths = branches.map((b) => getBranchSubtreeWidth(b));
         const totalParallelWidth = branchWidths.reduce((a, b) => a + b, 0);
 
-        // Place parallel node centered
+        // Place parallel or condition node centered
         const parallelNode: LayoutNode = {
           id: step.id,
-          type: "parallel",
-          label: step.name || "Parallel Branches",
-          stepKey: "parallel",
+          type: isCondition ? "condition" : "parallel",
+          label: step.name || (isCondition ? "Condition" : "Parallel Branches"),
+          stepKey: step.stepKey || (isCondition ? "condition" : "parallel"),
           x: centerX,
           y: yCursor,
           config: {
             ...(step.params || {}),
             branchCount: branches.length,
-            branches: branches.map((b, idx) => ({ id: b.id, name: b.name || `Branch ${idx + 1}` })),
+            branches: branches.map((b, idx) => {
+              const isElse = b.id === "else" || b.id.endsWith("-else") || b.name === "Else";
+              return {
+                id: b.id,
+                name: b.name || (isElse ? "Else" : isCondition ? `Case ${idx + 1}` : `Branch ${idx + 1}`),
+              };
+            }),
             branchContext,
           },
         };
@@ -146,7 +153,7 @@ export function computeTreeCanvasLayout(
           });
         }
 
-        // Layout branches side by side under the parallel node
+        // Layout branches side by side under the parallel/condition node
         const branchTopY = yCursor + NODE_HEIGHT + V_GAP;
         let branchLeft = centerX - totalParallelWidth / 2;
         let maxBranchY = branchTopY;
@@ -156,6 +163,9 @@ export function computeTreeCanvasLayout(
           const bWidth = branchWidths[bIdx];
           const branchCenterX = branchLeft + bWidth / 2;
           const branchPort = `branch-${bIdx}`;
+          const isElse = branch.name === "Else" || branch.id === "else" || branch.id.endsWith("-else");
+          const defaultBranchName = isElse ? "Else" : isCondition ? `Case ${bIdx + 1}` : `Branch ${bIdx + 1}`;
+          const branchName = branch.name || defaultBranchName;
 
           if (!branch.steps || branch.steps.length === 0) {
             // Empty branch placeholder
@@ -163,14 +173,17 @@ export function computeTreeCanvasLayout(
             const placeholderNode: LayoutNode = {
               id: placeholderId,
               type: "empty-branch",
-              label: branch.name || `Branch ${bIdx + 1}`,
+              label: branchName,
               x: branchCenterX,
               y: branchTopY,
               config: {
                 branchId: branch.id,
                 parallelId: step.id,
+                sourceParallelStepId: step.id,
                 branchIndex: bIdx,
-                branchName: branch.name || `Branch ${bIdx + 1}`,
+                branchName: branchName,
+                isConditionCase: isCondition,
+                isElse: isElse,
               },
             };
             nodes.push(placeholderNode);

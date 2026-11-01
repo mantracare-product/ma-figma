@@ -18,6 +18,7 @@ export interface ExecutionEngineOptions {
   sleepFn?: (ms: number, step: WorkflowStep) => Promise<void>;
   logger?: (log: StepExecutionLog) => void;
   shouldStop?: () => boolean;
+  context?: Record<string, any>;
 }
 
 /**
@@ -97,7 +98,80 @@ export async function executeWorkflowSequence(
       continue;
     }
 
-    if (isParallelStep(step)) {
+    if (step.stepKey === "condition") {
+      // Condition Node reached:
+      // Evaluate condition cases in order. If any case matches, execute its branch.
+      // If no cases match, fallback to the Else branch.
+      const cases = Array.isArray(step.params?.cases) ? step.params.cases : [];
+      const branches = step.branches || [];
+      let matchedBranchId = null;
+      let matchedCaseName = null;
+
+      for (let cIdx = 0; cIdx < cases.length; cIdx++) {
+        const c = cases[cIdx];
+        const conds = c.conditions || [];
+        if (conds.length === 0) continue;
+
+        const matchLogic = c.matchLogic || "AND";
+        let isMatch = false;
+
+        const evaluateRule = (rule) => {
+          if (!rule || !rule.field) return true;
+          if (!options.context) return true;
+          const val = options.context[rule.field] ?? options.context[rule.field.toLowerCase()];
+          const target = rule.value;
+          switch (rule.operator) {
+            case "Equal To":
+            case "Equals":
+            case "is":
+              return String(val ?? "").toLowerCase() === String(target ?? "").toLowerCase();
+            case "Not Equal To":
+            case "is not":
+              return String(val ?? "").toLowerCase() !== String(target ?? "").toLowerCase();
+            case "Contains":
+              return String(val ?? "").toLowerCase().includes(String(target ?? "").toLowerCase());
+            case "Does Not Contain":
+              return !String(val ?? "").toLowerCase().includes(String(target ?? "").toLowerCase());
+            case "Is Empty":
+              return val === undefined || val === null || val === "";
+            case "Is Not Empty":
+              return val !== undefined && val !== null && val !== "";
+            case "Greater Than":
+              return Number(val) > Number(target);
+            case "Less Than":
+              return Number(val) < Number(target);
+            default:
+              return true;
+          }
+        };
+
+        if (matchLogic === "AND") {
+          isMatch = conds.every(evaluateRule);
+        } else {
+          isMatch = conds.some(evaluateRule);
+        }
+
+        if (isMatch) {
+          matchedBranchId = c.id;
+          matchedCaseName = c.name || `Case ${cIdx + 1}`;
+          break;
+        }
+      }
+
+      let targetBranch = matchedBranchId ? branches.find((b) => b.id === matchedBranchId) : null;
+      if (!targetBranch) {
+        targetBranch = branches.find(
+          (b) => b.id === "else" || b.id.endsWith("-else") || b.name === "Else"
+        ) || branches[branches.length - 1];
+        matchedCaseName = "Else";
+      }
+
+      if (targetBranch) {
+        const branchLabel = targetBranch.name || matchedCaseName || "Branch";
+        const nestedPath = `${currentPath} > ${step.name || "Condition"} > ${branchLabel}`;
+        await executeWorkflowSequence(targetBranch.steps || [], options, nestedPath, logs);
+      }
+    } else if (isParallelStep(step)) {
       // Parallel Branches Node reached:
       // Start ALL branches concurrently at the same time without awaiting one before the other!
       const branches = step.branches || [];

@@ -5,6 +5,7 @@ import {
   GitBranch,
   Zap,
   Sparkles,
+  Workflow,
   Search,
   ChevronRight,
   ChevronLeft,
@@ -12,6 +13,8 @@ import {
   ChevronDown,
   Clock,
   Edit,
+  Pencil,
+  Check,
   UserCheck,
   PhoneCall,
   MessageCircle,
@@ -47,6 +50,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import FlowBuilderTab from "./FlowBuilderTab";
+import { HowItWorksModal, HowItWorksButton } from "../help/HowItWorksModal";
 import StepDetailDrawer from "./StepDetailDrawer";
 import { Tooltip } from "../ui/Tooltip";
 import type { WorkflowStep } from "../../types/workflow";
@@ -86,6 +90,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   generate_document: ["stage", "postcall"],
   send_payment: ["stage", "incall", "inchat", "postcall"],
   processmovement: ["stage", "inchat", "postcall"],
+  assign_process: ["stage", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
@@ -123,6 +128,28 @@ export interface CatalogStepItem {
 }
 
 export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
+  // Create CRM Entities
+  {
+    key: "create_appointment",
+    name: "Create Appointment",
+    desc: "Create and schedule a new appointment record in CRM.",
+    iconKey: "calendar",
+    cats: ["all", "crm", "workflow"],
+  },
+  {
+    key: "create_client",
+    name: "Create Client",
+    desc: "Create a new contact or client record in CRM.",
+    iconKey: "usercheck",
+    cats: ["all", "crm", "data"],
+  },
+  {
+    key: "create_process",
+    name: "Create Process",
+    desc: "Create and enroll a record into a process workflow.",
+    iconKey: "gitbranch",
+    cats: ["all", "crm", "workflow"],
+  },
   // Logic & Wait & Conditions
   {
     key: "wait",
@@ -221,13 +248,6 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
   },
 
   // Data & Assignment
-  {
-    key: "fieldupdate",
-    name: "Field Update",
-    desc: "Update record attributes or custom field values.",
-    iconKey: "edit",
-    cats: ["all", "data"],
-  },
   {
     key: "assignhuman",
     name: "Assign to a Human",
@@ -385,15 +405,41 @@ export default function AddAutomationDrawer({
   const [automationName, setAutomationName] = useState("");
   const [automationDescription, setAutomationDescription] = useState("");
   const [automationStatus, setAutomationStatus] = useState<"draft" | "active">("active");
+  // Top bar unified inline rename & description editing state
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [tempDescription, setTempDescription] = useState("");
+  const [showFlowBuilderHelp, setShowFlowBuilderHelp] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Stage Trigger State (Stage Scope)
+  const handleStartEditing = () => {
+    setTempName(automationName || (initialAutomation?.name || "New Global Automation"));
+    setTempDescription(automationDescription || "");
+    setIsEditingInfo(true);
+  };
+
+  const handleSaveInfo = () => {
+    if (tempName.trim()) {
+      setAutomationName(tempName.trim());
+    }
+    setAutomationDescription(tempDescription.trim());
+    setIsEditingInfo(false);
+  };
+
+  const handleCancelInfo = () => {
+    setTempName(automationName);
+    setTempDescription(automationDescription);
+    setIsEditingInfo(false);
+  };
+
+    // Stage Trigger State (Stage Scope)
   const [stageTriggerCategory, setStageTriggerCategory] = useState<"stage" | "client" | "appointment">("stage");
   const [stageTriggerWhen, setStageTriggerWhen] = useState<"entry" | "exit">("entry");
   const [stageTriggerEvent, setStageTriggerEvent] = useState<string>("client.created");
 
   // Global Trigger State (Global Scope)
-  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("client");
-  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("client.created");
+  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("process");
+  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("process.created");
   const [globalTriggerParams, setGlobalTriggerParams] = useState<Record<string, any>>({});
   const [isChoosingGlobalTrigger, setIsChoosingGlobalTrigger] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
@@ -438,6 +484,8 @@ export default function AddAutomationDrawer({
         lastAutomationIdRef.current = initialAutomation?.id || null;
         setIsAddStepOpen(false);
         setIsChoosingGlobalTrigger(false);
+        setIsEditingInfo(false);
+        setShowFlowBuilderHelp(false);
         let initRules: ScopingRule[] =
           initialScopingRules && initialScopingRules.length > 0
             ? initialScopingRules
@@ -557,7 +605,11 @@ export default function AddAutomationDrawer({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (isStepDetailOpen) {
+        if (showFlowBuilderHelp) {
+          setShowFlowBuilderHelp(false);
+        } else if (isEditingInfo) {
+          handleCancelInfo();
+        } else if (isStepDetailOpen) {
           setIsStepDetailOpen(false);
         } else if (isAddStepOpen) {
           setIsAddStepOpen(false);
@@ -858,56 +910,113 @@ export default function AddAutomationDrawer({
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
           {/* Header */}
-          <div className="flex-shrink-0 px-6 pt-4 pb-3.5 border-b border-gray-200 bg-white">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
+          <div className="flex-shrink-0 px-6 py-3.5 border-b border-gray-200 bg-white">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
                   {effectiveScope === "stage" ? (
-                    <GitBranch className="w-4 h-4" />
+                    <GitBranch className="w-4.5 h-4.5" />
                   ) : (
-                    <Zap className="w-4 h-4" />
+                    <Zap className="w-4.5 h-4.5" />
                   )}
                 </div>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
+                  {/* Title Row + Single Pencil Icon */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2
-                      className="text-base font-bold text-gray-950 truncate"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {automationName || (initialAutomation?.name || "Automation Canvas")}
-                    </h2>
-
-                    {/* Scope Chip */}
-                    {effectiveScope === "stage" ? (
-                      <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white shadow-2xs truncate"
-                        style={{ backgroundColor: stageColor || "#2563EB" }}
-                      >
-                        {stageName} · {processName}
-                      </span>
+                    {isEditingInfo ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <input
+                          ref={nameInputRef}
+                          type="text"
+                          value={tempName}
+                          onChange={(e) => setTempName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveInfo();
+                            if (e.key === "Escape") handleCancelInfo();
+                          }}
+                          className="px-2 py-0.5 text-base font-bold text-gray-950 bg-white border border-blue-500 rounded-md shadow-xs outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[260px]"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          placeholder="Automation name"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveInfo}
+                          className="w-7 h-7 rounded-md bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center transition-colors cursor-pointer shadow-xs"
+                          title="Save changes"
+                          aria-label="Save changes"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelInfo}
+                          className="w-7 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Cancel"
+                          aria-label="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     ) : (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                        Global
-                      </span>
+                      <div className="flex items-center gap-1.5 group min-w-0">
+                        <h2
+                          className="text-base font-bold text-gray-950 truncate cursor-pointer hover:text-blue-700 transition-colors"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          onClick={handleStartEditing}
+                          title="Click to edit name and description"
+                        >
+                          {automationName || (initialAutomation?.name || "New Global Automation")}
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={handleStartEditing}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                          title="Edit name and description"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
+                  </div>
 
-                    {/* Status Chip */}
-                    <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                        automationStatus === "draft"
-                          ? "bg-amber-100 text-amber-800 border border-amber-200"
-                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                      }`}
-                    >
-                      {automationStatus === "draft" ? "Draft" : "Active"}
-                    </span>
+                  {/* Description in Top Bar */}
+                  <div className="mt-1">
+                    {isEditingInfo ? (
+                      <input
+                        type="text"
+                        value={tempDescription}
+                        onChange={(e) => setTempDescription(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveInfo();
+                          if (e.key === "Escape") handleCancelInfo();
+                        }}
+                        placeholder="Explain what this automation accomplishes..."
+                        className="w-full max-w-xl px-2.5 py-1 text-xs text-gray-800 bg-white border border-blue-500 rounded-md shadow-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    ) : (
+                      <p
+                        className="text-xs text-gray-500 truncate max-w-xl cursor-pointer hover:text-gray-800 transition-colors"
+                        onClick={handleStartEditing}
+                        title="Click to edit name and description"
+                      >
+                        {automationDescription || (
+                          <span className="text-gray-400 italic">No description added</span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Top Right: Close Button */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Top Right: How Flow Builder Works & Close Button */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <HowItWorksButton
+                  label="How Flow Builder Works"
+                  onClick={() => setShowFlowBuilderHelp(true)}
+                />
+                <div className="w-px h-5 bg-gray-200" />
                 <button
                   type="button"
                   onClick={onClose}
@@ -1000,6 +1109,8 @@ export default function AddAutomationDrawer({
                 isAdmin={isAdmin}
                 initialStepIdToConfigure={initialStepIdToConfigure}
                 onSave={() => handleSaveAutomation("active")}
+                hideHowItWorks={true}
+                initialHasChosenTrigger={Boolean(initialAutomation || (workflowSteps && workflowSteps.length > 0) || initialStepIdToConfigure)}
               />
             </div>
         </motion.div>
@@ -1039,7 +1150,23 @@ export default function AddAutomationDrawer({
           />
         )}
       </div>
-    </AnimatePresence>,
+            {/* How It Works Modal */}
+        <HowItWorksModal
+          isOpen={showFlowBuilderHelp}
+          onClose={() => setShowFlowBuilderHelp(false)}
+          title="How Flow Builder Works"
+          summary="Flow Builder is a visual map of every automation step — laid out as connected nodes so you can see and edit the order at a glance."
+          bullets={[
+            "Each lane shows steps in the order they run",
+            "Drag a node's bottom port to another node's top port to change what runs next",
+            "Select a step, then add a Condition, Wait, or Parallel Branch from the left panel to modify it",
+            "Double-click any node to open its full configuration",
+            "Nodes sync with your automation steps automatically — edit here or in the step drawer",
+          ]}
+          guideUrl="/guide/process-settings#flow-builder-canvas"
+        />
+      
+</AnimatePresence>,
     document.body
   );
 }

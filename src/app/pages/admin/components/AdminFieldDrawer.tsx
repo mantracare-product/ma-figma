@@ -75,7 +75,7 @@ import {
   resolveColumnsOrSubFields,
 } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
-import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT, getWorkflowsForModule } from "../../../../lib/useProcessStore";
 import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../lib/teamStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
@@ -2505,9 +2505,33 @@ export function AdminFieldDrawer({
             </div>
           </div>
 
-          {/* 1B. Process Workflow Selector (shown when module includes 'process') */}
-          {(form.selectedModules.includes("process") || form.module === "process") && (() => {
-            const activeProcessList = availableProcesses.length > 0 ? availableProcesses : allProcesses;
+          {/* 1B. Workflow Selector (shown for workflow modules: process, appointment, invoice, claim) */}
+          {(() => {
+            const isWfModule = ["process", "appointment", "invoice", "claim"].some(
+              (m) => form.selectedModules.includes(m as any) || form.module === m
+            );
+            if (!isWfModule) return null;
+
+            const targetWfModule = form.module === "process"
+              ? "process"
+              : form.module === "appointment"
+              ? "appointment"
+              : form.module === "invoice"
+              ? "invoice"
+              : form.module === "claim"
+              ? "claim"
+              : (form.selectedModules.find((m) => ["process", "appointment", "invoice", "claim"].includes(m)) || "process");
+
+            const workflowNoun = targetWfModule === "process"
+              ? "Process"
+              : targetWfModule === "appointment"
+              ? "Appointment"
+              : targetWfModule === "invoice"
+              ? "Invoice"
+              : "Claim";
+
+            const entityWorkflows = getWorkflowsForModule(targetWfModule, allProcesses);
+            const activeProcessList = entityWorkflows.length > 0 ? entityWorkflows : (availableProcesses.length > 0 ? availableProcesses : allProcesses);
             const allSelected = activeProcessList.length > 0 && activeProcessList.every((p) => form.processIds?.includes(p.id));
             const noneSelected = !form.processIds || form.processIds.length === 0;
 
@@ -2524,9 +2548,9 @@ export function AdminFieldDrawer({
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <label className="block text-xs font-semibold text-slate-700">
-                      Process Workflow
+                      {workflowNoun} Workflow
                     </label>
-                    <InfoTooltip text="Select the process workflows this field applies to." size="sm" />
+                    <InfoTooltip text={`Select the ${workflowNoun.toLowerCase()} workflows this field applies to.`} size="sm" />
                   </div>
                   {activeProcessList.length > 1 && !isReadOnly && (
                     <button
@@ -2553,12 +2577,12 @@ export function AdminFieldDrawer({
                     <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                       {noneSelected ? (
                         <span className="text-slate-400 text-xs">
-                          Select process workflows...
+                          Select {workflowNoun.toLowerCase()} workflows...
                         </span>
                       ) : allSelected ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                          <span>All ({activeProcessList.length}) Processes Selected</span>
+                          <span>All ({activeProcessList.length}) Workflows Selected</span>
                         </span>
                       ) : (
                         form.processIds.map((pId) => {
@@ -2566,7 +2590,7 @@ export function AdminFieldDrawer({
                           return (
                             <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                              <span className="truncate max-w-[150px]">{proc?.name || `Process #${pId}`}</span>
+                              <span className="truncate max-w-[150px]">{proc?.name || `Workflow #${pId}`}</span>
                             </span>
                           );
                         })
@@ -2579,7 +2603,6 @@ export function AdminFieldDrawer({
 
                   {processPickerOpen && !isReadOnly && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 max-h-60 overflow-y-auto">
-                      {/* Select All Row */}
                       <button
                         type="button"
                         onClick={toggleSelectAllProcesses}
@@ -2587,7 +2610,7 @@ export function AdminFieldDrawer({
                           allSelected ? "bg-blue-50 text-blue-900" : "text-slate-700 hover:bg-slate-50"
                         }`}
                       >
-                        <span>Select All Processes ({activeProcessList.length})</span>
+                        <span>Select All Workflows ({activeProcessList.length})</span>
                         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
                           allSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
                         }`}>
@@ -2635,7 +2658,7 @@ export function AdminFieldDrawer({
             );
           })()}
 
-          {/* Contact Category Selector (when module includes 'client') */}
+          {/* Contact Category Selector (ONLY for module 'client') */}
           {(form.selectedModules.includes("client") || form.module === "client") && (() => {
             const currentCat = form.contactCategories?.[0] || initialContactCategory || "Lead";
             const dropdownCats = Array.from(
@@ -2686,7 +2709,7 @@ export function AdminFieldDrawer({
                       type="text"
                       value={newCustomCategoryInput}
                       onChange={(e) => setNewCustomCategoryInput(e.target.value)}
-                      placeholder="New category name..."
+                      placeholder="New contact category name..."
                       className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                       autoFocus
                       onKeyDown={(e) => {

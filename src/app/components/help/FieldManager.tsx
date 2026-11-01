@@ -6,9 +6,10 @@ import {
   FieldModule,
   isFieldMatchingOrg,
   isFieldMatchingContactCategory,
+  isProcessMatchingAssignment,
 } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
-import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT, getWorkflowsForModule } from "../../../lib/useProcessStore";
 import { useContactCategories, addContactCategory } from "../../../lib/contactCategoriesStore";
 import { toast } from "sonner";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
@@ -124,6 +125,14 @@ export function SelectFieldsModal({
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
 
+  const [selectedWorkflowByModule, setSelectedWorkflowByModule] = useState<Record<string, string>>(() => ({
+    process: activeProcessId || "all",
+    appointment: "all",
+    invoice: "all",
+    claim: "all",
+  }));
+  const [openWorkflowDropdownModule, setOpenWorkflowDropdownModule] = useState<string | null>(null);
+
   useEffect(() => {
     if (contactCategory) {
       setSelectedContactCategory(contactCategory);
@@ -196,16 +205,34 @@ export function SelectFieldsModal({
     }));
   };
 
-  // Compile all fields grouped by module, strictly obeying activeOrganization scope and contact category
+  // Compile all fields grouped by module, obeying organization scope, contact category, or workflow
   const groupedFieldsList = targetModules.map(module => {
-    const procId = activeProcessId || activeProcessName;
+    const isWorkflowModule = ["process", "appointment", "invoice", "claim"].includes(module);
+    const targetWfId = isWorkflowModule
+      ? (selectedWorkflowByModule[module] && selectedWorkflowByModule[module] !== "all"
+          ? selectedWorkflowByModule[module]
+          : undefined)
+      : (activeProcessId || activeProcessName);
+
     const fields = getAllFields(module).filter(f => {
-      if (!isFieldMatchingOrg(f, activeOrganization, procId)) return false;
+      if (!isFieldMatchingOrg(f, activeOrganization, targetWfId)) return false;
+
       if (module === "client" && selectedContactCategory && selectedContactCategory !== "all") {
         if (!isFieldMatchingContactCategory(f, selectedContactCategory)) return false;
       }
+
+      if (isWorkflowModule && targetWfId) {
+        if (f.processIds && f.processIds.length > 0) {
+          const isAll = f.processIds.includes("all") || f.processIds.includes("*");
+          if (!isAll && !isProcessMatchingAssignment(f.processIds, targetWfId)) {
+            return false;
+          }
+        }
+      }
+
       return f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase());
     });
+
     return {
       module,
       label: module === "client" ? "CONTACT" : (MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase()),
@@ -264,9 +291,9 @@ export function SelectFieldsModal({
               value={fieldSearchQuery}
               onChange={(e) => setFieldSearchQuery(e.target.value)}
               placeholder={
-                selectedContactCategory !== "all"
-                  ? `Search ${selectedContactCategory} contact fields...`
-                  : "Search contact fields..."
+                targetModules.length === 1
+                  ? `Search ${MODULE_NOUN[targetModules[0]]?.singular || targetModules[0]} fields...`
+                  : "Search fields across categories..."
               }
               className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 transition-colors shadow-2xs"
             />
@@ -281,6 +308,7 @@ export function SelectFieldsModal({
             return (
               <div key={group.module} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
                 {group.module === "client" ? (
+                  /* 1. CONTACT: Shows Contact Category Dropdown */
                   <div className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/60 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left">
                     <div className="flex items-center gap-2">
                       <button
@@ -388,7 +416,117 @@ export function SelectFieldsModal({
                       <ChevronDown className={`w-4 h-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                     </button>
                   </div>
+                ) : ["process", "appointment", "invoice", "claim"].includes(group.module) ? (
+                  /* 2. WORKFLOW ENTITIES: Process, Appointment, Invoice, Claim show Workflow Dropdown */
+                  (() => {
+                    const workflows = getWorkflowsForModule(group.module, allProcesses);
+                    const currentWfId = selectedWorkflowByModule[group.module] || "all";
+                    const currentWf = workflows.find((w) => w.id === currentWfId);
+                    const labelNoun = group.module === "process" ? "Process" : "Workflow";
+                    const displayWfName = currentWfId === "all"
+                      ? (group.module === "process" ? "All Processes" : "All Workflows")
+                      : (currentWf?.name || currentWfId);
+
+                    return (
+                      <div className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/60 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleSection(group.module)}
+                            className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer"
+                          >
+                            <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                              {group.label}
+                            </span>
+                            <span className="text-xs font-bold text-gray-400">
+                              ({group.fields.length})
+                            </span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                          </button>
+
+                          <span className="text-gray-300 font-light text-xs">|</span>
+
+                          {/* Workflow Filter Dropdown */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenWorkflowDropdownModule(openWorkflowDropdownModule === group.module ? null : group.module);
+                              }}
+                              className="h-7 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <span className="text-gray-400 font-normal text-[11px]">{labelNoun}:</span>
+                              <span className="max-w-[140px] truncate text-blue-600 font-bold text-[11px]">
+                                {displayWfName}
+                              </span>
+                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${openWorkflowDropdownModule === group.module ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {openWorkflowDropdownModule === group.module && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-[10001]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenWorkflowDropdownModule(null);
+                                  }}
+                                />
+                                <div
+                                  className="absolute left-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-[10002] py-1 max-h-56 overflow-y-auto"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedWorkflowByModule((prev) => ({ ...prev, [group.module]: "all" }));
+                                      setOpenWorkflowDropdownModule(null);
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                      currentWfId === "all" ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-gray-50"
+                                    }`}
+                                  >
+                                    <span>{group.module === "process" ? "All Processes" : "All Workflows"}</span>
+                                    {currentWfId === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                  </button>
+
+                                  {workflows.map((wf) => {
+                                    const isSel = currentWfId === wf.id;
+                                    return (
+                                      <button
+                                        key={wf.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedWorkflowByModule((prev) => ({ ...prev, [group.module]: wf.id }));
+                                          setOpenWorkflowDropdownModule(null);
+                                        }}
+                                        className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                          isSel ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-gray-50"
+                                        }`}
+                                      >
+                                        <span className="truncate">{wf.name}</span>
+                                        {isSel && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(group.module)}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                        </button>
+                      </div>
+                    );
+                  })()
                 ) : (
+                  /* 3. OTHER MODULES: Plain clean header with NO dropdown (organization, teamMember, call, service, scribe) */
                   <button
                     type="button"
                     onClick={() => toggleSection(group.module)}
@@ -500,45 +638,61 @@ export function SelectFieldsModal({
       {createFieldModalOpenFor && (
         <CreateFieldModal
           lockModule={createFieldModalOpenFor}
-          initialContactCategory={selectedContactCategory !== "all" ? selectedContactCategory : (contactCategory || "Lead")}
-          activeProcessId={activeProcessId}
+          initialContactCategory={
+            createFieldModalOpenFor === "client" && selectedContactCategory !== "all"
+              ? selectedContactCategory
+              : undefined
+          }
+          activeProcessId={
+            ["process", "appointment", "invoice", "claim"].includes(createFieldModalOpenFor) &&
+            selectedWorkflowByModule[createFieldModalOpenFor] &&
+            selectedWorkflowByModule[createFieldModalOpenFor] !== "all"
+              ? selectedWorkflowByModule[createFieldModalOpenFor]
+              : activeProcessId
+          }
           activeProcessName={activeProcessName}
           processStages={resolvedProcessStages}
           isAdmin={isAdmin}
           onClose={() => setCreateFieldModalOpenFor(null)}
           onCreated={(newField) => {
-            setSelectedFieldsForModal(prev => [...prev, newField.key]);
+            setSelectedFieldsForModal((prev) => [...prev, newField.key]);
             setCreateFieldModalOpenFor(null);
           }}
         />
       )}
 
-      {/* Add Category Modal Popup */}
+      {/* Add Contact Category Modal Popup (only for Contact module) */}
       {isAddCategoryOpen && (
         <div className="fixed inset-0 z-[10005] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-2xl p-5 w-80 max-w-[90vw] space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-800">Add New Category</h3>
+              <h3 className="text-sm font-bold text-gray-800">
+                Add Contact Category
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsAddCategoryOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+            <p className="text-xs text-gray-500">
+              Create a custom category to organize and filter your contact fields.
+            </p>
             <input
               type="text"
-              placeholder="e.g. Partners, Vendors, Employees"
+              placeholder="e.g. VIP, Partner, Contractor"
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newCategoryName.trim()) {
-                  addContactCategory(newCategoryName.trim());
-                  setSelectedContactCategory(newCategoryName.trim());
+                  const added = newCategoryName.trim();
+                  addContactCategory(added);
+                  setSelectedContactCategory(added);
                   setNewCategoryName("");
                   setIsAddCategoryOpen(false);
-                  toast.success("Category added successfully");
+                  toast.success(`Contact category "${added}" added`);
                 }
               }}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
@@ -559,17 +713,18 @@ export function SelectFieldsModal({
                 type="button"
                 onClick={() => {
                   if (newCategoryName.trim()) {
-                    addContactCategory(newCategoryName.trim());
-                    setSelectedContactCategory(newCategoryName.trim());
+                    const added = newCategoryName.trim();
+                    addContactCategory(added);
+                    setSelectedContactCategory(added);
                     setNewCategoryName("");
                     setIsAddCategoryOpen(false);
-                    toast.success("Category added successfully");
+                    toast.success(`Contact category "${added}" added`);
                   }
                 }}
                 disabled={!newCategoryName.trim()}
                 className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg cursor-pointer"
               >
-                Add
+                Add Category
               </button>
             </div>
           </div>
