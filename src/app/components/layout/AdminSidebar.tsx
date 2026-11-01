@@ -27,7 +27,6 @@ import {
   Shield,
   Building2,
   BarChart2,
-  Blocks,
   Users,
   FileText,
   Megaphone,
@@ -126,7 +125,6 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "INTEGRATIONS",
       items: [
         { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
-        { id: "integration", label: "Integration", icon: Blocks, path: "/admin/settings" },
       ],
     },
     {
