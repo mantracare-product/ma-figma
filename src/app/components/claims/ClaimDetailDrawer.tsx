@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router";
 import {
   X,
   Shield,
@@ -169,6 +170,7 @@ export default function ClaimDetailDrawer({
   onOpenCMS1500,
   onClaimCreated,
 }: ClaimDetailDrawerProps) {
+  const navigate = useNavigate();
   const { activeOrganization } = useOrganization();
   const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
 
@@ -673,109 +675,31 @@ export default function ClaimDetailDrawer({
           maxWidth: "1150px",
         }}
       >
-        {/* ── Top Header (DESIGN.md Light Architectural Standard) ── */}
+        {/* ── Top Header ── */}
         <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-xs">
-              <Shield className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-slate-900 tracking-wider">
-                  {liveClaim.claimNumber}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopyClaimId}
-                  className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
-                  title="Copy Claim ID"
-                >
-                  {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-                <span
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 border"
-                  style={{
-                    backgroundColor: `${currentClaimStage.color || "#3B82F6"}18`,
-                    color: currentClaimStage.color || "#3B82F6",
-                    borderColor: `${currentClaimStage.color || "#3B82F6"}40`,
-                    fontFamily: "Outfit, sans-serif",
-                  }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: currentClaimStage.color || "#3B82F6" }} />
-                  {currentClaimStage.name}
-                </span>
-              </div>
-              <h2 className="text-base font-bold text-slate-800 truncate max-w-md mt-0.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {claimTitle}
-              </h2>
-            </div>
+          <div className="flex items-center gap-3 min-w-0">
+            <h1
+              className="text-base font-bold text-slate-900 tracking-tight truncate"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {(liveClaim as any).title || (isCreateMode ? "New Insurance Claim" : `${liveClaim.patientName || "Client"}_Claim_${liveClaim.serviceDate || (liveClaim.createdAt ? liveClaim.createdAt.slice(0, 10) : "2026-10-15")}`)}
+            </h1>
+            <span
+              className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 shrink-0"
+              style={{ fontFamily: "JetBrains Mono, monospace" }}
+            >
+              #{liveClaim.claimNumber.replace(/^#/, "")}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
-            {isCreateMode ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleSaveClaim("Draft")}
-                  className="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <span>Save as Draft</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveClaim("Ready to Submit")}
-                  className="h-8 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create Claim</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSaveExistingChanges}
-                  className="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title="Save any edits made to fields"
-                >
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Save Changes</span>
-                </button>
-
-                {liveClaim.status !== "Submitted" && liveClaim.status !== "Paid" && (
-                  <button
-                    type="button"
-                    onClick={handleSubmitClearinghouse}
-                    disabled={isSubmitting}
-                    className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Clock className="w-3.5 h-3.5 animate-spin" />
-                        <span>Transmitting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Submit 837P</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </>
-            )}
-
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors ml-1 cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
               title="Close Drawer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -1103,6 +1027,26 @@ export default function ClaimDetailDrawer({
             </div>
           )}
         </div>
+
+        {isCreateMode && (
+          <div className="flex-shrink-0 bg-white border-t border-slate-200 px-7 py-3 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => handleSaveClaim("Draft")}
+              className="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSaveClaim("Ready to Submit")}
+              className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create Claim</span>
+            </button>
+          </div>
+        )}
 
         {/* ── Field Management Modals (Shared Architecture) ── */}
         {fieldManagerOpen && fieldManagerMode === "select" && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   X,
   Calendar,
@@ -119,6 +119,7 @@ export default function AppointmentDetailDrawer({
   employees = [],
   services = [],
 }: AppointmentDetailDrawerProps) {
+  const navigate = useNavigate();
   const { activeOrganization } = useOrganization();
   const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
   const { invoices } = useInvoices();
@@ -710,110 +711,24 @@ export default function AppointmentDetailDrawer({
           maxWidth: "1150px",
         }}
       >
-        {/* ── Top Header (DESIGN.md Light Architectural Standard) ── */}
+        {/* ── Top Header ── */}
         <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-xs">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div>
-              <h1
-                className="text-base font-bold text-slate-900 tracking-tight"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Appointment View
-              </h1>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                <span className="font-mono font-semibold text-slate-700">#{formattedApptId}</span>
-                {effectiveAppt.source && (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    effectiveAppt.source.toLowerCase().includes("walk") || effectiveAppt.source === "ai_receptionist"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : effectiveAppt.source.toLowerCase().includes("ma-client") || effectiveAppt.source.toLowerCase().includes("portal")
-                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                      : "bg-sky-50 text-sky-700 border border-sky-200"
-                  }`}>
-                    <Sparkles className="w-2.5 h-2.5 opacity-75" />
-                    Source: {effectiveAppt.source === "ai_receptionist" ? "Walked In" : effectiveAppt.source}
-                  </span>
-                )}
-              </div>
-            </div>
+          <div className="flex items-center gap-3 min-w-0">
+            <h1
+              className="text-base font-bold text-slate-900 tracking-tight truncate"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {effectiveAppt.title || `${effectiveAppt.clientName || "Client"}_Appointment_${effectiveAppt.date || "2026-10-15"}`}
+            </h1>
+            <span
+              className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 shrink-0"
+              style={{ fontFamily: "JetBrains Mono, monospace" }}
+            >
+              {formattedApptId.startsWith("#") ? formattedApptId : `#${formattedApptId}`}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {onReschedule && (
-              <button
-                type="button"
-                onClick={() => onReschedule(effectiveAppt)}
-                className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                Reschedule
-              </button>
-            )}
-
-            {effectiveAppt.status !== "completed" && (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    const completed = appointmentService.completeAppointment(effectiveAppt.id);
-                    setLiveAppointment(completed);
-                    if (onMarkComplete) onMarkComplete(effectiveAppt.id);
-                    toast.success("Appointment marked as completed");
-                  } catch (e) {
-                    console.warn(e);
-                  }
-                }}
-                className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                Mark as Complete
-              </button>
-            )}
-
-            {effectiveAppt.status !== "no-show" && effectiveAppt.status !== "no_show" && effectiveAppt.status !== "completed" && effectiveAppt.status !== "cancelled" && (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    const noShow = appointmentService.markNoShow(effectiveAppt.id);
-                    setLiveAppointment(noShow);
-                    if (onUpdateAppointment) onUpdateAppointment(noShow);
-                    if (onMarkNoShow) onMarkNoShow(effectiveAppt.id);
-                    toast.success("Appointment marked as No Show");
-                  } catch (e) {
-                    console.warn(e);
-                  }
-                }}
-                className="px-3.5 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <UserX className="w-3.5 h-3.5 text-slate-600" />
-                No Show
-              </button>
-            )}
-
-            {effectiveAppt.status !== "cancelled" && (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    const cancelled = appointmentService.cancelAppointment(effectiveAppt.id, "Cancelled from drawer");
-                    setLiveAppointment(cancelled);
-                    if (onUpdateAppointment) onUpdateAppointment(cancelled);
-                    toast.success("Appointment cancelled & invoice voided if unpaid");
-                  } catch (e) {
-                    console.warn(e);
-                  }
-                }}
-                className="px-3.5 py-1.5 rounded-xl border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                Cancel
-              </button>
-            )}
-
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}

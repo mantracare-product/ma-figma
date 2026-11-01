@@ -5,12 +5,9 @@ import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
 import SettingsGuard from "./components/auth/SettingsGuard";
 import Login from "./pages/auth/Login";
+import PageContentLoader from "./components/layout/PageContentLoader";
 
-const PageLoading = () => (
-  <div className="flex items-center justify-center min-h-[60vh] w-full">
-    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-  </div>
-);
+const PageLoading = () => <PageContentLoader />;
 
 function withLazy(factory: () => Promise<any>, exportName = "default"): ComponentType<any> {
   const LazyComponent = lazy(async () => {
