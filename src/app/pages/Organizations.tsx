@@ -928,7 +928,11 @@ export default function Organizations() {
     // 1. Actions: Three-dot button in FRONT (Column 1), vertically centered on every row
     {
       id: "actions",
-      header: "Actions",
+      header: (
+        <span title="Actions" className="inline-flex items-center justify-center">
+          <Settings className="w-4 h-4 text-white" />
+        </span>
+      ),
       width: "56px",
       minWidth: "56px",
       maxWidth: "60px",
@@ -964,7 +968,7 @@ export default function Organizations() {
               title="Actions"
               aria-label="Actions"
             >
-              <Settings className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" />
             </button>
           </div>
         );
