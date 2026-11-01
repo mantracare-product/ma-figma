@@ -39,8 +39,8 @@ export default function AdminLayout() {
     <div className="h-screen flex flex-col overflow-hidden bg-[#fafafa] font-sans antialiased text-[#222222]">
       {/* ── Fixed Full-Width Compact Top Header (Stays on top) ── */}
       <header className="h-12 bg-white border-b border-gray-200/90 flex items-center shrink-0 z-40 select-none relative">
-        {/* Left Area: Hamburger Menu Trigger + Brand Logo */}
-        <div className="h-full px-4 sm:px-5 flex items-center gap-3 shrink-0 border-r border-gray-200/90">
+        {/* Left Area: Hamburger Menu Trigger + Brand Logo (Aligned with drawer partition: w-64 / 256px) */}
+        <div className="h-full w-64 min-w-[256px] max-w-[256px] px-4 flex items-center gap-3 shrink-0 border-r border-gray-200/90">
           <button
             type="button"
             onClick={() => setIsDrawerOpen((prev) => !prev)}
