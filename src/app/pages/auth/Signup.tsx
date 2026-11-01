@@ -13,7 +13,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import logo from "@/imports/ma_logo-1.png";
-import { getStoredPlans } from "../../../lib/plansBillingStore";
+import { getStoredPlans, type PlanTier } from "../../../lib/plansBillingStore";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -149,7 +149,7 @@ export default function Signup() {
             localStorage.setItem("mantra_organizations_v1", JSON.stringify(updated));
             window.dispatchEvent(new CustomEvent("mantra_organization_changed"));
           }
-        } catch {}
+        } catch { }
       }
 
       localStorage.setItem("verify_origin", "signup");

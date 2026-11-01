@@ -6,7 +6,7 @@ interface GuestRouteProps {
 }
 
 export default function GuestRoute({ children }: GuestRouteProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const location = useLocation();
 
   if (isAuthenticated) {
