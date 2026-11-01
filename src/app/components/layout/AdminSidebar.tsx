@@ -3,8 +3,7 @@
  * Path: src/app/components/layout/AdminSidebar.tsx
  *
  * Dedicated Admin Portal Side Drawer Navigation:
- * - Slides out on-demand only when clicking the hamburger menu button in the top bar.
- * - Header has MantraAssist logo and close 'X' button.
+ * - Positioned below the top bar, sliding out on-demand via the hamburger button.
  * - Navigation sections match exact MA client hover and active styles.
  * - Links automatically close drawer on selection.
  * - Bottom has pinned Admin user card with avatar, role, and logout menu.
@@ -37,10 +36,8 @@ import {
   Sparkles,
   User,
   ChevronsUpDown,
-  X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import logo from "../../../imports/ma_logo.png";
 import { toast } from "sonner";
 
 interface AdminSidebarProps {
@@ -203,36 +200,9 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
   }, [location.pathname]);
 
   return (
-    <aside className="h-full w-72 sm:w-80 min-w-[288px] max-w-[320px] bg-white border-r border-gray-200/90 shadow-2xl flex flex-col shrink-0 select-none z-50 relative">
+    <aside className="h-full w-64 min-w-[256px] max-w-[256px] bg-white flex flex-col shrink-0 select-none z-30 relative">
       <div className="h-full w-full flex flex-col justify-between overflow-hidden">
-        {/* ── Drawer Header with Logo and Close X Button ── */}
-        <div className="h-14 px-4 flex items-center justify-between border-b border-gray-100 shrink-0 bg-white">
-          <Link
-            to="/admin/workflows"
-            onClick={onClose}
-            className="flex items-center gap-2"
-          >
-            <img
-              src={logo}
-              alt="MantraAssist"
-              className="h-6 w-auto max-w-[130px] object-contain"
-            />
-          </Link>
-
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-              aria-label="Close navigation drawer"
-              title="Close menu (Esc)"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
-        </div>
-
-        {/* ── Middle Scrollable Navigation List (Matches MA Sidebar styling) ── */}
+        {/* ── Middle Scrollable Navigation List (Starts right below the topbar) ── */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
           {sections.map((section) => {
             const isExpanded = !!expandedSections[section.id];
