@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, EyeOff, Download,
   Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles,
-  Folder, Tag, Info, User, Layers
+  Folder, Tag, Info, User, Layers, Edit
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   DocumentTemplate,
   getStoredDocumentTemplates,
+  deleteDocumentTemplate,
   DOCUMENT_TEMPLATES_EVENT,
   getStoredTemplateCategories,
   DOCUMENT_CATEGORIES_EVENT,
@@ -80,13 +81,8 @@ export default function DocumentsTab({
   const [availableTemplates, setAvailableTemplates] = useState<DocumentTemplate[]>(getStoredDocumentTemplates);
   const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    Invoices: true,
-    Prescription: true,
-    "Session Notes": true,
-    "Consent forms": true,
-    "Patient Intake form": true,
-  });
+  const [expandedCategory, setExpandedCategory] = useState<string | null>("Prescription");
+  const [templateToEdit, setTemplateToEdit] = useState<DocumentTemplate | null>(null);
   const [drawerInitialTemplate, setDrawerInitialTemplate] = useState<DocumentTemplate | null>(null);
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -498,10 +494,7 @@ export default function DocumentsTab({
   };
 
   const toggleCategoryExpand = (cat: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [cat]: !prev[cat],
-    }));
+    setExpandedCategory((prev) => (prev === cat ? null : cat));
   };
 
   const filteredDocuments = documents.filter((doc) => {
@@ -654,82 +647,112 @@ export default function DocumentsTab({
                     </div>
                   </div>
 
-                   {/* Grouped Category Dropdown Accordions */}
-                  <div className="max-h-64 overflow-y-auto">
-                    {filteredCategoriesList.map((catName) => {
-                      const templatesInCat = scopedTemplates.filter(
-                        (t) => (t.category || "General").toLowerCase() === catName.toLowerCase()
-                      );
-                      const isExpanded = expandedCategories[catName] ?? (templatesInCat.length > 0);
+                    {/* Grouped Category Dropdown Accordions (Only one open at a time) */}
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredCategoriesList.map((catName) => {
+                        const templatesInCat = scopedTemplates.filter(
+                          (t) => (t.category || "General").toLowerCase() === catName.toLowerCase()
+                        );
+                        const isExpanded = expandedCategory === catName;
 
-                      return (
-                        <div key={catName}>
-                          {/* Category Header — clearly a section label */}
-                          <button
-                            type="button"
-                            onClick={() => toggleCategoryExpand(catName)}
-                            className={`w-full px-3 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${
-                              isExpanded
-                                ? "bg-slate-100 border-l-2 border-slate-600"
-                                : "hover:bg-slate-50 border-l-2 border-transparent"
-                            }`}
-                          >
-                            <span className={`text-[11px] font-bold uppercase tracking-wide ${
-                              isExpanded ? "text-slate-800" : "text-slate-500"
-                            }`}>
-                              {catName}
-                            </span>
-                            <ChevronDown
-                              className={`w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0 ${
-                                isExpanded ? "rotate-180 text-slate-600" : ""
+                        return (
+                          <div key={catName}>
+                            {/* Category Header — clearly a section label */}
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryExpand(catName)}
+                              className={`w-full px-3 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${
+                                isExpanded
+                                  ? "bg-slate-100 border-l-2 border-slate-600"
+                                  : "hover:bg-slate-50 border-l-2 border-transparent"
                               }`}
-                            />
-                          </button>
+                            >
+                              <span className={`text-[11px] font-bold uppercase tracking-wide ${
+                                isExpanded ? "text-slate-800" : "text-slate-500"
+                              }`}>
+                                {catName}
+                              </span>
+                              <ChevronDown
+                                className={`w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0 ${
+                                  isExpanded ? "rotate-180 text-slate-600" : ""
+                                }`}
+                              />
+                            </button>
 
-                          {/* Templates List — visually subordinate to category */}
-                          {isExpanded && (
-                            <div className="bg-white border-l-2 border-slate-200 ml-0 animate-in fade-in-50 duration-100">
-                              {templatesInCat.length === 0 ? (
-                                <div className="py-2 px-4 flex items-center gap-2">
-                                  <p className="text-[11px] text-slate-400 italic">No templates in this category.</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowActionDropdown(false);
-                                      setShowAddTemplateDrawer(true);
-                                    }}
-                                    className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer"
-                                  >
-                                    + Add
-                                  </button>
-                                </div>
-                              ) : (
-                                templatesInCat.map((tpl) => (
-                                  <button
-                                    key={tpl.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setShowActionDropdown(false);
-                                      setDrawerInitialTemplate(tpl);
-                                      setShowGenerateDocDrawer(true);
-                                    }}
-                                    className="w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between group border-b border-slate-50 last:border-b-0"
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="w-1 h-1 rounded-full bg-slate-300 group-hover:bg-blue-400 shrink-0 transition-colors" />
-                                      <p className="text-xs text-slate-700 truncate group-hover:text-blue-700 font-medium">
-                                        {tpl.name}
-                                      </p>
+                            {/* Templates List — visually subordinate to category */}
+                            {isExpanded && (
+                              <div className="bg-white border-l-2 border-slate-200 ml-0 animate-in fade-in-50 duration-100">
+                                {templatesInCat.length === 0 ? (
+                                  <div className="py-2 px-4 flex items-center gap-2">
+                                    <p className="text-[11px] text-slate-400 italic">No templates in this category.</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowActionDropdown(false);
+                                        setTemplateToEdit(null);
+                                        setShowAddTemplateDrawer(true);
+                                      }}
+                                      className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer"
+                                    >
+                                      + Add
+                                    </button>
+                                  </div>
+                                ) : (
+                                  templatesInCat.map((tpl) => (
+                                    <div
+                                      key={tpl.id}
+                                      className="w-full px-3.5 py-1.5 hover:bg-slate-50 transition-colors flex items-center justify-between group border-b border-slate-50 last:border-b-0"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowActionDropdown(false);
+                                          setDrawerInitialTemplate(tpl);
+                                          setShowGenerateDocDrawer(true);
+                                        }}
+                                        className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-blue-500 shrink-0 transition-colors" />
+                                        <p className="text-xs text-slate-700 truncate group-hover:text-blue-700 font-medium">
+                                          {tpl.name}
+                                        </p>
+                                      </button>
+                                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                                        <button
+                                          type="button"
+                                          title="Edit Template"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowActionDropdown(false);
+                                            setTemplateToEdit(tpl);
+                                            setShowAddTemplateDrawer(true);
+                                          }}
+                                          className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                                        >
+                                          <Edit className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Delete Template"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteDocumentTemplate(tpl.id);
+                                            setAvailableTemplates(getStoredDocumentTemplates());
+                                            toast.success(`Template "${tpl.name}" deleted`);
+                                          }}
+                                          className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
                                     </div>
-                                    <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 ml-1" />
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
 
                     {filteredCategoriesList.length === 0 && (
                       <p className="text-center text-xs text-slate-400 py-3">No matching categories found.</p>
@@ -752,6 +775,7 @@ export default function DocumentsTab({
                       type="button"
                       onClick={() => {
                         setShowActionDropdown(false);
+                        setTemplateToEdit(null);
                         setShowAddTemplateDrawer(true);
                       }}
                       className="w-full py-1.5 px-3 text-left text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer block border border-slate-200/80 bg-white"
@@ -961,14 +985,23 @@ export default function DocumentsTab({
         />
       )}
 
-      {/* Create New Template Drawer */}
+      {/* Create / Edit Template Drawer */}
       {showAddTemplateDrawer && (
         <AddDocumentTemplateDrawer
           isOpen={showAddTemplateDrawer}
-          onClose={() => setShowAddTemplateDrawer(false)}
+          initialTemplate={templateToEdit}
+          onClose={() => {
+            setShowAddTemplateDrawer(false);
+            setTemplateToEdit(null);
+          }}
           onTemplateCreated={(newTpl) => {
             setAvailableTemplates(getStoredDocumentTemplates());
-            toast.success(`Template "${newTpl.name}" created and added to templates!`);
+            setTemplateToEdit(null);
+            toast.success(
+              templateToEdit
+                ? `Template "${newTpl.name}" updated successfully!`
+                : `Template "${newTpl.name}" created and added to templates!`
+            );
           }}
         />
       )}

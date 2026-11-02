@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { WorkflowStep } from "../app/types/workflow";
 import { runEntityStageMigration } from "./entityMigration";
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
 export interface AISettings {
   platform: string;
@@ -1195,15 +1196,29 @@ export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
 };
 
 export function getStoredProcesses(): Process[] {
+  const isFresh = isFreshWorkspace();
+
   let list: Process[] = [];
   try {
-    const raw = localStorage.getItem(PROCESSES_STORAGE_KEY);
-    list = raw ? JSON.parse(raw) : DEFAULT_INITIAL_PROCESSES;
-    if (!Array.isArray(list) || list.length === 0) {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(PROCESSES_STORAGE_KEY) : null;
+    if (raw !== null && raw !== undefined) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        if (parsed.length === 0) return [];
+        list = parsed;
+      }
+    } else if (isFresh) {
+      return [];
+    } else {
       list = [...DEFAULT_INITIAL_PROCESSES];
     }
   } catch {
+    if (isFresh) return [];
     list = [...DEFAULT_INITIAL_PROCESSES];
+  }
+
+  if (isFresh && list.length === 0) {
+    return [];
   }
 
   let changed = false;
@@ -1312,41 +1327,45 @@ export function getStoredProcesses(): Process[] {
     return { ...p, stages: updatedStages };
   });
 
-  // Ensure Demo Patient Care Journey exists and is connected to portal
-  const demoProcIdx = list.findIndex((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey");
-  if (demoProcIdx === -1) {
-    list.unshift(DEMO_PATIENT_PORTAL_PROCESS);
-    changed = true;
-  } else {
-    const existingDemo = list[demoProcIdx];
-    if (!existingDemo.connectedToPatientPortal) {
-      existingDemo.connectedToPatientPortal = true;
-      existingDemo.connectedToAiReceptionist = true;
+  // Ensure Demo Patient Care Journey exists and is connected to portal only in demo mode
+  if (!isFresh) {
+    const demoProcIdx = list.findIndex((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey");
+    if (demoProcIdx === -1) {
+      list.unshift(DEMO_PATIENT_PORTAL_PROCESS);
       changed = true;
-    }
-    const checkinSt = existingDemo.stages.find((s) => s.id === "stage-client-checked-in" || s.name === "Client Checked In");
-    if (checkinSt && (!checkinSt.connectedToPatientPortal || !checkinSt.portalReceptionSettings)) {
-      checkinSt.connectedToPatientPortal = true;
-      checkinSt.connectedToAiReceptionist = true;
-      checkinSt.portalReceptionSettings = {
-        enabled: true,
-        enabledPortal: true,
-        enabledReception: true,
-        cardTitle: "Client Checked In",
-        cardDescription: "Your hospital arrival and token have been verified. Welcome to Mantra Care!",
-        htmlContent: "<h3>Check-in Verified</h3><p>Welcome to Mantra Care! Your arrival has been recorded. Please wait in the lounge for your appointment.</p><p><strong>Patient:</strong> {{client.name}}<br/><strong>Client ID:</strong> {{client.id}}</p>",
-      };
-      changed = true;
+    } else {
+      const existingDemo = list[demoProcIdx];
+      if (!existingDemo.connectedToPatientPortal) {
+        existingDemo.connectedToPatientPortal = true;
+        existingDemo.connectedToAiReceptionist = true;
+        changed = true;
+      }
+      const checkinSt = existingDemo.stages.find((s) => s.id === "stage-client-checked-in" || s.name === "Client Checked In");
+      if (checkinSt && (!checkinSt.connectedToPatientPortal || !checkinSt.portalReceptionSettings)) {
+        checkinSt.connectedToPatientPortal = true;
+        checkinSt.connectedToAiReceptionist = true;
+        checkinSt.portalReceptionSettings = {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Client Checked In",
+          cardDescription: "Your hospital arrival and token have been verified. Welcome to Mantra Care!",
+          htmlContent: "<h3>Check-in Verified</h3><p>Welcome to Mantra Care! Your arrival has been recorded. Please wait in the lounge for your appointment.</p><p><strong>Patient:</strong> {{client.name}}<br/><strong>Client ID:</strong> {{client.id}}</p>",
+        };
+        changed = true;
+      }
     }
   }
 
-  // Ensure singleton processes for non-client entities exist
-  const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
-  for (const et of nonClientTypes) {
-    const exists = list.some((p) => p.entityType === et);
-    if (!exists) {
-      list.push(DEFAULT_ENTITY_PROCESSES[et]);
-      changed = true;
+  // Ensure singleton processes for non-client entities exist only if non-empty or not fresh
+  if (!isFresh || list.length > 0) {
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
+    for (const et of nonClientTypes) {
+      const exists = list.some((p) => p.entityType === et);
+      if (!exists) {
+        list.push(DEFAULT_ENTITY_PROCESSES[et]);
+        changed = true;
+      }
     }
   }
 
@@ -1473,9 +1492,13 @@ export function useProcessStore() {
       setWorkflowStepsState(getStoredWorkflowSteps());
     };
     window.addEventListener(PROCESS_STORE_EVENT, handler);
+    window.addEventListener("organizationChanged", handler);
+    window.addEventListener("mantra_organization_changed", handler);
     window.addEventListener("storage", handler);
     return () => {
       window.removeEventListener(PROCESS_STORE_EVENT, handler);
+      window.removeEventListener("organizationChanged", handler);
+      window.removeEventListener("mantra_organization_changed", handler);
       window.removeEventListener("storage", handler);
     };
   }, []);

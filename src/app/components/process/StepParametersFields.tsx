@@ -152,6 +152,7 @@ export default function StepParametersFields({
     | "triggerConditionMulti"
     | "triggerConditionDynamic"
     | "assignProcessFieldToken"
+    | "fieldUpdateValueToken"
     | "aiTriggerPromptToken"
   >("monitoredFields");
   const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
@@ -672,7 +673,12 @@ export default function StepParametersFields({
               }
             : b
         );
-        onChange({ fieldUpdateBlocks: updated });
+        const first = updated[0];
+        onChange({
+          fieldUpdateBlocks: updated,
+          primaryField: first?.fieldToEdit || "",
+          primaryFieldLabel: first?.fieldLabel || first?.fieldToEdit || "",
+        });
       }
     } else if (fieldModalMode === "fieldUpdateMulti") {
       if (selectedKeys.length > 0) {
@@ -708,6 +714,28 @@ export default function StepParametersFields({
           prompt: nextPrompt,
           aiTriggerPrompt: nextPrompt,
         });
+      }
+    } else if (fieldModalMode === "fieldUpdateValueToken") {
+      if (selectedKeys.length > 0) {
+        const chosenKey = selectedKeys[0];
+        const token = `{{${chosenKey}}}`;
+        const targetIdx = targetFieldUpdateIndex ?? 0;
+        const currentBlocks = Array.isArray(params.fieldUpdateBlocks) && params.fieldUpdateBlocks.length > 0
+          ? params.fieldUpdateBlocks
+          : [{ fieldToEdit: params.primaryField || "", fieldLabel: params.primaryFieldLabel || "", operator: params.operator || "Equal To", updateValue: params.value || "" }];
+        const currentVal = currentBlocks[targetIdx]?.updateValue || params.value || "";
+        const nextVal = currentVal ? `${currentVal} ${token}` : token;
+        const updatedBlocks = currentBlocks.map((b: any, i: number) => (i === targetIdx ? { ...b, updateValue: nextVal } : b));
+        const first = updatedBlocks[0] || {};
+        onChange({
+          fieldUpdateBlocks: updatedBlocks,
+          primaryField: first.fieldToEdit || "",
+          primaryFieldLabel: first.fieldLabel || first.fieldToEdit || "",
+          operator: first.operator || "Equal To",
+          value: first.updateValue ?? "",
+          updateValue: first.updateValue ?? "",
+        });
+        setTargetFieldUpdateIndex(null);
       }
     } else if (fieldModalMode === "assignProcessFieldToken" || fieldModalMode === "aiTriggerPromptToken") {
       if (targetProcessFieldKey && selectedKeys.length > 0) {
@@ -2232,149 +2260,378 @@ export default function StepParametersFields({
               );
             })()}
 
-            {(stepKey === "fieldupdate" || stepKey === "field-update") && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Sliders className="w-4 h-4 text-blue-600" />
-                    <span>Field Update Blocks</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldModalMode("fieldUpdateMulti");
-                      setIsFieldRegistryModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Select Fields from Registry</span>
-                  </button>
-                </div>
+            {(stepKey === "fieldupdate" || stepKey === "field-update") && (() => {
+              const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";
 
-                {fieldUpdateBlocks.map((block: any, index: number) => (
-                  <div key={index} className="border border-border rounded-lg overflow-hidden bg-white p-3 space-y-3 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-gray-500">Block #{index + 1}</span>
-                      {fieldUpdateBlocks.length > 1 && (
-                        <button
-                          onClick={() => onChange({ fieldUpdateBlocks: fieldUpdateBlocks.filter((_: any, i: number) => i !== index) })}
-                          className="text-xs text-red-500 flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
-                        </button>
-                      )}
-                    </div>
+              // Respective scoped entity processes (same as update_to_stage and create_process)
+              const appointmentProcesses = effectiveProcesses.filter((p: any) => p.entityType === "appointment");
+              const effectiveApptProcesses = appointmentProcesses.length > 0
+                ? appointmentProcesses
+                : (() => {
+                    const allAppts = getStoredProcesses().filter((p: any) => p.entityType === "appointment");
+                    return allAppts.length > 0 ? allAppts : [DEFAULT_ENTITY_PROCESSES.appointment];
+                  })();
 
-                    {/* Field Registry Selector */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-semibold text-slate-700">Target Field to Update</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetFieldUpdateIndex(index);
-                            setFieldModalMode("fieldUpdateSingle");
-                            setIsFieldRegistryModalOpen(true);
-                          }}
-                          className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+              const invoiceProcesses = effectiveProcesses.filter((p: any) => p.entityType === "invoice");
+              const effectiveInvProcesses = invoiceProcesses.length > 0
+                ? invoiceProcesses
+                : (() => {
+                    const allInvs = getStoredProcesses().filter((p: any) => p.entityType === "invoice");
+                    return allInvs.length > 0 ? allInvs : [DEFAULT_ENTITY_PROCESSES.invoice];
+                  })();
+
+              const clientProcesses = effectiveProcesses.filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+              const effectiveClientProcesses = clientProcesses.length > 0
+                ? clientProcesses
+                : getStoredProcesses().filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+
+              const currentEntityProcesses =
+                stageEntity === "appointment"
+                  ? effectiveApptProcesses
+                  : stageEntity === "invoice"
+                  ? effectiveInvProcesses
+                  : effectiveClientProcesses;
+
+              const selectedProcId = stepDetailProcess || params.processId || currentEntityProcesses[0]?.id || "";
+              const selectedProc = currentEntityProcesses.find((p: any) => p.id === selectedProcId) || currentEntityProcesses[0];
+              const stages = selectedProc?.stages || [];
+              const currentStageVal = stepDetailStage || params.stageId || stages[0]?.id || stages[0]?.name || "";
+
+              const targetModule = stageEntity === "appointment" ? "appointment" : stageEntity === "invoice" ? "invoice" : "process";
+              const allModFields = getAllFields(targetModule);
+              const matchingProcFields = allModFields.filter((f) => {
+                if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all") || f.processIds.includes("*")) {
+                  return true;
+                }
+                return selectedProc && (f.processIds.includes(selectedProc.id) || f.processIds.includes(selectedProc.name));
+              });
+
+              // Available fields for the primary field dropdown
+              const availableFields = stageEntity === "processes"
+                ? Array.from(new Map([...allClientFields, ...matchingProcFields].map(f => [f.key, f])).values())
+                : matchingProcFields;
+
+              // Ensure at least one field update block exists
+              const rawBlocks = Array.isArray(params.fieldUpdateBlocks) && params.fieldUpdateBlocks.length > 0
+                ? params.fieldUpdateBlocks
+                : [
+                    {
+                      id: "fup-1",
+                      fieldToEdit: params.primaryField || params.field || "",
+                      fieldLabel: params.primaryFieldLabel || params.fieldLabel || "",
+                      fieldType: params.fieldType || targetModule,
+                      operator: params.operator || "Equal To",
+                      updateValue: params.value ?? params.updateValue ?? "",
+                    },
+                  ];
+
+              const handleBlockChange = (index: number, patch: Record<string, any>) => {
+                const updatedBlocks = rawBlocks.map((b: any, i: number) => (i === index ? { ...b, ...patch } : b));
+                const first = updatedBlocks[0] || {};
+                onChange({
+                  stageEntity,
+                  entityType: stageEntity,
+                  processId: selectedProc?.id || "",
+                  processName: selectedProc?.name || "",
+                  stepDetailProcess: selectedProc?.id || "",
+                  stageId: currentStageVal,
+                  stageName: stages.find((s: any) => s.id === currentStageVal || s.name === currentStageVal)?.name || currentStageVal,
+                  stepDetailStage: currentStageVal,
+                  fieldUpdateBlocks: updatedBlocks,
+                  primaryField: first.fieldToEdit || "",
+                  primaryFieldLabel: first.fieldLabel || first.fieldToEdit || "",
+                  operator: first.operator || "Equal To",
+                  value: first.updateValue ?? "",
+                  updateValue: first.updateValue ?? "",
+                });
+              };
+
+              const handleAddBlock = () => {
+                const nextBlock = {
+                  id: `fup-${Date.now()}`,
+                  fieldToEdit: "",
+                  fieldLabel: "",
+                  fieldType: targetModule,
+                  operator: "Equal To",
+                  updateValue: "",
+                };
+                const updatedBlocks = [...rawBlocks, nextBlock];
+                onChange({
+                  fieldUpdateBlocks: updatedBlocks,
+                });
+              };
+
+              const handleRemoveBlock = (index: number) => {
+                const updatedBlocks = rawBlocks.filter((_: any, i: number) => i !== index);
+                const first = updatedBlocks[0] || {};
+                onChange({
+                  fieldUpdateBlocks: updatedBlocks,
+                  primaryField: first.fieldToEdit || "",
+                  primaryFieldLabel: first.fieldLabel || first.fieldToEdit || "",
+                  operator: first.operator || "Equal To",
+                  value: first.updateValue ?? "",
+                  updateValue: first.updateValue ?? "",
+                });
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* 1. Choose Entity */}
+                  {renderField(
+                    "Choose Entity",
+                    <select
+                      value={stageEntity}
+                      onChange={(e) => {
+                        const entId = e.target.value as "processes" | "appointment" | "invoice";
+                        let nextProc: any = null;
+                        if (entId === "processes") {
+                          nextProc = effectiveClientProcesses[0];
+                        } else if (entId === "appointment") {
+                          nextProc = effectiveApptProcesses[0];
+                        } else if (entId === "invoice") {
+                          nextProc = effectiveInvProcesses[0];
+                        }
+                        const nextStage = nextProc?.stages?.[0];
+                        onChange({
+                          stageEntity: entId,
+                          entityType: entId,
+                          processId: nextProc?.id || "",
+                          processName: nextProc?.name || "",
+                          stepDetailProcess: nextProc?.id || "",
+                          stageId: nextStage?.id || nextStage?.name || "",
+                          stageName: nextStage?.name || "",
+                          stepDetailStage: nextStage?.id || nextStage?.name || "",
+                          fieldUpdateBlocks: [
+                            {
+                              id: `fup-${Date.now()}`,
+                              fieldToEdit: "",
+                              fieldLabel: "",
+                              fieldType: entId === "processes" ? "process" : entId,
+                              operator: "Equal To",
+                              updateValue: "",
+                            },
+                          ],
+                          primaryField: "",
+                          primaryFieldLabel: "",
+                          operator: "Equal To",
+                          value: "",
+                          updateValue: "",
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800 cursor-pointer"
+                    >
+                      <option value="processes">Processes</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="invoice">Invoice</option>
+                    </select>
+                  )}
+
+                  {/* 2. Choose Workflow */}
+                  {renderField(
+                    "Choose Workflow",
+                    <select
+                      value={selectedProc?.id || ""}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        const targetProc = currentEntityProcesses.find((p: any) => p.id === nextId) || currentEntityProcesses[0];
+                        const defaultStage = targetProc?.stages?.[0];
+                        onChange({
+                          stageEntity,
+                          entityType: stageEntity,
+                          processId: nextId,
+                          processName: targetProc?.name || "",
+                          stepDetailProcess: nextId,
+                          stageId: defaultStage?.id || defaultStage?.name || "",
+                          stageName: defaultStage?.name || "",
+                          stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                          fieldUpdateBlocks: rawBlocks.map((b: any) => ({
+                            ...b,
+                            fieldToEdit: "",
+                            fieldLabel: "",
+                            updateValue: "",
+                          })),
+                          primaryField: "",
+                          primaryFieldLabel: "",
+                          value: "",
+                          updateValue: "",
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800 cursor-pointer"
+                    >
+                      <option value="">Select workflow / process...</option>
+                      {currentEntityProcesses.map((p: any) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* 3. Choose Stage (if workflow has stages) */}
+                  {selectedProc && stages.length > 0 && renderField(
+                    "Choose Stage",
+                    <select
+                      value={currentStageVal}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const targetStage = stages.find((s: any) => s.id === val || s.name === val);
+                        onChange({
+                          stageId: val,
+                          stageName: targetStage?.name || val,
+                          stepDetailStage: val,
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800 cursor-pointer"
+                    >
+                      {stages.map((s: any) => (
+                        <option key={s.id || s.name} value={s.id || s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* 4. Primary Field, Operator, and Value Blocks */}
+                  <div className="space-y-3 pt-1">
+                    {rawBlocks.map((block: any, index: number) => {
+                      const selectedFieldDef = availableFields.find((f: any) => f.key === block.fieldToEdit) || getFieldDefByKey(block.fieldToEdit);
+                      const isClearOp = block.operator === "Clear Value" || block.operator === "Is Empty";
+
+                      return (
+                        <div
+                          key={block.id || index}
+                          className="p-4 bg-white border border-slate-200 rounded-xl space-y-3.5 shadow-2xs hover:border-slate-300 transition-all"
                         >
-                          {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? "Change Field" : "Select from Registry"}
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetFieldUpdateIndex(index);
-                          setFieldModalMode("fieldUpdateSingle");
-                          setIsFieldRegistryModalOpen(true);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
-                      >
-                        {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? (
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                              {block.fieldType || "field"}
-                            </span>
-                            <span className="font-semibold text-slate-900 truncate">
-                              {block.fieldLabel || block.fieldToEdit}
-                            </span>
-                            <code className="text-[10px] text-slate-400 font-mono">({block.fieldToEdit})</code>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Field Update {rawBlocks.length > 1 ? `#${index + 1}` : ""}
+                              </span>
+                              {selectedFieldDef && (
+                                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200/80 font-mono">
+                                  {selectedFieldDef.inputType || "text"}
+                                </span>
+                              )}
+                            </div>
+                            {rawBlocks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBlock(index)}
+                                className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer font-medium"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Remove
+                              </button>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-slate-400">Click to select field from registry...</span>
-                        )}
-                        <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={block.valueSource}
-                        onChange={e => {
-                          const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, valueSource: e.target.value, updateValue: "" } : b);
-                          onChange({ fieldUpdateBlocks: updated });
-                        }}
-                        className="w-full px-3 py-2 text-xs border rounded-md bg-white cursor-pointer font-medium"
-                      >
-                        <option value="static">Static Value</option>
-                        <option value="variable">Variable / Formula</option>
-                      </select>
-                      {block.valueSource === "variable" ? (
-                        <div className="relative flex items-center">
-                          <input
-                            type="text"
-                            value={block.updateValue}
-                            placeholder="e.g. {{client_name}} or formula..."
-                            onChange={e => {
-                              const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, updateValue: e.target.value } : b);
-                              onChange({ fieldUpdateBlocks: updated });
-                            }}
-                            className="w-full px-3 py-2 text-xs border rounded-md"
-                          />
+                          {/* Primary Field Selection */}
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-slate-700">
+                              Primary Field <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={block.fieldToEdit || ""}
+                              onChange={(e) => {
+                                const selectedKey = e.target.value;
+                                const fDef = availableFields.find((f: any) => f.key === selectedKey) || getFieldDefByKey(selectedKey);
+                                handleBlockChange(index, {
+                                  fieldToEdit: selectedKey,
+                                  fieldLabel: fDef?.label || selectedKey,
+                                  fieldType: fDef?.module || fDef?.inputType || targetModule,
+                                });
+                              }}
+                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                            >
+                              <option value="">Select primary field to update...</option>
+                              {availableFields.map((f: any) => (
+                                <option key={f.key} value={f.key}>
+                                  {f.label} ({f.inputType || "text"})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Operator */}
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-slate-700">
+                              Operator
+                            </label>
+                            <select
+                              value={block.operator || "Equal To"}
+                              onChange={(e) => handleBlockChange(index, { operator: e.target.value })}
+                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                            >
+                              <option value="Equal To">Equal To (Set Value)</option>
+                              <option value="Clear Value">Clear Value (Empty)</option>
+                              <option value="Append">Append Value</option>
+                              <option value="Increment">Increment (+)</option>
+                              <option value="Decrement">Decrement (-)</option>
+                            </select>
+                          </div>
+
+                          {/* Value: By default static, and if Select Field is clicked, opens that modal */}
+                          {!isClearOp ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-semibold text-slate-700">
+                                  Value
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetFieldUpdateIndex(index);
+                                    setFieldModalMode("fieldUpdateValueToken");
+                                    setIsFieldRegistryModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                  title="Select field from registry modal"
+                                >
+                                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Select Field</span>
+                                </button>
+                              </div>
+
+                              <div className="relative flex items-center">
+                                <input
+                                  type="text"
+                                  value={block.updateValue ?? ""}
+                                  onChange={(e) => handleBlockChange(index, { updateValue: e.target.value })}
+                                  placeholder={`Enter value or click "Select Field" for ${block.fieldLabel || "value"}...`}
+                                  className="w-full pl-3 pr-8 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-slate-800"
+                                />
+                                {block.updateValue ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBlockChange(index, { updateValue: "" })}
+                                    className="absolute right-2 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                                    title="Clear value"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
+                              This field will be cleared / set to empty when the automation executes.
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        renderFieldValueInput(
-                          block.fieldToEdit,
-                          block.fieldType,
-                          block.updateValue,
-                          (newVal) => {
-                            const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, updateValue: newVal } : b);
-                            onChange({ fieldUpdateBlocks: updated });
-                          },
-                          "New value..."
-                        )
-                      )}
-                      <p className="col-span-2 -mt-1 text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Static Value: selected value conforms to field type and choices. Variable / Formula: reference event data or earlier step outputs.
-                      </p>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldModalMode("fieldUpdateMulti");
-                      setIsFieldRegistryModalOpen(true);
-                    }}
-                    className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
-                  >
-                    <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChange({
-                      fieldUpdateBlocks: [...fieldUpdateBlocks, { fieldType: "client", fieldToEdit: "", fieldLabel: "", valueSource: "static", updateValue: "" }]
+                      );
                     })}
-                    className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Blank
-                  </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAddBlock}
+                      className="w-full py-2.5 border border-dashed border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/30 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Another Field Update</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {(stepKey === "assignhuman" || stepKey === "assign-responsible") && renderField(
               "Assign To",
@@ -5207,7 +5464,7 @@ export default function StepParametersFields({
             fieldModalMode === "caseConditionSingle" ||
             fieldModalMode === "caseConditionDynamic" ||
             fieldModalMode === "triggerConditionSingle" ||
-            fieldModalMode === "assignProcessFieldToken"
+            fieldModalMode === "assignProcessFieldToken" || fieldModalMode === "fieldUpdateValueToken"
           }
           initialSelectedKeys={
             fieldModalMode === "monitoredFields"

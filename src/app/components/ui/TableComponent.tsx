@@ -18,7 +18,7 @@ import { toast } from "sonner";
 export interface TableColumn<T> {
   id?: string;
   key?: string;
-  header: string;
+  header: React.ReactNode;
   accessorKey?: keyof T;
   render?: (row: T, index: number) => React.ReactNode;
   align?: "left" | "center" | "right";
@@ -87,7 +87,7 @@ export function TableComponent<T>({
   renderFooter,
   actionIcon = "dots",
 }: TableComponentProps<T>) {
-  const getColId = (c: TableColumn<T>): string => c.id || c.key || c.header;
+  const getColId = (c: TableColumn<T>): string => c.id || c.key || (typeof c.header === "string" ? c.header : "col");
 
   // Column customization state
   const defaultColumnOrder = useMemo(() => columns.map(getColId), [columns]);
@@ -207,7 +207,7 @@ export function TableComponent<T>({
 
   const getColumnAlign = (col: TableColumn<T>): "left" | "center" | "right" => {
     if (col.align) return col.align;
-    const headerLower = (col.header || "").toLowerCase();
+    const headerLower = (typeof col.header === "string" ? col.header : String(col.id || "")).toLowerCase();
     const keyLower = String(col.id || col.key || col.accessorKey || "").toLowerCase();
     if (
       headerLower === "status" ||

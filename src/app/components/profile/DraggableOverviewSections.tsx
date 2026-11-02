@@ -1847,6 +1847,7 @@ export default function DraggableOverviewSections({
         <AdminSectionDrawer
           section={null}
           initialModule={customFieldsModule as Exclude<FieldModule, "deal">}
+          initialContactCategory={customFieldsModule === "client" ? effectiveContactCategory : undefined}
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}

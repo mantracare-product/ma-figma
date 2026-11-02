@@ -92,40 +92,45 @@ const DEFAULT_SERVICES: Service[] = [
   { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  cptCode: "70450", duration: 20, slotDuration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, availableForAppointment: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
 ];
 
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+
 // ─── Store helpers ────────────────────────────────────────────────────────────
 
 function loadServices(): Service[] {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Service[];
-      const defaultCptMap: Record<number, string> = {
-        1: "99204",
-        2: "99213",
-        3: "D1110",
-        4: "70450",
-      };
-      let changed = false;
-      const enriched = parsed.map((s) => {
-        let updated = { ...s };
-        if (!updated.cptCode && defaultCptMap[updated.id]) {
-          changed = true;
-          updated.cptCode = defaultCptMap[updated.id];
-        }
-        if (updated.availableForAppointment === undefined) {
-          changed = true;
-          updated.availableForAppointment = updated.id !== 4;
-        }
-        if (updated.slotDuration === undefined) {
-          changed = true;
-          updated.slotDuration = updated.duration || 30;
-        }
-        return updated;
-      });
-      if (changed) {
-        localStorage.setItem(STORE_KEY, JSON.stringify(enriched));
+    if (isDemoMantraActive()) {
+      const demoRaw = localStorage.getItem("ma_services_demo");
+      if (demoRaw) {
+        try {
+          const parsed = JSON.parse(demoRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
       }
-      return enriched;
+      return DEFAULT_SERVICES;
+    }
+
+    if (isFreshWorkspace()) {
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      const raw =
+        (activeOrgId && localStorage.getItem(`ma_services_${activeOrgId}`)) ||
+        localStorage.getItem("ma_services_store_signup") ||
+        localStorage.getItem(STORE_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {}
+      }
+      return [];
+    }
+
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw !== null && raw !== undefined) {
+      const parsed = JSON.parse(raw) as Service[];
+      if (Array.isArray(parsed)) {
+        if (parsed.length === 0) return [];
+        return parsed;
+      }
     }
   } catch { /* ignore */ }
   return DEFAULT_SERVICES;
@@ -136,7 +141,7 @@ function saveServices(services: Service[]) {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-export { loadServices };
+export { loadServices, saveServices as saveStoredServices };
 export function getStoredServices(): Service[] {
   return loadServices();
 }

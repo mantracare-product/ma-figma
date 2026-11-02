@@ -1514,9 +1514,10 @@ export default function AdminPlans() {
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     <option value="All">All Tiers</option>
+                    <option value="Free">Free (Onboarding)</option>
                     <option value="Starter">Starter</option>
+                    <option value="Growth">Growth</option>
                     <option value="Professional">Professional</option>
-                    <option value="Custom">Custom</option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
@@ -1831,67 +1832,69 @@ export default function AdminPlans() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Tier *</label>
-                      <select
-                        value={planForm.tier}
-                        onChange={(e) => setPlanForm({ ...planForm, tier: e.target.value as PlanTier })}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                      >
-                        <option value="Free">Free (Onboarding)</option>
-                        <option value="Starter">Starter</option>
-                        <option value="Professional">Professional</option>
-                        <option value="Custom">Custom</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Category *</label>
-                      <select
-                        value={planForm.category || "AI Receptionist"}
-                        onChange={(e) => setPlanForm({ ...planForm, category: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
-                      >
-                        {PLAN_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Admin Scope Rules (Unified Admin Scope System) */}
-                    <div className="sm:col-span-2 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-gray-800">
-                          Admin Scope *
-                        </label>
-                        <span className="text-[11px] font-semibold text-gray-500">
-                          {(!planForm.scopingRules || planForm.scopingRules.length === 0)
-                            ? "Universal (Global) · Visible to all workspaces"
-                            : `${planForm.scopingRules.length} Rule${planForm.scopingRules.length > 1 ? "s" : ""} Active`}
-                        </span>
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Tier *</label>
+                        <select
+                          value={planForm.tier}
+                          onChange={(e) => setPlanForm({ ...planForm, tier: e.target.value as PlanTier })}
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                        >
+                          <option value="Free">Free (Onboarding)</option>
+                          <option value="Starter">Starter</option>
+                          <option value="Growth">Growth</option>
+                          <option value="Professional">Professional</option>
+                        </select>
                       </div>
 
-                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-2xs">
-                        <AdminScopingRulesEditor
-                          rules={planForm.scopingRules || []}
-                          onChange={(rules) => {
-                            const primaryCat = rules[0]?.industryCategory || "Global";
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Plan Category *</label>
+                        <select
+                          value={planForm.category || "AI Receptionist"}
+                          onChange={(e) => setPlanForm({ ...planForm, category: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                        >
+                          {PLAN_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Industry Category *</label>
+                        <select
+                          value={planForm.targetCategory || "Global"}
+                          onChange={(e) => {
+                            const selectedCat = e.target.value;
+                            const newRules: ScopingRule[] =
+                              selectedCat === "Global" || selectedCat === "All Industries"
+                                ? []
+                                : [
+                                    {
+                                      id: `rule_${Date.now()}`,
+                                      industryCategory: selectedCat,
+                                      industries: [],
+                                      locations: [],
+                                    },
+                                  ];
                             setPlanForm({
                               ...planForm,
-                              scopingRules: rules,
-                              targetCategory: rules.length === 0 ? "Global" : primaryCat,
+                              targetCategory: selectedCat,
+                              scopingRules: newRules,
                             });
                           }}
-                          showHeader={true}
-                        />
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                        >
+                          <option value="Global">Universal (All Industries)</option>
+                          {INITIAL_CATEGORIES.map((cat) => (
+                            <option key={cat.id} value={cat.name}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <p className="text-[11px] text-gray-500">
-                        {(!planForm.scopingRules || planForm.scopingRules.length === 0)
-                          ? "Universal Admin Scope: available to all tenant workspaces worldwide"
-                          : `Restricted Admin Scope: dynamically provisioned to tenant workspaces matching ${planForm.scopingRules.length} rule${planForm.scopingRules.length > 1 ? "s" : ""}.`}
-                      </p>
                     </div>
 
                     <div className="sm:col-span-2">

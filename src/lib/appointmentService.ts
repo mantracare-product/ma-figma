@@ -21,6 +21,7 @@ import { appendActivity } from "./activityEngine";
 import { flattenRuleSteps } from "./automationTree";
 import { getClientList } from "./getClientList";
 import { findRoomForAppointment } from "./roomsStore";
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
   try {
@@ -546,6 +547,14 @@ class AppointmentService {
   public getAppointments(): Appointment[] {
     if (typeof window === "undefined") return INITIAL_APPOINTMENTS;
     try {
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        const raw = sessionStorage.getItem(`appointments_${signupOrgId}`) || localStorage.getItem(`appointments_${signupOrgId}`);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+
       const raw = sessionStorage.getItem(APPOINTMENTS_STORAGE_KEY) || localStorage.getItem(APPOINTMENTS_STORAGE_KEY);
       if (!raw) {
         return [];
@@ -588,8 +597,14 @@ class AppointmentService {
     if (typeof window === "undefined") return;
     try {
       const serialized = JSON.stringify(appointments);
-      sessionStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
-      localStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        sessionStorage.setItem(`appointments_${signupOrgId}`, serialized);
+        localStorage.setItem(`appointments_${signupOrgId}`, serialized);
+      } else {
+        sessionStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
+        localStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
+      }
       window.dispatchEvent(new CustomEvent(APPOINTMENTS_CHANGE_EVENT, { detail: appointments }));
       window.dispatchEvent(new CustomEvent("mantra_appointment_changed", { detail: appointments }));
       window.dispatchEvent(new Event("storage"));

@@ -8,8 +8,9 @@
  */
 
 import type { ScopingRule } from "../app/context/FieldRegistryContext";
+import { formatCategoryWithPrefix } from "./planRecommendation";
 
-export type PlanTier = "Free" | "Starter" | "Professional" | "Custom";
+export type PlanTier = "Free" | "Starter" | "Growth" | "Scale" | "Professional" | "Custom";
 
 export interface CountryPricing {
   country: string;
@@ -32,14 +33,28 @@ export const PLAN_CATEGORIES = [
   "AI Scribe",
   "EHR",
   "RCM",
+  "Internal",
+  "Onboarding",
 ] as const;
 
-export type PlanCategory = (typeof PLAN_CATEGORIES)[number];
+export type PlanCategory = (typeof PLAN_CATEGORIES)[number] | "AI EHR" | "AI RCM";
+
+export function isCategoryMatch(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const la = a.trim().toLowerCase();
+  const lb = b.trim().toLowerCase();
+  if (la === lb) return true;
+  if ((la.includes("ehr") || la === "ai ehr") && (lb.includes("ehr") || lb === "ai ehr")) return true;
+  if ((la.includes("rcm") || la === "ai rcm") && (lb.includes("rcm") || lb === "ai rcm")) return true;
+  if ((la.includes("scribe") || la === "ai scribe") && (lb.includes("scribe") || lb === "ai scribe")) return true;
+  if ((la.includes("reception") || la === "ai receptionist") && (lb.includes("reception") || lb === "ai receptionist")) return true;
+  return false;
+}
 
 export interface IndustryPlan {
   id: string;
   name: string;
-  category?: PlanCategory | string; // Category: AI Scribe, AI Receptionist, EHR, RCM
+  category?: PlanCategory | string; // Category: AI Scribe, AI Receptionist, EHR, RCM, AI EHR, AI RCM
   tier: PlanTier;
   targetCategory: string; // "Global" or specific category e.g. "Wellness & Lifestyle", "Real Estate", "Healthcare", "IT/Tech"
   scopingRules?: ScopingRule[]; // Unified Admin Scope rules (category, industries, locations)
@@ -196,8 +211,8 @@ export interface CartItem {
 
 export const CART_STORAGE_KEY = "mantra_billing_cart_v2";
 export const CART_CHANGED_EVENT = "mantra_cart_changed";
-export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v4";
-export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v1";
+export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v7";
+export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v2";
 export const TEAM_MEMBER_PACKS_STORAGE_KEY = "mantra_admin_team_member_packs_v1";
 export const GLOBAL_BILLING_SETTINGS_KEY = "mantra_global_billing_settings_v1";
 export const CREDIT_ACTIONS_STORAGE_KEY = "mantra_admin_credit_actions_v1";
@@ -704,151 +719,194 @@ export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
+
+  // ── CATEGORY 5: ONBOARDING (Free tier given to new organizations) ──
+  {
+    id: "plan-onboarding-free",
+    name: "Onboarding Free Plan",
+    category: "Onboarding",
+    tier: "Free",
+    targetCategory: "Global",
+    description: "Complimentary onboarding tier for new organizations with free starter credits.",
+    includedSeats: 2,
+    monthlyCredits: 500,
+    yearlyCredits: 6000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "2 team members included",
+      "500 included Voice & Chat Credits / mo",
+      "Trial AI Receptionist & Chatbot",
+      "Multi-channel Chat & Call logs",
+      "Basic Scheduling & Confirmations",
+    ],
+    modules: ["telephony", "clients"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+
+  // ── CATEGORY 6: INTERNAL (Internal staff, demo & test organizations) ──
+  {
+    id: "plan-internal-demo",
+    name: "Internal Staff Plan",
+    category: "Internal",
+    tier: "Free",
+    targetCategory: "Global",
+    description: "Internal testing and demonstration tier for staff with full module privileges.",
+    includedSeats: 50,
+    monthlyCredits: 10000,
+    yearlyCredits: 120000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: true,
+    features: [
+      "Full Internal Staff Access",
+      "10,000 monthly credits",
+      "All AI modules unlocked",
+      "Multi-specialty workflows",
+      "Full API & Webhook sandbox",
+    ],
+    modules: ["telephony", "scribe", "ehr", "billing", "clients", "appointments", "workflows"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-internal-test",
+    name: "Internal Sandbox Plan",
+    category: "Internal",
+    tier: "Free",
+    targetCategory: "Global",
+    description: "Lightweight internal sandbox environment for engineering testing.",
+    includedSeats: 10,
+    monthlyCredits: 2000,
+    yearlyCredits: 24000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: true,
+    features: [
+      "Internal Sandbox Access",
+      "2,000 monthly credits",
+      "Developer API tools",
+      "Call & Chat simulation",
+    ],
+    modules: ["telephony", "workflows"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 export const INITIAL_CREDIT_PACKAGES: CreditPackage[] = [
-  {
-    id: "cred-pkg-500-us",
-    name: "500 Credits Booster",
-    credits: 500,
-    pricePerCredit: 0.05,
-    totalPrice: 25,
-    country: "United States",
-    currency: "USD",
-    currencySymbol: "$",
-    isActive: true,
-    isInternalStaffOnly: false,
-    badge: "Quick Top-up",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-  {
-    id: "cred-pkg-1000-us",
-    name: "1,000 Credits Pack",
-    credits: 1000,
-    pricePerCredit: 0.045,
-    totalPrice: 45,
-    country: "United States",
-    currency: "USD",
-    currencySymbol: "$",
-    isActive: true,
-    isInternalStaffOnly: false,
-    badge: "Most Popular",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-  {
-    id: "cred-pkg-2500-us",
-    name: "2,500 Credits Value",
-    credits: 2500,
-    pricePerCredit: 0.04,
-    totalPrice: 100,
-    country: "United States",
-    currency: "USD",
-    currencySymbol: "$",
-    isActive: true,
-    isInternalStaffOnly: false,
-    badge: "Great Value",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-  {
-    id: "cred-pkg-5000-us",
-    name: "5,000 Credits Scale",
-    credits: 5000,
-    pricePerCredit: 0.036,
-    totalPrice: 180,
-    country: "United States",
-    currency: "USD",
-    currencySymbol: "$",
-    isActive: true,
-    isInternalStaffOnly: false,
-    badge: "Best Value (Save 28%)",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-
-  // ── India Packages ──
+  // ── India Top-up Packs (Item 6) ──
   {
     id: "cred-pkg-500-in",
     name: "500 Credits Booster",
     credits: 500,
-    pricePerCredit: 3.75,
-    totalPrice: 1875,
+    pricePerCredit: 6.0,
+    totalPrice: 2999,
     country: "India",
     currency: "INR",
     currencySymbol: "₹",
     isActive: true,
     isInternalStaffOnly: false,
     badge: "Quick Top-up",
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", price: 2999 },
+      { country: "United States", currency: "USD", currencySymbol: "$", price: 36 },
+    ],
     createdAt: "2026-01-15T10:00:00Z",
   },
   {
     id: "cred-pkg-1000-in",
     name: "1,000 Credits Pack",
     credits: 1000,
-    pricePerCredit: 3.375,
-    totalPrice: 3375,
+    pricePerCredit: 5.0,
+    totalPrice: 4999,
     country: "India",
     currency: "INR",
     currencySymbol: "₹",
     isActive: true,
     isInternalStaffOnly: false,
     badge: "Most Popular",
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", price: 4999 },
+      { country: "United States", currency: "USD", currencySymbol: "$", price: 60 },
+    ],
     createdAt: "2026-01-15T10:00:00Z",
   },
   {
-    id: "cred-pkg-2500-in",
-    name: "2,500 Credits Value",
-    credits: 2500,
-    pricePerCredit: 3.0,
-    totalPrice: 7500,
+    id: "cred-pkg-3000-in",
+    name: "3,000 Credits Value",
+    credits: 3000,
+    pricePerCredit: 4.0,
+    totalPrice: 11999,
     country: "India",
     currency: "INR",
     currencySymbol: "₹",
     isActive: true,
     isInternalStaffOnly: false,
     badge: "Great Value",
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", price: 11999 },
+      { country: "United States", currency: "USD", currencySymbol: "$", price: 145 },
+    ],
     createdAt: "2026-01-15T10:00:00Z",
   },
   {
     id: "cred-pkg-5000-in",
     name: "5,000 Credits Scale",
     credits: 5000,
-    pricePerCredit: 2.7,
-    totalPrice: 13500,
+    pricePerCredit: 3.6,
+    totalPrice: 17999,
     country: "India",
     currency: "INR",
     currencySymbol: "₹",
     isActive: true,
     isInternalStaffOnly: false,
-    badge: "Best Value (Save 28%)",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-
-  // ── UK Packages ──
-  {
-    id: "cred-pkg-1000-uk",
-    name: "1,000 Credits Pack",
-    credits: 1000,
-    pricePerCredit: 0.036,
-    totalPrice: 36,
-    country: "United Kingdom",
-    currency: "GBP",
-    currencySymbol: "£",
-    isActive: true,
-    isInternalStaffOnly: false,
-    badge: "Most Popular",
+    badge: "Scale Pack",
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", price: 17999 },
+      { country: "United States", currency: "USD", currencySymbol: "$", price: 215 },
+    ],
     createdAt: "2026-01-15T10:00:00Z",
   },
   {
-    id: "cred-pkg-5000-uk",
-    name: "5,000 Credits Scale",
-    credits: 5000,
-    pricePerCredit: 0.0288,
-    totalPrice: 144,
-    country: "United Kingdom",
-    currency: "GBP",
-    currencySymbol: "£",
+    id: "cred-pkg-10000-in",
+    name: "10,000 Credits Enterprise",
+    credits: 10000,
+    pricePerCredit: 3.0,
+    totalPrice: 29999,
+    country: "India",
+    currency: "INR",
+    currencySymbol: "₹",
     isActive: true,
     isInternalStaffOnly: false,
-    badge: "Best Value",
+    badge: "Best Value (Save 50%)",
+    countryPricing: [
+      { country: "India", currency: "INR", currencySymbol: "₹", price: 29999 },
+      { country: "United States", currency: "USD", currencySymbol: "$", price: 360 },
+    ],
     createdAt: "2026-01-15T10:00:00Z",
   },
 
@@ -1201,6 +1259,9 @@ export function getStoredPlans(): IndustryPlan[] {
       localStorage.removeItem("mantra_admin_industry_plans_v1");
       localStorage.removeItem("mantra_admin_industry_plans_v2");
       localStorage.removeItem("mantra_admin_industry_plans_v3");
+      localStorage.removeItem("mantra_admin_industry_plans_v4");
+      localStorage.removeItem("mantra_admin_industry_plans_v5");
+      localStorage.removeItem("mantra_admin_industry_plans_v6");
     }
     const raw = typeof window !== "undefined" ? localStorage.getItem(PLANS_STORAGE_KEY) : null;
     if (!raw) {
@@ -1210,18 +1271,21 @@ export function getStoredPlans(): IndustryPlan[] {
       return INITIAL_INDUSTRY_PLANS;
     }
     const parsed: IndustryPlan[] = JSON.parse(raw);
-    if (
-      !Array.isArray(parsed) ||
-      parsed.length !== INITIAL_INDUSTRY_PLANS.length ||
-      parsed.some((p) => p.name.includes("Voice") || !p.category)
-    ) {
+    if (!Array.isArray(parsed) || parsed.length === 0) {
       if (typeof window !== "undefined") {
         localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
       }
       return INITIAL_INDUSTRY_PLANS;
     }
-    // Guarantee category is populated for every plan
-    const updated = parsed.map((p) => {
+    // Guarantee category is populated for every plan and normalize Scale tier
+    let updated = parsed.map((p) => {
+      if ((p.tier as any) === "Scale") {
+        p = {
+          ...p,
+          tier: "Professional",
+          name: p.name.replace(/\bScale\b/i, "Professional"),
+        };
+      }
       if (p.category) return p;
       const lower = p.name.toLowerCase();
       let cat: PlanCategory = "AI Receptionist";
@@ -1230,6 +1294,31 @@ export function getStoredPlans(): IndustryPlan[] {
       else if (lower.includes("rcm") || lower.includes("billing") || lower.includes("claim")) cat = "RCM";
       return { ...p, category: cat };
     });
+
+    // Ensure all 4 core categories plus Internal and Onboarding plans exist
+    const hasReceptionist = updated.some((p) => isCategoryMatch(p.category, "AI Receptionist"));
+    const hasScribe = updated.some((p) => isCategoryMatch(p.category, "AI Scribe"));
+    const hasEHR = updated.some((p) => isCategoryMatch(p.category, "EHR"));
+    const hasRCM = updated.some((p) => isCategoryMatch(p.category, "RCM"));
+    const hasInternal = updated.some((p) => (p.category || "").toLowerCase() === "internal");
+    const hasOnboarding = updated.some((p) => (p.category || "").toLowerCase() === "onboarding");
+    if (!hasReceptionist || !hasScribe || !hasEHR || !hasRCM || !hasInternal || !hasOnboarding) {
+      const missing = INITIAL_INDUSTRY_PLANS.filter((p) => {
+        if (!hasReceptionist && isCategoryMatch(p.category, "AI Receptionist")) return true;
+        if (!hasScribe && isCategoryMatch(p.category, "AI Scribe")) return true;
+        if (!hasEHR && isCategoryMatch(p.category, "EHR")) return true;
+        if (!hasRCM && isCategoryMatch(p.category, "RCM")) return true;
+        const cat = (p.category || "").toLowerCase();
+        if (!hasInternal && cat === "internal") return true;
+        if (!hasOnboarding && cat === "onboarding") return true;
+        return false;
+      });
+      updated = [...updated, ...missing];
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(updated));
+      }
+    }
+
     return updated;
   } catch (err) {
     console.error("Error reading plans:", err);
@@ -1384,7 +1473,49 @@ export const DEFAULT_FREE_PLAN: IndustryPlan = {
 
 export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscription {
   const subs = getStoredSubscriptions();
-  const existing = subs[workspaceId];
+  let existing = subs[workspaceId];
+
+  // Reconcile if organization has an assigned plan from Admin or Signup
+  try {
+    let assignedPlanId: string | undefined;
+    let assignedBillingCycle: "monthly" | "yearly" = "monthly";
+    let orgCurrency = "USD";
+
+    if (typeof window !== "undefined") {
+      const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+      if (rawOrgs) {
+        const orgs = JSON.parse(rawOrgs);
+        const matchedOrg = orgs.find((o: any) => o.id === workspaceId);
+        if (matchedOrg?.assignedPlanId) {
+          assignedPlanId = matchedOrg.assignedPlanId;
+          assignedBillingCycle = matchedOrg.assignedBillingCycle || "monthly";
+          orgCurrency = matchedOrg.currency || "USD";
+        }
+      }
+      const rawUserOrg = localStorage.getItem("user_organization");
+      if (rawUserOrg && !assignedPlanId) {
+        const userOrg = JSON.parse(rawUserOrg);
+        if (userOrg?.id === workspaceId && userOrg?.assignedPlanId) {
+          assignedPlanId = userOrg.assignedPlanId;
+          assignedBillingCycle = userOrg.assignedBillingCycle || "monthly";
+          orgCurrency = userOrg.currency || "USD";
+        }
+      }
+    }
+
+    if (assignedPlanId) {
+      const plans = getStoredPlans();
+      const targetPlan = plans.find(
+        (p) => p.id === assignedPlanId || p.name.toLowerCase() === assignedPlanId.toLowerCase()
+      );
+      if (targetPlan && (!existing || existing.planId !== targetPlan.id || existing.tier === "Free")) {
+        return assignPlanToWorkspace(workspaceId, targetPlan.id, assignedBillingCycle, orgCurrency);
+      }
+    }
+  } catch (err) {
+    console.error("Error checking assignedPlanId in getWorkspaceSubscription:", err);
+  }
+
   if (existing && existing.planId && existing.status === "Active") {
     // Sanitize legacy combined multi-plan names to single active plan
     if (existing.planName && existing.planName.includes(" + ")) {
@@ -1423,13 +1554,33 @@ export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscrip
   }
 
   // When a new user / workspace is created, overview shows the values of the Free onboarding plan
+  let defaultCategory = "AI Receptionist";
+  try {
+    const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+    if (rawOrgs) {
+      const orgs = JSON.parse(rawOrgs);
+      const matchedOrg = orgs.find((o: any) => o.id === workspaceId);
+      if (matchedOrg?.default_category) {
+        defaultCategory = matchedOrg.default_category;
+      }
+    }
+    const userOrgRaw = localStorage.getItem("user_organization");
+    if (userOrgRaw) {
+      const userOrg = JSON.parse(userOrgRaw);
+      if (userOrg?.id === workspaceId && userOrg?.default_category) {
+        defaultCategory = userOrg.default_category;
+      }
+    }
+  } catch {}
+
+  const normalizedCategory = formatCategoryWithPrefix(defaultCategory);
   const plans = getStoredPlans();
   const freePlan = plans.find((p) => (p.tier || "").toLowerCase() === "free" && p.isActive) || DEFAULT_FREE_PLAN;
 
   const defaultFreeSub: WorkspaceSubscription = {
     workspaceId,
     planId: freePlan.id,
-    planName: freePlan.name,
+    planName: `Free Plan · ${normalizedCategory}`,
     tier: "Free",
     billingCycle: "monthly",
     amount: 0,
@@ -1446,6 +1597,20 @@ export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscrip
     totalCredits: (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0),
     creditsUsed: existing?.creditsUsed || 0,
     creditsRemaining: Math.max(0, (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0) - (existing?.creditsUsed || 0)),
+    activePlans: [
+      {
+        planId: freePlan.id,
+        planName: `Free Plan · ${normalizedCategory}`,
+        category: normalizedCategory,
+        tier: "Free",
+        billingCycle: "monthly",
+        amount: 0,
+        currency: "USD",
+        currencySymbol: "$",
+        includedSeats: freePlan.includedSeats || 1,
+        monthlyCredits: freePlan.monthlyCredits || 500,
+      },
+    ],
   };
 
   subs[workspaceId] = defaultFreeSub;
@@ -1456,6 +1621,66 @@ export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscrip
   }
 
   return defaultFreeSub;
+}
+
+export function assignFreePlanForCategory(workspaceId: string, category: string): WorkspaceSubscription {
+  const subs = getStoredSubscriptions();
+  const existing = subs[workspaceId];
+
+  // Do not change a plan the user has already paid for
+  if (existing && existing.planId && existing.tier !== "Free" && existing.amount > 0) {
+    return existing;
+  }
+
+  const normalizedCategory = formatCategoryWithPrefix(category);
+  const plans = getStoredPlans();
+  const freePlan = plans.find((p) => (p.tier || "").toLowerCase() === "free" && p.isActive) || DEFAULT_FREE_PLAN;
+
+  const freeSub: WorkspaceSubscription = {
+    workspaceId,
+    planId: freePlan.id,
+    planName: `Free Plan · ${normalizedCategory}`,
+    tier: "Free",
+    billingCycle: "monthly",
+    amount: 0,
+    currency: "USD",
+    currencySymbol: "$",
+    status: "Active",
+    nextRenewalDate: "Free (No Expiration)",
+    startDate: existing?.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    userCount: 1,
+    includedSeats: freePlan.includedSeats || 1,
+    extraSeatsPurchased: existing?.extraSeatsPurchased || 0,
+    planCredits: freePlan.monthlyCredits || 500,
+    addonCredits: existing?.addonCredits || 0,
+    totalCredits: (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0),
+    creditsUsed: existing?.creditsUsed || 0,
+    creditsRemaining: Math.max(0, (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0) - (existing?.creditsUsed || 0)),
+    activePlans: [
+      {
+        planId: freePlan.id,
+        planName: `Free Plan · ${normalizedCategory}`,
+        category: normalizedCategory,
+        tier: "Free",
+        billingCycle: "monthly",
+        amount: 0,
+        currency: "USD",
+        currencySymbol: "$",
+        includedSeats: freePlan.includedSeats || 1,
+        monthlyCredits: freePlan.monthlyCredits || 500,
+      },
+    ],
+  };
+
+  subs[workspaceId] = freeSub;
+  try {
+    localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(subs));
+    window.dispatchEvent(new Event(PLANS_BILLING_CHANGED_EVENT));
+  } catch (err) {
+    console.error("Error storing assigned free plan subscription:", err);
+  }
+
+  return freeSub;
 }
 
 export function updateWorkspaceSubscription(workspaceId: string, updates: Partial<WorkspaceSubscription>): void {
@@ -1505,8 +1730,37 @@ export interface WorkspaceScope {
   id?: string;
   industryCategory?: string; // e.g. "Healthcare", "Wellness & Lifestyle", "Real Estate", "IT/Tech"
   industry?: string; // e.g. "Dental Clinic", "Cardiology"
+  locations?: string[];
+  location?: string;
   country?: string; // e.g. "United States", "India", "United Kingdom", "Canada"
   currency?: string; // e.g. "USD", "INR", "GBP", "EUR"
+}
+
+function matchesCategoryOrSpecialty(planCatRaw?: string, targetCatRaw?: string, targetIndRaw?: string): boolean {
+  const planCat = (planCatRaw || "Global").trim().toLowerCase();
+  if (planCat === "global" || planCat === "all" || planCat === "*") return true;
+  if (!targetCatRaw && !targetIndRaw) return true; // Default/unassigned org can view industry plans
+
+  const tCat = (targetCatRaw || "").trim().toLowerCase();
+  const tInd = (targetIndRaw || "").trim().toLowerCase();
+
+  // 1. Direct or partial equality (e.g. "Healthcare" and "Healthcare & Clinic")
+  if (tCat && (planCat === tCat || planCat.includes(tCat) || tCat.includes(planCat))) return true;
+  if (tInd && (planCat === tInd || planCat.includes(tInd) || tInd.includes(planCat))) return true;
+
+  // 2. Specialty mapping (e.g. "ophthalmologist", "general physician", "dentist", "clinic" -> "healthcare")
+  const healthcareSpecialties = [
+    "ophthalmologist", "dentist", "general physician", "cardiologist", "dermatologist",
+    "pediatrician", "therapist", "orthopedic", "gynecologist", "ent specialist",
+    "clinic", "hospital", "patient", "medical", "doctor", "health", "dental"
+  ];
+  if (planCat === "healthcare") {
+    if (healthcareSpecialties.some((s) => tCat.includes(s) || tInd.includes(s))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -1539,19 +1793,35 @@ export function getAvailablePlansForWorkspace(
       if (plan.scopingRules && plan.scopingRules.length > 0) {
         return plan.scopingRules.some((rule) => {
           const ruleCat = (rule.industryCategory || "").trim().toLowerCase();
-          const matchCat = !ruleCat || ruleCat === "all" || ruleCat === "*" || (targetCategory && ruleCat === targetCategory);
+          const matchCat =
+            !ruleCat ||
+            ruleCat === "all" ||
+            ruleCat === "*" ||
+            matchesCategoryOrSpecialty(ruleCat, targetCategory, scope.industry);
           if (!matchCat) return false;
 
           const inds = (rule.industries || []).filter((i) => i && i !== "All" && i !== "*");
           if (inds.length > 0 && scope.industry) {
             const targetInd = scope.industry.trim().toLowerCase();
-            const matchInd = inds.some((ind) => ind.trim().toLowerCase() === targetInd);
+            const matchInd = inds.some((ind) => {
+              const cleaned = ind.trim().toLowerCase();
+              return cleaned === targetInd || cleaned.includes(targetInd) || targetInd.includes(cleaned);
+            });
             if (!matchInd) return false;
           }
 
           const locs = (rule.locations || []).filter((l) => l && l !== "All" && l !== "*");
           if (locs.length > 0) {
-            const matchLoc = locs.some((loc) => loc.trim().toLowerCase() === targetCountry);
+            const orgLocs = [
+              ...(scope.locations || []),
+              scope.location || "",
+              targetCountry,
+            ].map((l) => l.trim().toLowerCase()).filter(Boolean);
+
+            const matchLoc = locs.some((loc) => {
+              const cLoc = loc.trim().toLowerCase();
+              return orgLocs.some((ol) => ol === cLoc || ol.includes(cLoc) || cLoc.includes(ol));
+            });
             if (!matchLoc) return false;
           }
 
@@ -1560,11 +1830,7 @@ export function getAvailablePlansForWorkspace(
       }
 
       // Fallback: Category scope match
-      const planCategory = (plan.targetCategory || "Global").trim().toLowerCase();
-      if (planCategory === "global") return true;
-      if (targetCategory && planCategory === targetCategory) return true;
-
-      return false;
+      return matchesCategoryOrSpecialty(plan.targetCategory, targetCategory, scope.industry);
     })
     .map((plan) => {
       // Find matching country pricing or fallback
@@ -1809,10 +2075,11 @@ export function getSubscriptionDisplayPlanName(sub: WorkspaceSubscription | null
   if (sub.planName && sub.planName !== "No Plan Assigned") {
     return sub.planName;
   }
-  if ((sub.tier || "").toLowerCase() === "free" || sub.amount === 0) {
-    return "Free Plan";
+  if ((sub.tier || "").toLowerCase() === "free") {
+    const cat = sub.activePlans?.[0]?.category ? formatCategoryWithPrefix(sub.activePlans[0].category) : "AI Receptionist";
+    return `Free Plan · ${cat}`;
   }
-  return "AI Clinic Receptionist Starter";
+  return sub.planName || "No Plan Assigned";
 }
 
 export function assignPlanToWorkspace(
@@ -1823,7 +2090,7 @@ export function assignPlanToWorkspace(
 ): WorkspaceSubscription {
   const plans = getStoredPlans();
   const existing = getWorkspaceSubscription(workspaceId);
-  const targetPlan = plans.find((p) => p.id === planId);
+  const targetPlan = plans.find((p) => p.id === planId || p.name.toLowerCase() === planId.toLowerCase());
   if (!targetPlan) {
     return existing;
   }
@@ -1871,6 +2138,43 @@ export function assignPlanToWorkspace(
   };
 
   updateWorkspaceSubscription(workspaceId, updated);
+
+  // Sync to mantra_organizations_v1 and user_organization
+  try {
+    if (typeof window !== "undefined") {
+      const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+      if (rawOrgs) {
+        const orgs = JSON.parse(rawOrgs);
+        const nextOrgs = orgs.map((o: any) =>
+          o.id === workspaceId
+            ? {
+                ...o,
+                assignedPlanId: targetPlan.id,
+                assignedPlanName: targetPlan.name,
+                assignedPlanCategory: targetPlan.category,
+                assignedBillingCycle: billingCycle,
+              }
+            : o
+        );
+        localStorage.setItem("mantra_organizations_v1", JSON.stringify(nextOrgs));
+        window.dispatchEvent(new CustomEvent("mantra_organization_changed"));
+      }
+      const rawUserOrg = localStorage.getItem("user_organization");
+      if (rawUserOrg) {
+        const userOrg = JSON.parse(rawUserOrg);
+        if (userOrg?.id === workspaceId) {
+          localStorage.setItem("user_organization", JSON.stringify({
+            ...userOrg,
+            assignedPlanId: targetPlan.id,
+            assignedPlanName: targetPlan.name,
+            assignedPlanCategory: targetPlan.category,
+            assignedBillingCycle: billingCycle,
+          }));
+        }
+      }
+    }
+  } catch {}
+
   return updated;
 }
 
@@ -2134,5 +2438,315 @@ export function purchaseCustomTeamMembersForWorkspace(workspaceId: string, membe
 
   updateWorkspaceSubscription(workspaceId, updated);
   return updated;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PUBLIC PRICING DATA ENGINE (GET /api/public/pricing)
+// ─────────────────────────────────────────────────────────────
+
+export interface PublicPricingPlan {
+  id: string;
+  name: string;
+  tier: PlanTier;
+  category: string;
+  description: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  discountedMonthlyPrice: number;
+  monthlyCredits: number;
+  includedSeats: number;
+  teamMembers: string;
+  isPopular: boolean;
+  features: string[];
+  addedFeatures: string[];
+}
+
+export interface PublicPricingProduct {
+  id: string; // "receptionist" | "scribe" | "ehr" | "rcm"
+  name: string; // "AI Receptionist" | "AI Scribe" | "AI EHR" | "AI RCM"
+  subtitle?: string;
+  plans: PublicPricingPlan[];
+}
+
+export interface PublicComparisonFeatureRow {
+  name: string;
+  tierValues: Record<string, string | boolean>;
+}
+
+export interface PublicComparisonGroup {
+  groupName: string;
+  features: PublicComparisonFeatureRow[];
+}
+
+export interface PublicCreditActionItem {
+  id: string;
+  name: string;
+  unitLabel: string;
+  creditsDeducted: number;
+  description?: string;
+}
+
+export interface PublicTopUpPackItem {
+  id: string;
+  credits: number;
+  price: number;
+  costPerCredit: number;
+  badge?: string;
+}
+
+export interface PublicPricingData {
+  yearlyDiscountPercent: number;
+  products: PublicPricingProduct[];
+  comparisonGroups: Record<string, PublicComparisonGroup[]>;
+  creditActions: PublicCreditActionItem[];
+  topUpPacks: PublicTopUpPackItem[];
+}
+
+const PRODUCT_DEFINITIONS = [
+  { id: "receptionist", name: "AI Receptionist", subtitle: "Includes AI CRM & Engagement" },
+  { id: "scribe", name: "AI Scribe", subtitle: "Ambient Clinical Dictation & SOAP Notes" },
+  { id: "ehr", name: "AI EHR", subtitle: "Cloud Records, Workflows & Scheduling" },
+  { id: "rcm", name: "AI RCM", subtitle: "Revenue Cycle, Claims & Denial Management" },
+];
+
+const TIER_ORDER: Record<string, number> = {
+  starter: 1,
+  growth: 2,
+  professional: 2,
+  scale: 3,
+  custom: 4,
+  enterprise: 4,
+};
+
+export function getPublicPricingData(): PublicPricingData {
+  const allPlans = getStoredPlans().filter((p) => p.isActive !== false && !p.isInternalStaffOnly);
+
+  const products: PublicPricingProduct[] = PRODUCT_DEFINITIONS.map((prodDef) => {
+    const rawPlans = allPlans.filter((p) => {
+      const c = (p.category || "").toLowerCase();
+      if (prodDef.id === "receptionist") return c.includes("reception");
+      if (prodDef.id === "scribe") return c.includes("scribe");
+      if (prodDef.id === "ehr") return c.includes("ehr");
+      if (prodDef.id === "rcm") return c.includes("rcm");
+      return false;
+    });
+
+    rawPlans.sort((a, b) => {
+      const rankA = TIER_ORDER[(a.tier || "").toLowerCase()] || 99;
+      const rankB = TIER_ORDER[(b.tier || "").toLowerCase()] || 99;
+      return rankA - rankB;
+    });
+
+    const starterObj = rawPlans.find((p) => (p.tier || "").toLowerCase() === "starter");
+    const growthObj = rawPlans.find((p) => (p.tier || "").toLowerCase() === "growth" || (p.tier || "").toLowerCase() === "professional");
+
+    const starterFeatures = starterObj?.features || [];
+    const growthFeatures = growthObj?.features || [];
+
+    const plans: PublicPricingPlan[] = rawPlans.map((p) => {
+      const inrPricing = p.countryPricing?.find((cp) => cp.currency === "INR") || p.countryPricing?.[0];
+      const monthlyPrice = inrPricing?.monthlyPrice ?? 0;
+      const yearlyPrice = inrPricing?.yearlyPrice ?? Math.round(monthlyPrice * 12 * 0.8);
+      const discountedMonthlyPrice = Math.round(monthlyPrice * 0.8);
+
+      let addedFeatures: string[] = [];
+      const tierLower = (p.tier || "").toLowerCase();
+      if (tierLower === "starter") {
+        addedFeatures = p.features;
+      } else if (tierLower === "growth" || tierLower === "professional") {
+        addedFeatures = p.features.filter((f) => !starterFeatures.includes(f));
+      } else if (tierLower === "scale" || tierLower === "custom" || tierLower === "enterprise") {
+        addedFeatures = p.features.filter((f) => !growthFeatures.includes(f) && !starterFeatures.includes(f));
+      } else {
+        addedFeatures = p.features;
+      }
+
+      return {
+        id: p.id,
+        name: p.name,
+        tier: p.tier,
+        category: prodDef.name,
+        description: p.description,
+        monthlyPrice,
+        yearlyPrice,
+        discountedMonthlyPrice,
+        monthlyCredits: p.monthlyCredits,
+        includedSeats: p.includedSeats || (tierLower === "starter" ? 8 : tierLower === "growth" ? 25 : 100),
+        teamMembers: `Up to ${p.includedSeats || (tierLower === "starter" ? 8 : tierLower === "growth" ? 25 : 100)}`,
+        isPopular: Boolean(p.isPopular),
+        features: p.features,
+        addedFeatures,
+      };
+    });
+
+    return {
+      id: prodDef.id,
+      name: prodDef.name,
+      subtitle: prodDef.subtitle,
+      plans,
+    };
+  });
+
+  // Build comparison groups per product
+  const comparisonGroups: Record<string, PublicComparisonGroup[]> = {};
+  products.forEach((prod) => {
+    comparisonGroups[prod.id] = buildProductComparisonGroups(prod);
+  });
+
+  // Credit actions (Item 6)
+  const creditActions: PublicCreditActionItem[] = getStoredCreditActions().map((act) => ({
+    id: act.id,
+    name: act.name,
+    unitLabel: act.unitLabel,
+    creditsDeducted: act.creditsDeducted,
+    description: act.description,
+  }));
+
+  // Top-up credit packs (Item 6)
+  const allPacks = getStoredCreditPackages().filter((p) => p.isActive !== false && !p.isInternalStaffOnly);
+  const inrPacks = allPacks.filter((p) => p.currency === "INR" || p.country === "India");
+  const activePacks = inrPacks.length > 0 ? inrPacks : allPacks;
+
+  const topUpPacks: PublicTopUpPackItem[] = activePacks.map((pkg) => {
+    const localized = getPackageLocalizedPrice(pkg, "India", "INR");
+    const costPerCredit = pkg.credits > 0 ? parseFloat((localized.price / pkg.credits).toFixed(2)) : 0;
+    return {
+      id: pkg.id,
+      credits: pkg.credits,
+      price: localized.price,
+      costPerCredit,
+      badge: pkg.badge,
+    };
+  });
+
+  return {
+    yearlyDiscountPercent: 20,
+    products,
+    comparisonGroups,
+    creditActions,
+    topUpPacks,
+  };
+}
+
+function buildProductComparisonGroups(prod: PublicPricingProduct): PublicComparisonGroup[] {
+  const plans = prod.plans;
+  const tiers = plans.map((p) => p.tier);
+
+  // Group 1: Platform
+  const platformFeatures: PublicComparisonFeatureRow[] = [
+    {
+      name: "Credits / month",
+      tierValues: Object.fromEntries(
+        plans.map((p) => [p.tier, p.monthlyCredits.toLocaleString()])
+      ),
+    },
+    {
+      name: "Team members",
+      tierValues: Object.fromEntries(
+        plans.map((p) => [p.tier, `Up to ${p.includedSeats}`])
+      ),
+    },
+  ];
+
+  // Check if Client Import is in any plan
+  const hasClientImport = plans.some((p) =>
+    p.features.some((f) => f.toLowerCase().includes("client import"))
+  );
+  if (hasClientImport) {
+    platformFeatures.push({
+      name: "Client Import (CSV / Excel)",
+      tierValues: Object.fromEntries(
+        plans.map((p) => [
+          p.tier,
+          p.features.some((f) => f.toLowerCase().includes("client import")),
+        ])
+      ),
+    });
+  }
+
+  // Groups:
+  const productFeatures: PublicComparisonFeatureRow[] = [];
+  const templatesFeatures: PublicComparisonFeatureRow[] = [];
+  const automationFeatures: PublicComparisonFeatureRow[] = [];
+  const enterpriseFeatures: PublicComparisonFeatureRow[] = [];
+
+  // Special multi-value handling for Specialty-Specific Workflows
+  const hasWorkflowsMulti = plans.some((p) =>
+    p.features.some((f) => f.toLowerCase().includes("specialty-specific workflow"))
+  );
+  if (hasWorkflowsMulti) {
+    productFeatures.push({
+      name: "Specialty-Specific Workflows",
+      tierValues: Object.fromEntries(
+        plans.map((p) => {
+          const feat = p.features.find((f) => f.toLowerCase().includes("specialty-specific workflow"));
+          if (!feat) return [p.tier, false];
+          if (feat.includes("(1)")) return [p.tier, "1"];
+          if (feat.includes("3")) return [p.tier, "Up to 3"];
+          if (feat.toLowerCase().includes("unlimited")) return [p.tier, "Unlimited"];
+          return [p.tier, true];
+        })
+      ),
+    });
+  }
+
+  // Collect all other distinct features preserving the order from plans data
+  const seenFeatureNames = new Set<string>();
+  if (hasClientImport) seenFeatureNames.add("client import (csv / excel)");
+  if (hasWorkflowsMulti) seenFeatureNames.add("specialty-specific workflows");
+
+  plans.forEach((plan) => {
+    plan.features.forEach((rawFeature) => {
+      const lower = rawFeature.toLowerCase().trim();
+      if (lower.includes("client import") || lower.includes("specialty-specific workflow")) {
+        return;
+      }
+      if (seenFeatureNames.has(lower)) {
+        return;
+      }
+      seenFeatureNames.add(lower);
+
+      const row: PublicComparisonFeatureRow = {
+        name: rawFeature,
+        tierValues: Object.fromEntries(
+          plans.map((p) => [
+            p.tier,
+            p.features.some((f) => f.toLowerCase().trim() === lower),
+          ])
+        ),
+      };
+
+      if (lower.includes("template")) {
+        templatesFeatures.push(row);
+      } else if (
+        lower.includes("automation") ||
+        lower.includes("workflow") ||
+        lower.includes("api") ||
+        lower.includes("webhook")
+      ) {
+        automationFeatures.push(row);
+      } else if (
+        lower.includes("security") ||
+        lower.includes("sso") ||
+        lower.includes("support") ||
+        lower.includes("dedicated") ||
+        lower.includes("sla") ||
+        lower.includes("integration") ||
+        lower.includes("training")
+      ) {
+        enterpriseFeatures.push(row);
+      } else {
+        productFeatures.push(row);
+      }
+    });
+  });
+
+  return [
+    { groupName: "Platform", features: platformFeatures },
+    { groupName: prod.name, features: productFeatures },
+    { groupName: "Templates", features: templatesFeatures },
+    { groupName: "Automation", features: automationFeatures },
+    { groupName: "Enterprise & Support", features: enterpriseFeatures },
+  ];
 }
 

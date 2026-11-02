@@ -38,6 +38,7 @@ import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
 import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
 import { logStageMove } from "../../lib/useAutomationStore";
 import { appendActivity } from "../../lib/activityEngine";
+import { isDemoMantraActive, isFreshWorkspace } from "../../lib/onboardingWorkspace";
 
 interface CallLog {
   id: string;
@@ -329,6 +330,8 @@ export default function Deals() {
     };
 
     window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+    window.addEventListener("organizationChanged", handler);
+    window.addEventListener("mantra_organization_changed", handler);
     window.addEventListener("storage", handler);
     window.addEventListener("focus", handler);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -345,6 +348,8 @@ export default function Deals() {
 
     return () => {
       window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+      window.removeEventListener("organizationChanged", handler);
+      window.removeEventListener("mantra_organization_changed", handler);
       window.removeEventListener("storage", handler);
       window.removeEventListener("focus", handler);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -361,9 +366,13 @@ export default function Deals() {
       } catch {}
     };
     window.addEventListener(PROCESS_STORE_EVENT, handler);
+    window.addEventListener("organizationChanged", handler);
+    window.addEventListener("mantra_organization_changed", handler);
     window.addEventListener("storage", handler);
     return () => {
       window.removeEventListener(PROCESS_STORE_EVENT, handler);
+      window.removeEventListener("organizationChanged", handler);
+      window.removeEventListener("mantra_organization_changed", handler);
       window.removeEventListener("storage", handler);
     };
   }, []);
@@ -544,8 +553,16 @@ export default function Deals() {
   }, [selectedProcessFilter]);
   const [stageDropdownCallId, setStageDropdownCallId] = useState<string | null>(null);
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
-  const [deals, setDeals] = useState<Deal[]>(() => {
+  const getDealsForActiveOrg = (): Deal[] => {
     try {
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        const raw = localStorage.getItem(`deals_${signupOrgId}`) || sessionStorage.getItem(`deals_${signupOrgId}`);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+
       const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
       let list: Deal[] = raw ? JSON.parse(raw) : initialDeals;
       if (!Array.isArray(list) || list.length === 0) list = initialDeals;
@@ -562,23 +579,28 @@ export default function Deals() {
       }
       return list;
     } catch {
-      return initialDeals;
+      return [];
     }
-  });
+  };
+
+  const [deals, setDeals] = useState<Deal[]>(getDealsForActiveOrg);
 
   useEffect(() => {
     try {
-      localStorage.setItem("deals", JSON.stringify(deals));
-      sessionStorage.setItem("deals", JSON.stringify(deals));
+      if (isFreshWorkspace()) {
+        const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+        localStorage.setItem(`deals_${signupOrgId}`, JSON.stringify(deals));
+        sessionStorage.setItem(`deals_${signupOrgId}`, JSON.stringify(deals));
+      } else {
+        localStorage.setItem("deals", JSON.stringify(deals));
+        sessionStorage.setItem("deals", JSON.stringify(deals));
+      }
     } catch {}
   }, [deals]);
 
   useEffect(() => {
     const handler = () => {
-      try {
-        const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
-        if (raw) setDeals(JSON.parse(raw));
-      } catch {}
+      setDeals(getDealsForActiveOrg());
     };
 
     const handleVisibility = () => {
@@ -588,6 +610,8 @@ export default function Deals() {
     };
 
     window.addEventListener("deals_updated", handler);
+    window.addEventListener("organizationChanged", handler);
+    window.addEventListener("mantra_organization_changed", handler);
     window.addEventListener("storage", handler);
     window.addEventListener("focus", handler);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -604,6 +628,8 @@ export default function Deals() {
 
     return () => {
       window.removeEventListener("deals_updated", handler);
+      window.removeEventListener("organizationChanged", handler);
+      window.removeEventListener("mantra_organization_changed", handler);
       window.removeEventListener("storage", handler);
       window.removeEventListener("focus", handler);
       document.removeEventListener("visibilitychange", handleVisibility);

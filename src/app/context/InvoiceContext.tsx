@@ -346,13 +346,22 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch {}
     };
 
+    const handleOrgChange = () => {
+      setInvoices(invoiceService.getInvoices());
+      handleSyncPayments();
+    };
+
     window.addEventListener("mantra_payments_changed", handleSyncPayments);
     window.addEventListener("storage", handleSyncPayments);
+    window.addEventListener("organizationChanged", handleOrgChange);
+    window.addEventListener("mantra_organization_changed", handleOrgChange);
 
     return () => {
       unsub();
       window.removeEventListener("mantra_payments_changed", handleSyncPayments);
       window.removeEventListener("storage", handleSyncPayments);
+      window.removeEventListener("organizationChanged", handleOrgChange);
+      window.removeEventListener("mantra_organization_changed", handleOrgChange);
     };
   }, []);
 

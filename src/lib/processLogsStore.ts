@@ -1,3 +1,5 @@
+import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
 
@@ -73,14 +75,53 @@ function notifyProcessLogsChanged() {
 
 export function getStoredCallLogs(): CallLog[] {
   try {
-    const raw = (typeof window !== "undefined" && (localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY))) || null;
-    let logs = raw ? JSON.parse(raw) : initialCallLogs;
-    if (!Array.isArray(logs) || logs.length === 0) {
-      logs = initialCallLogs;
+    if (isDemoMantraActive()) {
+      const demoRaw =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem("callLogs_demo") || localStorage.getItem(STORAGE_KEY))) ||
+        null;
+      if (demoRaw) {
+        try {
+          const logs = JSON.parse(demoRaw);
+          if (Array.isArray(logs) && logs.length > 0) return logs;
+        } catch {}
+      }
+      return initialCallLogs;
     }
+
+    if (isFreshWorkspace()) {
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      const raw =
+        (typeof window !== "undefined" &&
+          ((activeOrgId && localStorage.getItem(`callLogs_${activeOrgId}`)) ||
+            localStorage.getItem("callLogs_signup"))) ||
+        null;
+      if (raw) {
+        try {
+          const logs = JSON.parse(raw);
+          if (Array.isArray(logs)) return logs;
+        } catch {}
+      }
+      return [];
+    }
+
+    const raw =
+      (typeof window !== "undefined" &&
+        (localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY))) ||
+      null;
+
+    if (raw !== null && raw !== undefined) {
+      const logs = JSON.parse(raw);
+      if (Array.isArray(logs)) {
+        if (logs.length === 0) return [];
+        return logs;
+      }
+    }
+
+    let logs = initialCallLogs;
     let migrated = false;
 
-    // Ensure Patient Care Journey logs are present in logs
+    // Ensure Patient Care Journey logs are present in logs only in demo mode
     const hasPatientCare = logs.some((l: CallLog) => l.process === "Patient Care Journey");
     if (!hasPatientCare) {
       logs = [...initialPatientCareJourneyLogs, ...logs];
@@ -95,7 +136,7 @@ export function getStoredCallLogs(): CallLog[] {
     }
     return logs;
   } catch {
-    return initialCallLogs;
+    return [];
   }
 }
 

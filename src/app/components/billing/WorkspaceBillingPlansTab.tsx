@@ -43,6 +43,8 @@ import {
   CartItem,
   PLAN_CATEGORIES,
   PlanCategory,
+  DEFAULT_COUNTRY_PRICING,
+  isCategoryMatch,
   getStoredPlans,
   getStoredCreditPackages,
   getStoredTeamMemberPacks,
@@ -61,6 +63,10 @@ import {
   PLANS_BILLING_CHANGED_EVENT,
   CART_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
+import {
+  normalizeCategoryToTabName,
+  isPlanMatchingRecommendedTier,
+} from "../../../lib/planRecommendation";
 import { useOrganization } from "../../context/OrganizationContext";
 
 export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHeader?: boolean } = {}) {
@@ -73,7 +79,22 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
 
   // Category filter state (strictly category-wise: "AI Receptionist", "AI Scribe", "EHR", "RCM")
-  const [selectedCategory, setSelectedCategory] = useState<string>(PLAN_CATEGORIES[0]);
+  // Preselect category tab that matches default_category on first open.
+  // Existing organizations with no saved answers open Plans on the first tab as it does today.
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    if (activeOrganization?.default_category) {
+      return normalizeCategoryToTabName(activeOrganization.default_category);
+    }
+    return PLAN_CATEGORIES[0];
+  });
+
+  useEffect(() => {
+    if (activeOrganization?.default_category) {
+      setSelectedCategory(normalizeCategoryToTabName(activeOrganization.default_category));
+    } else {
+      setSelectedCategory(PLAN_CATEGORIES[0]);
+    }
+  }, [activeOrganization?.id, activeOrganization?.default_category]);
 
   // Cart modal/slide-over state
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -131,10 +152,13 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   // Apply Scope-based visibility filtering & Tier positioning
   const scopedPlanItems = useMemo(() => {
     const available = getAvailablePlansForWorkspace(plans, {
-      id: activeOrganization.id,
-      industryCategory: activeOrganization.industryCategory,
-      country: activeOrganization.country || "United States",
-      currency: activeOrganization.currency || "USD",
+      id: activeOrganization?.id,
+      industryCategory: activeOrganization?.industryCategory,
+      industry: activeOrganization?.industry,
+      locations: activeOrganization?.locations || (activeOrganization?.location ? [activeOrganization.location] : []),
+      location: activeOrganization?.location,
+      country: activeOrganization?.country || activeOrganization?.location || "United States",
+      currency: activeOrganization?.currency || "USD",
     });
 
     // 1. Free plan is an onboarding plan and is NOT shown on the plans page
@@ -145,8 +169,31 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
     // Filter strictly by selected category ("AI Receptionist", "AI Scribe", "EHR", "RCM")
     if (selectedCategory) {
       visiblePlans = visiblePlans.filter(
-        ({ plan }) => (plan.category || "").toLowerCase() === selectedCategory.toLowerCase()
+        ({ plan }) => isCategoryMatch(plan.category, selectedCategory)
       );
+    }
+
+    // Fallback: If strict scoping yielded 0 plans but active plans exist in the selected category,
+    // display all active plans for that category so the tenant workspace is never locked out
+    if (visiblePlans.length === 0 && plans.length > 0) {
+      const fallbackActive = plans
+        .filter((p) => p.isActive && !p.isInternalStaffOnly && (p.tier || "").toLowerCase() !== "free")
+        .filter((p) => !selectedCategory || isCategoryMatch(p.category, selectedCategory));
+
+      if (fallbackActive.length > 0) {
+        const targetCountry = (activeOrganization?.country || activeOrganization?.location || "United States").trim().toLowerCase();
+        visiblePlans = fallbackActive.map((plan) => {
+          let pricing = plan.countryPricing.find((cp) => cp.country.trim().toLowerCase() === targetCountry) ||
+            plan.countryPricing.find((cp) => cp.country.toLowerCase().includes("united states") || cp.currency === "USD") ||
+            plan.countryPricing[0] ||
+            DEFAULT_COUNTRY_PRICING[0];
+          return {
+            plan,
+            pricing,
+            isIndustrySpecific: (plan.targetCategory || "Global").trim().toLowerCase() !== "global",
+          };
+        });
+      }
     }
 
     // 2. Tier decides the positioning of the cards: Starter > Professional > Enterprise > Custom
@@ -216,8 +263,8 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
         {/* Categories selector pills placed BEFORE monthly / yearly */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          {PLAN_CATEGORIES.map((cat) => {
-            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+          {PLAN_CATEGORIES.filter((cat) => cat !== "Internal" && cat !== "Onboarding").map((cat) => {
+            const isSelected = isCategoryMatch(selectedCategory, cat);
             return (
               <button
                 key={cat}
@@ -290,7 +337,10 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch pt-3">
         {scopedPlanItems.map(({ plan, pricing }) => {
           const isYearly = billingCycle === "yearly";
-          const isCurrentPlan = subscription?.planId === plan.id;
+          const isCurrentPlan =
+            subscription?.status === "Active" &&
+            (subscription?.planId === plan.id ||
+              (subscription?.planName && subscription.planName.toLowerCase() === plan.name.toLowerCase()));
           const inCartItem = cartItems.find((ci) => ci.type === "plan" && ci.planId === plan.id);
           const displayPrice = isYearly ? pricing.yearlyPrice : pricing.monthlyPrice;
           const credits = isYearly ? plan.yearlyCredits : plan.monthlyCredits;
@@ -309,7 +359,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   : "border-slate-200/85 hover:border-slate-300"
               }`}
             >
-              {/* Highlight as Popular - Ribbon on Pricing Card */}
+              {/* Highlight as Popular - Ribbon on Pricing Card (No Recommended badge) */}
               {isPopular && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
                   <span

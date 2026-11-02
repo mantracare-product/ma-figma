@@ -289,6 +289,7 @@ const NODE_CATEGORIES = [
     label: "Data & Assignment",
     icon: <Settings2 className="w-3.5 h-3.5" />,
     nodes: [
+      { type: "field-update" as NodeType, label: "Field Update", icon: <Sliders className="w-4 h-4" />, desc: "Update a record or workflow field value" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member to handle this record" },
       { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data payload via webhook" },
     ],
@@ -575,7 +576,21 @@ function getNodeSubtitle(
     return node.config?.callActionPhoneNumber ? `${node.config.callActionCountryCode || ""} ${node.config.callActionPhoneNumber}` : "Transfer active call";
   }
   if (node.type === "field-update") {
-    if (node.config?.fieldName) return `Set ${node.config.fieldName} = ${node.config.fieldValue || "value"}`;
+    const pFields = node.config?.processFields ? Object.keys(node.config.processFields).filter(k => Boolean(node.config.processFields[k])) : [];
+    if (pFields.length > 0) {
+      const firstKey = pFields[0];
+      const val = node.config.processFields[firstKey];
+      return `Set ${firstKey} = ${val}${pFields.length > 1 ? ` (+${pFields.length - 1} more)` : ""}`;
+    }
+    const pField = node.config?.primaryFieldLabel || node.config?.fieldName || node.config?.primaryField || node.config?.fieldUpdateBlocks?.[0]?.fieldLabel || node.config?.fieldUpdateBlocks?.[0]?.fieldToEdit;
+    if (pField) {
+      const op = node.config?.operator || node.config?.fieldUpdateBlocks?.[0]?.operator || "=";
+      const val = node.config?.value ?? node.config?.fieldValue ?? node.config?.fieldUpdateBlocks?.[0]?.updateValue ?? "";
+      return `Set ${pField} ${op === "Equal To" ? "=" : op} ${val || "(blank)"}`;
+    }
+    if (node.config?.processName) {
+      return `Update in ${node.config.processName}`;
+    }
     return "Update record attributes";
   }
   if (node.type === "assign-responsible") {

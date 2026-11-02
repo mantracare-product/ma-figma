@@ -2,19 +2,18 @@
  * AdminSidebar.tsx
  * Path: src/app/components/layout/AdminSidebar.tsx
  *
- * Dedicated Admin Portal Sidebar navigation:
- * - Docked inline navigation matching client Sidebar.
- * - Collapsible to 68px (icon rail) or expandable to 256px (full accordion).
- * - Middle navigation area scrolls independently (flex-1 overflow-y-auto).
- * - Bottom footer ("Back to Clinic App" and "Log out") is pinned (shrink-0).
+ * Dedicated Admin Portal Side Drawer Navigation:
+ * - Positioned below the top bar, sliding out on-demand via the hamburger button.
+ * - Navigation sections match exact MA client hover and active styles.
+ * - Links automatically close drawer on selection.
+ * - Bottom has pinned Admin user card with avatar, role, and logout menu.
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
   ShoppingCart,
   CreditCard,
   PhoneCall,
@@ -28,17 +27,16 @@ import {
   Shield,
   Building2,
   BarChart2,
-  Blocks,
   Users,
   FileText,
   Megaphone,
   LogOut,
-  ArrowUpRight,
   Zap,
   Sparkles,
+  User,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { useSidebar } from "../../context/SidebarContext";
 import { toast } from "sonner";
 
 interface AdminSidebarProps {
@@ -62,16 +60,30 @@ interface NavSection {
 export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
-  const { collapsed, setCollapsed } = useSidebar();
+  const { user, logout } = useAuth();
 
-  // Accordion state
+  // Accordion state - auto-expanded section containing active route
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    overview: false,
-    setup: true,
-    corporate: false,
+    corporate: true,
+    templates: true,
+    integrations: true,
     settings: false,
   });
+
+  // User profile upward dropdown state
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const toggleSection = (secId: string) => {
     setExpandedSections((prev) => ({
@@ -88,24 +100,20 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
 
   const sections: NavSection[] = [
     {
-      id: "overview",
-      title: "OVERVIEW",
+      id: "corporate",
+      title: "CORPORATE",
       items: [
-        { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
-        { id: "subscriptions", label: "Billing & Subscriptions", icon: CreditCard, path: "/admin/billing" },
-        { id: "call-logs", label: "Calls logs", icon: PhoneCall, path: "/admin/call-logs" },
-        { id: "credits", label: "Credits & Packages", icon: Coins, path: "/admin/plans" },
-        { id: "usages", label: "Usages (LiveKit / Dogra, Cartesia)", icon: Activity, path: "/admin/usages" },
+        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
+        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
+        { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
       ],
     },
     {
-      id: "setup",
-      title: "SETUP",
+      id: "templates",
+      title: "TEMPLATES",
       items: [
-        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
         { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows" },
         { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
-        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
         { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
@@ -113,11 +121,10 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       ],
     },
     {
-      id: "corporate",
-      title: "CORPORATE",
+      id: "integrations",
+      title: "INTEGRATIONS",
       items: [
-        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
-        { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
+        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
       ],
     },
     {
@@ -125,7 +132,6 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "SETTINGS",
       items: [
         { id: "plans", label: "Plans & Credits", icon: CreditCard, path: "/admin/plans" },
-        { id: "integration", label: "Integration", icon: Blocks, path: "/admin/settings" },
         { id: "user-management", label: "User Management", icon: Users, path: "/admin/users" },
         { id: "logs", label: "Logs", icon: FileText, path: "/admin/logs" },
         { id: "campaigns", label: "Campaigns", icon: Megaphone, path: "/admin/campaigns" },
@@ -173,193 +179,151 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
     return location.pathname === itemPath;
   };
 
+  // Auto-expand section containing current active path
+  useEffect(() => {
+    sections.forEach((sec) => {
+      const hasActive = sec.items.some((it) => isPathActive(it.path));
+      if (hasActive) {
+        setExpandedSections((prev) => ({
+          ...prev,
+          [sec.id]: true,
+        }));
+      }
+    });
+  }, [location.pathname]);
+
   return (
-    <aside
-      className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${
-        collapsed ? "w-[68px] min-w-[68px] max-w-[68px]" : "w-64 min-w-[256px] max-w-[256px]"
-      }`}
-    >
-      {/* Floating Circular Collapse/Expand Toggle Button on dividing border */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        className="absolute -right-2.5 top-[60px] w-5 h-5 rounded-full bg-white border border-gray-200/90 shadow-xs hover:shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-all z-40 cursor-pointer"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? (
-          <ChevronRight className="w-3 h-3 text-gray-600" />
-        ) : (
-          <ChevronLeft className="w-3 h-3 text-gray-600" />
-        )}
-      </button>
-
+    <aside className="h-full w-64 min-w-[256px] max-w-[256px] bg-white flex flex-col shrink-0 select-none z-30 relative">
       <div className="h-full w-full flex flex-col justify-between overflow-hidden">
-        {/* ── Top Header / Admin Badge ── */}
-        {collapsed ? (
-          <div className="p-3 flex justify-center border-b border-gray-100">
-            <div
-              className="w-8 h-8 rounded-xl bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shadow-xs"
-              title="Admin Portal"
-            >
-              <Shield className="w-4 h-4 text-white" />
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 pb-2">
-            <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 px-3 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  <Shield className="w-4 h-4 text-white" />
-                </div>
-                <div className="truncate">
-                  <span
-                    className="text-xs font-bold text-gray-900 block truncate"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Admin Console
+        {/* ── Middle Scrollable Navigation List (Starts right below the topbar) ── */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {sections.map((section) => {
+            const isExpanded = !!expandedSections[section.id];
+            const hasActiveChild = section.items.some((it) => isPathActive(it.path));
+
+            return (
+              <div key={section.id} className="space-y-1.5">
+                {/* Accordion Header Button matching MA styling */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.id)}
+                  className={`w-full px-3 py-1.5 flex items-center justify-between text-[11px] font-bold tracking-wider rounded-lg transition-all cursor-pointer group ${
+                    hasActiveChild && !isExpanded
+                      ? "text-gray-900 bg-gray-100/70"
+                      : "text-gray-700 hover:text-gray-900 hover:bg-gray-50/80"
+                  }`}
+                >
+                  <span className="group-hover:text-gray-900 transition-colors">
+                    {section.title}
                   </span>
-                  <span className="text-[10px] text-gray-500 block truncate">
-                    Platform Management
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Scrollable Navigation Items ── */}
-        <div className={`flex-1 overflow-y-auto ${collapsed ? "p-2 space-y-2" : "p-4 space-y-4"} min-h-0`}>
-          {collapsed ? (
-            /* Collapsed Icon-Only Rail */
-            <div className="space-y-1.5 flex flex-col items-center">
-              {sections.flatMap((s) => s.items).map((item) => {
-                const active = isPathActive(item.path);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.id}
-                    to={item.path}
-                    onClick={onClose}
-                    title={item.label}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                      active
-                        ? "bg-[#1E293B] text-white shadow-xs font-semibold"
-                        : "text-[#64748B] hover:text-[#0F172A] hover:bg-gray-100"
-                    }`}
-                  >
-                    <Icon className="w-4.5 h-4.5 shrink-0" />
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            /* Expanded Full Accordion View */
-            sections.map((section) => {
-              const isExpanded = !!expandedSections[section.id];
-              const hasActiveChild = section.items.some((it) => isPathActive(it.path));
-
-              const getHeaderStyle = () => {
-                if (isExpanded && hasActiveChild) {
-                  return "border-2 border-gray-900 text-gray-900 rounded-full bg-white shadow-2xs";
-                }
-                if (section.id === "overview") {
-                  return "bg-gray-100 text-gray-700 rounded-full";
-                }
-                return "text-gray-700 hover:text-gray-900";
-              };
-
-              return (
-                <div key={section.id} className="space-y-1.5">
-                  {/* Accordion Header Button */}
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(section.id)}
-                    className={`w-full px-4 py-2 flex items-center justify-between text-[11px] font-bold tracking-wider transition-all cursor-pointer ${getHeaderStyle()}`}
-                  >
-                    <span>{section.title}</span>
-                    {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
-                    )}
-                  </button>
-
-                  {/* Accordion Body Items */}
-                  {isExpanded && (
-                    <div className="pt-1 pb-2 space-y-1 pl-1">
-                      {section.items.map((item) => {
-                        const active = isPathActive(item.path);
-                        const Icon = item.icon;
-
-                        return (
-                          <Link
-                            key={item.id}
-                            to={item.path}
-                            onClick={onClose}
-                            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all ${
-                              active
-                                ? "bg-[#1E293B] text-white font-semibold shadow-xs"
-                                : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-50"
-                            }`}
-                          >
-                            <Icon
-                              className={`w-4 h-4 shrink-0 ${
-                                active ? "text-white" : "text-[#64748B]"
-                              }`}
-                            />
-                            <span className="truncate">{item.label}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+                  {isExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
                   )}
-                </div>
-              );
-            })
-          )}
+                </button>
+
+                {/* Accordion Body Items matching MA styling */}
+                {isExpanded && (
+                  <div className="pt-1 pb-2 space-y-1 pl-1">
+                    {section.items.map((item) => {
+                      const active = isPathActive(item.path);
+                      const Icon = item.icon;
+
+                      return (
+                        <Link
+                          key={item.id}
+                          to={item.path}
+                          onClick={onClose}
+                          className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all group ${
+                            active
+                              ? "bg-[#1E293B] text-white font-semibold shadow-xs"
+                              : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-50"
+                          }`}
+                        >
+                          <Icon
+                            className={`w-4 h-4 shrink-0 transition-colors ${
+                              active ? "text-white" : "text-[#64748B] group-hover:text-[#0F172A]"
+                            }`}
+                          />
+                          <span className="truncate flex-1">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        {/* ── Fixed/Pinned Bottom Controls ── */}
-        <div className={`shrink-0 ${collapsed ? "p-2 border-t border-gray-100 flex flex-col items-center gap-1 bg-[#FAFAFA]" : "p-4 border-t border-gray-100 space-y-1 bg-[#FAFAFA]"}`}>
-          {collapsed ? (
-            <>
-              <Link
-                to="/clients"
-                title="Back to Clinic App"
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-              >
-                <ArrowUpRight className="w-4.5 h-4.5" />
-              </Link>
+        {/* ── Fixed/Pinned Bottom Admin Profile Card (Matches MA Sidebar) ── */}
+        <div className="shrink-0 p-3 border-t border-gray-100 bg-[#FAFAFA] relative" ref={userMenuRef}>
+          {/* Upward Dropdown Menu */}
+          {showUserMenu && (
+            <div className="absolute bottom-full left-3 right-3 mb-2 bg-white/95 backdrop-blur-xl border border-gray-200/90 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
               <button
                 type="button"
-                onClick={handleSignOut}
-                title="Log out"
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                onClick={() => {
+                  setShowUserMenu(false);
+                  navigate("/profile");
+                  if (onClose) onClose();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-[#1456f0] hover:bg-blue-50/60 transition-colors cursor-pointer"
               >
-                <LogOut className="w-4.5 h-4.5" />
+                <User className="w-4 h-4 text-gray-500" />
+                <span>Profile</span>
               </button>
-            </>
-          ) : (
-            <>
-              <Link
-                to="/clients"
-                className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-              >
-                <ArrowUpRight className="w-4 h-4 text-gray-400" />
-                <span>Back to Clinic App</span>
-              </Link>
 
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-              >
-                <LogOut className="w-4 h-4 text-gray-400" />
-                <span>Log out</span>
-              </button>
-            </>
+              <div className="border-t border-gray-100 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    handleSignOut();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 text-red-500" />
+                  <span>Log out</span>
+                </button>
+              </div>
+            </div>
           )}
+
+          {/* Admin User card trigger button */}
+          <button
+            type="button"
+            onClick={() => setShowUserMenu((v) => !v)}
+            className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-gray-100 transition-all cursor-pointer group"
+            aria-expanded={showUserMenu}
+            aria-label="Admin user menu"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#1E293B] to-[#334155] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ring-1 ring-black/5">
+                {user?.name
+                  ? user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : "AD"}
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span
+                  className="text-xs font-bold text-gray-900 truncate group-hover:text-black"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {user?.name || "Admin"}
+                </span>
+                <span className="text-[11px] text-gray-400 truncate">
+                  {user?.role || "Administrator"}
+                </span>
+              </div>
+            </div>
+            <ChevronsUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 shrink-0" />
+          </button>
         </div>
       </div>
     </aside>

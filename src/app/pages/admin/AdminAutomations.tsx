@@ -54,6 +54,13 @@ export default function AdminAutomations() {
   const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
   const [scopingTargetRuleId, setScopingTargetRuleId] = useState<string | null>(null);
 
+  // New Rule Popup Modal state
+  const [showNewRuleModal, setShowNewRuleModal] = useState(false);
+  const [newRuleName, setNewRuleName] = useState("");
+  const [newRuleDescription, setNewRuleDescription] = useState("");
+  const [newRuleScopingRules, setNewRuleScopingRules] = useState<ScopingRule[]>([]);
+  const [newRuleNameError, setNewRuleNameError] = useState("");
+
   const availableIndustriesForFilter = useMemo(() => {
     if (selectedCategoryFilter === "All") {
       return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
@@ -140,7 +147,24 @@ export default function AdminAutomations() {
   }, [activeRule, pendingScopingRules, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
 
   const drawerInitialAutomation = useMemo(() => {
-    if (isCreatingNewRule || !activeRule) return null;
+    if (isCreatingNewRule) {
+      return {
+        id: `rule-${Date.now()}`,
+        orgId: "default",
+        name: newRuleName.trim() || "New Global Automation",
+        description: newRuleDescription.trim(),
+        scope: "global" as const,
+        status: "active" as const,
+        scopingRules: newRuleScopingRules.length > 0 ? newRuleScopingRules : drawerInitialScopingRules,
+        trigger: {
+          type: "client" as EventTriggerType,
+          event: "client.created",
+        },
+        steps: [],
+        updatedAt: new Date().toISOString(),
+      } as any;
+    }
+    if (!activeRule) return null;
     return {
       id: activeRule.id,
       orgId: activeRule.orgId || "default",
@@ -173,12 +197,36 @@ export default function AdminAutomations() {
       })) as any,
       updatedAt: activeRule.updatedAt || "",
     } as any;
-  }, [isCreatingNewRule, activeRule]);
+  }, [isCreatingNewRule, activeRule, newRuleName, newRuleDescription, newRuleScopingRules, drawerInitialScopingRules]);
 
   const handleCreateNewRule = () => {
+    setNewRuleName("");
+    setNewRuleDescription("");
+    setNewRuleNameError("");
+    const initialScope: ScopingRule[] =
+      selectedCategoryFilter && selectedCategoryFilter !== "All"
+        ? [
+            {
+              industryCategory: selectedCategoryFilter,
+              industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+              locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+            },
+          ]
+        : [];
+    setNewRuleScopingRules(initialScope);
+    setShowNewRuleModal(true);
+  };
+
+  const handleConfirmNewRuleModal = () => {
+    if (!newRuleName.trim()) {
+      setNewRuleNameError("Please enter a rule name to continue.");
+      return;
+    }
+    setNewRuleNameError("");
+    setShowNewRuleModal(false);
     setIsCreatingNewRule(true);
     setActiveRuleId(null);
-    setPendingScopingRules([]);
+    setPendingScopingRules(newRuleScopingRules);
     setIsAddAutomationDrawerOpen(true);
   };
 
@@ -500,7 +548,7 @@ export default function AdminAutomations() {
           defaultView="flowbuilder"
           processes={processes}
           initialAutomation={drawerInitialAutomation}
-          processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
+          processName={isCreatingNewRule ? (newRuleName.trim() || "New Global Automation") : (activeRule ? activeRule.name : "New Global Automation")}
           workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
         onSaveAutomation={(saved) => {
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
@@ -612,8 +660,8 @@ export default function AdminAutomations() {
             try {
               const created = createRule({
                 orgId: "default",
-                name: saved.name || "New Automation",
-                description: saved.description || "",
+                name: saved.name || newRuleName.trim() || "New Automation",
+                description: saved.description !== undefined ? saved.description : newRuleDescription.trim(),
                 entityType: detectedEntityType,
                 isAdmin: true,
                 createdIn: "admin",
@@ -671,6 +719,121 @@ export default function AdminAutomations() {
         }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
+      )}
+
+      {/* New Automation Rule Modal (Name, Description, Admin Scope) */}
+      {showNewRuleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[88vh]">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Create New Automation Rule
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Define rule details and admin scope before building the workflow.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewRuleModal(false);
+                  setNewRuleNameError("");
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Rule Name */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Rule Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newRuleName}
+                  onChange={(e) => {
+                    setNewRuleName(e.target.value);
+                    if (newRuleNameError) setNewRuleNameError("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleConfirmNewRuleModal();
+                    }
+                  }}
+                  placeholder="e.g. Client Intake & Follow-up Workflow"
+                  autoFocus
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border ${
+                    newRuleNameError ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:border-blue-500 focus:ring-blue-100"
+                  } rounded-xl shadow-2xs outline-none focus:ring-2 transition-all`}
+                />
+                {newRuleNameError && (
+                  <p className="text-[11px] text-red-500 mt-1 font-medium">{newRuleNameError}</p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Description <span className="text-gray-400 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={newRuleDescription}
+                  onChange={(e) => setNewRuleDescription(e.target.value)}
+                  placeholder="Explain what this automation accomplishes..."
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-300 rounded-xl shadow-2xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                />
+              </div>
+
+              {/* Admin Scope */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Admin Scope
+                </label>
+                <AdminControlAccordion
+                  scopingRules={newRuleScopingRules}
+                  onScopingRulesChange={(rules) => setNewRuleScopingRules(rules)}
+                  defaultAdminControlOpen={true}
+                  defaultScopeOpen={true}
+                  defaultPermissionsOpen={false}
+                  scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
+                  permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50/70 border-t border-gray-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewRuleModal(false);
+                  setNewRuleNameError("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmNewRuleModal}
+                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span>Continue to Builder</span>
+                <span>→</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Admin Scope Rules Configuration Modal */}

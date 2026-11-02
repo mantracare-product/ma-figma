@@ -23,6 +23,19 @@ function apiServerPlugin() {
     name: 'api-server-plugin',
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
+        if ((req.url === '/api/public/pricing' || req.url?.startsWith('/api/public/pricing?')) && req.method === 'GET') {
+          try {
+            const { getPublicPricingData } = await server.ssrLoadModule('./src/lib/plansBillingStore.ts');
+            const data = getPublicPricingData();
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(data));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Failed to load public pricing', detail: String(err?.message || err) }));
+          }
+          return;
+        }
         if (req.url === '/api/stt/transcribe') {
           if (req.method === 'GET') {
             res.setHeader('Content-Type', 'application/json');
@@ -68,6 +81,25 @@ function apiServerPlugin() {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Simulation failed', detail: String(err?.message || err) }));
+            }
+          });
+          return;
+        }
+        if (req.url === '/api/onboarding/extract' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: any) => { body += chunk; });
+          req.on('end', async () => {
+            try {
+              const reqBody = JSON.parse(body);
+              const { handleOnboardingExtractRequest } = await server.ssrLoadModule('./api/onboarding/extract.ts');
+              const result = await handleOnboardingExtractRequest(reqBody);
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ unconfigured: true, error: String(err?.message || err) }));
             }
           });
           return;

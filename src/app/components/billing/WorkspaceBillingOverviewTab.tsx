@@ -50,6 +50,7 @@ import {
   getSubscriptionDisplayPlanName,
   PLANS_BILLING_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
+import { formatCategoryWithPrefix } from "../../../lib/planRecommendation";
 import { useOrganization } from "../../context/OrganizationContext";
 
 interface WorkspaceBillingOverviewTabProps {
@@ -115,21 +116,40 @@ export default function WorkspaceBillingOverviewTab({
   }, [initialSub]);
 
   // Derived subscription values according to PRD FR-1, FR-11, Rule 5.3
-  const isFreePlan = (sub?.tier || "").toLowerCase() === "free" || sub?.amount === 0;
+  const storedPlans = getStoredPlans();
+  const currentPlanObj = storedPlans.find(
+    (p) => p.id === sub?.planId || (sub?.planName && p.name.toLowerCase() === sub.planName.toLowerCase())
+  );
+
+  const isFreePlan = (sub?.tier || "").toLowerCase() === "free";
   const hasPlan = Boolean(
     sub?.status === "Active" ||
       (sub?.planName && sub.planName !== "No Plan Assigned")
   );
-  const planName = getSubscriptionDisplayPlanName(sub);
+  const freeCategory = formatCategoryWithPrefix(
+    activeOrganization?.default_category ||
+    sub?.activePlans?.[0]?.category ||
+    "AI Receptionist"
+  );
+  const planName = isFreePlan
+    ? `Free Plan · ${freeCategory}`
+    : getSubscriptionDisplayPlanName(sub);
   const currencySymbol = sub?.currencySymbol || "$";
-  const planRate = isFreePlan ? "Free ($0)" : `${currencySymbol}${sub?.amount || 49}`;
+  const planRate = isFreePlan
+    ? "Free ($0)"
+    : (sub?.tier || currentPlanObj?.tier || "").toLowerCase() === "custom"
+    ? "Custom"
+    : `${currencySymbol}${((sub?.amount ?? currentPlanObj?.countryPricing?.[0]?.monthlyPrice ?? 0)).toLocaleString()}`;
   const isYearly = sub?.billingCycle === "yearly";
 
-  const includedSeats = sub?.includedSeats ?? (isFreePlan ? 1 : 5);
+  const includedSeats = sub?.includedSeats ?? currentPlanObj?.includedSeats ?? (isFreePlan ? 1 : 2);
   const extraSeats = sub?.extraSeatsPurchased || 0;
   const totalAllowedSeats = includedSeats + extraSeats;
 
-  const planCredits = sub?.planCredits && sub.planCredits > 0 ? sub.planCredits : (isFreePlan ? 500 : 1000);
+  const planCredits =
+    sub?.planCredits && sub.planCredits > 0
+      ? sub.planCredits
+      : currentPlanObj?.monthlyCredits ?? (isFreePlan ? 500 : 1000);
   const addonCredits = sub?.addonCredits || 0;
   const totalCredits = hasPlan ? (sub?.totalCredits || planCredits + addonCredits) : addonCredits;
   const consumedCredits = sub?.creditsUsed || 0;
@@ -137,10 +157,6 @@ export default function WorkspaceBillingOverviewTab({
     totalCredits > 0
       ? Math.min(100, Math.max(0.1, (consumedCredits / totalCredits) * 100)).toFixed(1)
       : "0.0";
-
-  // Features list from assigned plan
-  const storedPlans = getStoredPlans();
-  const currentPlanObj = storedPlans.find((p) => p.id === sub?.planId);
   const rawFeatures = hasPlan
     ? currentPlanObj?.features || [
         "AI Voice Receptionist agent",
@@ -416,11 +432,11 @@ export default function WorkspaceBillingOverviewTab({
               className="text-sm font-bold text-slate-900 text-left sm:text-right"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {(sub?.tier || "").toLowerCase() === "custom"
+              {(sub?.tier || currentPlanObj?.tier || "").toLowerCase() === "custom"
                 ? "Custom"
                 : isFreePlan && extraSeats === 0
                 ? "Free ($0) / month"
-                : `${currencySymbol}${(((sub?.amount || 0)) + extraSeats * (globalSettings.defaultPricePerExtraMember || 20)).toLocaleString()} / ${isYearly ? "year" : "month"}`}
+                : `${currencySymbol}${(((sub?.amount ?? currentPlanObj?.countryPricing?.[0]?.monthlyPrice ?? 0)) + extraSeats * (globalSettings.defaultPricePerExtraMember || 20)).toLocaleString()} / ${isYearly ? "year" : "month"}`}
             </span>
           </div>
 

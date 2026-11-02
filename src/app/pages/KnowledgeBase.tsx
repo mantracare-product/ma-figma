@@ -44,6 +44,7 @@ import PageTopBar from "../components/layout/PageTopBar";
 import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
+import { isDemoMantraActive, isFreshWorkspace } from "../../lib/onboardingWorkspace";
 
 // ─── Process / Stage seed data (mirrors Process.tsx state) ───────────────────
 
@@ -1175,6 +1176,55 @@ const SEED_SOURCES: GlobalKnowledgeSource[] = [
   },
 ];
 
+export const KB_STORAGE_KEY = "ma_knowledge_base_sources";
+export const KB_STORE_EVENT = "ma_knowledge_base_changed";
+
+export function getStoredKnowledgeBaseSources(): GlobalKnowledgeSource[] {
+  try {
+    if (isDemoMantraActive()) {
+      const demoRaw = typeof window !== "undefined" ? localStorage.getItem("ma_kb_sources_demo") : null;
+      if (demoRaw) {
+        try {
+          const parsed = JSON.parse(demoRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+      return SEED_SOURCES;
+    }
+
+    if (isFreshWorkspace()) {
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      const raw =
+        (typeof window !== "undefined" &&
+          ((activeOrgId && localStorage.getItem(`ma_kb_${activeOrgId}`)) ||
+            localStorage.getItem("ma_kb_sources_signup") ||
+            localStorage.getItem(KB_STORAGE_KEY))) ||
+        null;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {}
+      }
+      return [];
+    }
+
+    const raw = typeof window !== "undefined" ? localStorage.getItem(KB_STORAGE_KEY) : null;
+    if (raw !== null && raw !== undefined) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return SEED_SOURCES;
+}
+
+export function saveStoredKnowledgeBaseSources(sources: GlobalKnowledgeSource[]) {
+  try {
+    localStorage.setItem(KB_STORAGE_KEY, JSON.stringify(sources));
+    window.dispatchEvent(new Event(KB_STORE_EVENT));
+  } catch {}
+}
+
 const PAGE_SIZES = [20, 50, 100] as const;
 type PageSizeValue = (typeof PAGE_SIZES)[number];
 
@@ -1188,7 +1238,32 @@ export default function KnowledgeBase() {
   const [processTree, setProcessTree] = useState<ProcessDef[]>(PROCESS_TREE_SEED);
   const [prefillProcessId, setPrefillProcessId] = useState<string | null>(null);
 
-  const [sources, setSources] = useState<GlobalKnowledgeSource[]>(SEED_SOURCES);
+  const [sources, setSourcesState] = useState<GlobalKnowledgeSource[]>(() => getStoredKnowledgeBaseSources());
+
+  const setSources = (updater: GlobalKnowledgeSource[] | ((prev: GlobalKnowledgeSource[]) => GlobalKnowledgeSource[])) => {
+    setSourcesState((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveStoredKnowledgeBaseSources(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handler = () => {
+      setSourcesState(getStoredKnowledgeBaseSources());
+    };
+    window.addEventListener(KB_STORE_EVENT, handler);
+    window.addEventListener("organizationChanged", handler);
+    window.addEventListener("mantra_organization_changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(KB_STORE_EVENT, handler);
+      window.removeEventListener("organizationChanged", handler);
+      window.removeEventListener("mantra_organization_changed", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");

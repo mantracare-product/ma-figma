@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo, ReactNode } from "react";
+import { createContext, useContext, useState, useMemo, useEffect, ReactNode } from "react";
 
 export interface Organization {
   id: string;
@@ -7,11 +7,25 @@ export interface Organization {
   industry: string;
   locations?: string[];
   location?: string;
+  primaryLocation?: string;
+  availability?: string;
+  operatingHours?: string | null;
+  teamSize?: string;
+  primaryRequirements?: string[];
+  uploadedDocuments?: any[];
+  telephonyChoice?: string | null;
+  website?: string;
+  description?: string;
+  callVolume?: string | null;
+  internationalCalls?: boolean | null;
+  operatingCountries?: string[];
   country?: string;
   currency?: string;
   email: string;
   phone: string;
   status: "Active" | "Inactive";
+  default_category?: string;
+  recommended_tier?: string;
 }
 
 interface OrganizationContextType {
@@ -108,7 +122,24 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     try {
       const saved = localStorage.getItem("mantra_organizations_v1");
-      return saved ? JSON.parse(saved) : defaultOrganizations;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasDemo = parsed.some((o: any) => o.id === "demo" || o.name?.toLowerCase().includes("demo mantra"));
+          if (!hasDemo) {
+            return [...parsed, ...defaultOrganizations];
+          }
+          return parsed;
+        }
+      }
+
+      const userOrg = localStorage.getItem("user_organization");
+      if (userOrg) {
+        const parsedUserOrg = JSON.parse(userOrg);
+        return [{ ...parsedUserOrg, id: parsedUserOrg.id || "org-fresh-1" }, ...defaultOrganizations];
+      }
+
+      return defaultOrganizations;
     } catch {
       return defaultOrganizations;
     }
@@ -117,11 +148,46 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [activeOrgId, setActiveOrgId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem("mantra_active_org_id_v1");
-      return saved || defaultOrganizations[0].id;
+      if (saved) return saved;
+
+      const savedOrgs = localStorage.getItem("mantra_organizations_v1");
+      if (savedOrgs) {
+        const parsed = JSON.parse(savedOrgs);
+        if (Array.isArray(parsed) && parsed[0]?.id) return parsed[0].id;
+      }
+      return defaultOrganizations[0].id;
     } catch {
       return defaultOrganizations[0].id;
     }
   });
+
+  useEffect(() => {
+    const handleOrgChanged = (e?: any) => {
+      try {
+        const saved = localStorage.getItem("mantra_organizations_v1");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hasDemo = parsed.some((o: any) => o.id === "demo" || o.name?.toLowerCase().includes("demo mantra"));
+            setOrganizations(hasDemo ? parsed : [...parsed, ...defaultOrganizations]);
+          }
+        }
+        const activeId = localStorage.getItem("mantra_active_org_id_v1");
+        if (activeId) {
+          setActiveOrgId(activeId);
+        }
+      } catch {}
+    };
+
+    window.addEventListener("organizationChanged", handleOrgChanged);
+    window.addEventListener("mantra_organization_changed", handleOrgChanged);
+    window.addEventListener("storage", handleOrgChanged);
+    return () => {
+      window.removeEventListener("organizationChanged", handleOrgChanged);
+      window.removeEventListener("mantra_organization_changed", handleOrgChanged);
+      window.removeEventListener("storage", handleOrgChanged);
+    };
+  }, []);
 
   const [sessionOverride, setSessionOverrideState] = useState<Partial<Organization> | null>(() => {
     try {
@@ -153,7 +219,17 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const setActiveOrganization = (org: Organization) => {
     setActiveOrgId(org.id);
     localStorage.setItem("mantra_active_org_id_v1", org.id);
+    localStorage.setItem("active_organization_name", org.name);
     window.dispatchEvent(new CustomEvent("organizationChanged", { detail: org }));
+    window.dispatchEvent(new CustomEvent("mantra_organization_changed", { detail: org }));
+    window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new Event("clientsStore_updated"));
+    window.dispatchEvent(new Event("processLogs_updated"));
+    window.dispatchEvent(new Event("mantra_appointments_changed"));
+    window.dispatchEvent(new Event("ma_services_changed"));
+    window.dispatchEvent(new Event("ma_knowledge_base_changed"));
+    window.dispatchEvent(new Event("mantra_invoices_changed"));
+    window.dispatchEvent(new Event("deals_updated"));
   };
 
   const addOrganization = (orgData: Omit<Organization, "id">) => {
