@@ -6,59 +6,78 @@ import {
   Pencil,
   Globe,
   SlidersHorizontal,
-  ArrowRight,
-  Shield,
+  ChevronDown,
 } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import AddAutomationDrawer, { STEP_ALLOWED_TRIGGERS } from "../../components/process/AddAutomationDrawer";
-import { Modal } from "../../components/ui/Modal";
 import type { WorkflowStep } from "../../types/workflow";
 import type { EventTriggerType } from "../../types/automation";
 import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
 import {
   useAutomationRules,
   AutomationRule,
+  isAutomationRuleMatchingScope,
   isAdminAutomationRule,
 } from "../../../lib/useAutomationStore";
 import { useProcessStore } from "../../../lib/useProcessStore";
+import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
 import { AdminControlAccordion } from "./components/AdminControlAccordion";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_INDUSTRIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../../data/industryReferenceData";
 import { toast } from "sonner";
 
 export default function AdminAutomations() {
   const { processes } = useProcessStore();
   const { rules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
 
-  // Filter state matching MA Automations module
+  // Filter state
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
 
-  // New Rule Popup Modal state
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newRuleName, setNewRuleName] = useState("");
-  const [newRuleDescription, setNewRuleDescription] = useState("");
-  const [newRuleScopingRules, setNewRuleScopingRules] = useState<ScopingRule[]>([]);
+  // Admin Scope filters
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
 
-  // Scope Config Modal state for existing rules
+  // Rule Scoping Modal state
   const [showScopeConfigModal, setShowScopeConfigModal] = useState(false);
   const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
   const [scopingTargetRuleId, setScopingTargetRuleId] = useState<string | null>(null);
+
+  const availableIndustriesForFilter = useMemo(() => {
+    if (selectedCategoryFilter === "All") {
+      return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
+    }
+    return getIndustriesForCategory(selectedCategoryFilter);
+  }, [selectedCategoryFilter]);
 
   // Product-level rules (excluding client personal customizations)
   const adminRules = useMemo(() => {
     return rules.filter(isAdminAutomationRule);
   }, [rules]);
 
-  // Filtered rules list matching MA Automations module
+  // Filtered rules list with admin scoping
   const filteredRules = useMemo(() => {
     return adminRules.filter((r) => {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
+
+      const matchesScope = isAutomationRuleMatchingScope(r, {
+        category: selectedCategoryFilter,
+        industry: selectedIndustryFilter,
+        location: selectedLocationFilter,
+      });
+      if (!matchesScope) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -69,7 +88,7 @@ export default function AdminAutomations() {
       }
       return true;
     });
-  }, [adminRules, statusFilter, searchQuery]);
+  }, [rules, statusFilter, searchQuery, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
 
   // Set default active rule
   useEffect(() => {
@@ -93,9 +112,6 @@ export default function AdminAutomations() {
   }, [activeRule, isCreatingNewRule]);
 
   const drawerInitialScopingRules = useMemo(() => {
-    if (isCreatingNewRule) {
-      return newRuleScopingRules;
-    }
     if (activeRule?.scopingRules && activeRule.scopingRules.length > 0) {
       return activeRule.scopingRules;
     }
@@ -111,28 +127,20 @@ export default function AdminAutomations() {
     if (pendingScopingRules && pendingScopingRules.length > 0) {
       return pendingScopingRules;
     }
+    if (selectedCategoryFilter && selectedCategoryFilter !== "All") {
+      return [
+        {
+          industryCategory: selectedCategoryFilter,
+          industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+          locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+        },
+      ];
+    }
     return [];
-  }, [isCreatingNewRule, newRuleScopingRules, activeRule, pendingScopingRules]);
+  }, [activeRule, pendingScopingRules, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
 
   const drawerInitialAutomation = useMemo(() => {
-    if (isCreatingNewRule) {
-      return {
-        id: "rule_" + Date.now(),
-        orgId: "default",
-        name: newRuleName.trim() || "New Global Automation",
-        description: newRuleDescription.trim(),
-        scope: "global" as const,
-        status: "active" as const,
-        scopingRules: newRuleScopingRules,
-        trigger: {
-          type: "client" as EventTriggerType,
-          event: "client.created",
-        },
-        steps: [],
-        updatedAt: new Date().toISOString(),
-      } as any;
-    }
-    if (!activeRule) return null;
+    if (isCreatingNewRule || !activeRule) return null;
     return {
       id: activeRule.id,
       orgId: activeRule.orgId || "default",
@@ -144,8 +152,8 @@ export default function AdminAutomations() {
       trigger: {
         type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
           c.events.some((e) => e.event === activeRule.trigger.event)
-        )?.type || "client") as EventTriggerType,
-        event: activeRule.trigger.event || "client.created",
+        )?.type || "call") as EventTriggerType,
+        event: activeRule.trigger.event,
       },
       steps: (activeRule.actions || []).map((s, idx) => ({
         ...s,
@@ -165,30 +173,16 @@ export default function AdminAutomations() {
       })) as any,
       updatedAt: activeRule.updatedAt || "",
     } as any;
-  }, [isCreatingNewRule, activeRule, newRuleName, newRuleDescription, newRuleScopingRules]);
+  }, [isCreatingNewRule, activeRule]);
 
-  // Open modal popup when user clicks New Rule
-  const handleOpenAddModal = () => {
-    setNewRuleName("");
-    setNewRuleDescription("");
-    setNewRuleScopingRules([]);
-    setShowAddModal(true);
-  };
-
-  // Confirm modal and launch builder drawer with name, description, and admin scope
-  const handleConfirmAddModal = () => {
-    if (!newRuleName.trim()) {
-      toast.error("Please enter an automation name");
-      return;
-    }
+  const handleCreateNewRule = () => {
     setIsCreatingNewRule(true);
     setActiveRuleId(null);
-    setPendingScopingRules(newRuleScopingRules);
-    setShowAddModal(false);
+    setPendingScopingRules([]);
     setIsAddAutomationDrawerOpen(true);
   };
 
-  // Table Columns matching MA design
+  // Table Columns
   const ruleColumns: TableColumn<AutomationRule>[] = [
     {
       id: "name",
@@ -316,6 +310,15 @@ export default function AdminAutomations() {
 
   const ruleRowActions: TableRowAction<AutomationRule>[] = [
     {
+      label: "Configure Scope Rules",
+      icon: <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />,
+      onClick: (rule) => {
+        setScopingTargetRuleId(rule.id);
+        setPendingScopingRules(rule.scopingRules ? [...rule.scopingRules] : []);
+        setShowScopeConfigModal(true);
+      },
+    },
+    {
       label: "View / Edit Rule",
       icon: <Pencil className="w-3.5 h-3.5" />,
       onClick: (rule) => {
@@ -323,15 +326,6 @@ export default function AdminAutomations() {
         setActiveRuleId(rule.id);
         setPendingScopingRules(rule.scopingRules ? [...rule.scopingRules] : []);
         setIsAddAutomationDrawerOpen(true);
-      },
-    },
-    {
-      label: "Configure Scope Rules",
-      icon: <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />,
-      onClick: (rule) => {
-        setScopingTargetRuleId(rule.id);
-        setPendingScopingRules(rule.scopingRules ? [...rule.scopingRules] : []);
-        setShowScopeConfigModal(true);
       },
     },
     {
@@ -364,24 +358,85 @@ export default function AdminAutomations() {
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
-        {/* Top Header - Exactly matching MA Automation page */}
+        {/* Top Header */}
         <PageHeader
           title="Automations"
-          subtitle="Visual rule engine connecting lifecycle events directly to pipeline actions."
+          subtitle="Visual rule engine connecting lifecycle events directly to pipeline actions across tenant organizations."
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Admin Global Rules
+            </span>
+          }
         />
 
-        {/* Action Bar powered by PageTopBar - Clean MA design */}
+        {/* Action Bar powered by PageTopBar with Admin Scope Filters */}
         <PageTopBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search rules, events, triggers..."
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 1. Category */}
+              <select
+                value={selectedCategoryFilter}
+                onChange={(e) => {
+                  setSelectedCategoryFilter(e.target.value);
+                  setSelectedIndustryFilter("All");
+                }}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Categories</option>
+                {INITIAL_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* 2. Industry */}
+              <select
+                value={selectedIndustryFilter}
+                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Industries</option>
+                {availableIndustriesForFilter.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+
+              {/* 3. Location */}
+              <select
+                value={selectedLocationFilter}
+                onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Locations</option>
+                {STANDARD_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
           filterPresets={[
             {
               id: "all",
               label: "All Rules",
               count: adminRules.length,
-              isActive: statusFilter === "all",
-              onClick: () => setStatusFilter("all"),
+              isActive: statusFilter === "all" && selectedCategoryFilter === "All" && selectedIndustryFilter === "All" && selectedLocationFilter === "All",
+              onClick: () => {
+                setStatusFilter("all");
+                setSelectedCategoryFilter("All");
+                setSelectedIndustryFilter("All");
+                setSelectedLocationFilter("All");
+              },
             },
             {
               id: "active",
@@ -398,14 +453,21 @@ export default function AdminAutomations() {
               onClick: () => setStatusFilter("paused"),
             },
           ]}
+          onClearAllFilters={() => {
+            setSelectedCategoryFilter("All");
+            setSelectedIndustryFilter("All");
+            setSelectedLocationFilter("All");
+            setStatusFilter("all");
+            setSearchQuery("");
+          }}
           primaryAction={{
             label: "New Rule",
             icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: handleOpenAddModal,
+            onClick: handleCreateNewRule,
           }}
         />
 
-        {/* Rules Table View - Exact styling from MA Automation */}
+        {/* Rules Table View */}
         <TableComponent
           data={filteredRules}
           columns={ruleColumns}
@@ -418,348 +480,249 @@ export default function AdminAutomations() {
             setIsAddAutomationDrawerOpen(true);
           }}
           defaultRowsPerPage={15}
-          emptyMessage="No automation rules found. Click 'New Rule' to create one."
+          emptyMessage="No automation rules found matching active filters. Click 'New Rule' to create one."
           tableId="admin-automation-rules-table"
         />
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          POPUP MODAL: ADD AUTOMATION (Name, Description & Admin Scope)
-          ───────────────────────────────────────────────────────────── */}
-      <Modal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        maxWidth="lg"
-        title={
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Zap className="w-4.5 h-4.5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-gray-900 leading-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
-                New Automation Rule
-              </h3>
-              <p className="text-xs text-gray-500 font-normal">
-                Set automation name, description, and tenant scope before configuring steps.
-              </p>
-            </div>
-          </div>
-        }
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmAddModal}
-              className="px-5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-            >
-              <span>Continue to Builder</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-1">
-          {/* 1. Automation Name */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-              Automation Name <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={newRuleName}
-              onChange={(e) => setNewRuleName(e.target.value)}
-              placeholder="e.g. Inbound Patient Welcome & SMS Followup"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900 font-medium placeholder:text-gray-400 shadow-2xs"
-              autoFocus
-            />
-          </div>
-
-          {/* 2. Description */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-              Description
-            </label>
-            <textarea
-              value={newRuleDescription}
-              onChange={(e) => setNewRuleDescription(e.target.value)}
-              placeholder="Describe what this automation handles and when it should trigger..."
-              rows={3}
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-800 resize-none placeholder:text-gray-400 shadow-2xs"
-            />
-          </div>
-
-          {/* 3. Admin Scope Component */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Shield className="w-3.5 h-3.5 text-gray-600" />
-              <label className="block text-xs font-semibold text-gray-800">
-                Admin Scope Component
-              </label>
-            </div>
-            <AdminControlAccordion
-              scopingRules={newRuleScopingRules}
-              onScopingRulesChange={setNewRuleScopingRules}
-              defaultAdminControlOpen={true}
-              defaultScopeOpen={true}
-              defaultPermissionsOpen={false}
-              scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
-              permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* ─────────────────────────────────────────────────────────────
-          BUILDER DRAWER (Flow Builder)
-          ───────────────────────────────────────────────────────────── */}
+      {/* Add Automation Drawer (Admin Global Scope) */}
       {isAddAutomationDrawerOpen && (
         <AddAutomationDrawer
           isOpen={isAddAutomationDrawerOpen}
           onClose={() => {
             setIsAddAutomationDrawerOpen(false);
             setIsCreatingNewRule(false);
-            setNewRuleName("");
-            setNewRuleDescription("");
-            setNewRuleScopingRules([]);
           }}
-          isAdmin={false}
+          isAdmin={true}
           initialScopingRules={drawerInitialScopingRules}
           onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
           scope="global"
           defaultView="flowbuilder"
           processes={processes}
           initialAutomation={drawerInitialAutomation}
-          processName={isCreatingNewRule ? (newRuleName.trim() || "New Global Automation") : (activeRule ? activeRule.name : "New Global Automation")}
+          processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
           workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
-          onSaveAutomation={(saved) => {
-            const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
-              (e) => e.event === (saved.trigger as any).event
-            );
-            const triggerEvtStr = String((saved.trigger as any)?.event || "").toLowerCase();
-            const triggerCategory = GLOBAL_TRIGGER_CATALOG.find((cat) =>
-              cat.events.some((e) => e.event.toLowerCase() === triggerEvtStr)
-            );
-            const detectedEntityType =
-              triggerCategory?.type === "appointment" || triggerEvtStr.startsWith("appointment")
-                ? "appointment"
-                : triggerCategory?.type === "invoice" || triggerEvtStr.startsWith("invoice")
-                ? "invoice"
-                : "client";
+        onSaveAutomation={(saved) => {
+          const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
+            (e) => e.event === (saved.trigger as any).event
+          );
+          const triggerEvtStr = String((saved.trigger as any)?.event || "").toLowerCase();
+          const triggerCategory = GLOBAL_TRIGGER_CATALOG.find((cat) =>
+            cat.events.some((e) => e.event.toLowerCase() === triggerEvtStr)
+          );
+          const detectedEntityType =
+            triggerCategory?.type === "appointment" || triggerEvtStr.startsWith("appointment")
+              ? "appointment"
+              : triggerCategory?.type === "invoice" || triggerEvtStr.startsWith("invoice")
+              ? "invoice"
+              : "client";
 
-            const mappedActions: WorkflowStep[] = (saved.steps || []).map((s: any) => ({
-              ...s,
-              id: s.id,
-              name: s.name,
-              description: s.description || "",
-              iconKey: s.iconKey || "zap",
-              stepKey: s.stepKey,
-              trigger: s.trigger || "stage",
-              executionType: s.executionType || "wait",
-              delayValue: s.delay?.value ?? s.delayValue ?? 0,
-              delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
-              params: s.params || {},
-              branches: s.branches,
-            }));
+          const mappedActions: WorkflowStep[] = (saved.steps || []).map((s: any) => ({
+            ...s,
+            id: s.id,
+            name: s.name,
+            description: s.description || "",
+            iconKey: s.iconKey || "zap",
+            stepKey: s.stepKey,
+            trigger: s.trigger || "stage",
+            executionType: s.executionType || "wait",
+            delayValue: s.delay?.value ?? s.delayValue ?? 0,
+            delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
+            params: s.params || {},
+            branches: s.branches,
+          }));
 
-            const ruleScopingRules =
-              (saved as any).scopingRules && (saved as any).scopingRules.length > 0
-                ? (saved as any).scopingRules
-                : pendingScopingRules.length > 0
-                ? pendingScopingRules
-                : isCreatingNewRule
-                ? newRuleScopingRules
-                : activeRule?.scopingRules || [];
+          const ruleScopingRules =
+            (saved as any).scopingRules && (saved as any).scopingRules.length > 0
+              ? (saved as any).scopingRules
+              : pendingScopingRules.length > 0
+              ? pendingScopingRules
+              : activeRule?.scopingRules || [];
 
-            // Find any update_to_stage / stage movement action in the steps tree
-            let stageMovementStep: WorkflowStep | undefined;
-            const findStageMovement = (stepsList: WorkflowStep[]): WorkflowStep | undefined => {
-              for (const s of stepsList) {
-                if (
-                  s.stepKey === "update_to_stage" ||
-                  s.stepKey === "update-stage" ||
-                  s.stepKey === "movetostage" ||
-                  s.stepKey === "stagemovement" ||
-                  s.stepKey === "processmovement" ||
-                  s.stepKey === "move-process" ||
-                  s.stepKey === "move-stage" ||
-                  s.stepKey === "move-new-process"
-                ) {
-                  return s;
-                }
-                if (s.branches && s.branches.length > 0) {
-                  for (const b of s.branches) {
-                    const found = findStageMovement(b.steps || []);
-                    if (found) return found;
-                  }
-                }
+          // Find any update_to_stage / stage movement action in the steps tree
+          let stageMovementStep: WorkflowStep | undefined;
+          const findStageMovement = (stepsList: WorkflowStep[]): WorkflowStep | undefined => {
+            for (const s of stepsList) {
+              if (
+                s.stepKey === "update_to_stage" ||
+                s.stepKey === "update-stage" ||
+                s.stepKey === "movetostage" ||
+                s.stepKey === "stagemovement" ||
+                s.stepKey === "processmovement" ||
+                s.stepKey === "move-process" ||
+                s.stepKey === "move-stage" ||
+                s.stepKey === "move-new-process"
+              ) {
+                return s;
               }
-              return undefined;
-            };
-            stageMovementStep = findStageMovement(mappedActions);
-
-            const trigParams = (saved.trigger as any)?.params || {};
-            const isStageTrigger =
-              triggerEvtStr.startsWith("stage.") ||
-              triggerEvtStr.includes("stage") ||
-              (saved.trigger as any)?.type === "stage" ||
-              trigParams?.category === "stage";
-
-            const trigStageId = trigParams.stageId || trigParams.triggerStageId || (saved.trigger as any)?.stage?.stageId || "";
-            const trigStageName = trigParams.stageName || trigParams.triggerStageName || "";
-            const trigProcessId = trigParams.processId || trigParams.triggerProcessId || (saved.trigger as any)?.stage?.processId || "";
-            const trigProcessName = trigParams.processName || trigParams.triggerProcessName || "";
-
-            const actionStageId = stageMovementStep?.params?.stageId || stageMovementStep?.params?.stepDetailStage || trigStageId;
-            const actionStageName = stageMovementStep?.params?.stageName || stageMovementStep?.params?.stepDetailStageName || trigStageName;
-            const actionProcessId = stageMovementStep?.params?.processId || stageMovementStep?.params?.stepDetailProcess || trigProcessId;
-            const actionProcessName = stageMovementStep?.params?.processName || stageMovementStep?.params?.stepDetailProcessName || trigProcessName;
-
-            const normalizedTriggerParams = {
-              ...trigParams,
-              ...(isStageTrigger || trigStageId ? {
-                stageId: trigStageId || actionStageId,
-                stageName: trigStageName || actionStageName,
-                processId: trigProcessId || actionProcessId,
-                processName: trigProcessName || actionProcessName,
-                triggerStageId: trigStageId || actionStageId,
-                triggerStageName: trigStageName || actionStageName,
-                triggerProcessId: trigProcessId || actionProcessId,
-                triggerProcessName: trigProcessName || actionProcessName,
-              } : {}),
-            };
-
-            const actionPayload = {
-              type: "moveToStage" as const,
-              processId: actionProcessId || "",
-              stageId: actionStageId || "",
-              processName: actionProcessName || "",
-              stageName: actionStageName || "",
-            };
-
-            if (isCreatingNewRule || !activeRule) {
-              try {
-                const finalRuleName = saved.name || newRuleName.trim() || "New Global Automation";
-                const finalRuleDesc = saved.description || newRuleDescription.trim() || "";
-                const created = createRule({
-                  orgId: "default",
-                  name: finalRuleName,
-                  description: finalRuleDesc,
-                  entityType: detectedEntityType,
-                  isAdmin: true,
-                  createdIn: "admin",
-                  isClientCustomization: false,
-                  source: "product",
-                  trigger: {
-                    event: (saved.trigger as any).event || "client.created",
-                    label: catalogEvt?.label || (saved.trigger as any).event || "Client created",
-                    source: "any",
-                    params: normalizedTriggerParams,
-                  },
-                  action: actionPayload,
-                  actions: mappedActions,
-                  enabled: saved.status === "active",
-                  health: "ok",
-                  scopingRules: ruleScopingRules,
-                  industryCategory: ruleScopingRules[0]?.industryCategory || "All",
-                  industry: ruleScopingRules[0]?.industries?.[0] || "All",
-                  locations: ruleScopingRules[0]?.locations || ["All"],
-                });
-                setActiveRuleId(created.id);
-                setIsCreatingNewRule(false);
-                setNewRuleName("");
-                setNewRuleDescription("");
-                setNewRuleScopingRules([]);
-                toast.success("Automation rule created");
-              } catch (err: any) {
-                toast.error(err.message || "Failed to create rule");
-              }
-            } else {
-              try {
-                updateRule(activeRule.id, {
-                  name: saved.name,
-                  description: saved.description,
-                  enabled: saved.status === "active",
-                  entityType: detectedEntityType,
-                  isAdmin: true,
-                  createdIn: "admin",
-                  isClientCustomization: false,
-                  source: "product",
-                  trigger: {
-                    event: (saved.trigger as any).event,
-                    label: catalogEvt?.label || (saved.trigger as any).event,
-                    source: "any",
-                    params: normalizedTriggerParams,
-                  },
-                  action: actionPayload,
-                  actions: mappedActions,
-                  scopingRules: ruleScopingRules,
-                  updatedAt: new Date().toISOString(),
-                });
-                setIsCreatingNewRule(false);
-                toast.success("Automation rule updated");
-              } catch (err: any) {
-                toast.error(err.message || "Failed to update rule");
+              if (s.branches && s.branches.length > 0) {
+                for (const b of s.branches) {
+                  const found = findStageMovement(b.steps || []);
+                  if (found) return found;
+                }
               }
             }
-          }}
-          stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
-        />
+            return undefined;
+          };
+          stageMovementStep = findStageMovement(mappedActions);
+
+          const trigParams = (saved.trigger as any)?.params || {};
+          const isStageTrigger =
+            triggerEvtStr.startsWith("stage.") ||
+            triggerEvtStr.includes("stage") ||
+            (saved.trigger as any)?.type === "stage" ||
+            trigParams?.category === "stage";
+
+          // If trigger is a stage trigger, resolve process/stage from trigger params
+          const trigStageId = trigParams.stageId || trigParams.triggerStageId || (saved.trigger as any)?.stage?.stageId || "";
+          const trigStageName = trigParams.stageName || trigParams.triggerStageName || "";
+          const trigProcessId = trigParams.processId || trigParams.triggerProcessId || (saved.trigger as any)?.stage?.processId || "";
+          const trigProcessName = trigParams.processName || trigParams.triggerProcessName || "";
+
+          // Resolve destination stage/process from movement step if present
+          const actionStageId = stageMovementStep?.params?.stageId || stageMovementStep?.params?.stepDetailStage || trigStageId;
+          const actionStageName = stageMovementStep?.params?.stageName || stageMovementStep?.params?.stepDetailStageName || trigStageName;
+          const actionProcessId = stageMovementStep?.params?.processId || stageMovementStep?.params?.stepDetailProcess || trigProcessId;
+          const actionProcessName = stageMovementStep?.params?.processName || stageMovementStep?.params?.stepDetailProcessName || trigProcessName;
+
+          // Normalized trigger params ensuring stageId and processId are populated
+          const normalizedTriggerParams = {
+            ...trigParams,
+            ...(isStageTrigger || trigStageId ? {
+              stageId: trigStageId || actionStageId,
+              stageName: trigStageName || actionStageName,
+              processId: trigProcessId || actionProcessId,
+              processName: trigProcessName || actionProcessName,
+              triggerStageId: trigStageId || actionStageId,
+              triggerStageName: trigStageName || actionStageName,
+              triggerProcessId: trigProcessId || actionProcessId,
+              triggerProcessName: trigProcessName || actionProcessName,
+            } : {}),
+          };
+
+          const actionPayload = {
+            type: "moveToStage" as const,
+            processId: actionProcessId || "",
+            stageId: actionStageId || "",
+            processName: actionProcessName || "",
+            stageName: actionStageName || "",
+          };
+
+          if (isCreatingNewRule || !activeRule) {
+            try {
+              const created = createRule({
+                orgId: "default",
+                name: saved.name || "New Automation",
+                description: saved.description || "",
+                entityType: detectedEntityType,
+                isAdmin: true,
+                createdIn: "admin",
+                isClientCustomization: false,
+                source: "product",
+                trigger: {
+                  event: (saved.trigger as any).event || "call.inbound",
+                  label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
+                  source: "any",
+                  params: normalizedTriggerParams,
+                },
+                action: actionPayload,
+                actions: mappedActions,
+                enabled: saved.status === "active",
+                health: "ok",
+                scopingRules: ruleScopingRules,
+                industryCategory: ruleScopingRules[0]?.industryCategory || (selectedCategoryFilter !== "All" ? selectedCategoryFilter : "All"),
+                industry: ruleScopingRules[0]?.industries?.[0] || (selectedIndustryFilter !== "All" ? selectedIndustryFilter : "All"),
+                locations: ruleScopingRules[0]?.locations || (selectedLocationFilter !== "All" ? [selectedLocationFilter] : ["All"]),
+              });
+              setActiveRuleId(created.id);
+              setIsCreatingNewRule(false);
+              toast.success("Automation rule created");
+            } catch (err: any) {
+              toast.error(err.message || "Failed to create rule");
+            }
+          } else {
+            try {
+              updateRule(activeRule.id, {
+                name: saved.name,
+                description: saved.description,
+                enabled: saved.status === "active",
+                entityType: detectedEntityType,
+                isAdmin: true,
+                createdIn: "admin",
+                isClientCustomization: false,
+                source: "product",
+                trigger: {
+                  event: (saved.trigger as any).event,
+                  label: catalogEvt?.label || (saved.trigger as any).event,
+                  source: "any",
+                  params: normalizedTriggerParams,
+                },
+                action: actionPayload,
+                actions: mappedActions,
+                scopingRules: ruleScopingRules,
+                updatedAt: new Date().toISOString(),
+              });
+              setIsCreatingNewRule(false);
+              toast.success("Automation rule updated");
+            } catch (err: any) {
+              toast.error(err.message || "Failed to update rule");
+            }
+          }
+        }}
+        stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+      />
       )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          ADMIN SCOPE CONFIGURATION MODAL (For existing rules)
-          ───────────────────────────────────────────────────────────── */}
+      {/* Admin Scope Rules Configuration Modal */}
       {showScopeConfigModal && (
-        <Modal
-          isOpen={showScopeConfigModal}
-          onClose={() => setShowScopeConfigModal(false)}
-          maxWidth="lg"
-          title={
-            <div className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-blue-600" />
-              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Configure Admin Scope Rules
-              </h3>
-            </div>
-          }
-          footer={
-            <div className="flex items-center justify-end gap-2.5 w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-white">
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Configure Admin Scope Rules
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowScopeConfigModal(false)}
-                className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              <AdminControlAccordion
+                scopingRules={pendingScopingRules}
+                onScopingRulesChange={(rules) => setPendingScopingRules(rules)}
+                defaultAdminControlOpen={true}
+                defaultScopeOpen={true}
+                defaultPermissionsOpen={false}
+                scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
+                permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+              />
+            </div>
+
+            <div className="p-4 bg-gray-50/70 border-t border-gray-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowScopeConfigModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200/60 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveScopeModal}
-                className="px-4.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
               >
                 Save Scope Rules
               </button>
             </div>
-          }
-        >
-          <div className="p-1">
-            <AdminControlAccordion
-              scopingRules={pendingScopingRules}
-              onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
-              defaultAdminControlOpen={true}
-              defaultScopeOpen={true}
-              defaultPermissionsOpen={false}
-              scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
-              permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
-            />
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
