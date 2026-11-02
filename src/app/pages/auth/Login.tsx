@@ -247,7 +247,7 @@ export default function Login() {
             </div>
 
             {/* 2 & 3. Main Content: Platform Badge, Headline & Subtext */}
-            <div className="my-auto py-6 max-w-2xl">
+            <div className="mt-10 xl:mt-12 mb-auto max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 backdrop-blur-sm rounded-full mb-6">
                 <div className="w-1.5 h-1.5 bg-[#3B82F6] rounded-full animate-pulse" />
                 <span
@@ -271,156 +271,11 @@ export default function Login() {
               </h1>
 
               <p
-                className="text-[#D6DCE5] text-sm sm:text-base leading-relaxed mb-8 max-w-xl"
+                className="text-[#D6DCE5] text-sm sm:text-base leading-relaxed max-w-xl"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 From customer conversations to daily operations, MantraAssist automates what slows you down, so you can focus on growth.
               </p>
-
-              {/* 4. Row of 3 Glass Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-8">
-                {/* Card 1 */}
-                <div
-                  className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.06)",
-                    boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)",
-                  }}
-                >
-                  <div>
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                      <Zap className="w-4.5 h-4.5 text-[#3B82F6]" />
-                    </div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">
-                      OMNICHANNEL
-                    </div>
-                    <h3
-                      className="text-sm font-bold text-white mb-1.5"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Customer Conversations
-                    </h3>
-                    <p
-                      className="text-xs text-[#D6DCE5] leading-relaxed"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Automates conversations over voice, email, text, and chat with natural-language AI.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Card 2 */}
-                <div
-                  className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.06)",
-                    boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)",
-                  }}
-                >
-                  <div>
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                      <Calendar className="w-4.5 h-4.5 text-[#3B82F6]" />
-                    </div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">
-                      SCHEDULING
-                    </div>
-                    <h3
-                      className="text-sm font-bold text-white mb-1.5"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Smart Scheduling
-                    </h3>
-                    <p
-                      className="text-xs text-[#D6DCE5] leading-relaxed"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Books and manages appointments dynamically, syncing with your existing calendars.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Card 3 */}
-                <div
-                  className="p-5 rounded-[22px] border border-white/8 backdrop-blur-md shadow-xl flex flex-col justify-between"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.06)",
-                    boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)",
-                  }}
-                >
-                  <div>
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3.5 bg-[#3B82F6]/15 border border-[#3B82F6]/20">
-                      <Share2 className="w-4.5 h-4.5 text-[#3B82F6]" />
-                    </div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#3B82F6] mb-1">
-                      INTEGRATIONS
-                    </div>
-                    <h3
-                      className="text-sm font-bold text-white mb-1.5"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Seamless Integrations
-                    </h3>
-                    <p
-                      className="text-xs text-[#D6DCE5] leading-relaxed"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Real-time, secure data flow with your CRM, helpdesk, and the tools you already use.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Bottom Wide Glass Stats Bar */}
-              <div
-                className="p-4 px-5 rounded-[20px] border border-white/8 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-4"
-                style={{
-                  background: "rgba(255, 255, 255, 0.06)",
-                  boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)",
-                }}
-              >
-                <div className="flex items-center gap-4 sm:gap-6 min-w-0">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#3B82F6]/15 border border-[#3B82F6]/20 shrink-0">
-                    <TrendingUp className="w-4.5 h-4.5 text-[#3B82F6]" />
-                  </div>
-
-                  <div className="flex items-center gap-4 sm:gap-6">
-                    <div>
-                      <div className="text-[10px] uppercase font-bold tracking-wider text-[#8E9EB5]">
-                        EFFICIENCY GAIN
-                      </div>
-                      <div className="text-lg font-extrabold text-white flex items-center gap-1 leading-tight">
-                        40% <span className="text-[#3B82F6] text-sm">↑</span>
-                      </div>
-                    </div>
-
-                    <div className="h-7 w-px bg-white/10 shrink-0" />
-
-                    <div>
-                      <div className="text-[10px] uppercase font-bold tracking-wider text-[#8E9EB5]">
-                        TIME SAVED
-                      </div>
-                      <div className="text-lg font-extrabold text-white leading-tight">
-                        12.5{" "}
-                        <span className="text-xs font-normal text-[#D6DCE5]">
-                          hrs/wk
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.open("https://mantracare.com/request-demo", "_blank")
-                  }
-                  className="px-4 py-2 rounded-full border border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  <span>Request a Demo</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#3B82F6]" />
-                </button>
-              </div>
             </div>
 
             {/* 6. Footer Links */}
