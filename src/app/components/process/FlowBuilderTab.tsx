@@ -576,6 +576,12 @@ function getNodeSubtitle(
     return node.config?.callActionPhoneNumber ? `${node.config.callActionCountryCode || ""} ${node.config.callActionPhoneNumber}` : "Transfer active call";
   }
   if (node.type === "field-update") {
+    const pFields = node.config?.processFields ? Object.keys(node.config.processFields).filter(k => Boolean(node.config.processFields[k])) : [];
+    if (pFields.length > 0) {
+      const firstKey = pFields[0];
+      const val = node.config.processFields[firstKey];
+      return `Set ${firstKey} = ${val}${pFields.length > 1 ? ` (+${pFields.length - 1} more)` : ""}`;
+    }
     const pField = node.config?.primaryFieldLabel || node.config?.fieldName || node.config?.primaryField || node.config?.fieldUpdateBlocks?.[0]?.fieldLabel || node.config?.fieldUpdateBlocks?.[0]?.fieldToEdit;
     if (pField) {
       const op = node.config?.operator || node.config?.fieldUpdateBlocks?.[0]?.operator || "=";
