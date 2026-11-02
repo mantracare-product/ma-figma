@@ -39,6 +39,18 @@ export const PLAN_CATEGORIES = [
 
 export type PlanCategory = (typeof PLAN_CATEGORIES)[number] | "AI EHR" | "AI RCM";
 
+export function isCategoryMatch(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const la = a.trim().toLowerCase();
+  const lb = b.trim().toLowerCase();
+  if (la === lb) return true;
+  if ((la.includes("ehr") || la === "ai ehr") && (lb.includes("ehr") || lb === "ai ehr")) return true;
+  if ((la.includes("rcm") || la === "ai rcm") && (lb.includes("rcm") || lb === "ai rcm")) return true;
+  if ((la.includes("scribe") || la === "ai scribe") && (lb.includes("scribe") || lb === "ai scribe")) return true;
+  if ((la.includes("reception") || la === "ai receptionist") && (lb.includes("reception") || lb === "ai receptionist")) return true;
+  return false;
+}
+
 export interface IndustryPlan {
   id: string;
   name: string;
@@ -199,7 +211,7 @@ export interface CartItem {
 
 export const CART_STORAGE_KEY = "mantra_billing_cart_v2";
 export const CART_CHANGED_EVENT = "mantra_cart_changed";
-export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v6";
+export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v7";
 export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v2";
 export const TEAM_MEMBER_PACKS_STORAGE_KEY = "mantra_admin_team_member_packs_v1";
 export const GLOBAL_BILLING_SETTINGS_KEY = "mantra_global_billing_settings_v1";
@@ -266,481 +278,443 @@ export function getPackageLocalizedPrice(
 }
 
 export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
-  // ── CATEGORY 1: AI RECEPTIONIST ──
+  // ── CATEGORY 1: AI RECEPTIONIST (Healthcare) ──
   {
     id: "plan-ai-rec-starter",
-    name: "AI Receptionist Starter",
+    name: "AI Clinic Receptionist Starter",
     category: "AI Receptionist",
     tier: "Starter",
     targetCategory: "Healthcare",
-    description: "Essential 24/7 call answering, triage and scheduling for solo clinics and emerging practices.",
-    includedSeats: 8,
+    description: "24/7 autonomous AI voice receptionist for outpatient clinics and medical practices.",
+    includedSeats: 2,
     monthlyCredits: 1000,
     yearlyCredits: 12000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "24/7 AI Receptionist",
-      "Missed, Inbound & Outbound Calls Handling",
-      "Appointment Scheduling & Reminders",
-      "Human / Live-Agent Transfer",
-      "AI Lead Management & Followups",
-      "WhatsApp, SMS & Email Automation",
-      "Pipeline Templates (by industry)",
-      "Email Support",
+      "2 staff members included",
+      "1,000 Voice & Chat Credits / mo",
+      "24/7 AI Medical Call Answering",
+      "Appointment Booking & Triage",
+      "HIPAA Compliant Call Logs",
     ],
     modules: ["telephony", "clients", "appointments"],
     moduleFeatures: {
-      telephony: ["24/7 AI Voice Answering Agent", "Inbound Calling", "Appointment Scheduling"],
+      telephony: ["24/7 AI Voice Answering Agent", "Inbound Calling"],
     },
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 5998, yearlyPrice: 57581 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 49, yearlyPrice: 470 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 3999, yearlyPrice: 38390 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 39, yearlyPrice: 375 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 65, yearlyPrice: 624 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 75, yearlyPrice: 720 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 45, yearlyPrice: 432 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-rec-growth",
-    name: "AI Receptionist Growth",
+    id: "plan-ai-rec-pro",
+    name: "AI Clinic Receptionist Pro",
     category: "AI Receptionist",
-    tier: "Growth",
+    tier: "Professional",
     targetCategory: "Healthcare",
-    description: "Multi-channel patient capture, lead reactivation, and intelligent routing for busy healthcare clinics.",
-    includedSeats: 25,
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
+    description: "Multi-line inbound/outbound call triage, nurse line transfers, and emergency routing.",
+    includedSeats: 5,
+    monthlyCredits: 3500,
+    yearlyCredits: 42000,
     isActive: true,
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "24/7 AI Receptionist",
-      "Missed, Inbound & Outbound Calls Handling",
-      "Appointment Scheduling & Reminders",
-      "Human / Live-Agent Transfer",
-      "AI Lead Management & Followups",
-      "WhatsApp, SMS & Email Automation",
-      "Pipeline Templates (by industry)",
-      "Email Support",
-      "AI Website & WhatsApp Chatbot",
-      "Website / Google / Meta Lead Capture",
-      "Patient Reactivation",
-      "Referral Management",
-      "Web Form Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "Priority Support",
+      "5 staff members included",
+      "3,500 Voice & Chat Credits / mo",
+      "Multi-Line Concurrent Call Handling",
+      "Intelligent Clinical Triage & Urgency Rules",
+      "Direct Provider & On-Call Transfers",
+      "SMS Appointment Confirmation & Reminders",
     ],
-    modules: ["telephony", "clients", "appointments", "workflows"],
+    modules: ["telephony", "clients", "appointments"],
     moduleFeatures: {
       telephony: ["24/7 AI Voice Answering Agent", "Inbound & Outbound Calling", "Smart Routing"],
     },
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 13998, yearlyPrice: 134381 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 179, yearlyPrice: 1718 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 99, yearlyPrice: 950 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 7999, yearlyPrice: 76790 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 135, yearlyPrice: 1296 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 150, yearlyPrice: 1440 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 90, yearlyPrice: 864 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-rec-scale",
-    name: "AI Receptionist Professional",
+    id: "plan-ai-rec-custom",
+    name: "AI Hospital Reception Enterprise",
     category: "AI Receptionist",
-    tier: "Professional",
+    tier: "Custom",
     targetCategory: "Healthcare",
-    description: "Enterprise clinic networks with custom AI voice agents, SSO, dedicated SLA, and bespoke workflows.",
-    includedSeats: 100,
-    monthlyCredits: 8000,
-    yearlyCredits: 96000,
+    description: "Hospital network deployment, custom multilingual voice models, and PBX telephony bridge.",
+    includedSeats: 20,
+    monthlyCredits: 15000,
+    yearlyCredits: 180000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "24/7 AI Receptionist",
-      "Missed, Inbound & Outbound Calls Handling",
-      "Appointment Scheduling & Reminders",
-      "Human / Live-Agent Transfer",
-      "AI Lead Management & Followups",
-      "WhatsApp, SMS & Email Automation",
-      "Pipeline Templates (by industry)",
-      "Email Support",
-      "AI Website & WhatsApp Chatbot",
-      "Website / Google / Meta Lead Capture",
-      "Patient Reactivation",
-      "Referral Management",
-      "Web Form Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "Priority Support",
-      "Custom AI Workflows",
-      "Advanced Security / SSO",
-      "Dedicated Account Manager",
-      "Dedicated Support / SLA",
-      "Custom AI Training / Workflows",
-      "Custom Integrations",
+      "20+ staff seats included",
+      "Custom High-Volume Credit Allocation",
+      "Enterprise PBX / SIP Trunk Integration",
+      "Custom Trained Voice Models (30+ Languages)",
+      "Dedicated Healthcare SLA & BAA Agreement",
+      "Custom Hospital EHR Rota Dispatch",
     ],
     modules: ["telephony", "clients", "appointments", "workflows"],
     moduleFeatures: {
-      telephony: ["Enterprise PBX Trunking", "Multilingual Voice", "Dedicated Routing"],
+      telephony: ["Enterprise PBX Trunking", "Multilingual Voice", "Hospital Rota Dispatch"],
     },
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 29998, yearlyPrice: 287981 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 389, yearlyPrice: 3734 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
 
-  // ── CATEGORY 2: AI SCRIBE ──
+  // ── CATEGORY 2: AI SCRIBE (Healthcare) ──
   {
     id: "plan-ai-scribe-starter",
-    name: "AI Scribe Starter",
+    name: "AI Clinical Scribe Starter",
     category: "AI Scribe",
     tier: "Starter",
     targetCategory: "Healthcare",
-    description: "Real-time consultation audio capture and instant SOAP notes for solo practitioners.",
-    includedSeats: 3,
-    monthlyCredits: 1000,
-    yearlyCredits: 12000,
+    description: "Ambient consultation audio capture and instant SOAP note generation for solo practitioners.",
+    includedSeats: 2,
+    monthlyCredits: 1200,
+    yearlyCredits: 14400,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "AI Documentation & Coding",
-      "Automated Session Notes / Prescription",
-      "Custom Templates",
-      "Auto-generate Notes After Each Session",
-      "Email Support",
+      "2 provider seats included",
+      "1,200 Audio Transcription Credits / mo",
+      "Real-Time Ambient Consultation Capture",
+      "Instant Structured SOAP Note Synthesis",
+      "One-Click EHR Copy & Export",
     ],
     modules: ["scribe"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 1499, yearlyPrice: 14390 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 19, yearlyPrice: 182 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 59, yearlyPrice: 566 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 4799, yearlyPrice: 46070 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 47, yearlyPrice: 450 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 89, yearlyPrice: 854 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 55, yearlyPrice: 528 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-scribe-growth",
-    name: "AI Scribe Growth",
+    id: "plan-ai-scribe-pro",
+    name: "AI Clinical Scribe Pro",
     category: "AI Scribe",
-    tier: "Growth",
+    tier: "Professional",
     targetCategory: "Healthcare",
-    description: "Multi-provider clinical documentation with note templates, client imports, and automated flows.",
-    includedSeats: 10,
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
+    description: "Multi-specialty clinical dictation, ICD-10 suggestions, and direct 2-way EHR sync.",
+    includedSeats: 5,
+    monthlyCredits: 4000,
+    yearlyCredits: 48000,
     isActive: true,
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "AI Documentation & Coding",
-      "Automated Session Notes / Prescription",
-      "Custom Templates",
-      "Auto-generate Notes After Each Session",
-      "Email Support",
-      "Client Imports",
-      "Session Note & Prescription Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "Priority Support",
+      "5 provider seats included",
+      "4,000 Audio Transcription Credits / mo",
+      "40+ Medical Specialty SOAP Templates",
+      "Automated ICD-10 & CPT Code Suggestions",
+      "Direct EHR Chart Insertion via FHIR API",
+      "Patient Visit Summary & Instructions Draft",
     ],
     modules: ["scribe"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 2999, yearlyPrice: 28790 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 39, yearlyPrice: 374 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 9599, yearlyPrice: 92150 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 95, yearlyPrice: 912 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 159, yearlyPrice: 1526 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 179, yearlyPrice: 1718 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 110, yearlyPrice: 1056 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-scribe-scale",
-    name: "AI Scribe Professional",
+    id: "plan-ai-scribe-custom",
+    name: "AI Health System Scribe Enterprise",
     category: "AI Scribe",
-    tier: "Professional",
+    tier: "Custom",
     targetCategory: "Healthcare",
-    description: "Multi-specialty hospital dictation with tailored clinical vocabulary, dedicated SLA, and SSO.",
+    description: "Hospital-wide ambient documentation, tailored clinical fine-tuning, and on-premise security.",
     includedSeats: 25,
-    monthlyCredits: 8000,
-    yearlyCredits: 96000,
+    monthlyCredits: 20000,
+    yearlyCredits: 240000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "AI Documentation & Coding",
-      "Automated Session Notes / Prescription",
-      "Custom Templates",
-      "Auto-generate Notes After Each Session",
-      "Email Support",
-      "Client Imports",
-      "Session Note & Prescription Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "Priority Support",
-      "Specialty-Specific Templates",
-      "Advanced Security / SSO",
-      "Dedicated Account Manager",
-      "Dedicated Support / SLA",
-      "Custom AI Training / Workflows",
-      "Custom Integrations",
+      "25+ clinician seats included",
+      "Unlimited Ambient Clinical Audio Processing",
+      "Custom Hospital Specialty Vocabularies",
+      "Epic, Cerner & Athenahealth Deep Bi-Directional Sync",
+      "Enterprise SOC2 & HIPAA Compliance Vault",
+      "Dedicated Clinical Account Manager",
     ],
     modules: ["scribe", "workflows"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 4999, yearlyPrice: 47990 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 65, yearlyPrice: 624 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
 
-  // ── CATEGORY 3: AI EHR ──
+  // ── CATEGORY 3: EHR (Healthcare) ──
   {
-    id: "plan-ai-ehr-starter",
-    name: "AI EHR Starter",
-    category: "AI EHR",
+    id: "plan-ehr-starter",
+    name: "Cloud EHR Essentials",
+    category: "EHR",
     tier: "Starter",
     targetCategory: "Healthcare",
-    description: "Core digital health records, patient scheduling, automated notes, and clinical documentation.",
-    includedSeats: 8,
-    monthlyCredits: 1000,
-    yearlyCredits: 12000,
+    description: "Core digital health records, patient demographics, and appointment scheduling.",
+    includedSeats: 3,
+    monthlyCredits: 1500,
+    yearlyCredits: 18000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Patient Scheduling & Management",
-      "Specialty-Specific Workflows (1)",
-      "Automated Session Notes / Prescription",
-      "AI Documentation & Coding",
-      "Session Note & Prescription Templates",
-      "Email Support",
+      "3 clinical staff included",
+      "1,500 System & Notification Credits / mo",
+      "Digital Health Records & Demographics",
+      "Patient Portal Self-Service Booking",
+      "Automated SMS & Email Reminders",
     ],
     modules: ["clients", "appointments"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 1499, yearlyPrice: 14390 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 19, yearlyPrice: 182 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 6399, yearlyPrice: 61430 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 63, yearlyPrice: 604 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 105, yearlyPrice: 1008 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 72, yearlyPrice: 691 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-ehr-growth",
-    name: "AI EHR Growth",
-    category: "AI EHR",
-    tier: "Growth",
+    id: "plan-ehr-pro",
+    name: "Integrated Clinical EHR Suite",
+    category: "EHR",
+    tier: "Professional",
     targetCategory: "Healthcare",
-    description: "Comprehensive EHR workflows, web forms, external integrations, and multi-specialty charting.",
-    includedSeats: 25,
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
+    description: "Full clinical charting, e-prescriptions, lab integrations, and digital intake forms.",
+    includedSeats: 8,
+    monthlyCredits: 5000,
+    yearlyCredits: 60000,
     isActive: true,
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Patient Scheduling & Management",
-      "Specialty-Specific Workflows (1)",
-      "Automated Session Notes / Prescription",
-      "AI Documentation & Coding",
-      "Session Note & Prescription Templates",
-      "Email Support",
-      "Specialty-Specific Workflows (up to 3)",
-      "Document Templates",
-      "Web Form Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "EHR / Software Integrations",
-      "Priority Support",
+      "8 clinical staff included",
+      "5,000 System Credits / mo",
+      "Comprehensive Clinical Charting & E-Rx",
+      "Bi-directional Lab & Imaging Interfaces",
+      "Custom Digital Patient Intake Forms",
+      "Secure HIPAA Document & Records Vault",
     ],
     modules: ["clients", "appointments", "forms"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 3499, yearlyPrice: 33590 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 45, yearlyPrice: 432 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 149, yearlyPrice: 1430 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 11999, yearlyPrice: 115190 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 199, yearlyPrice: 1910 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 225, yearlyPrice: 2160 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 138, yearlyPrice: 1324 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-ehr-scale",
-    name: "AI EHR Professional",
-    category: "AI EHR",
-    tier: "Professional",
+    id: "plan-ehr-custom",
+    name: "Enterprise Health Network EHR",
+    category: "EHR",
+    tier: "Custom",
     targetCategory: "Healthcare",
-    description: "Enterprise hospital health network with unlimited workflows, custom intake forms, SSO, and SLA.",
-    includedSeats: 100,
-    monthlyCredits: 8000,
-    yearlyCredits: 96000,
+    description: "Multi-facility health system EHR with FHIR interoperability, clinical trials, and HL7 feeds.",
+    includedSeats: 30,
+    monthlyCredits: 25000,
+    yearlyCredits: 300000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Patient Scheduling & Management",
-      "Specialty-Specific Workflows (1)",
-      "Automated Session Notes / Prescription",
-      "AI Documentation & Coding",
-      "Session Note & Prescription Templates",
-      "Email Support",
-      "Specialty-Specific Workflows (up to 3)",
-      "Document Templates",
-      "Web Form Templates",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "EHR / Software Integrations",
-      "Priority Support",
-      "Specialty-Specific Workflows (Unlimited)",
-      "Custom Fields, Forms & Appointment Types",
-      "Patient Intake & Digital Forms",
-      "Advanced Security / SSO",
-      "Dedicated Account Manager",
-      "Dedicated Support / SLA",
-      "Custom AI Training / Workflows",
-      "Custom Integrations",
+      "30+ multi-facility staff included",
+      "Unlimited Records & High Quota Allocation",
+      "HL7 & FHIR Interoperability Bridge",
+      "Multi-Department Rota & Inpatient Tracking",
+      "Role-Based Audit Logs & Access Control",
+      "99.99% Guaranteed Enterprise Uptime SLA",
     ],
     modules: ["clients", "appointments", "forms", "workflows"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 6999, yearlyPrice: 67190 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 89, yearlyPrice: 854 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
 
-  // ── CATEGORY 4: AI RCM ──
+  // ── CATEGORY 4: RCM (Healthcare) ──
   {
-    id: "plan-ai-rcm-starter",
-    name: "AI RCM Starter",
-    category: "AI RCM",
+    id: "plan-rcm-starter",
+    name: "RCM Billing & Claims Starter",
+    category: "RCM",
     tier: "Starter",
     targetCategory: "Healthcare",
-    description: "Automated eligibility & benefits verification, claims templates, and patient payment processing.",
-    includedSeats: 8,
-    monthlyCredits: 1000,
-    yearlyCredits: 12000,
+    description: "Automated claim submission, real-time eligibility checks, and patient invoicing.",
+    includedSeats: 3,
+    monthlyCredits: 1500,
+    yearlyCredits: 18000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Eligibility & Benefits Verification",
-      "Claims & Follow-up Templates",
-      "Email Support",
+      "3 billing specialists included",
+      "1,500 Billing & Claims Credits / mo",
+      "Automated Clearinghouse EDI 837 Submission",
+      "Instant Patient Insurance Eligibility (EDI 270/271)",
+      "Patient Online Invoices & Settlement",
     ],
     modules: ["billing"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 7999, yearlyPrice: 76790 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 99, yearlyPrice: 950 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 69, yearlyPrice: 662 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 5599, yearlyPrice: 53750 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 55, yearlyPrice: 528 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 92, yearlyPrice: 883 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 105, yearlyPrice: 1008 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 64, yearlyPrice: 614 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-rcm-growth",
-    name: "AI RCM Growth",
-    category: "AI RCM",
-    tier: "Growth",
+    id: "plan-rcm-pro",
+    name: "Full Revenue Cycle Suite",
+    category: "RCM",
+    tier: "Professional",
     targetCategory: "Healthcare",
-    description: "Automated claims status tracking, follow-up automations, EHR sync, and clearinghouse integrations.",
-    includedSeats: 25,
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
+    description: "End-to-end denial management, automated ERA posting, and predictive collection analytics.",
+    includedSeats: 6,
+    monthlyCredits: 4500,
+    yearlyCredits: 54000,
     isActive: true,
     isPopular: true,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Eligibility & Benefits Verification",
-      "Claims & Follow-up Templates",
-      "Email Support",
-      "Claims Status & Follow-up",
-      "Automated Claims Follow-up",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "EHR / Software Integrations",
-      "Priority Support",
+      "6 billing specialists included",
+      "4,500 Billing Credits / mo",
+      "Denial Workflow Automation & Resubmission",
+      "Automated ERA (EDI 835) Payment Posting",
+      "A/R Aging & Payer Performance Analytics",
+      "Automated SMS/Email Patient Collections",
     ],
     modules: ["billing"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 17999, yearlyPrice: 172790 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 229, yearlyPrice: 2198 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 139, yearlyPrice: 1334 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 11199, yearlyPrice: 107510 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 111, yearlyPrice: 1065 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 185, yearlyPrice: 1776 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 210, yearlyPrice: 2016 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 128, yearlyPrice: 1228 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "plan-ai-rcm-scale",
-    name: "AI RCM Professional",
-    category: "AI RCM",
-    tier: "Professional",
+    id: "plan-rcm-custom",
+    name: "Enterprise Hospital RCM Solutions",
+    category: "RCM",
+    tier: "Custom",
     targetCategory: "Healthcare",
-    description: "End-to-end denial & AR management, custom billing rules, enterprise SSO, and dedicated SLA.",
-    includedSeats: 100,
-    monthlyCredits: 8000,
-    yearlyCredits: 96000,
+    description: "Large-scale revenue cycle operations with contract modeling, underpayment recovery, and dedicated billers.",
+    includedSeats: 25,
+    monthlyCredits: 25000,
+    yearlyCredits: 300000,
     isActive: true,
     isPopular: false,
     isInternalStaffOnly: false,
     features: [
-      "Client Import (CSV / Excel)",
-      "Eligibility & Benefits Verification",
-      "Claims & Follow-up Templates",
-      "Email Support",
-      "Claims Status & Follow-up",
-      "Automated Claims Follow-up",
-      "Workflow Automation",
-      "API & Webhook Access",
-      "EHR / Software Integrations",
-      "Priority Support",
-      "Denial & AR Management",
-      "Custom Templates",
-      "Advanced Security / SSO",
-      "Dedicated Account Manager",
-      "Dedicated Support / SLA",
-      "Custom AI Training / Workflows",
-      "Custom Integrations",
+      "25+ enterprise billing seats included",
+      "Custom High-Volume Claims & Invoicing Quota",
+      "Payer Contract Modeling & Fee Schedule Rules",
+      "Automated Underpayment & Overpayment Audits",
+      "Dedicated Certified Billing Account Team",
+      "Tailored Clearinghouse & Bank Lockbox Integration",
     ],
     modules: ["billing", "workflows"],
     moduleFeatures: {},
     linkedTemplates: [],
     linkedProcessTemplates: [],
     countryPricing: [
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 34999, yearlyPrice: 335990 },
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 449, yearlyPrice: 4310 },
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
     ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1287,6 +1261,7 @@ export function getStoredPlans(): IndustryPlan[] {
       localStorage.removeItem("mantra_admin_industry_plans_v3");
       localStorage.removeItem("mantra_admin_industry_plans_v4");
       localStorage.removeItem("mantra_admin_industry_plans_v5");
+      localStorage.removeItem("mantra_admin_industry_plans_v6");
     }
     const raw = typeof window !== "undefined" ? localStorage.getItem(PLANS_STORAGE_KEY) : null;
     if (!raw) {
@@ -1320,13 +1295,23 @@ export function getStoredPlans(): IndustryPlan[] {
       return { ...p, category: cat };
     });
 
-    // Ensure Internal and Onboarding plans exist
+    // Ensure all 4 core categories plus Internal and Onboarding plans exist
+    const hasReceptionist = updated.some((p) => isCategoryMatch(p.category, "AI Receptionist"));
+    const hasScribe = updated.some((p) => isCategoryMatch(p.category, "AI Scribe"));
+    const hasEHR = updated.some((p) => isCategoryMatch(p.category, "EHR"));
+    const hasRCM = updated.some((p) => isCategoryMatch(p.category, "RCM"));
     const hasInternal = updated.some((p) => (p.category || "").toLowerCase() === "internal");
     const hasOnboarding = updated.some((p) => (p.category || "").toLowerCase() === "onboarding");
-    if (!hasInternal || !hasOnboarding) {
+    if (!hasReceptionist || !hasScribe || !hasEHR || !hasRCM || !hasInternal || !hasOnboarding) {
       const missing = INITIAL_INDUSTRY_PLANS.filter((p) => {
+        if (!hasReceptionist && isCategoryMatch(p.category, "AI Receptionist")) return true;
+        if (!hasScribe && isCategoryMatch(p.category, "AI Scribe")) return true;
+        if (!hasEHR && isCategoryMatch(p.category, "EHR")) return true;
+        if (!hasRCM && isCategoryMatch(p.category, "RCM")) return true;
         const cat = (p.category || "").toLowerCase();
-        return (cat === "internal" && !hasInternal) || (cat === "onboarding" && !hasOnboarding);
+        if (!hasInternal && cat === "internal") return true;
+        if (!hasOnboarding && cat === "onboarding") return true;
+        return false;
       });
       updated = [...updated, ...missing];
       if (typeof window !== "undefined") {
@@ -1488,7 +1473,49 @@ export const DEFAULT_FREE_PLAN: IndustryPlan = {
 
 export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscription {
   const subs = getStoredSubscriptions();
-  const existing = subs[workspaceId];
+  let existing = subs[workspaceId];
+
+  // Reconcile if organization has an assigned plan from Admin or Signup
+  try {
+    let assignedPlanId: string | undefined;
+    let assignedBillingCycle: "monthly" | "yearly" = "monthly";
+    let orgCurrency = "USD";
+
+    if (typeof window !== "undefined") {
+      const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+      if (rawOrgs) {
+        const orgs = JSON.parse(rawOrgs);
+        const matchedOrg = orgs.find((o: any) => o.id === workspaceId);
+        if (matchedOrg?.assignedPlanId) {
+          assignedPlanId = matchedOrg.assignedPlanId;
+          assignedBillingCycle = matchedOrg.assignedBillingCycle || "monthly";
+          orgCurrency = matchedOrg.currency || "USD";
+        }
+      }
+      const rawUserOrg = localStorage.getItem("user_organization");
+      if (rawUserOrg && !assignedPlanId) {
+        const userOrg = JSON.parse(rawUserOrg);
+        if (userOrg?.id === workspaceId && userOrg?.assignedPlanId) {
+          assignedPlanId = userOrg.assignedPlanId;
+          assignedBillingCycle = userOrg.assignedBillingCycle || "monthly";
+          orgCurrency = userOrg.currency || "USD";
+        }
+      }
+    }
+
+    if (assignedPlanId) {
+      const plans = getStoredPlans();
+      const targetPlan = plans.find(
+        (p) => p.id === assignedPlanId || p.name.toLowerCase() === assignedPlanId.toLowerCase()
+      );
+      if (targetPlan && (!existing || existing.planId !== targetPlan.id || existing.tier === "Free")) {
+        return assignPlanToWorkspace(workspaceId, targetPlan.id, assignedBillingCycle, orgCurrency);
+      }
+    }
+  } catch (err) {
+    console.error("Error checking assignedPlanId in getWorkspaceSubscription:", err);
+  }
+
   if (existing && existing.planId && existing.status === "Active") {
     // Sanitize legacy combined multi-plan names to single active plan
     if (existing.planName && existing.planName.includes(" + ")) {
@@ -2045,17 +2072,14 @@ export function recordCreditDeduction(
 
 export function getSubscriptionDisplayPlanName(sub: WorkspaceSubscription | null | undefined): string {
   if (!sub) return "No Plan Assigned";
-  if ((sub.tier || "").toLowerCase() === "free" || sub.amount === 0) {
-    if (sub.planName && sub.planName.startsWith("Free Plan · ")) {
-      return sub.planName;
-    }
-    const cat = sub.activePlans?.[0]?.category ? formatCategoryWithPrefix(sub.activePlans[0].category) : "AI Receptionist";
-    return `Free Plan · ${cat}`;
-  }
   if (sub.planName && sub.planName !== "No Plan Assigned") {
     return sub.planName;
   }
-  return "AI Clinic Receptionist Starter";
+  if ((sub.tier || "").toLowerCase() === "free") {
+    const cat = sub.activePlans?.[0]?.category ? formatCategoryWithPrefix(sub.activePlans[0].category) : "AI Receptionist";
+    return `Free Plan · ${cat}`;
+  }
+  return sub.planName || "No Plan Assigned";
 }
 
 export function assignPlanToWorkspace(
@@ -2066,7 +2090,7 @@ export function assignPlanToWorkspace(
 ): WorkspaceSubscription {
   const plans = getStoredPlans();
   const existing = getWorkspaceSubscription(workspaceId);
-  const targetPlan = plans.find((p) => p.id === planId);
+  const targetPlan = plans.find((p) => p.id === planId || p.name.toLowerCase() === planId.toLowerCase());
   if (!targetPlan) {
     return existing;
   }
@@ -2114,6 +2138,43 @@ export function assignPlanToWorkspace(
   };
 
   updateWorkspaceSubscription(workspaceId, updated);
+
+  // Sync to mantra_organizations_v1 and user_organization
+  try {
+    if (typeof window !== "undefined") {
+      const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+      if (rawOrgs) {
+        const orgs = JSON.parse(rawOrgs);
+        const nextOrgs = orgs.map((o: any) =>
+          o.id === workspaceId
+            ? {
+                ...o,
+                assignedPlanId: targetPlan.id,
+                assignedPlanName: targetPlan.name,
+                assignedPlanCategory: targetPlan.category,
+                assignedBillingCycle: billingCycle,
+              }
+            : o
+        );
+        localStorage.setItem("mantra_organizations_v1", JSON.stringify(nextOrgs));
+        window.dispatchEvent(new CustomEvent("mantra_organization_changed"));
+      }
+      const rawUserOrg = localStorage.getItem("user_organization");
+      if (rawUserOrg) {
+        const userOrg = JSON.parse(rawUserOrg);
+        if (userOrg?.id === workspaceId) {
+          localStorage.setItem("user_organization", JSON.stringify({
+            ...userOrg,
+            assignedPlanId: targetPlan.id,
+            assignedPlanName: targetPlan.name,
+            assignedPlanCategory: targetPlan.category,
+            assignedBillingCycle: billingCycle,
+          }));
+        }
+      }
+    }
+  } catch {}
+
   return updated;
 }
 

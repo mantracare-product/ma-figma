@@ -44,6 +44,7 @@ import {
   PLAN_CATEGORIES,
   PlanCategory,
   DEFAULT_COUNTRY_PRICING,
+  isCategoryMatch,
   getStoredPlans,
   getStoredCreditPackages,
   getStoredTeamMemberPacks,
@@ -168,7 +169,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
     // Filter strictly by selected category ("AI Receptionist", "AI Scribe", "EHR", "RCM")
     if (selectedCategory) {
       visiblePlans = visiblePlans.filter(
-        ({ plan }) => (plan.category || "").toLowerCase() === selectedCategory.toLowerCase()
+        ({ plan }) => isCategoryMatch(plan.category, selectedCategory)
       );
     }
 
@@ -177,7 +178,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
     if (visiblePlans.length === 0 && plans.length > 0) {
       const fallbackActive = plans
         .filter((p) => p.isActive && !p.isInternalStaffOnly && (p.tier || "").toLowerCase() !== "free")
-        .filter((p) => !selectedCategory || (p.category || "").toLowerCase() === selectedCategory.toLowerCase());
+        .filter((p) => !selectedCategory || isCategoryMatch(p.category, selectedCategory));
 
       if (fallbackActive.length > 0) {
         const targetCountry = (activeOrganization?.country || activeOrganization?.location || "United States").trim().toLowerCase();
@@ -263,7 +264,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
         {/* Categories selector pills placed BEFORE monthly / yearly */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {PLAN_CATEGORIES.filter((cat) => cat !== "Internal" && cat !== "Onboarding").map((cat) => {
-            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            const isSelected = isCategoryMatch(selectedCategory, cat);
             return (
               <button
                 key={cat}
@@ -336,7 +337,10 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch pt-3">
         {scopedPlanItems.map(({ plan, pricing }) => {
           const isYearly = billingCycle === "yearly";
-          const isCurrentPlan = subscription?.planId === plan.id;
+          const isCurrentPlan =
+            subscription?.status === "Active" &&
+            (subscription?.planId === plan.id ||
+              (subscription?.planName && subscription.planName.toLowerCase() === plan.name.toLowerCase()));
           const inCartItem = cartItems.find((ci) => ci.type === "plan" && ci.planId === plan.id);
           const displayPrice = isYearly ? pricing.yearlyPrice : pricing.monthlyPrice;
           const credits = isYearly ? plan.yearlyCredits : plan.monthlyCredits;
@@ -344,38 +348,19 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
           const isPopular = plan.isPopular === true || (plan.isPopular as any) === "true";
           const planCategory = plan.category || "AI Receptionist";
 
-          // Recommended tag logic (Requirement 5 & 6)
-          const isDefaultCategoryTab = Boolean(activeOrganization?.default_category) &&
-            selectedCategory.toLowerCase() === normalizeCategoryToTabName(activeOrganization?.default_category).toLowerCase();
-          const isRecommended = isDefaultCategoryTab &&
-            Boolean(activeOrganization?.recommended_tier) &&
-            isPlanMatchingRecommendedTier(plan.tier, plan.name, activeOrganization?.recommended_tier);
-
           return (
             <div
               key={plan.id}
               className={`bg-white rounded-[28px] border-2 transition-all duration-200 p-7 flex flex-col justify-between relative shadow-2xs hover:shadow-md ${
                 isCurrentPlan
                   ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
-                  : isRecommended
-                  ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
                   : isPopular
                   ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.10)]"
                   : "border-slate-200/85 hover:border-slate-300"
               }`}
             >
-              {/* Highlight as Recommended or Popular - Ribbon on Pricing Card */}
-              {isRecommended ? (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
-                  <span
-                    className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-[11px] font-bold bg-[#1E293B] text-white shadow-md border border-slate-700 tracking-wider uppercase whitespace-nowrap"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    Recommended
-                  </span>
-                </div>
-              ) : isPopular ? (
+              {/* Highlight as Popular - Ribbon on Pricing Card (No Recommended badge) */}
+              {isPopular && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
                   <span
                     className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-[11px] font-bold bg-[#1E293B] text-white shadow-md border border-slate-700 tracking-wider uppercase whitespace-nowrap"
@@ -385,7 +370,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                     Popular
                   </span>
                 </div>
-              ) : null}
+              )}
 
               <div className="space-y-4">
                 {/* Plan Title & Description */}

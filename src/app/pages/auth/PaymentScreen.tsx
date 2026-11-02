@@ -88,23 +88,33 @@ export default function PaymentScreen() {
 
   // Calculate pricing in INR
   const inrPricing = useMemo(() => {
-    if (!selectedPlan) return { monthlyPrice: 5998, yearlyPrice: 57581 };
+    if (!selectedPlan) {
+      const fallback = plans.find((p) => p.isActive !== false && p.category !== "Onboarding" && p.category !== "Internal") || plans[0];
+      return (
+        fallback?.countryPricing?.find((cp) => cp.currency === "INR") ||
+        fallback?.countryPricing?.[0] || {
+          monthlyPrice: 0,
+          yearlyPrice: 0,
+        }
+      );
+    }
     return (
       selectedPlan.countryPricing?.find((cp) => cp.currency === "INR") ||
       selectedPlan.countryPricing?.[0] || {
-        monthlyPrice: 5998,
-        yearlyPrice: 57581,
+        monthlyPrice: 0,
+        yearlyPrice: 0,
       }
     );
-  }, [selectedPlan]);
+  }, [selectedPlan, plans]);
 
   const amountDue = useMemo(() => {
-    if (!inrPricing) return 5998;
+    if (!inrPricing) return 0;
     return billingCycle === "yearly" ? inrPricing.yearlyPrice : inrPricing.monthlyPrice;
   }, [inrPricing, billingCycle]);
 
-  // Clean Plan & Tier formatting (e.g. "AI Receptionist · Starter", removing any duplicate tier)
+  // Clean Plan & Tier formatting (e.g. "Cloud EHR Essentials", "Full Revenue Cycle Suite", etc.)
   const planDisplayName = useMemo(() => {
+    if (selectedPlan?.name) return selectedPlan.name;
     const category = selectedPlan?.category || "AI Receptionist";
     const tier = selectedPlan?.tier || "Starter";
     return `${category} · ${tier}`;
@@ -209,7 +219,15 @@ export default function PaymentScreen() {
             const orgs = JSON.parse(rawOrgs);
             const updated = orgs.map((o: any) =>
               o.id === currentOrgId || (inviteSession && o.inviteToken === inviteSession.token) || (o.email && o.email.toLowerCase() === userEmail.toLowerCase())
-                ? { ...o, name: billingOrgName.trim(), status: "Active" }
+                ? {
+                    ...o,
+                    name: billingOrgName.trim(),
+                    status: "Active",
+                    assignedPlanId: selectedPlan?.id,
+                    assignedPlanName: selectedPlan?.name,
+                    assignedPlanCategory: selectedPlan?.category,
+                    assignedBillingCycle: billingCycle,
+                  }
                 : o
             );
             localStorage.setItem("mantra_organizations_v1", JSON.stringify(updated));
