@@ -187,21 +187,29 @@ export default function Signup() {
   return (
     <GuestRoute>
       <div className="min-h-screen flex">
-        {/* Left Side - Brand & Features (Identical to Login) */}
+        {/* Left Side - Brand & Features (Dark Slate/Navy Hero) */}
         <div
-          className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
+          className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-[56px] min-h-screen"
           style={{
             background:
               "linear-gradient(135deg, #141B24 0%, #1c2736 50%, #2A3A4D 100%)",
           }}
         >
-          {/* Subtle Ambient Glow Overlays */}
-          <div className="absolute top-0 right-0 w-[450px] h-[450px] bg-[#3B82F6]/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#3B82F6]/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+          {/* Very soft radial blue glow behind heading (low opacity, no hard edges) */}
+          <div className="absolute top-1/2 -translate-y-1/2 left-8 w-[540px] h-[540px] bg-[#3B82F6]/[0.06] rounded-full blur-[140px] pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col justify-between p-8 xl:p-12 2xl:p-14 w-full h-full">
-            {/* 1. Logo */}
-            <div className="flex items-center gap-3">
+          {/* Faint dot texture at 3 to 4% opacity */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.035]"
+            style={{
+              backgroundImage: "radial-gradient(rgba(255, 255, 255, 1) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          />
+
+          <div className="relative z-10 flex flex-col justify-between w-full h-full">
+            {/* 1. Logo top-left */}
+            <div className="flex items-center">
               <img
                 src={logo}
                 alt="MantraAssist"
@@ -213,41 +221,44 @@ export default function Signup() {
               />
             </div>
 
-            {/* 2 & 3. Main Content: Platform Badge, Headline & Subtext */}
-            <div className="mt-10 xl:mt-12 mb-auto max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 backdrop-blur-sm rounded-full mb-6">
-                <div className="w-1.5 h-1.5 bg-[#3B82F6] rounded-full animate-pulse" />
+            {/* 2 & 3. Main Content: Vertically centered in the space between logo and footer */}
+            <div className="my-auto max-w-[520px] w-full flex flex-col items-start">
+              {/* Badge: 12px, medium weight, pill shape, 1px border in white at 12% opacity, background white at 4%, small blue dot with soft glow. Gap to heading: 24px */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/[0.04] border border-white/[0.12] backdrop-blur-sm rounded-full mb-6">
+                <div className="w-1.5 h-1.5 bg-[#3B82F6] rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
                 <span
-                  className="text-white text-xs font-semibold tracking-wide"
+                  className="text-white text-[12px] font-medium tracking-wide"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   AI Workforce Platform
                 </span>
               </div>
 
+              {/* Heading: about 56px, line-height 1.05, bold, letter-spacing -0.02em, pure white. Keep "Workforce" in brand blue with 2px underline & 6px offset. Gap to subtitle: 20px */}
               <h1
-                className="font-bold text-white text-3xl sm:text-4xl xl:text-[46px] 2xl:text-[52px] leading-[1.15] tracking-tight mb-4"
-                style={{ fontFamily: "Inter, sans-serif", fontWeight: 800 }}
+                className="font-bold text-white text-[42px] xl:text-[56px] leading-[1.05] tracking-[-0.02em] mb-5 text-left"
+                style={{ fontFamily: "Inter, sans-serif" }}
               >
                 The AI{" "}
-                <span className="text-[#3B82F6] underline decoration-2 underline-offset-8 decoration-[#3B82F6]">
+                <span className="text-[#3B82F6] underline decoration-2 underline-offset-[6px] decoration-[#3B82F6]">
                   Workforce
                 </span>
                 <br />
                 for Every Business.
               </h1>
 
+              {/* Subtitle: 18px, line-height 1.6, slate-300 at about 75% opacity, max-width about 460px */}
               <p
-                className="text-[#D6DCE5] text-sm sm:text-base leading-relaxed max-w-xl"
+                className="text-[18px] leading-[1.6] text-slate-300/75 max-w-[460px] text-left"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 From customer conversations to daily operations, MantraAssist automates what slows you down, so you can focus on growth.
               </p>
             </div>
 
-            {/* 6. Footer Links */}
+            {/* Footer Links: 13px, muted slate, evenly spaced with small dot separators, aligned to baseline */}
             <div
-              className="flex items-center gap-3 text-xs text-[#8E9EB5]"
+              className="flex items-center gap-3.5 text-[13px] text-slate-400"
               style={{ fontFamily: "Inter, sans-serif" }}
             >
               <button
@@ -256,14 +267,14 @@ export default function Signup() {
               >
                 English
               </button>
-              <span className="text-white/20">•</span>
+              <span className="text-white/20 text-xs">•</span>
               <button
                 type="button"
                 className="hover:text-white transition-colors cursor-pointer"
               >
                 Accessibility
               </button>
-              <span className="text-white/20">•</span>
+              <span className="text-white/20 text-xs">•</span>
               <button
                 type="button"
                 className="hover:text-white transition-colors cursor-pointer"
@@ -274,9 +285,9 @@ export default function Signup() {
           </div>
         </div>
 
-        {/* Right Side - Signup Form */}
-        <div className="flex-1 flex items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white">
-          <div className="w-full max-w-lg">
+        {/* Right Side - Signup Form (Centered horizontally and vertically, max-width 420px, 24px side padding on mobile) */}
+        <div className="flex-1 flex items-center justify-center px-6 py-10 lg:p-[56px] bg-gradient-to-br from-gray-50 to-white min-h-screen">
+          <div className="w-full max-w-[420px] mx-auto">
             {/* Logo for mobile */}
             <div className="lg:hidden mb-8">
               <img
@@ -289,28 +300,28 @@ export default function Signup() {
               />
             </div>
 
-            {/* Header */}
-            <div className="mb-8">
+            {/* Header: Heading about 32px bold, subtitle 15px muted slate. Heading to subtitle: 8px. Subtitle to first label: 32px */}
+            <div className="mb-8 text-left">
               <h2
-                className="text-4xl font-bold mb-3 text-gray-900 tracking-tight"
-                style={{ fontFamily: "Inter, sans-serif", fontWeight: 700 }}
+                className="text-[32px] font-bold text-gray-900 tracking-tight leading-tight mb-2 text-left"
+                style={{ fontFamily: "Inter, sans-serif" }}
               >
                 Get started
               </h2>
               <p
-                className="text-base text-gray-600 leading-relaxed"
-                style={{ fontFamily: "Inter, sans-serif", fontWeight: 400 }}
+                className="text-[15px] text-slate-500 leading-normal text-left"
+                style={{ fontFamily: "Inter, sans-serif" }}
               >
                 Create your account to start your free trial
               </p>
             </div>
 
             {/* Form Container */}
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit}>
               {/* 1. Organization email */}
               <div>
                 <label
-                  className="block text-sm font-semibold mb-2 text-slate-800"
+                  className="block text-[13px] font-medium text-slate-700 mb-2 text-left"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   Organization email
@@ -320,16 +331,16 @@ export default function Signup() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. contact@eyemantra.com"
-                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+                  className="w-full h-[48px] px-4 bg-white border border-slate-200 rounded-[12px] text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20 transition-all shadow-2xs hover:border-slate-300"
                   style={{ fontFamily: "Inter, sans-serif" }}
                   autoFocus
                 />
               </div>
 
-              {/* 2. Organization website */}
-              <div>
+              {/* 2. Organization website (20px between fields) */}
+              <div className="mt-5">
                 <label
-                  className="block text-sm font-semibold mb-2 text-slate-800"
+                  className="block text-[13px] font-medium text-slate-700 mb-2 text-left"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   Organization website
@@ -339,15 +350,15 @@ export default function Signup() {
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
                   placeholder="e.g. https://www.eyemantra.com"
-                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs"
+                  className="w-full h-[48px] px-4 bg-white border border-slate-200 rounded-[12px] text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20 transition-all shadow-2xs hover:border-slate-300"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
               </div>
 
-              {/* 3. Password */}
-              <div>
+              {/* 3. Password (20px between fields) */}
+              <div className="mt-5">
                 <label
-                  className="block text-sm font-semibold mb-2 text-slate-800"
+                  className="block text-[13px] font-medium text-slate-700 mb-2 text-left"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   Password
@@ -358,13 +369,13 @@ export default function Signup() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password here"
-                    className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all text-slate-900 placeholder:text-slate-400 hover:border-slate-300 shadow-2xs pr-11"
+                    className="w-full h-[48px] pl-4 pr-12 bg-white border border-slate-200 rounded-[12px] text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20 transition-all shadow-2xs hover:border-slate-300"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer flex items-center justify-center"
                     title={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
@@ -376,38 +387,43 @@ export default function Signup() {
                 </div>
               </div>
 
-              {/* Bottom Section: Centered "Continue" button & "Already have an account? Sign in" below it */}
-              <div className="pt-4 flex flex-col items-center space-y-4">
+              {/* Last field to button: 28px. Button to sign-up line: 20px. Centered under button. */}
+              <div className="mt-7 flex flex-col items-center">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-80 max-w-full py-4 bg-[#182230] hover:bg-black active:scale-[0.98] text-white text-base font-semibold rounded-full shadow-md shadow-slate-900/15 hover:shadow-lg hover:shadow-slate-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-[52px] bg-[#141B24] hover:bg-[#0f172a] active:scale-[0.99] text-white text-sm font-semibold rounded-[12px] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    "Continue"
+                    <>
+                      <span>Continue</span>
+                      <ArrowRight className="w-4 h-4 text-white" />
+                    </>
                   )}
                 </button>
 
-                <div className="text-sm text-slate-500 text-center font-normal">
-                  <span>Already have an account? </span>
+                <p
+                  className="mt-5 text-sm text-slate-500 text-center"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Already have an account?{" "}
                   <Link
                     to="/login"
-                    className="text-[#2563EB] hover:text-blue-700 font-semibold hover:underline transition-colors"
-                    style={{ fontFamily: "Inter, sans-serif" }}
+                    className="text-[#3B82F6] hover:text-blue-700 font-semibold hover:underline transition-colors"
                   >
                     Sign in
                   </Link>
-                </div>
+                </p>
               </div>
             </form>
 
             {/* Mobile Features Preview */}
             <div className="lg:hidden mt-12 pt-8 border-t border-gray-200">
               <h3
-                className="text-base font-bold mb-4 text-gray-900"
+                className="text-base font-bold mb-4 text-gray-900 text-left"
                 style={{ fontFamily: "Inter, sans-serif", fontWeight: 700 }}
               >
                 Why join us?
