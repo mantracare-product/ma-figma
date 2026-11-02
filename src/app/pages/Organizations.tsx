@@ -123,6 +123,7 @@ export interface OrganizationItem {
   teamSize?: string;
   callVolume?: string | null;
   internationalCalls?: boolean | null;
+  operatingCountries?: string[];
   telephonyChoice?: string | null;
   primaryRequirements?: string[];
   uploadedDocuments?: Array<{ id: string; name: string; sizeLabel: string }>;
@@ -654,8 +655,7 @@ export default function Organizations() {
     "24/7 AI Receptionist",
     "Appointment Scheduling & Reminders",
   ]);
-  const [selectedIntl, setSelectedIntl] = useState<"Yes" | "No">("No");
-  const [selectedPhone, setSelectedPhone] = useState<string>("Use a number from MantraAssist");
+  const [selectedOperatingCountries, setSelectedOperatingCountries] = useState<string[]>(["India"]);
 
   // Knowledge base documents (new)
   const [uploadedDocs, setUploadedDocs] = useState<Array<{ id: string; name: string; sizeLabel: string }>>([
@@ -834,8 +834,9 @@ export default function Organizations() {
           services: servicesList,
           teamSize: selectedTeamSize,
           callVolume: selectedCallVolume,
-          internationalCalls: selectedIntl === "Yes",
-          telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+          operatingCountries: selectedOperatingCountries,
+          internationalCalls: selectedOperatingCountries.length > 1,
+          telephonyChoice: "default",
           primaryRequirements: selectedRequirements,
           uploadedDocuments: uploadedDocs,
           status: "Invite sent",
@@ -1707,34 +1708,25 @@ export default function Organizations() {
                       </div>
                     </div>
 
-                    {/* Row 2: International Calls & Phone Number */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <DrawerFieldLabel label="International calls" />
-                        <select
-                          value={selectedIntl}
-                          onChange={(e) => setSelectedIntl(e.target.value as "Yes" | "No")}
-                          className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-xs"
-                        >
-                          <option value="No">No</option>
-                          <option value="Yes">Yes</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <DrawerFieldLabel
-                          label="Phone number"
-                          tooltip="Choose between a dedicated virtual line or forwarding from your existing number."
-                        />
-                        <select
-                          value={selectedPhone}
-                          onChange={(e) => setSelectedPhone(e.target.value)}
-                          className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-xs"
-                        >
-                          <option value="Use a number from MantraAssist">Use a number from MantraAssist</option>
-                          <option value="Use my own number">Use my own number</option>
-                        </select>
-                      </div>
+                    {/* Row 2: In which countries do you operate in */}
+                    <div>
+                      <DrawerFieldLabel label="In which countries do you operate in?" />
+                      <select
+                        multiple
+                        value={selectedOperatingCountries}
+                        onChange={(e) => {
+                          const options = Array.from(e.target.selectedOptions, (option) => option.value);
+                          setSelectedOperatingCountries(options.length > 0 ? options : [e.target.value]);
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs min-h-[75px]"
+                      >
+                        {COUNTRIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-gray-500 mt-1">Hold Ctrl / Cmd to select multiple countries.</p>
                     </div>
                   </div>
 

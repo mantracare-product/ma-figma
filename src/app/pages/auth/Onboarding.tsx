@@ -973,20 +973,34 @@ export default function Onboarding() {
       "Appointment Scheduling & Reminders",
     ];
   });
-  const [selectedIntl, setSelectedIntl] = useState(() => {
-    if (inviteSession?.confirmedData?.internationalCalls !== undefined) {
-      return inviteSession.confirmedData.internationalCalls ? "Yes" : "No";
+  const [operatingCountries, setOperatingCountries] = useState<string[]>(() => {
+    if (
+      inviteSession?.confirmedData?.operatingCountries &&
+      Array.isArray(inviteSession.confirmedData.operatingCountries) &&
+      inviteSession.confirmedData.operatingCountries.length > 0
+    ) {
+      return inviteSession.confirmedData.operatingCountries;
     }
-    return pricingSelection ? "" : "No";
+    const initialCountry = inviteSession?.confirmedData?.country || "India";
+    return [initialCountry];
   });
-  const [selectedPhone, setSelectedPhone] = useState(() => {
-    if (inviteSession?.confirmedData?.telephonyChoice) {
-      return inviteSession.confirmedData.telephonyChoice === "bring_own"
-        ? "Use my own number"
-        : "Use a number from MantraAssist";
+
+  const prevCountryRef = useRef(country);
+  useEffect(() => {
+    if (prevCountryRef.current !== country) {
+      const oldVal = prevCountryRef.current;
+      prevCountryRef.current = country;
+      setOperatingCountries((prev) => {
+        if (prev.length === 0 || (prev.length === 1 && prev[0] === oldVal)) {
+          return [country];
+        }
+        if (!prev.includes(country)) {
+          return [country, ...prev.filter((c) => c !== oldVal)];
+        }
+        return prev;
+      });
     }
-    return pricingSelection ? "" : "Use a number from MantraAssist";
-  });
+  }, [country]);
 
   // ── Step 6: Payment Screen State (Pricing Flow Only, Item 10 & 11) ──
   const [paymentMethod, setPaymentMethod] = useState<"card" | "upi">("card");
@@ -1257,10 +1271,11 @@ export default function Onboarding() {
       website: savedWebsite || undefined,
       services: formattedServices,
       callVolume: selectedCallVolume,
-      internationalCalls: selectedIntl === "Yes",
+      operatingCountries,
+      internationalCalls: operatingCountries.length > 1 || (operatingCountries[0] !== country),
       teamSize: selectedTeamSize,
       primaryRequirements: selectedRequirements,
-      telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+      telephonyChoice: "default",
       uploadedDocuments: uploadedDocs,
       default_category: matchedCategory,
       recommended_tier: matchedTier,
@@ -1991,14 +2006,12 @@ export default function Onboarding() {
                     toast.error("Please select how many calls you get in a day");
                     return;
                   }
-                  if (!selectedIntl) {
-                    toast.error("Please select if you take international calls");
+                  if (!operatingCountries || operatingCountries.length === 0) {
+                    toast.error("Please select in which countries you operate in");
                     return;
                   }
-                  if (!selectedPhone) {
-                    toast.error("Please select which phone number to use");
-                    return;
-                  }
+
+                  const intlCalls = operatingCountries.length > 1 || (operatingCountries[0] !== country);
 
                   if (inviteSession) {
                     if (activeOrganization?.id) {
@@ -2008,8 +2021,9 @@ export default function Onboarding() {
                         primaryRequirements: selectedRequirements,
                         teamSize: selectedTeamSize,
                         callVolume: selectedCallVolume,
-                        internationalCalls: selectedIntl === "Yes",
-                        telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+                        operatingCountries,
+                        internationalCalls: intlCalls,
+                        telephonyChoice: "default",
                       });
                     }
                     setStep(5);
@@ -2021,8 +2035,9 @@ export default function Onboarding() {
                         primaryRequirements: selectedRequirements,
                         teamSize: selectedTeamSize,
                         callVolume: selectedCallVolume,
-                        internationalCalls: selectedIntl === "Yes",
-                        telephonyChoice: selectedPhone === "Use my own number" ? "bring_own" : "default",
+                        operatingCountries,
+                        internationalCalls: intlCalls,
+                        telephonyChoice: "default",
                       });
                     }
                     setStep(5);
@@ -2041,6 +2056,9 @@ export default function Onboarding() {
                         primaryRequirements: selectedRequirements,
                         teamSize: selectedTeamSize,
                         callVolume: selectedCallVolume,
+                        operatingCountries,
+                        internationalCalls: intlCalls,
+                        telephonyChoice: "default",
                       });
                       assignFreePlanForCategory(activeOrganization.id, matchedCategory);
                     }
@@ -2092,27 +2110,16 @@ export default function Onboarding() {
                   required
                 />
 
-                {/* Row 3: International calls & Phone number side by side */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
-                  <CustomDropdown
-                    label="Do you take international calls?"
-                    options={["Yes", "No", "Not sure"]}
-                    value={selectedIntl}
-                    onChange={(val) => setSelectedIntl(val)}
-                    required
-                  />
-
-                  <CustomDropdown
-                    label="Which number should we use?"
-                    options={[
-                      "Use a number from MantraAssist",
-                      "Use my own number",
-                    ]}
-                    value={selectedPhone}
-                    onChange={(val) => setSelectedPhone(val)}
-                    required
-                  />
-                </div>
+                {/* Row 3: In which countries do you operate in */}
+                <CustomDropdown
+                  label="In which countries do you operate in?"
+                  placeholder="Select countries..."
+                  isMulti
+                  options={COUNTRIES}
+                  value={operatingCountries}
+                  onChange={(val) => setOperatingCountries(Array.isArray(val) ? val : [val])}
+                  required
+                />
 
                 {/* Bottom Actions */}
                 <div className="pt-4 flex items-center justify-between">

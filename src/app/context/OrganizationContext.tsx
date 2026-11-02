@@ -18,6 +18,7 @@ export interface Organization {
   description?: string;
   callVolume?: string | null;
   internationalCalls?: boolean | null;
+  operatingCountries?: string[];
   country?: string;
   currency?: string;
   email: string;

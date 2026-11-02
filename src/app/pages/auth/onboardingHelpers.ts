@@ -20,6 +20,7 @@ export interface CollectedOnboardingData {
   requirements: string[];
   callVolume: string | null;
   internationalCalls: boolean | null;
+  operatingCountries?: string[];
   locations: string[];
   primaryLocation: string | null;
   operatingHours: string | null;
