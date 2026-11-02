@@ -208,35 +208,22 @@ export default function Signup() {
           />
 
           <div className="relative z-10 flex flex-col justify-between w-full h-full">
-            {/* 1. Logo top-left */}
-            <div className="flex items-center">
+            {/* Main Content: Logo, Heading & Subtitle block */}
+            <div className="my-auto max-w-[520px] w-full flex flex-col items-start">
+              {/* MantraAssist Brand Anchor Logo (moved from top-left, height 40px, same white asset, 40px gap to heading) */}
               <img
                 src={logo}
                 alt="MantraAssist"
-                className="h-8 w-auto drop-shadow-md"
+                className="h-10 w-auto drop-shadow-md mb-10"
                 style={{ filter: "brightness(0) invert(1)" }}
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}
               />
-            </div>
 
-            {/* 2 & 3. Main Content: Vertically centered in the space between logo and footer */}
-            <div className="my-auto max-w-[520px] w-full flex flex-col items-start">
-              {/* Badge: 12px, medium weight, pill shape, 1px border in white at 12% opacity, background white at 4%, small blue dot with soft glow. Gap to heading: 24px */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/[0.04] border border-white/[0.12] backdrop-blur-sm rounded-full mb-6">
-                <div className="w-1.5 h-1.5 bg-[#3B82F6] rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
-                <span
-                  className="text-white text-[12px] font-medium tracking-wide"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  AI Workforce Platform
-                </span>
-              </div>
-
-              {/* Heading: about 56px, line-height 1.05, bold, letter-spacing -0.02em, pure white. Keep "Workforce" in brand blue with 2px underline & 6px offset. Gap to subtitle: 20px */}
+              {/* Heading: about 56px, line-height 1.05, bold, letter-spacing -0.02em, pure white. Keep "Workforce" in brand blue with 2px underline & 6px offset. Gap to subtitle: 24px */}
               <h1
-                className="font-bold text-white text-[42px] xl:text-[56px] leading-[1.05] tracking-[-0.02em] mb-5 text-left"
+                className="font-bold text-white text-[42px] xl:text-[56px] leading-[1.05] tracking-[-0.02em] mb-6 text-left"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 The AI{" "}
