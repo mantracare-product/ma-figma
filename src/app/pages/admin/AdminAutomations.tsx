@@ -7,7 +7,9 @@ import {
   Globe,
   SlidersHorizontal,
   ChevronDown,
+  ArrowRight,
 } from "lucide-react";
+import { Modal } from "../../components/ui/Modal";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
@@ -48,6 +50,13 @@ export default function AdminAutomations() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
+
+  // New Automation Modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newRuleName, setNewRuleName] = useState("");
+  const [newRuleDescription, setNewRuleDescription] = useState("");
+  const [newRuleScopingRules, setNewRuleScopingRules] = useState<ScopingRule[]>([]);
+  const [newRuleNameError, setNewRuleNameError] = useState(false);
 
   // Rule Scoping Modal state
   const [showScopeConfigModal, setShowScopeConfigModal] = useState(false);
@@ -112,6 +121,9 @@ export default function AdminAutomations() {
   }, [activeRule, isCreatingNewRule]);
 
   const drawerInitialScopingRules = useMemo(() => {
+    if (isCreatingNewRule) {
+      return newRuleScopingRules;
+    }
     if (activeRule?.scopingRules && activeRule.scopingRules.length > 0) {
       return activeRule.scopingRules;
     }
@@ -140,7 +152,24 @@ export default function AdminAutomations() {
   }, [activeRule, pendingScopingRules, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
 
   const drawerInitialAutomation = useMemo(() => {
-    if (isCreatingNewRule || !activeRule) return null;
+    if (isCreatingNewRule) {
+      return {
+        id: `auto-${Date.now()}`,
+        orgId: "default",
+        name: newRuleName.trim() || "New Global Automation",
+        description: newRuleDescription.trim(),
+        scope: "global" as const,
+        status: "active" as const,
+        scopingRules: newRuleScopingRules.length > 0 ? newRuleScopingRules : drawerInitialScopingRules,
+        trigger: {
+          type: "client" as const,
+          event: "client.created",
+        },
+        steps: [],
+        updatedAt: new Date().toISOString(),
+      } as any;
+    }
+    if (!activeRule) return null;
     return {
       id: activeRule.id,
       orgId: activeRule.orgId || "default",
@@ -173,12 +202,38 @@ export default function AdminAutomations() {
       })) as any,
       updatedAt: activeRule.updatedAt || "",
     } as any;
-  }, [isCreatingNewRule, activeRule]);
+  }, [isCreatingNewRule, activeRule, newRuleName, newRuleDescription, newRuleScopingRules, drawerInitialScopingRules]);
 
   const handleCreateNewRule = () => {
+    setNewRuleName("");
+    setNewRuleDescription("");
+    setNewRuleNameError(false);
+    const initScope: ScopingRule[] =
+      selectedCategoryFilter && selectedCategoryFilter !== "All"
+        ? [
+            {
+              id: `scope-${Date.now()}`,
+              industryCategory: selectedCategoryFilter,
+              industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+              locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+            },
+          ]
+        : [];
+    setNewRuleScopingRules(initScope);
+    setShowAddModal(true);
+  };
+
+  const handleProceedFromAddModal = () => {
+    if (!newRuleName.trim()) {
+      setNewRuleNameError(true);
+      toast.error("Please enter a rule name");
+      return;
+    }
+    setNewRuleNameError(false);
+    setShowAddModal(false);
     setIsCreatingNewRule(true);
     setActiveRuleId(null);
-    setPendingScopingRules([]);
+    setPendingScopingRules(newRuleScopingRules);
     setIsAddAutomationDrawerOpen(true);
   };
 
@@ -500,7 +555,7 @@ export default function AdminAutomations() {
           defaultView="flowbuilder"
           processes={processes}
           initialAutomation={drawerInitialAutomation}
-          processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
+          processName={isCreatingNewRule ? (newRuleName.trim() || "New Global Automation") : (activeRule ? activeRule.name : "New Global Automation")}
           workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
         onSaveAutomation={(saved) => {
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
@@ -612,8 +667,8 @@ export default function AdminAutomations() {
             try {
               const created = createRule({
                 orgId: "default",
-                name: saved.name || "New Automation",
-                description: saved.description || "",
+                name: saved.name || newRuleName.trim() || "New Automation",
+                description: saved.description || newRuleDescription.trim() || "",
                 entityType: detectedEntityType,
                 isAdmin: true,
                 createdIn: "admin",
@@ -671,6 +726,125 @@ export default function AdminAutomations() {
         }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          NEW AUTOMATION RULE POPUP MODAL
+          ───────────────────────────────────────────────────────────── */}
+      {showAddModal && (
+        <Modal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          maxWidth="lg"
+          title={
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0">
+                <Zap className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    New Automation Rule
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
+                    Admin Global Rule
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Set rule details and organization scoping before building actions.
+                </p>
+              </div>
+            </div>
+          }
+          footer={
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[11px] text-gray-400">
+                * Required field
+              </span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProceedFromAddModal}
+                  className="inline-flex items-center gap-1.5 px-4.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all cursor-pointer shadow-xs"
+                >
+                  <span>Continue to Builder</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="p-1 space-y-4">
+            {/* Rule Name Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-gray-700">
+                Rule Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newRuleName}
+                onChange={(e) => {
+                  setNewRuleName(e.target.value);
+                  if (newRuleNameError) setNewRuleNameError(false);
+                }}
+                placeholder="e.g. Inbound Patient Consultation Triage & SMS"
+                autoFocus
+                className={`w-full px-3.5 py-2 text-xs border rounded-xl outline-none transition-all ${
+                  newRuleNameError
+                    ? "border-red-400 ring-2 ring-red-400/20 bg-red-50/20"
+                    : "border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 bg-white"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleProceedFromAddModal();
+                  }
+                }}
+              />
+              {newRuleNameError && (
+                <p className="text-[11px] text-red-500 font-medium">
+                  Please enter a rule name before continuing.
+                </p>
+              )}
+            </div>
+
+            {/* Description Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-gray-700">
+                Description
+              </label>
+              <textarea
+                value={newRuleDescription}
+                onChange={(e) => setNewRuleDescription(e.target.value)}
+                placeholder="Describe what this automation handles and when it should execute..."
+                rows={2}
+                className="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 bg-white resize-none"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
+
+            {/* Admin Scope Rules Section */}
+            <div className="pt-2">
+              <AdminControlAccordion
+                scopingRules={newRuleScopingRules}
+                onScopingRulesChange={(rules) => setNewRuleScopingRules(rules)}
+                defaultAdminControlOpen={true}
+                defaultScopeOpen={true}
+                defaultPermissionsOpen={false}
+                scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
+                permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+              />
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Admin Scope Rules Configuration Modal */}
