@@ -31,6 +31,18 @@ const OrganizationContext: React.Context<OrganizationContextType | undefined> =
 
 const defaultOrganizations: Organization[] = [
   {
+    id: "eye-mantra",
+    name: "Eye Mantra New",
+    industryCategory: "Healthcare",
+    industry: "Ophthalmology Clinic",
+    locations: ["California", "New York"],
+    country: "United States",
+    currency: "USD",
+    email: "care@eyemantra.com",
+    phone: "+1 (555) 345-6789",
+    status: "Active",
+  },
+  {
     id: "demo",
     name: "Demo Mantra Care",
     industryCategory: "Healthcare",

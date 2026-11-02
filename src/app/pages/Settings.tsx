@@ -2314,6 +2314,10 @@ export default function Settings() {
       setBitrixConnectionTested(false);
       setIsMappingSectionExpanded(false);
     }
+    // If Phorest is already connected, mark as tested
+    if (integration.id === "phorest") {
+      setPhorestConnectionTested(integration.connected || false);
+    }
     // If Salesforce is already connected, mark as tested and load saved processes
     if (integration.id === "salesforce" && integration.connected) {
       setSalesforceConnectionTested(true);
@@ -2408,6 +2412,27 @@ export default function Settings() {
 
   const handleSaveIntegration = () => {
     if (!selectedIntegration) return;
+
+    // Phorest-specific validation
+    if (selectedIntegration.id === "phorest") {
+      if (!integrationCredentials.username || !integrationCredentials.password || !integrationCredentials.businessId) {
+        toast.error("Please fill in Username, Password, and Business ID");
+        return;
+      }
+      if (!phorestConnectionTested) {
+        toast.error("Please test connection before saving");
+        return;
+      }
+      try {
+        localStorage.setItem("phorestIntegration", JSON.stringify({
+          connected: true,
+          credentials: integrationCredentials,
+          updatedAt: new Date().toISOString(),
+        }));
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
     // Salesforce-specific validation
     if (selectedIntegration.id === "salesforce") {
@@ -2593,6 +2618,15 @@ export default function Settings() {
       )
     );
 
+    if (selectedIntegration.id === "phorest") {
+      try {
+        localStorage.removeItem('phorestIntegration');
+        setPhorestConnectionTested(false);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     if (selectedIntegration.id === "whatsapp-business") {
       try {
         localStorage.removeItem('whatsappTemplateIntegrations');
@@ -2618,6 +2652,21 @@ export default function Settings() {
     setTestConnectionStatus("success");
     setIsTestingConnection(false);
     toast.success("Connection test successful");
+
+    // For Phorest, validate credentials and simulate live handshake
+    if (selectedIntegration?.id === "phorest") {
+      if (!integrationCredentials.username || !integrationCredentials.password || !integrationCredentials.businessId) {
+        toast.error("Enter Username, Password, and Business ID before testing");
+        setIsTestingConnection(false);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      setPhorestConnectionTested(true);
+      setTestConnectionStatus("success");
+      setIsTestingConnection(false);
+      toast.success("Phorest API verified successfully (Handshake 200 OK)");
+      return;
+    }
 
     // For Bitrix, mark connection as tested and auto-expand mapping section
     if (selectedIntegration?.id === "bitrix24") {
@@ -2862,6 +2911,40 @@ export default function Settings() {
         { name: "clientSecret", label: "Client Secret", type: "password", placeholder: "Enter client secret" },
         { name: "practiceId", label: "Practice ID", placeholder: "Enter practice ID" },
       ],
+      phorest: [
+        {
+          name: "username",
+          label: "API Username *",
+          placeholder: "e.g. global/your_email@domain.com",
+          tooltip: "Your Phorest API username (must include the 'global/' prefix)",
+        },
+        {
+          name: "password",
+          label: "API Password / Secret *",
+          type: "password",
+          placeholder: "Enter Phorest API password",
+          tooltip: "Your secret Phorest API password provided by Phorest Support",
+        },
+        {
+          name: "businessId",
+          label: "Business ID *",
+          placeholder: "e.g. Xf7saoBpuqy2t0RRIkBpXg",
+          tooltip: "Your unique Phorest Business UUID",
+        },
+        {
+          name: "region",
+          label: "Gateway Region *",
+          placeholder: "US or EU",
+          defaultValue: "US",
+          tooltip: "US (api-gateway-us.phorest.com) for North America/Canada/Australia; EU (api-gateway-eu.phorest.com) for Europe/UK",
+        },
+        {
+          name: "branchId",
+          label: "Default Branch ID (Optional)",
+          placeholder: "e.g. hPfzdyamWjxp9GzYVUETRg (leave blank to auto-detect)",
+          tooltip: "Branch identifier for booking and lead routing. If blank, MantraAssist auto-detects primary branch",
+        },
+      ],
       bitrix24: [
         {
           name: "apiUrl",
@@ -2976,6 +3059,28 @@ export default function Settings() {
     { id: "athena", name: "Athena Health", description: "Cloud-based EHR and practice management", category: "ehr", connected: false },
 
     // CRM / Data Source
+    {
+      id: "phorest",
+      name: "Phorest",
+      description: "Salon & clinic management software for clients, staff, and appointments",
+      category: "crm",
+      connected: (() => {
+        try {
+          const saved = localStorage.getItem("phorestIntegration");
+          return !!saved && JSON.parse(saved).connected;
+        } catch {
+          return false;
+        }
+      })(),
+      credentials: (() => {
+        try {
+          const saved = localStorage.getItem("phorestIntegration");
+          return saved ? JSON.parse(saved).credentials : undefined;
+        } catch {
+          return undefined;
+        }
+      })(),
+    },
     { id: "bitrix24", name: "Bitrix 24", description: "Collaboration and CRM platform", category: "crm", connected: false },
     { id: "hubspot", name: "HubSpot", description: "Marketing and sales CRM", category: "crm", connected: false },
     { id: "salesforce", name: "Salesforce", description: "Cloud-based CRM solution", category: "crm", connected: true },
@@ -3080,6 +3185,7 @@ export default function Settings() {
   const [integrationConfigTab, setIntegrationConfigTab] = useState<"api" | "numbers" | "category-mapping">("api");
   const [bitrixConnectionTested, setBitrixConnectionTested] = useState(false);
   const [salesforceConnectionTested, setSalesforceConnectionTested] = useState(false);
+  const [phorestConnectionTested, setPhorestConnectionTested] = useState(false);
   const [salesforceSelectedProcesses, setSalesforceSelectedProcesses] = useState<string[]>([]);
   const [salesforceProcessValidationError, setSalesforceProcessValidationError] = useState<string>("");
   const [isMappingSectionExpanded, setIsMappingSectionExpanded] = useState(false);
@@ -7880,6 +7986,15 @@ export default function Settings() {
                                 </svg>
                               </div>
                             )}
+                            {integration.id === "phorest" && (
+                              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#0F5A47] flex items-center justify-center shadow-sm">
+                                <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none">
+                                  <rect width="32" height="32" rx="8" fill="#0F5A47" />
+                                  <path d="M10 24V8h6.5a5.5 5.5 0 0 1 0 11H14v5h-4z" fill="white" />
+                                  <circle cx="21" cy="11" r="2.5" fill="#34D399" />
+                                </svg>
+                              </div>
+                            )}
                             {integration.id === "meta-leads" && (
                               <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#1877F2] flex items-center justify-center shadow-sm">
                                 <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white">
@@ -10866,7 +10981,21 @@ export default function Settings() {
                               )}
                             </div>
 
-                            {field.type === "toggle" ? (
+                            {field.name === "region" && selectedIntegration.id === "phorest" ? (
+                              <select
+                                value={integrationCredentials[field.name] || "US"}
+                                onChange={(e) =>
+                                  setIntegrationCredentials({
+                                    ...integrationCredentials,
+                                    [field.name]: e.target.value,
+                                  })
+                                }
+                                className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm font-medium"
+                              >
+                                <option value="US">North America, Canada & Australia (api-gateway-us.phorest.com)</option>
+                                <option value="EU">United Kingdom & Europe (api-gateway-eu.phorest.com)</option>
+                              </select>
+                            ) : field.type === "toggle" ? (
                               <label className="flex items-center gap-3 cursor-pointer">
                                 <div className="relative">
                                   <input
@@ -10940,6 +11069,41 @@ export default function Settings() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {selectedIntegration?.id === "phorest" && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-emerald-700 flex-shrink-0" />
+                        <p className="text-sm font-semibold text-emerald-950">
+                          Phorest Clinic Synchronization
+                        </p>
+                      </div>
+                      <p className="text-xs text-emerald-800 leading-relaxed">
+                        Connecting Phorest enables MantraAssist AI to autonomously answer incoming calls, check real-time availability, book and reschedule appointments, capture patient leads, and route emergency triage calls.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-emerald-900 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Live 24/7 Booking</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Client Profile Sync</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Staff Rosters & Hours</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Lead Gen & Consent</span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 pt-1 border-t border-emerald-200/60">
+                        * Basic Auth credentials can be requested from your Phorest Support (<code className="font-mono">api-requests@phorest.com</code>). Ensure your username begins with <code className="font-mono">global/</code>.
+                      </p>
                     </div>
                   )}
 
@@ -11559,6 +11723,10 @@ export default function Settings() {
                             ? (!salesforceConnectionTested
                               ? "Test connection first to enable saving"
                               : "Save Salesforce API details and process selection.")
+                            : selectedIntegration.id === "phorest"
+                              ? (!phorestConnectionTested
+                                ? "Test connection first to enable saving"
+                                : "Save Phorest credentials and activate synchronization.")
                             : "Save and activate this provider"
                       }
                     >
@@ -11568,7 +11736,8 @@ export default function Settings() {
                         className="flex-1"
                         disabled={
                           (selectedIntegration.id === "bitrix24" && !bitrixConnectionTested) ||
-                          (selectedIntegration.id === "salesforce" && !salesforceConnectionTested)
+                          (selectedIntegration.id === "salesforce" && !salesforceConnectionTested) ||
+                          (selectedIntegration.id === "phorest" && !phorestConnectionTested)
                         }
                       >
                         <Save className="w-4 h-4" />

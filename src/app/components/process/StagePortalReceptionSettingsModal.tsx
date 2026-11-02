@@ -141,24 +141,6 @@ export default function StagePortalReceptionSettingsModal({
     setFieldDropdownOpen(false);
   };
 
-  const handleInsertSingleToken = (token: string) => {
-    const tokenString = `{{${token}}}`;
-    const el = textareaRef.current;
-    if (el) {
-      const start = el.selectionStart ?? htmlContent.length;
-      const end = el.selectionEnd ?? htmlContent.length;
-      const updated = htmlContent.substring(0, start) + tokenString + htmlContent.substring(end);
-      setHtmlContent(updated);
-      setTimeout(() => {
-        el.focus();
-        el.setSelectionRange(start + tokenString.length, start + tokenString.length);
-      }, 50);
-    } else {
-      setHtmlContent((prev) => (prev ? `${prev} ${tokenString}` : tokenString));
-    }
-    toast.success(`Inserted {{${token}}}`);
-  };
-
   const toggleDropdownSection = (moduleKey: string) => {
     setCollapsedDropdownSections((prev) => ({
       ...prev,

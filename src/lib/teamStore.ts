@@ -39,6 +39,45 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     locations: ["California", "California Branch", "Online"],
     availableLocations: ["California", "California Branch", "Online"],
   },
+  {
+    id: 2,
+    name: "Akshita Sharma",
+    email: "akshita.sharma@mantra.care",
+    role: "Ophthalmologist",
+    department: "Clinical",
+    status: true,
+    organizationId: "1",
+    canBookAppointments: true,
+    calendarConnected: true,
+    locations: ["California", "California Branch", "Online"],
+    availableLocations: ["California", "California Branch", "Online"],
+  },
+  {
+    id: 3,
+    name: "Alice",
+    email: "alice@mantra.care",
+    role: "Senior Surgeon",
+    department: "Surgery",
+    status: true,
+    organizationId: "1",
+    canBookAppointments: true,
+    calendarConnected: true,
+    locations: ["California", "California Branch", "Online"],
+    availableLocations: ["California", "California Branch", "Online"],
+  },
+  {
+    id: 4,
+    name: "Charu Arora",
+    email: "charu@mantra.care",
+    role: "Physician",
+    department: "Consultation",
+    status: true,
+    organizationId: "1",
+    canBookAppointments: true,
+    calendarConnected: true,
+    locations: ["California", "California Branch", "Online"],
+    availableLocations: ["California", "California Branch", "Online"],
+  },
 ];
 
 const LEGACY_MOCK_NAMES = new Set([
@@ -63,9 +102,18 @@ const LEGACY_MOCK_NAMES = new Set([
 ]);
 
 function cleanLegacyMembers(list: any[]): TeamMember[] {
-  const filtered = list.filter((m) => m && m.name && !LEGACY_MOCK_NAMES.has(m.name.toLowerCase()));
+  let filtered = list.filter((m) => m && m.name && !LEGACY_MOCK_NAMES.has(m.name.toLowerCase()));
+
+  // Ensure primary demo clinicians (Akshita Sharma & Alice) are always available
+  if (!filtered.some((m) => m.name?.toLowerCase().includes("akshita"))) {
+    filtered.push(INITIAL_TEAM_MEMBERS[1]);
+  }
+  if (!filtered.some((m) => m.name?.toLowerCase().includes("alice"))) {
+    filtered.push(INITIAL_TEAM_MEMBERS[2]);
+  }
+
   if (!filtered.some((m) => m.name.toLowerCase() === "admin user" || (m.role && m.role.toLowerCase() === "admin"))) {
-    return [...INITIAL_TEAM_MEMBERS, ...filtered];
+    return [INITIAL_TEAM_MEMBERS[0], ...filtered];
   }
   return filtered.map((m) => {
     if (m.name?.toLowerCase() === "admin user" && (!m.locations || m.locations.length === 0)) {
