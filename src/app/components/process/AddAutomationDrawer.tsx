@@ -1110,7 +1110,7 @@ export default function AddAutomationDrawer({
                 initialStepIdToConfigure={initialStepIdToConfigure}
                 onSave={() => handleSaveAutomation("active")}
                 hideHowItWorks={true}
-                initialHasChosenTrigger={Boolean(initialAutomation || (workflowSteps && workflowSteps.length > 0) || initialStepIdToConfigure)}
+                initialHasChosenTrigger={Boolean((initialAutomation?.steps && initialAutomation.steps.length > 0) || (workflowSteps && workflowSteps.length > 0) || initialStepIdToConfigure)}
               />
             </div>
         </motion.div>
