@@ -975,6 +975,11 @@ export function isFieldMatchingContactCategory(
 ): boolean {
   if (!selectedCategory || selectedCategory === "all" || selectedCategory === "*") return true;
   if (!field.contactCategories || field.contactCategories.length === 0) return true;
+  // If field contains all standard contact categories, it is a universal contact field that matches any contact category
+  const hasAllStandard = ["lead", "client", "supplier", "vendor"].every((cat) =>
+    field.contactCategories?.some((c) => c.toLowerCase() === cat)
+  );
+  if (hasAllStandard) return true;
   return field.contactCategories.some(
     (c) => c.toLowerCase() === selectedCategory.toLowerCase()
   );
@@ -991,6 +996,10 @@ export function isSectionMatchingContactCategory(
 ): boolean {
   if (!selectedCategory || selectedCategory === "all" || selectedCategory === "*") return true;
   if (!section.contactCategories || section.contactCategories.length === 0) return true;
+  const hasAllStandardSec = ["lead", "client", "supplier", "vendor"].every((cat) =>
+    section.contactCategories?.some((c) => c.toLowerCase() === cat)
+  );
+  if (hasAllStandardSec) return true;
   return section.contactCategories.some(
     (c) => c.toLowerCase() === selectedCategory.toLowerCase()
   );

@@ -16,7 +16,7 @@ import { X, ChevronDown, Check, Plus, Trash2, Layers, Settings2, GripVertical, G
 import type {
   FieldDefinition, FieldModule, SectionDefinition, ScopingRule, SectionPermissions,
 } from "../../../context/FieldRegistryContext";
-import { useFieldRegistry } from "../../../context/FieldRegistryContext";
+import { useFieldRegistry, isFieldMatchingContactCategory } from "../../../context/FieldRegistryContext";
 import { MODULE_OPTIONS } from "./AdminFieldDrawer";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
@@ -434,9 +434,35 @@ export function AdminSectionDrawer({
     return Array.from(fieldsMap.values());
   }, [form.selectedModules, getAllFields]);
 
+  // Active contact category for the section being created/edited
+  const isClientModule = form.selectedModules.includes("client") || form.module === "client";
+  const activeContactCategories = useMemo(() => {
+    if (form.contactCategories && form.contactCategories.length > 0) {
+      return form.contactCategories;
+    }
+    if (initialContactCategory) {
+      return [initialContactCategory];
+    }
+    return isClientModule ? ["Lead"] : [];
+  }, [form.contactCategories, initialContactCategory, isClientModule]);
+
   const eligibleFields = useMemo(() => {
     return moduleFields.filter((f) => {
+      // 1. Contact category filtering: When building a section for a particular contact category,
+      // only show fields that belong to that contact category (or universal contact fields)
+      if (f.module === "client" || isClientModule) {
+        if (activeContactCategories.length > 0) {
+          const matchesCategory = activeContactCategories.some((cat) =>
+            isFieldMatchingContactCategory(f, cat)
+          );
+          if (!matchesCategory) return false;
+        }
+      }
+
+      // 2. Scoping rules filtering (industry, country, etc.)
       if (!doesFieldMatchSectionScope(f, form.scopingRules)) return false;
+
+      // 3. Process context filtering
       if (isProcessActive && hasActiveProcessContext && activeProcessId) {
         if (f.processIds && f.processIds.length > 0) {
           const match = f.processIds.includes(activeProcessId) || (activeProcessName && f.processIds.includes(activeProcessName));
@@ -445,7 +471,7 @@ export function AdminSectionDrawer({
       }
       return true;
     });
-  }, [moduleFields, form.scopingRules, isProcessActive, hasActiveProcessContext, activeProcessId, activeProcessName]);
+  }, [moduleFields, form.scopingRules, isProcessActive, hasActiveProcessContext, activeProcessId, activeProcessName, isClientModule, activeContactCategories]);
 
   const toggleFieldKey = (key: string) => {
     setForm(p => ({
@@ -700,7 +726,19 @@ export function AdminSectionDrawer({
                         setShowAddCustomCategoryBox(true);
                       } else {
                         setShowAddCustomCategoryBox(false);
-                        setForm((p) => ({ ...p, contactCategories: [e.target.value] }));
+                        const newCat = e.target.value;
+                        setForm((p) => {
+                          const validKeys = p.fieldKeys.filter((key) => {
+                            const fld = moduleFields.find((f) => f.key === key);
+                            if (!fld || fld.module !== "client") return true;
+                            return isFieldMatchingContactCategory(fld, newCat);
+                          });
+                          return {
+                            ...p,
+                            contactCategories: [newCat],
+                            fieldKeys: validKeys,
+                          };
+                        });
                       }
                     }}
                     className="w-full bg-transparent text-xs font-semibold text-slate-800 pr-6 outline-none cursor-pointer appearance-none"
@@ -729,7 +767,18 @@ export function AdminSectionDrawer({
                         if (e.key === "Enter" && newCustomCategoryInput.trim()) {
                           const added = newCustomCategoryInput.trim();
                           addContactCategory(added);
-                          setForm((p) => ({ ...p, contactCategories: [added] }));
+                          setForm((p) => {
+                            const validKeys = p.fieldKeys.filter((key) => {
+                              const fld = moduleFields.find((f) => f.key === key);
+                              if (!fld || fld.module !== "client") return true;
+                              return isFieldMatchingContactCategory(fld, added);
+                            });
+                            return {
+                              ...p,
+                              contactCategories: [added],
+                              fieldKeys: validKeys,
+                            };
+                          });
                           setNewCustomCategoryInput("");
                           setShowAddCustomCategoryBox(false);
                         }
@@ -741,7 +790,18 @@ export function AdminSectionDrawer({
                         if (newCustomCategoryInput.trim()) {
                           const added = newCustomCategoryInput.trim();
                           addContactCategory(added);
-                          setForm((p) => ({ ...p, contactCategories: [added] }));
+                          setForm((p) => {
+                            const validKeys = p.fieldKeys.filter((key) => {
+                              const fld = moduleFields.find((f) => f.key === key);
+                              if (!fld || fld.module !== "client") return true;
+                              return isFieldMatchingContactCategory(fld, added);
+                            });
+                            return {
+                              ...p,
+                              contactCategories: [added],
+                              fieldKeys: validKeys,
+                            };
+                          });
                           setNewCustomCategoryInput("");
                           setShowAddCustomCategoryBox(false);
                         }
@@ -1093,13 +1153,17 @@ export function AdminSectionDrawer({
                     <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
                       <span className="font-semibold text-gray-700">Available Fields</span>
                       <span className="text-[10px] text-gray-500 font-medium">
-                        {form.scopingRules.length > 0 ? "Filtered by scope" : "All fields"}
+                        {isClientModule && activeContactCategories.length > 0
+                          ? `${activeContactCategories.join(", ")} fields`
+                          : form.scopingRules.length > 0
+                          ? "Filtered by scope"
+                          : "All fields"}
                       </span>
                     </div>
                     <div className="overflow-y-auto p-1 divide-y divide-gray-50">
                       {eligibleFields.length === 0 ? (
                         <p className="px-4 py-4 text-xs text-gray-400 italic text-center">
-                          No fields match this section's scope.
+                          No fields match this section's category & scope.
                         </p>
                       ) : (
                         eligibleFields.map(f => (
