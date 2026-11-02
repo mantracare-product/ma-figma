@@ -42,6 +42,7 @@ export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
   { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
   { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
+  { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value on a workflow entity.", iconKey: "edit", cats: ["all", "data"], popular: true },
   { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this record.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
   { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
 ];

@@ -249,6 +249,13 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
 
   // Data & Assignment
   {
+    key: "fieldupdate",
+    name: "Field Update",
+    desc: "Update a specific field value on a workflow entity.",
+    iconKey: "edit",
+    cats: ["all", "data"],
+  },
+  {
     key: "assignhuman",
     name: "Assign to a Human",
     desc: "Assign a team member to handle this record.",
