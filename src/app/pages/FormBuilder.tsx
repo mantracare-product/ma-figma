@@ -2325,24 +2325,22 @@ export default function FormBuilder({
                       ))}
                     </div>
 
-                    {/* Section label "EXISTING FIELDS": 11px, weight 600, letter-spacing 0.06em, color #64748B, uppercase. 16px margin-top above it, separated from the tiles by a 1px #E2E8F0 divider. */}
+                    {/* Section label "EXISTING FIELDS": 11px, weight 600, letter-spacing 0.06em, color #64748B, uppercase. 16px space above it, separated by a 1px #E2E8F0 divider. */}
                     <div className="mt-4 pt-4 border-t border-[#E2E8F0]">
                       <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748B]" style={{ fontFamily: 'Outfit, sans-serif' }}>
                         EXISTING FIELDS
                       </span>
-                      {/* Helper text under it: 12px, line-height 18px, color #64748B, 4px margin-top, 12px margin-bottom. Keep it to its existing wording. */}
-                      <p className="text-[12px] leading-[18px] text-[#64748B] mt-1 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Import configured fields from your CRM, Process, or Appointments.
-                      </p>
-                      {/* Button: full width of the panel, 40px height, 8px radius, white background, 1px SOLID #E2E8F0 border (replace the dashed blue border), #0F172A text at 13px weight 500, with the existing icon in #475569 at 16px and an 8px gap to the label. No blue text.
-                          Hover: #F8FAFC background and #CBD5E1 border. Focus: 2px brand-blue focus ring. Active: #F1F5F9 background. */}
+
+                      {/* Text button: no border, no background, no shadow, not full width, 8px space below label, 4px 0 padding, hover underline */}
                       <button
                         type="button"
                         onClick={() => setShowSelectFieldModal(true)}
-                        className="w-full h-10 rounded-lg bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] active:bg-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 text-[#0F172A] text-[13px] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                        title="Import configured fields from your CRM, Process, or Appointments."
+                        aria-label="Select from Field Library"
+                        className="mt-2 py-1 px-0 h-auto inline-flex items-center gap-2 text-[#2563EB] hover:text-[#1D4ED8] active:text-[#1E40AF] text-[13px] font-medium hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-1 focus-visible:rounded-[4px] transition-colors"
                         style={{ fontFamily: 'DM Sans, sans-serif' }}
                       >
-                        <Sliders className="w-4 h-4 text-[#475569]" />
+                        <Sliders className="w-4 h-4 text-current shrink-0" />
                         <span>Select from Field Library</span>
                       </button>
                     </div>
