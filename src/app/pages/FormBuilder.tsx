@@ -50,8 +50,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Maximize2,
-  Minimize2,
+  Scissors,
+  PenTool,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -128,9 +128,6 @@ export default function FormBuilder({
   const locationForm = location.state?.form as any;
   const existingForm = propInitialForm !== undefined ? propInitialForm : locationForm;
   const returnTo = propReturnTo !== undefined ? propReturnTo : location.state?.returnTo;
-
-  // Drawer Fullscreen expansion state
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Stable formId for new or existing forms
   const [formId, setFormId] = useState<number>(() => Number(existingForm?.id ?? propFormId ?? Date.now()));
@@ -596,23 +593,44 @@ export default function FormBuilder({
 
   const handleAddField = (fieldType: string, fieldName: string) => {
     const needsOptions = ["select", "multiselect", "checkbox", "radio"].includes(fieldType);
+    let defaultPlaceholder = `Enter your ${fieldName.toLowerCase()}`;
+    let defaultValue = "";
+    let validation = "";
+
+    if (fieldType === "email") {
+      defaultPlaceholder = "you@example.com";
+      validation = "email";
+    } else if (fieldType === "tel" || fieldType === "phone") {
+      defaultPlaceholder = "(555) 123-4567";
+      validation = "phone";
+    } else if (fieldType === "signature") {
+      defaultPlaceholder = "Sign your name";
+    } else if (fieldType === "page-break") {
+      defaultPlaceholder = "Page Break";
+    } else if (fieldType === "section-break") {
+      defaultPlaceholder = "Section Header / Subtitle";
+    } else if (fieldType === "html") {
+      defaultPlaceholder = "<p>Custom HTML content...</p>";
+      defaultValue = "<p>Enter custom HTML here</p>";
+    }
+
     const newField: FormField = {
       id: Date.now(),
       name: fieldName,
       type: fieldType,
-      placeholder: `Enter your ${fieldName.toLowerCase()}`,
+      placeholder: defaultPlaceholder,
       required: false,
       essential: false,
       label: fieldName,
       helpText: "",
-      validation: "",
+      validation,
       options: needsOptions ? [
         { id: 1, label: "Option 1", value: "option_1" },
         { id: 2, label: "Option 2", value: "option_2" },
         { id: 3, label: "Option 3", value: "option_3" },
       ] : undefined,
       allowOther: false,
-      defaultValue: "",
+      defaultValue,
     };
     setFormFields([...formFields, newField]);
     setSelectedField(newField);
@@ -716,7 +734,7 @@ export default function FormBuilder({
 
       {/* ── Premium SaaS Header Bar (Single 72px row: Back + Title Block | Ring Progress + Actions) ── */}
       <header className="shrink-0 bg-white h-[72px] border-b border-[#E2E8F0] flex items-center">
-        <div className="max-w-[1260px] mx-auto w-full px-4 h-full flex items-center justify-between gap-4">
+        <div className="w-full px-5 sm:px-6 h-full flex items-center justify-between gap-4">
           {/* Left Side: 36px Circular Back Button + Title Block (20px gap) */}
           <div className="flex items-center gap-5 min-w-0 max-w-[500px]">
             {/* 36px Circular Back Button */}
@@ -960,22 +978,9 @@ export default function FormBuilder({
                 </button>
               )}
 
-              {/* Drawer Controls (Full Screen Expand/Collapse & Close X) if in Drawer mode */}
+              {/* Drawer Controls (Close X) if in Drawer mode */}
               {isDrawer && (
-                <div className="flex items-center gap-1.5 pl-2 border-l border-[#E2E8F0] shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsFullscreen((prev) => !prev)}
-                    className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition-colors cursor-pointer shrink-0"
-                    title={isFullscreen ? "Exit Full Screen" : "Expand to Full Screen"}
-                    aria-label={isFullscreen ? "Exit Full Screen" : "Expand to Full Screen"}
-                  >
-                    {isFullscreen ? (
-                      <Minimize2 className="w-3.5 h-3.5" />
-                    ) : (
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                <div className="flex items-center pl-2 border-l border-[#E2E8F0] shrink-0">
                   <button
                     type="button"
                     onClick={handleCancel}
@@ -994,13 +999,12 @@ export default function FormBuilder({
 
       {/* ── Main content area: strictly fixed-height, child panes scroll independently ── */}
       <main className="flex-1 min-h-0 overflow-hidden py-4">
-        <div className="max-w-[1260px] mx-auto w-full px-4 h-full">
+        <div className="w-full px-5 sm:px-6 h-full flex flex-col min-h-0">
           {/* ── TAB 1: BUILD ── */}
           {currentTab === "build" && (
-            <div className="flex gap-5 h-full items-start">
-              {/* Left: Canvas Area (scrolls independently, centers form card) */}
-              <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1">
-                <div className="max-w-[740px] mx-auto space-y-3.5 pb-4">
+            <div className="flex gap-4 h-full items-start">
+              {/* Left: Canvas Area (fills drawer width together with right panel with 16px gap) */}
+              <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1 space-y-3.5 pb-4">
                 {/* Form Fields Canvas Drop Zone */}
                 <div
                   onDragOver={handleDragOver}
@@ -1063,11 +1067,10 @@ export default function FormBuilder({
                     </span>
                   </div>
                 </div>
-                </div>
               </div>
 
-              {/* Right: Fixed-width (340px) sticky & scrolls independently */}
-              <div className={`w-[340px] shrink-0 sticky top-0 self-start max-h-[calc(100vh-104px)] bg-white border border-[#E2E8F0] rounded-xl shadow-2xs flex flex-col ${
+              {/* Right: Fixed-width (320px) sticky & scrolls independently */}
+              <div className={`w-[320px] shrink-0 sticky top-0 self-start max-h-[calc(100vh-104px)] bg-white border border-[#E2E8F0] rounded-xl shadow-2xs flex flex-col ${
                 showFieldSettings && selectedField ? "h-[calc(100vh-104px)] overflow-hidden" : "h-auto overflow-y-auto"
               }`}>
                 {showFieldSettings && selectedField ? (
@@ -1123,7 +1126,7 @@ export default function FormBuilder({
                             </div>
 
                             {/* Placeholder */}
-                            {!["checkbox", "radio", "divider", "pagebreak", "signature", "rating"].includes(selectedField.type) && (
+                            {!["checkbox", "radio", "divider", "section-break", "pagebreak", "page-break", "signature", "rating", "html", "html-block"].includes(selectedField.type) && (
                               <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                                   Placeholder
@@ -1134,6 +1137,21 @@ export default function FormBuilder({
                                   onChange={(e) => handleUpdateField({ ...selectedField, placeholder: e.target.value })}
                                   className="w-full px-2.5 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                              </div>
+                            )}
+
+                            {/* HTML Content */}
+                            {["html", "html-block"].includes(selectedField.type) && (
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                                  HTML Content
+                                </label>
+                                <textarea
+                                  value={selectedField.defaultValue || selectedField.placeholder || ""}
+                                  onChange={(e) => handleUpdateField({ ...selectedField, defaultValue: e.target.value, placeholder: e.target.value })}
+                                  className="w-full px-2.5 py-1.5 border border-border rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y h-24 bg-slate-50"
+                                  placeholder="<p>Enter custom HTML here...</p>"
                                 />
                               </div>
                             )}
@@ -1153,21 +1171,23 @@ export default function FormBuilder({
                             </div>
 
                             {/* Required Toggle */}
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                                Required Field
-                              </label>
-                              <button
-                                onClick={() => handleUpdateField({ ...selectedField, required: !selectedField.required })}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${selectedField.required ? "bg-primary" : "bg-gray-200"
-                                  }`}
-                              >
-                                <span
-                                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${selectedField.required ? "translate-x-5" : "translate-x-0.5"
+                            {!["page-break", "pagebreak", "section-break", "divider", "html", "html-block"].includes(selectedField.type) && (
+                              <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                                  Required Field
+                                </label>
+                                <button
+                                  onClick={() => handleUpdateField({ ...selectedField, required: !selectedField.required })}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${selectedField.required ? "bg-primary" : "bg-gray-200"
                                     }`}
-                                />
-                              </button>
-                            </div>
+                                >
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${selectedField.required ? "translate-x-5" : "translate-x-0.5"
+                                      }`}
+                                  />
+                                </button>
+                              </div>
+                            )}
 
                             {/* Default Value for text/number fields */}
                             {["text", "number", "email", "url", "tel"].includes(selectedField.type) && (
@@ -2244,16 +2264,15 @@ export default function FormBuilder({
                       </div>
                     </div>
 
-                    {/* Pinned Footer with Delete Field Button */}
-                    <div className="shrink-0 p-3 border-t border-border bg-gray-50/60">
+                    {/* Pinned Footer with Done Button */}
+                    <div className="shrink-0 p-3 border-t border-[#E2E8F0] bg-white">
                       <button
                         type="button"
-                        onClick={() => handleDeleteField(selectedField.id)}
-                        className="w-full px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border border-red-200/60"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                        onClick={handleCloseFieldSettings}
+                        className="w-full h-10 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg transition-colors text-[13px] font-medium flex items-center justify-center cursor-pointer shadow-2xs"
+                        style={{ fontFamily: 'DM Sans, sans-serif' }}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete Field</span>
+                        Done
                       </button>
                     </div>
                   </div>
@@ -2281,6 +2300,12 @@ export default function FormBuilder({
                         { type: "radio", label: "Radio Button", icon: Circle },
                         { type: "checkbox", label: "Checkbox", icon: Square },
                         { type: "file", label: "File Upload", icon: Upload },
+                        { type: "email", label: "Email", icon: Mail },
+                        { type: "tel", label: "Phone", icon: Phone },
+                        { type: "page-break", label: "Page Break", icon: Scissors },
+                        { type: "section-break", label: "Section Break", icon: Minus },
+                        { type: "signature", label: "Signature", icon: PenTool },
+                        { type: "html", label: "HTML Block", icon: Code },
                       ].map((item) => (
                         <button
                           key={item.type}
@@ -2329,9 +2354,9 @@ export default function FormBuilder({
 
           {/* ── TAB 2: DESIGN & PREVIEW ── */}
           {currentTab === "design" && (
-            <div className="flex gap-5 h-full">
-              {/* Left: Settings (~42%) */}
-              <div className="w-[440px] shrink-0 h-full">
+            <div className="flex gap-4 h-full">
+              {/* Left: Settings (~40-42%) */}
+              <div className="w-[380px] xl:w-[420px] shrink-0 h-full">
                 <FormSettings
                   formTitle={formTitle}
                   formDescription={formDescription}
@@ -2461,7 +2486,9 @@ export default function FormBuilder({
                           {field.essential && (
                             <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded font-medium">Essential</span>
                           )}
-                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded font-mono uppercase">{field.type}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded font-mono uppercase">
+                            {field.type === "tel" ? "PHONE" : field.type === "page-break" ? "PAGE BREAK" : field.type === "section-break" ? "SECTION BREAK" : field.type === "html" ? "HTML BLOCK" : field.type}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -2587,19 +2614,13 @@ export default function FormBuilder({
     return (
       <div className="fixed inset-0 flex justify-end overflow-hidden z-[650] select-none">
         {/* Backdrop */}
-        {!isFullscreen && (
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
-            onClick={handleCancel}
-          />
-        )}
-
-        {/* Drawer Panel: Normal 95vw/1550px max width or 100vw when Fullscreen */}
         <div
-          className={`relative h-full bg-[#F8FAFC] shadow-2xl flex flex-col z-50 border-l border-gray-200 overflow-hidden transform transition-all duration-300 ease-out ${
-            isFullscreen ? "w-full max-w-full" : "w-full max-w-[95vw] 2xl:max-w-[1550px]"
-          }`}
-        >
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+          onClick={handleCancel}
+        />
+
+        {/* Drawer Panel: about 1100px max or 80% of viewport, anchored to right */}
+        <div className="relative w-[80vw] max-w-[1100px] h-full bg-[#F8FAFC] shadow-2xl flex flex-col z-50 border-l border-gray-200 overflow-hidden transform transition-transform duration-300 ease-out">
           {contentJSX}
         </div>
       </div>

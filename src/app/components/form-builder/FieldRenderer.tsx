@@ -14,6 +14,11 @@ import {
   X,
   ListChecks,
   PenTool,
+  Mail,
+  Phone,
+  Scissors,
+  Code,
+  Minus,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -179,6 +184,21 @@ export default function FieldRenderer({
 
   const renderFieldInput = () => {
     switch (field.type) {
+      case "email":
+        return (
+          <div className="relative">
+            <input
+              type="email"
+              placeholder={field.placeholder || "Enter your email address"}
+              value={fieldValue || ""}
+              onChange={(e) => onFieldChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary pr-9"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+        );
+
       case "textarea":
         return (
           <textarea
@@ -399,6 +419,7 @@ export default function FieldRenderer({
           </div>
         );
 
+      case "phone":
       case "tel":
         return (
           <div className="flex gap-2">
@@ -545,9 +566,11 @@ export default function FieldRenderer({
           </div>
         );
 
+      case "section-break":
       case "divider":
         return <div className="border-t-2 border-gray-300 my-4"></div>;
 
+      case "page-break":
       case "pagebreak":
         return (
           <div className="border-2 border-dashed border-primary rounded-lg p-4 bg-blue-50">
@@ -556,6 +579,17 @@ export default function FieldRenderer({
               <span className="text-xs bg-primary/10 px-2 py-1 rounded">Step 1 of 3</span>
             </div>
           </div>
+        );
+
+      case "html":
+      case "html-block":
+        return (
+          <div
+            className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{
+              __html: field.defaultValue || field.placeholder || "<p class='text-gray-400 italic'>HTML Block content</p>",
+            }}
+          />
         );
 
       case "number":
