@@ -270,3 +270,15 @@ In AI Agent configuration steps:
 - [x] **Add Section Buttons**: Always subtle greyish text buttons (`text-slate-500 hover:text-slate-700 hover:underline`).
 - [x] **Voice & Model Top Bar**: Clean toggle with `Models` and `Voices` tabs; no numbers/badges.
 - [x] **Workflow Selects**: Embed `Choose from library →` directly inside `<select>` options.
+
+
+
+
+Hello everyone here are the recent changes in the ma
+
+- Now you can have categories in the client page
+- Process assignment is not compulsory on client creation , does not affect the webhook import
+- If you want to automate it please use automation module
+- Automation module is live as well
+
+i have shared demo for the same , will share detailed automation demo in sometime
