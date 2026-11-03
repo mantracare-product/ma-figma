@@ -48,6 +48,8 @@ import {
   Square,
   ListChecks,
   ArrowLeft,
+  Check,
+  Maximize2,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -95,42 +97,44 @@ interface Template {
   stats: string;
 }
 
-export default function FormBuilder() {
+export interface FormBuilderProps {
+  isDrawer?: boolean;
+  isOpen?: boolean;
+  onClose?: () => void;
+  initialForm?: any;
+  formId?: number | string;
+  returnTo?: string | { tab: string; flowId: number };
+  onSaveSuccess?: (savedForm: any) => void;
+}
+
+export default function FormBuilder({
+  isDrawer = false,
+  isOpen = true,
+  onClose,
+  initialForm: propInitialForm,
+  formId: propFormId,
+  returnTo: propReturnTo,
+  onSaveSuccess,
+}: FormBuilderProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { getAllFields, addCustomField } = useFieldRegistry();
   const { customFieldsClients } = useClientFields();
   const systemFields = getAllFields("client").filter(f => f.source === "system");
   const template = location.state?.template as Template | undefined;
-  const existingForm = location.state?.form as {
-    id: number;
-    name: string;
-    description?: string;
-    fields?: FormField[];
-    submitButtonText?: string;
-    status?: string;
-    autoCreateClient?: boolean;
-    autoCreateProcessId?: string;
-    autoCreateStageId?: string;
-    formType?: "standard" | "intake" | "meta-ads";
-    createdBy?: string;
-    category?: string;
-    industry?: string;
-    scopingRules?: any[];
-    roles?: string[];
-    permissions?: any;
-    entity?: string;
-  } | undefined;
-  const returnTo = location.state?.returnTo as string | { tab: string; flowId: number } | undefined;
+  const locationForm = location.state?.form as any;
+  const existingForm = propInitialForm !== undefined ? propInitialForm : locationForm;
+  const returnTo = propReturnTo !== undefined ? propReturnTo : location.state?.returnTo;
 
   // Stable formId for new or existing forms
-  const [formId] = useState(() => existingForm?.id ?? Date.now());
+  const [formId, setFormId] = useState<number>(() => Number(existingForm?.id ?? propFormId ?? Date.now()));
 
   const sidebarInputRef = useRef<HTMLInputElement>(null);
   const sidebarSelectRef = useRef<HTMLInputElement>(null);
   // optionSourceRefs not needed with replace mode — removed
 
   const [currentTab, setCurrentTab] = useState<"build" | "design" | "live">("build");
+  const activeStepIndex = currentTab === "build" ? 1 : currentTab === "design" ? 2 : 3;
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formFields, setFormFields] = useState<FormField[]>([]);
@@ -392,7 +396,7 @@ export default function FormBuilder() {
       setSubmitButtonText("Submit");
       setFormFields([]);
     }
-  }, []);
+  }, [existingForm?.id, isOpen]);
 
   const handleNextTab = () => {
     if (currentTab === "build") {
@@ -455,6 +459,11 @@ export default function FormBuilder() {
     window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
     toast.success("Form saved as draft");
+    if (onSaveSuccess) onSaveSuccess(updatedForm);
+    if (isDrawer) {
+      onClose?.();
+      return;
+    }
     const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
@@ -517,6 +526,11 @@ export default function FormBuilder() {
     window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
     toast.success("Form published successfully!");
+    if (onSaveSuccess) onSaveSuccess(updatedForm);
+    if (isDrawer) {
+      onClose?.();
+      return;
+    }
     const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
@@ -530,6 +544,10 @@ export default function FormBuilder() {
   };
 
   const handleCancel = () => {
+    if (isDrawer) {
+      onClose?.();
+      return;
+    }
     const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
@@ -648,13 +666,16 @@ export default function FormBuilder() {
   };
 
 
-  return (
+  if (isDrawer && !isOpen) {
+    return null;
+  }
+
+  const contentJSX = (
     <div className="h-full flex flex-col bg-[#F8FAFC] overflow-hidden select-none">
-      {/* ── Compact Header & Sticky Tab Bar ── */}
-      <header className="shrink-0 bg-white border-b border-border px-6 pt-3 pb-0">
-        <div className="max-w-[1600px] mx-auto">
-          {/* Top row: Back link + Title */}
-          <div className="flex items-center justify-between gap-4 pb-2.5">
+      {/* ── Header: "Back to Form Templates" + "Form Builder: <name>" ── */}
+      <header className="shrink-0 bg-white border-b border-gray-100 py-3">
+        <div className="max-w-[1260px] mx-auto w-full px-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
@@ -663,7 +684,7 @@ export default function FormBuilder() {
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
+                <span>{isDrawer ? "Back to Form Templates" : location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
               </button>
               <div className="h-3.5 w-px bg-gray-200 shrink-0" />
               <div className="min-w-0">
@@ -672,76 +693,168 @@ export default function FormBuilder() {
                 </h1>
               </div>
             </div>
-          </div>
 
-          {/* Bottom row: Tabs Left-Aligned directly under title with active underline and step numbers */}
-          <div className="flex items-center gap-6 border-t border-gray-100 pt-1 -mb-px">
-            <button
-              type="button"
-              onClick={() => setCurrentTab("build")}
-              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
-                currentTab === "build"
-                  ? "text-blue-600"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            >
-              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
-                currentTab === "build" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
-              }`}>1</span>
-              <span>Build</span>
-              {currentTab === "build" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentTab("design")}
-              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
-                currentTab === "design"
-                  ? "text-blue-600"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            >
-              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
-                currentTab === "design" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
-              }`}>2</span>
-              <span>Design &amp; Preview</span>
-              {currentTab === "design" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentTab("live")}
-              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
-                currentTab === "live"
-                  ? "text-blue-600"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            >
-              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
-                currentTab === "live" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
-              }`}>3</span>
-              <span>Go Live</span>
-              {currentTab === "live" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-              )}
-            </button>
+            {/* If in drawer mode: Full Screen expand & Close X */}
+            {isDrawer && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentForm = {
+                      id: formId,
+                      name: formTitle,
+                      description: formDescription,
+                      fields: formFields,
+                      submitButtonText,
+                      status: existingForm?.status || "draft",
+                      autoCreateClient,
+                      autoCreateProcessId,
+                      autoCreateStageId,
+                      customUrlSlug,
+                      theme: { backgroundTheme, typography, buttonColor },
+                      category: existingForm?.category,
+                      scopingRules: existingForm?.scopingRules,
+                      roles: existingForm?.roles,
+                      permissions: existingForm?.permissions,
+                    };
+                    onClose?.();
+                    const targetRoute = location.pathname.startsWith("/admin") ? "/admin/form-builder" : "/web-forms/builder";
+                    navigate(targetRoute, { state: { form: currentForm, returnTo: location.pathname } });
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer border border-gray-200"
+                  title="Expand to Full Page"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Full Screen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                  title="Close Drawer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
+      {/* ── Horizontal Progress-Bar Stepper Row (Centered) ── */}
+      <div className="shrink-0 bg-white border-b border-gray-200/80 py-3 shadow-2xs">
+        <div className="max-w-[1260px] mx-auto w-full px-4">
+          <div className="max-w-[620px] mx-auto">
+            <div className="flex items-center justify-between relative">
+              {/* Step 1: Build */}
+              <button
+                type="button"
+                onClick={() => setCurrentTab("build")}
+                className="flex items-center gap-2 z-10 bg-white pr-2.5 cursor-pointer group"
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  currentTab === "build"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
+                    : activeStepIndex > 1
+                      ? "bg-blue-600 text-white shadow-2xs"
+                      : "border-2 border-gray-300 text-gray-400 bg-white"
+                }`}>
+                  {activeStepIndex > 1 ? (
+                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                  ) : (
+                    <span>1</span>
+                  )}
+                </div>
+                <span className={`text-xs transition-colors ${
+                  currentTab === "build"
+                    ? "font-bold text-blue-600"
+                    : activeStepIndex > 1
+                      ? "font-semibold text-gray-800 group-hover:text-blue-600"
+                      : "font-medium text-gray-400"
+                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Build
+                </span>
+              </button>
+
+              {/* Progress Connector: 1 -> 2 */}
+              <div className="flex-1 mx-2 h-0.5 relative bg-gray-200 rounded-full overflow-hidden">
+                <div className={`h-full bg-blue-600 transition-all duration-300 ${
+                  activeStepIndex >= 2 ? "w-full" : "w-0"
+                }`} />
+              </div>
+
+              {/* Step 2: Design & Preview */}
+              <button
+                type="button"
+                onClick={() => setCurrentTab("design")}
+                className="flex items-center gap-2 z-10 bg-white px-2.5 cursor-pointer group"
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  currentTab === "design"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
+                    : activeStepIndex > 2
+                      ? "bg-blue-600 text-white shadow-2xs"
+                      : "border-2 border-gray-300 text-gray-400 bg-white"
+                }`}>
+                  {activeStepIndex > 2 ? (
+                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                  ) : (
+                    <span>2</span>
+                  )}
+                </div>
+                <span className={`text-xs transition-colors ${
+                  currentTab === "design"
+                    ? "font-bold text-blue-600"
+                    : activeStepIndex > 2
+                      ? "font-semibold text-gray-800 group-hover:text-blue-600"
+                      : "font-medium text-gray-400"
+                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Design &amp; Preview
+                </span>
+              </button>
+
+              {/* Progress Connector: 2 -> 3 */}
+              <div className="flex-1 mx-2 h-0.5 relative bg-gray-200 rounded-full overflow-hidden">
+                <div className={`h-full bg-blue-600 transition-all duration-300 ${
+                  activeStepIndex >= 3 ? "w-full" : "w-0"
+                }`} />
+              </div>
+
+              {/* Step 3: Go Live */}
+              <button
+                type="button"
+                onClick={() => setCurrentTab("live")}
+                className="flex items-center gap-2 z-10 bg-white pl-2.5 cursor-pointer group"
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  currentTab === "live"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
+                    : "border-2 border-gray-300 text-gray-400 bg-white"
+                }`}>
+                  <span>3</span>
+                </div>
+                <span className={`text-xs transition-colors ${
+                  currentTab === "live"
+                    ? "font-bold text-blue-600"
+                    : "font-medium text-gray-400"
+                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Go Live
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Main content area: strictly fixed-height, child panes scroll independently ── */}
-      <main className="flex-1 min-h-0 overflow-hidden px-6 py-4">
-        <div className="max-w-[1600px] h-full mx-auto">
+      <main className="flex-1 min-h-0 overflow-hidden py-4">
+        <div className="max-w-[1260px] mx-auto w-full px-4 h-full">
           {/* ── TAB 1: BUILD ── */}
           {currentTab === "build" && (
-            <div className="flex gap-4 h-full">
-              {/* Left: Canvas Area (scrolls independently) */}
-              <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1 space-y-3">
+            <div className="flex gap-5 h-full">
+              {/* Left: Canvas Area (scrolls independently, centers form card) */}
+              <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1">
+                <div className="max-w-[740px] mx-auto space-y-3.5 pb-4">
                 {/* Form Title & Description Compact Card */}
                 <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-3">
                   <div>
@@ -840,10 +953,11 @@ export default function FormBuilder() {
                     </span>
                   </div>
                 </div>
+                </div>
               </div>
 
-              {/* Right: Fixed-width (340px) sticky & scrolls independently */}
-              <div className="w-[340px] shrink-0 h-full bg-white border border-border rounded-xl shadow-2xs overflow-hidden flex flex-col">
+              {/* Right: Fixed-width (330px) sticky & scrolls independently */}
+              <div className="w-[330px] shrink-0 h-full bg-white border border-border rounded-xl shadow-2xs overflow-hidden flex flex-col">
                 {showFieldSettings && selectedField ? (
                   /* Field Settings Panel */
                   <div className="flex flex-col h-full">
@@ -2100,9 +2214,9 @@ export default function FormBuilder() {
 
           {/* ── TAB 2: DESIGN & PREVIEW ── */}
           {currentTab === "design" && (
-            <div className="flex gap-4 h-full">
-              {/* Left: Settings (~40-42%) */}
-              <div className="w-[420px] xl:w-[460px] shrink-0 h-full">
+            <div className="flex gap-5 h-full">
+              {/* Left: Settings (~42%) */}
+              <div className="w-[440px] shrink-0 h-full">
                 <FormSettings
                   formTitle={formTitle}
                   formDescription={formDescription}
@@ -2190,7 +2304,8 @@ export default function FormBuilder() {
 
           {/* ── TAB 3: GO LIVE ── */}
           {currentTab === "live" && (
-            <div className="max-w-[720px] mx-auto h-full overflow-y-auto px-4 py-2 space-y-3.5">
+            <div className="h-full overflow-y-auto">
+              <div className="max-w-[740px] mx-auto py-2 space-y-3.5 pb-4">
               {/* Header */}
               <div className="text-center py-2">
                 <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-1.5">
@@ -2320,15 +2435,16 @@ export default function FormBuilder() {
                 <div className="bg-blue-50/70 border border-blue-200/60 rounded-lg p-2.5 text-xs text-blue-800">
                   Your form link will become active immediately upon publishing.
                 </div>
+                </div>
               </div>
             </div>
           )}
         </div>
       </main>
 
-      {/* ── Sticky Bottom Footer: Always visible ── */}
-      <footer className="shrink-0 bg-white border-t border-border px-6 py-2.5">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+      {/* ── Sticky Bottom Footer: Centered to 1260px container ── */}
+      <footer className="shrink-0 bg-white border-t border-gray-200/80 py-2.5">
+        <div className="max-w-[1260px] mx-auto w-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {currentTab !== "build" && (
               <Button
@@ -2411,4 +2527,27 @@ export default function FormBuilder() {
     
     </div>
   );
+
+  if (isDrawer) {
+    return (
+      <div className="fixed inset-0 flex justify-end overflow-hidden z-[650] select-none">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+          onClick={handleCancel}
+        />
+
+        {/* Drawer Panel */}
+        <div className="relative w-full max-w-[95vw] 2xl:max-w-[1550px] h-full bg-[#F8FAFC] shadow-2xl flex flex-col z-50 border-l border-gray-200 overflow-hidden transform transition-transform duration-300 ease-out">
+          {contentJSX}
+        </div>
+      </div>
+    );
+  }
+
+  return contentJSX;
+}
+
+export function FormBuilderDrawer(props: Omit<FormBuilderProps, "isDrawer">) {
+  return <FormBuilder {...props} isDrawer={true} />;
 }

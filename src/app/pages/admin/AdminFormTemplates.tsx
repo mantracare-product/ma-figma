@@ -38,6 +38,7 @@ import {
 } from "../../../data/forms";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
 import { AdminControlAccordion } from "./components/AdminControlAccordion";
+import FormBuilderDrawer from "../../components/form-builder/FormBuilderDrawer";
 import {
   INITIAL_CATEGORIES,
   INITIAL_INDUSTRIES,
@@ -71,6 +72,10 @@ export default function AdminFormTemplates() {
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
+
+  // Form Builder Drawer State
+  const [isBuilderDrawerOpen, setIsBuilderDrawerOpen] = useState(false);
+  const [activeBuilderForm, setActiveBuilderForm] = useState<Form | null>(null);
 
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -197,24 +202,16 @@ export default function AdminFormTemplates() {
 
     saveForm(newForm);
     setIsCreateModalOpen(false);
-    toast.success(`Form template "${newForm.name}" created! Opening Flow Builder...`);
+    toast.success(`Form template "${newForm.name}" created!`);
 
-    // Navigate directly into Flow Builder under admin layout with form pre-populated and returnTo pointing back to /admin/forms
-    navigate("/admin/form-builder", {
-      state: {
-        form: newForm,
-        returnTo: "/admin/forms",
-      },
-    });
+    // Open directly in Form Builder Side Drawer
+    setActiveBuilderForm(newForm);
+    setIsBuilderDrawerOpen(true);
   };
 
   const handleEditInBuilder = (form: Form) => {
-    navigate("/admin/form-builder", {
-      state: {
-        form,
-        returnTo: "/admin/forms",
-      },
-    });
+    setActiveBuilderForm(form);
+    setIsBuilderDrawerOpen(true);
   };
 
   const handleOpenScopeModal = (form: Form) => {
@@ -916,6 +913,20 @@ export default function AdminFormTemplates() {
           </div>
         </Modal>
       )}
+
+      {/* ─── FORM BUILDER SIDE DRAWER ────────────────────────────────────────── */}
+      <FormBuilderDrawer
+        isOpen={isBuilderDrawerOpen}
+        onClose={() => {
+          setIsBuilderDrawerOpen(false);
+          setActiveBuilderForm(null);
+        }}
+        initialForm={activeBuilderForm}
+        returnTo="/admin/forms"
+        onSaveSuccess={(savedForm) => {
+          setForms(getStoredForms());
+        }}
+      />
     </div>
   );
 }
