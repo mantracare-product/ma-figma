@@ -456,14 +456,15 @@ export default function FormBuilder() {
     window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
     toast.success("Form saved as draft");
+    const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
         navigate(returnTo);
       } else {
-        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+        navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
       }
     } else {
-      navigate("/web-forms");
+      navigate(defaultReturn);
     }
   };
 
@@ -517,26 +518,28 @@ export default function FormBuilder() {
     window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
     toast.success("Form published successfully!");
+    const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
         navigate(returnTo);
       } else {
-        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+        navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
       }
     } else {
-      navigate("/web-forms");
+      navigate(defaultReturn);
     }
   };
 
   const handleCancel = () => {
+    const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
     if (returnTo) {
       if (typeof returnTo === "string") {
         navigate(returnTo);
       } else {
-        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+        navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
       }
     } else {
-      navigate("/web-forms");
+      navigate(defaultReturn);
     }
   };
 
@@ -658,7 +661,7 @@ export default function FormBuilder() {
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{typeof returnTo === "string" && returnTo.includes("admin") ? "Back to Form Templates" : "Back to Forms"}</span>
+            <span>{location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
           </button>
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
             {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : "Create New Form"}

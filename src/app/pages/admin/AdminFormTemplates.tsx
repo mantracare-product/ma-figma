@@ -12,14 +12,12 @@ import {
   CheckCircle2,
   Shield,
   Lock,
-  Layers,
   ArrowRight,
   FileText,
   UserCheck,
   Share2,
   Eye,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
@@ -72,14 +70,12 @@ export default function AdminFormTemplates() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
 
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [createType, setCreateType] = useState<"standard" | "intake" | "meta-ads">("standard");
   const [createCategory, setCreateCategory] = useState("Healthcare");
   const [createScopingRules, setCreateScopingRules] = useState<ScopingRule[]>([]);
   const [createRoles, setCreateRoles] = useState<string[]>(["admin", "manager", "reception"]);
@@ -125,17 +121,12 @@ export default function AdminFormTemplates() {
   // Filter forms list
   const filteredForms = useMemo(() => {
     return forms.filter((f) => {
-      // 1. Type filter
-      if (selectedTypeFilter !== "all" && f.formType !== selectedTypeFilter) {
-        return false;
-      }
-
-      // 2. Status filter
+      // 1. Status filter
       if (selectedStatusFilter !== "all" && f.status !== selectedStatusFilter) {
         return false;
       }
 
-      // 3. Admin Scope match
+      // 2. Admin Scope match
       const matchesScope = isFormMatchingScope(f, {
         category: selectedCategoryFilter,
         industry: selectedIndustryFilter,
@@ -143,7 +134,7 @@ export default function AdminFormTemplates() {
       });
       if (!matchesScope) return false;
 
-      // 4. Search query
+      // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const nameMatch = f.name.toLowerCase().includes(q);
@@ -156,7 +147,6 @@ export default function AdminFormTemplates() {
     });
   }, [
     forms,
-    selectedTypeFilter,
     selectedStatusFilter,
     selectedCategoryFilter,
     selectedIndustryFilter,
@@ -168,7 +158,6 @@ export default function AdminFormTemplates() {
   const handleOpenCreateModal = () => {
     setCreateName("");
     setCreateDescription("");
-    setCreateType("standard");
     setCreateCategory(selectedCategoryFilter !== "All" ? selectedCategoryFilter : "Healthcare");
     setCreateScopingRules([]);
     setCreateRoles(["admin", "manager", "reception"]);
@@ -191,7 +180,7 @@ export default function AdminFormTemplates() {
       id: Date.now(),
       name: createName.trim(),
       description: createDescription.trim(),
-      formType: createType,
+      formType: "standard",
       createdBy: "Admin User",
       fieldCount: 0,
       fields: [],
@@ -210,8 +199,8 @@ export default function AdminFormTemplates() {
     setIsCreateModalOpen(false);
     toast.success(`Form template "${newForm.name}" created! Opening Flow Builder...`);
 
-    // Navigate directly into Flow Builder with form pre-populated and returnTo pointing back to /admin/forms
-    navigate("/web-forms/builder", {
+    // Navigate directly into Flow Builder under admin layout with form pre-populated and returnTo pointing back to /admin/forms
+    navigate("/admin/form-builder", {
       state: {
         form: newForm,
         returnTo: "/admin/forms",
@@ -220,7 +209,7 @@ export default function AdminFormTemplates() {
   };
 
   const handleEditInBuilder = (form: Form) => {
-    navigate("/web-forms/builder", {
+    navigate("/admin/form-builder", {
       state: {
         form,
         returnTo: "/admin/forms",
@@ -337,70 +326,25 @@ export default function AdminFormTemplates() {
   const columns: TableColumn<Form>[] = [
     {
       id: "name",
-      header: "Form Template",
+      header: "Template Name",
       align: "left",
-      width: "32%",
-      render: (f) => {
-        const typeLabels = {
-          standard: "Standard",
-          intake: "Intake Flow",
-          "meta-ads": "Meta Ads",
-        };
-        const typeColors = {
-          standard: "bg-blue-50 text-blue-700 border-blue-200",
-          intake: "bg-purple-50 text-purple-700 border-purple-200",
-          "meta-ads": "bg-amber-50 text-amber-700 border-amber-200",
-        };
-
-        return (
-          <div className="flex items-start gap-3 py-1">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckSquare className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  onClick={() => handleEditInBuilder(f)}
-                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm truncate"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {f.name}
-                </span>
-                <span
-                  className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${
-                    typeColors[f.formType || "standard"]
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {typeLabels[f.formType || "standard"]}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                {f.description || "No description provided."}
-              </p>
-            </div>
-          </div>
-        );
-      },
+      width: "35%",
+      render: (f) => (
+        <span
+          onClick={() => handleEditInBuilder(f)}
+          className="font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm block truncate"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {f.name}
+        </span>
+      ),
     },
     {
       id: "scope",
-      header: "Category & Scope",
+      header: "Scope",
       align: "left",
-      width: "22%",
-      render: (f) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span
-              className="px-2 py-0.5 text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-md border border-gray-200"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {f.category || "General"}
-            </span>
-          </div>
-          <div>{renderScopeSummary(f)}</div>
-        </div>
-      ),
+      width: "25%",
+      render: (f) => renderScopeSummary(f),
     },
     {
       id: "roles",
@@ -589,19 +533,6 @@ export default function AdminFormTemplates() {
                 ))}
               </select>
 
-              {/* Form Type Filter */}
-              <select
-                value={selectedTypeFilter}
-                onChange={(e) => setSelectedTypeFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Form Types</option>
-                <option value="standard">Standard Web Forms</option>
-                <option value="intake">Intake Flow Forms</option>
-                <option value="meta-ads">Meta Ads Forms</option>
-              </select>
-
               {/* Status Filter */}
               <select
                 value={selectedStatusFilter}
@@ -619,7 +550,6 @@ export default function AdminFormTemplates() {
             setSelectedCategoryFilter("All");
             setSelectedIndustryFilter("All");
             setSelectedLocationFilter("All");
-            setSelectedTypeFilter("all");
             setSelectedStatusFilter("all");
             setSearchQuery("");
           }}
@@ -704,74 +634,6 @@ export default function AdminFormTemplates() {
               className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
-          </div>
-
-          {/* Form Type Selection */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Form Type
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setCreateType("standard")}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  createType === "standard"
-                    ? "border-blue-500 bg-blue-50/50 shadow-2xs"
-                    : "border-gray-200 bg-white hover:border-gray-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckSquare className={`w-4 h-4 ${createType === "standard" ? "text-blue-600" : "text-gray-500"}`} />
-                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Standard Form
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Single-page online form for inquiries and leads.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCreateType("intake")}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  createType === "intake"
-                    ? "border-purple-500 bg-purple-50/50 shadow-2xs"
-                    : "border-gray-200 bg-white hover:border-gray-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Layers className={`w-4 h-4 ${createType === "intake" ? "text-purple-600" : "text-gray-500"}`} />
-                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Intake Flow Form
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Multi-step patient or client onboarding workflow.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCreateType("meta-ads")}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  createType === "meta-ads"
-                    ? "border-amber-500 bg-amber-50/50 shadow-2xs"
-                    : "border-gray-200 bg-white hover:border-gray-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className={`w-4 h-4 ${createType === "meta-ads" ? "text-amber-600" : "text-gray-500"}`} />
-                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Meta Ads Form
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Lead capture connected to Meta ad campaigns.
-                </p>
-              </button>
-            </div>
           </div>
 
           {/* Admin Control (Scope Rules & Roles & Permissions) */}

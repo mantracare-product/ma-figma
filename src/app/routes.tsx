@@ -267,6 +267,8 @@ export const router = createBrowserRouter([
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: AdminFormTemplates },
           { path: "form-templates", Component: AdminFormTemplates },
+          { path: "form-builder", Component: FormBuilder },
+          { path: "form-builder/:formId", Component: FormBuilder },
           { path: "plans", Component: AdminPlans },
           { path: "plans-credits", Component: AdminPlans },
           { path: "billing", Component: AdminBilling },

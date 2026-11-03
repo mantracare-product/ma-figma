@@ -176,6 +176,14 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         location.pathname === "/admin/document-template"
       );
     }
+    if (itemPath === "/admin/forms") {
+      return (
+        location.pathname === "/admin/forms" ||
+        location.pathname === "/admin/form-templates" ||
+        location.pathname === "/admin/form-builder" ||
+        location.pathname.startsWith("/admin/form-builder")
+      );
+    }
     return location.pathname === itemPath;
   };
 
