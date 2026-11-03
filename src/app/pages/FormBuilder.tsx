@@ -48,6 +48,7 @@ import {
   Square,
   ListChecks,
   ArrowLeft,
+  ArrowRight,
   Check,
   Maximize2,
 } from "lucide-react";
@@ -160,6 +161,8 @@ export default function FormBuilder({
   const [autoCreateClient, setAutoCreateClient] = useState(existingForm?.autoCreateClient ?? false);
   const [autoCreateProcessId, setAutoCreateProcessId] = useState(existingForm?.autoCreateProcessId ?? "");
   const [autoCreateStageId, setAutoCreateStageId] = useState(existingForm?.autoCreateStageId ?? "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   // Inline custom field creation state
   const [showInlineCreateField, setShowInlineCreateField] = useState(false);
@@ -415,132 +418,142 @@ export default function FormBuilder({
     }
   };
 
-  const handleSaveDraft = () => {
-    // Persist form data back to webForms storage
-    const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
-    const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
-    const updatedForm = {
-      id: formId,
-      name: formTitle,
-      description: formDescription,
-      fields: formFields.map(f => ({
-        label: f.label || f.name,
-        type: f.type,
-        placeholder: f.placeholder,
-        required: f.required,
-        options: f.options?.map(o => ({ label: o.label, value: o.value })),
-        module: f.module,
-        sourceType: f.sourceType,
-        sourceFieldKey: f.sourceFieldKey,
-      })),
-      status: "draft" as const,
-      formType: existingForm?.formType || "standard",
-      createdBy: existingForm?.createdBy || "Admin User",
-      fieldCount: formFields.length,
-      submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
-      enabled: false,
-      createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      lastUpdated: new Date().toISOString(),
-      autoCreateClient,
-      autoCreateProcessId,
-      autoCreateStageId,
-      category: existingForm?.category,
-      industry: existingForm?.industry,
-      scopingRules: existingForm?.scopingRules,
-      roles: existingForm?.roles,
-      permissions: existingForm?.permissions,
-      entity: existingForm?.entity,
-    };
-    const nextForms = existingForm?.id
-      ? forms.map((f: any) => f.id === formId ? updatedForm : f)
-      : [updatedForm, ...forms];
+  const handleSaveDraft = async () => {
+    setIsSaving(true);
+    try {
+      // Persist form data back to webForms storage
+      const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
+      const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
+      const updatedForm = {
+        id: formId,
+        name: formTitle,
+        description: formDescription,
+        fields: formFields.map(f => ({
+          label: f.label || f.name,
+          type: f.type,
+          placeholder: f.placeholder,
+          required: f.required,
+          options: f.options?.map(o => ({ label: o.label, value: o.value })),
+          module: f.module,
+          sourceType: f.sourceType,
+          sourceFieldKey: f.sourceFieldKey,
+        })),
+        status: "draft" as const,
+        formType: existingForm?.formType || "standard",
+        createdBy: existingForm?.createdBy || "Admin User",
+        fieldCount: formFields.length,
+        submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
+        enabled: false,
+        createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        lastUpdated: new Date().toISOString(),
+        autoCreateClient,
+        autoCreateProcessId,
+        autoCreateStageId,
+        category: existingForm?.category,
+        industry: existingForm?.industry,
+        scopingRules: existingForm?.scopingRules,
+        roles: existingForm?.roles,
+        permissions: existingForm?.permissions,
+        entity: existingForm?.entity,
+      };
+      const nextForms = existingForm?.id
+        ? forms.map((f: any) => f.id === formId ? updatedForm : f)
+        : [updatedForm, ...forms];
 
-    sessionStorage.setItem("webForms", JSON.stringify(nextForms));
-    localStorage.setItem("webForms", JSON.stringify(nextForms));
-    window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
+      sessionStorage.setItem("webForms", JSON.stringify(nextForms));
+      localStorage.setItem("webForms", JSON.stringify(nextForms));
+      window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
-    toast.success("Form saved as draft");
-    if (onSaveSuccess) onSaveSuccess(updatedForm);
-    if (isDrawer) {
-      onClose?.();
-      return;
-    }
-    const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
-    if (returnTo) {
-      if (typeof returnTo === "string") {
-        navigate(returnTo);
-      } else {
-        navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      toast.success("Form saved as draft");
+      if (onSaveSuccess) onSaveSuccess(updatedForm);
+      if (isDrawer) {
+        onClose?.();
+        return;
       }
-    } else {
-      navigate(defaultReturn);
+      const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
+      if (returnTo) {
+        if (typeof returnTo === "string") {
+          navigate(returnTo);
+        } else {
+          navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+        }
+      } else {
+        navigate(defaultReturn);
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handlePublishForm = () => {
+  const handlePublishForm = async () => {
     // Validate autoCreateClient configuration
     if (autoCreateClient && (!autoCreateProcessId || !autoCreateStageId)) {
       toast.error("Please select a Process and Initial Stage before publishing.");
       return;
     }
-    // Persist form data back to webForms storage
-    const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
-    const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
-    const updatedForm = {
-      id: formId,
-      name: formTitle,
-      description: formDescription,
-      fields: formFields.map(f => ({
-        label: f.label || f.name,
-        type: f.type,
-        placeholder: f.placeholder,
-        required: f.required,
-        options: f.options?.map(o => ({ label: o.label, value: o.value })),
-        module: f.module,
-        sourceType: f.sourceType,
-        sourceFieldKey: f.sourceFieldKey,
-      })),
-      status: "live" as const,
-      formType: existingForm?.formType || "standard",
-      createdBy: existingForm?.createdBy || "Admin User",
-      fieldCount: formFields.length,
-      submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
-      enabled: true,
-      createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      lastUpdated: new Date().toISOString(),
-      autoCreateClient,
-      autoCreateProcessId,
-      autoCreateStageId,
-      category: existingForm?.category,
-      industry: existingForm?.industry,
-      scopingRules: existingForm?.scopingRules,
-      roles: existingForm?.roles,
-      permissions: existingForm?.permissions,
-      entity: existingForm?.entity,
-    };
-    const nextForms = existingForm?.id
-      ? forms.map((f: any) => f.id === formId ? updatedForm : f)
-      : [updatedForm, ...forms];
+    setIsPublishing(true);
+    try {
+      // Persist form data back to webForms storage
+      const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
+      const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
+      const updatedForm = {
+        id: formId,
+        name: formTitle,
+        description: formDescription,
+        fields: formFields.map(f => ({
+          label: f.label || f.name,
+          type: f.type,
+          placeholder: f.placeholder,
+          required: f.required,
+          options: f.options?.map(o => ({ label: o.label, value: o.value })),
+          module: f.module,
+          sourceType: f.sourceType,
+          sourceFieldKey: f.sourceFieldKey,
+        })),
+        status: "live" as const,
+        formType: existingForm?.formType || "standard",
+        createdBy: existingForm?.createdBy || "Admin User",
+        fieldCount: formFields.length,
+        submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
+        enabled: true,
+        createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        lastUpdated: new Date().toISOString(),
+        autoCreateClient,
+        autoCreateProcessId,
+        autoCreateStageId,
+        category: existingForm?.category,
+        industry: existingForm?.industry,
+        scopingRules: existingForm?.scopingRules,
+        roles: existingForm?.roles,
+        permissions: existingForm?.permissions,
+        entity: existingForm?.entity,
+      };
+      const nextForms = existingForm?.id
+        ? forms.map((f: any) => f.id === formId ? updatedForm : f)
+        : [updatedForm, ...forms];
 
-    sessionStorage.setItem("webForms", JSON.stringify(nextForms));
-    localStorage.setItem("webForms", JSON.stringify(nextForms));
-    window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
+      sessionStorage.setItem("webForms", JSON.stringify(nextForms));
+      localStorage.setItem("webForms", JSON.stringify(nextForms));
+      window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
 
-    toast.success("Form published successfully!");
-    if (onSaveSuccess) onSaveSuccess(updatedForm);
-    if (isDrawer) {
-      onClose?.();
-      return;
-    }
-    const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
-    if (returnTo) {
-      if (typeof returnTo === "string") {
-        navigate(returnTo);
-      } else {
-        navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      toast.success("Form published successfully!");
+      if (onSaveSuccess) onSaveSuccess(updatedForm);
+      if (isDrawer) {
+        onClose?.();
+        return;
       }
-    } else {
-      navigate(defaultReturn);
+      const defaultReturn = location.pathname.startsWith("/admin") ? "/admin/forms" : "/web-forms";
+      if (returnTo) {
+        if (typeof returnTo === "string") {
+          navigate(returnTo);
+        } else {
+          navigate(defaultReturn, { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+        }
+      } else {
+        navigate(defaultReturn);
+      }
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -681,92 +694,173 @@ export default function FormBuilder({
         />
       )}
 
-      {/* ── Header Row: "← Back to Form Templates | Form Builder: <name>" ── */}
-      <div className="shrink-0 bg-white border-b border-gray-100 py-3.5">
-        <div className="max-w-[1260px] mx-auto w-full px-4">
+      {/* ── Production Form Editor Header Bar (Single row: Back + Title + Action Buttons) ── */}
+      <header className="shrink-0 bg-white min-h-[72px] sm:h-20 flex items-center">
+        <div className="max-w-[1260px] mx-auto w-full px-4 sm:px-6">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5 min-w-0">
+            {/* Left Group: Round Back Button + Title Block */}
+            <div className="flex items-center gap-3 min-w-0">
+              {/* Circular Back Button (40x40px, light grey border #E2E8F0, dark slate icon #0F172A) */}
               <button
                 type="button"
                 onClick={handleCancel}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 transition-colors cursor-pointer shrink-0"
-                style={{ fontFamily: "Outfit, sans-serif" }}
+                title="Back to Form Templates"
+                aria-label="Back to Form Templates"
+                className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2 transition-all cursor-pointer shrink-0 shadow-2xs"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{isDrawer ? "Back to Form Templates" : location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
+                <ArrowLeft className="w-5 h-5 text-[#0F172A]" strokeWidth={2} />
               </button>
-              <span className="text-gray-300 font-light select-none text-sm">|</span>
-              <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-gray-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : `Form Builder: ${formTitle || "New Form"}`}
+
+              {/* Title Block: Form Title (bold, ~24px, dark navy #0F172A) + Muted Chip (#F1F5F9 / #64748B) + Description */}
+              <div className="flex flex-col min-w-0">
+                <h1
+                  className="text-2xl font-bold text-[#0F172A] tracking-tight truncate leading-tight"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                >
+                  {formTitle || existingForm?.name || "New Form"}
                 </h1>
+                <div className="flex items-center gap-2 mt-1 min-w-0">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F1F5F9] text-[#64748B] shrink-0">
+                    {existingForm?.category || (existingForm?.formType === "intake" ? "Intake Flow" : existingForm?.formType === "meta-ads" ? "Meta Ads" : existingForm?.formType === "standard" ? "Standard Form" : existingForm?.status ? (existingForm.status.charAt(0).toUpperCase() + existingForm.status.slice(1)) : "Draft")}
+                  </span>
+                  <span
+                    className="text-xs text-[#64748B] truncate max-w-[280px] md:max-w-[380px] lg:max-w-[500px] xl:max-w-[620px]"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    title={formDescription || existingForm?.description || "Build, configure fields, and publish changes to this form template."}
+                  >
+                    {formDescription || existingForm?.description || "Build, configure fields, and publish changes to this form template."}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* If in drawer mode: Full Screen expand & Close X */}
-            {isDrawer && (
-              <div className="flex items-center gap-2 shrink-0">
+            {/* Right Group: Action buttons on same horizontal center line, right-aligned to container */}
+            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+              {currentTab !== "build" && (
                 <button
                   type="button"
-                  onClick={() => {
-                    const currentForm = {
-                      id: formId,
-                      name: formTitle,
-                      description: formDescription,
-                      fields: formFields,
-                      submitButtonText,
-                      status: existingForm?.status || "draft",
-                      autoCreateClient,
-                      autoCreateProcessId,
-                      autoCreateStageId,
-                      customUrlSlug,
-                      theme: { backgroundTheme, typography, buttonColor },
-                      category: existingForm?.category,
-                      scopingRules: existingForm?.scopingRules,
-                      roles: existingForm?.roles,
-                      permissions: existingForm?.permissions,
-                    };
-                    onClose?.();
-                    const targetRoute = location.pathname.startsWith("/admin") ? "/admin/form-builder" : "/web-forms/builder";
-                    navigate(targetRoute, { state: { form: currentForm, returnTo: location.pathname } });
-                  }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer border border-gray-200"
-                  title="Expand to Full Page"
+                  onClick={handleBackTab}
+                  className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
                 >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Full Screen</span>
+                  <ArrowLeft className="w-4 h-4 text-[#0F172A]" />
+                  <span>Back</span>
                 </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSaving}
+                className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
+              >
+                {isSaving && (
+                  <span className="w-4 h-4 border-2 border-[#0F172A] border-t-transparent rounded-full animate-spin shrink-0" />
+                )}
+                <span>Save Draft</span>
+              </button>
+
+              {currentTab !== "live" ? (
                 <button
                   type="button"
-                  onClick={handleCancel}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                  title="Close Drawer"
+                  onClick={handleNextTab}
+                  className="h-10 px-4 sm:px-5 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0F172A] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
                 >
-                  <X className="w-4 h-4" />
+                  <span>Next</span>
+                  <ArrowRight className="w-4 h-4 text-white" />
                 </button>
-              </div>
-            )}
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePublishForm}
+                  disabled={isPublishing}
+                  className="h-10 px-4 sm:px-5 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0F172A] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                >
+                  {isPublishing ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                  ) : (
+                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                  )}
+                  <span>Publish Form</span>
+                </button>
+              )}
+
+              {/* If in drawer mode: Full Screen expand & Close X */}
+              {isDrawer && (
+                <div className="flex items-center gap-2 pl-2 border-l border-[#E2E8F0] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentForm = {
+                        id: formId,
+                        name: formTitle,
+                        description: formDescription,
+                        fields: formFields,
+                        submitButtonText,
+                        status: existingForm?.status || "draft",
+                        autoCreateClient,
+                        autoCreateProcessId,
+                        autoCreateStageId,
+                        customUrlSlug,
+                        theme: { backgroundTheme, typography, buttonColor },
+                        category: existingForm?.category,
+                        scopingRules: existingForm?.scopingRules,
+                        roles: existingForm?.roles,
+                        permissions: existingForm?.permissions,
+                      };
+                      onClose?.();
+                      const targetRoute = location.pathname.startsWith("/admin") ? "/admin/form-builder" : "/web-forms/builder";
+                      navigate(targetRoute, { state: { form: currentForm, returnTo: location.pathname } });
+                    }}
+                    className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    title="Expand to Full Page"
+                  >
+                    <Maximize2 className="w-4 h-4 text-[#0F172A]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    title="Close Drawer"
+                  >
+                    <X className="w-4 h-4 text-[#0F172A]" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* ── Stepper Row: Matching media_1793689288159_f77e0e81.png ── */}
-      <div className="shrink-0 bg-white border-b border-gray-200/80 py-3.5">
-        <div className="max-w-[1260px] mx-auto w-full px-4">
-          <div className="max-w-[660px] mx-auto">
+      {/* ── Stepper Row: Directly below header row, centered with 16-24px spacing above & below, no background band or border ── */}
+      <div className="shrink-0 bg-white py-4 sm:py-5">
+        <div className="max-w-[1260px] mx-auto w-full px-4 sm:px-6">
+          <div className="max-w-[620px] mx-auto">
             <div className="flex items-center justify-between relative">
               {/* Step 1: Build */}
               <button
                 type="button"
                 onClick={() => setCurrentTab("build")}
-                className="flex items-center gap-2 z-10 bg-white pr-2.5 cursor-pointer group"
+                className="flex items-center gap-2.5 z-10 bg-white pr-2.5 cursor-pointer group"
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                   currentTab === "build"
-                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
+                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs"
                     : activeStepIndex > 1
-                      ? "bg-blue-600 text-white shadow-2xs"
-                      : "border border-gray-300 text-gray-400 bg-white"
+                      ? "bg-[#2563EB] text-white shadow-2xs"
+                      : "border border-[#E2E8F0] text-[#64748B] bg-white"
                 }`}>
                   {activeStepIndex > 1 ? (
                     <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
@@ -776,18 +870,18 @@ export default function FormBuilder({
                 </div>
                 <span className={`text-xs transition-colors ${
                   currentTab === "build"
-                    ? "font-bold text-blue-600"
+                    ? "font-bold text-[#2563EB]"
                     : activeStepIndex > 1
-                      ? "font-semibold text-gray-800 group-hover:text-blue-600"
-                      : "font-medium text-gray-500"
+                      ? "font-semibold text-[#0F172A] group-hover:text-[#2563EB]"
+                      : "font-medium text-[#64748B]"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Build
                 </span>
               </button>
 
               {/* Progress Connector: 1 -> 2 */}
-              <div className="flex-1 mx-3 h-[1.5px] relative bg-gray-200 rounded-full overflow-hidden">
-                <div className={`h-full bg-blue-600 transition-all duration-300 ${
+              <div className="flex-1 mx-3 h-[1.5px] relative bg-[#E2E8F0] rounded-full overflow-hidden">
+                <div className={`h-full bg-[#2563EB] transition-all duration-300 ${
                   activeStepIndex >= 2 ? "w-full" : "w-0"
                 }`} />
               </div>
@@ -796,14 +890,14 @@ export default function FormBuilder({
               <button
                 type="button"
                 onClick={() => setCurrentTab("design")}
-                className="flex items-center gap-2 z-10 bg-white px-2.5 cursor-pointer group"
+                className="flex items-center gap-2.5 z-10 bg-white px-2.5 cursor-pointer group"
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                   currentTab === "design"
-                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs font-bold"
+                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs font-bold"
                     : activeStepIndex > 2
-                      ? "bg-blue-600 text-white shadow-2xs font-bold"
-                      : "border border-gray-300 text-gray-400 bg-white"
+                      ? "bg-[#2563EB] text-white shadow-2xs font-bold"
+                      : "border border-[#E2E8F0] text-[#64748B] bg-white"
                 }`}>
                   {activeStepIndex > 2 ? (
                     <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
@@ -813,18 +907,18 @@ export default function FormBuilder({
                 </div>
                 <span className={`text-xs transition-colors ${
                   currentTab === "design"
-                    ? "font-bold text-blue-600"
+                    ? "font-bold text-[#2563EB]"
                     : activeStepIndex > 2
-                      ? "font-semibold text-gray-800 group-hover:text-blue-600"
-                      : "font-medium text-gray-500"
+                      ? "font-semibold text-[#0F172A] group-hover:text-[#2563EB]"
+                      : "font-medium text-[#64748B]"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Design &amp; Preview
                 </span>
               </button>
 
               {/* Progress Connector: 2 -> 3 */}
-              <div className="flex-1 mx-3 h-[1.5px] relative bg-gray-200 rounded-full overflow-hidden">
-                <div className={`h-full bg-blue-600 transition-all duration-300 ${
+              <div className="flex-1 mx-3 h-[1.5px] relative bg-[#E2E8F0] rounded-full overflow-hidden">
+                <div className={`h-full bg-[#2563EB] transition-all duration-300 ${
                   activeStepIndex >= 3 ? "w-full" : "w-0"
                 }`} />
               </div>
@@ -833,19 +927,19 @@ export default function FormBuilder({
               <button
                 type="button"
                 onClick={() => setCurrentTab("live")}
-                className="flex items-center gap-2 z-10 bg-white pl-2.5 cursor-pointer group"
+                className="flex items-center gap-2.5 z-10 bg-white pl-2.5 cursor-pointer group"
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                   currentTab === "live"
-                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs font-bold"
-                    : "border border-gray-300 text-gray-400 bg-white"
+                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs font-bold"
+                    : "border border-[#E2E8F0] text-[#64748B] bg-white"
                 }`}>
                   <span>3</span>
                 </div>
                 <span className={`text-xs transition-colors ${
                   currentTab === "live"
-                    ? "font-bold text-blue-600"
-                    : "font-medium text-gray-500"
+                    ? "font-bold text-[#2563EB]"
+                    : "font-medium text-[#64748B]"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Go Live
                 </span>
@@ -2450,66 +2544,6 @@ export default function FormBuilder({
           )}
         </div>
       </main>
-
-      {/* ── Sticky Bottom Footer: Centered to 1260px container ── */}
-      <footer className="shrink-0 bg-white border-t border-gray-200/80 py-2.5">
-        <div className="max-w-[1260px] mx-auto w-full px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {currentTab !== "build" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBackTab}
-                className="text-xs font-semibold h-8 cursor-pointer"
-                style={{ fontFamily: 'DM Sans, sans-serif' }}
-              >
-                ← Back
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCancel}
-              className="text-xs font-semibold text-gray-600 hover:text-gray-900 h-8 cursor-pointer"
-              style={{ fontFamily: 'DM Sans, sans-serif' }}
-            >
-              Cancel
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSaveDraft}
-              className="text-xs font-semibold text-gray-700 h-8 cursor-pointer"
-              style={{ fontFamily: 'DM Sans, sans-serif' }}
-            >
-              Save Draft
-            </Button>
-            {currentTab !== "live" ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleNextTab}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white h-8 px-4 cursor-pointer"
-                style={{ fontFamily: 'DM Sans, sans-serif' }}
-              >
-                Next →
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handlePublishForm}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white h-8 px-4 cursor-pointer"
-                style={{ fontFamily: 'DM Sans, sans-serif' }}
-              >
-                Publish Form
-              </Button>
-            )}
-          </div>
-        </div>
-      </footer>
 
       {showSelectFieldModal && (
         <SelectFieldsModal
