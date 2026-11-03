@@ -44,6 +44,7 @@ import {
   Circle,
   Square,
   ListChecks,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -108,8 +109,16 @@ export default function FormBuilder() {
     autoCreateClient?: boolean;
     autoCreateProcessId?: string;
     autoCreateStageId?: string;
+    formType?: "standard" | "intake" | "meta-ads";
+    createdBy?: string;
+    category?: string;
+    industry?: string;
+    scopingRules?: any[];
+    roles?: string[];
+    permissions?: any;
+    entity?: string;
   } | undefined;
-  const returnTo = location.state?.returnTo as { tab: string; flowId: number } | undefined;
+  const returnTo = location.state?.returnTo as string | { tab: string; flowId: number } | undefined;
 
   // Stable formId for new or existing forms
   const [formId] = useState(() => existingForm?.id ?? Date.now());
@@ -403,8 +412,8 @@ export default function FormBuilder() {
   };
 
   const handleSaveDraft = () => {
-    // Persist form data back to webForms sessionStorage
-    const saved = sessionStorage.getItem("webForms");
+    // Persist form data back to webForms storage
+    const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
     const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
     const updatedForm = {
       id: formId,
@@ -421,8 +430,8 @@ export default function FormBuilder() {
         sourceFieldKey: f.sourceFieldKey,
       })),
       status: "draft" as const,
-      formType: "standard" as const,
-      createdBy: "Admin User",
+      formType: existingForm?.formType || "standard",
+      createdBy: existingForm?.createdBy || "Admin User",
       fieldCount: formFields.length,
       submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
       enabled: false,
@@ -431,15 +440,28 @@ export default function FormBuilder() {
       autoCreateClient,
       autoCreateProcessId,
       autoCreateStageId,
+      category: existingForm?.category,
+      industry: existingForm?.industry,
+      scopingRules: existingForm?.scopingRules,
+      roles: existingForm?.roles,
+      permissions: existingForm?.permissions,
+      entity: existingForm?.entity,
     };
-    if (existingForm?.id) {
-      sessionStorage.setItem("webForms", JSON.stringify(forms.map((f: any) => f.id === formId ? updatedForm : f)));
-    } else {
-      sessionStorage.setItem("webForms", JSON.stringify([updatedForm, ...forms]));
-    }
+    const nextForms = existingForm?.id
+      ? forms.map((f: any) => f.id === formId ? updatedForm : f)
+      : [updatedForm, ...forms];
+
+    sessionStorage.setItem("webForms", JSON.stringify(nextForms));
+    localStorage.setItem("webForms", JSON.stringify(nextForms));
+    window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
+
     toast.success("Form saved as draft");
     if (returnTo) {
-      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      if (typeof returnTo === "string") {
+        navigate(returnTo);
+      } else {
+        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      }
     } else {
       navigate("/web-forms");
     }
@@ -451,8 +473,8 @@ export default function FormBuilder() {
       toast.error("Please select a Process and Initial Stage before publishing.");
       return;
     }
-    // Persist form data back to webForms sessionStorage
-    const saved = sessionStorage.getItem("webForms");
+    // Persist form data back to webForms storage
+    const saved = sessionStorage.getItem("webForms") || localStorage.getItem("webForms");
     const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
     const updatedForm = {
       id: formId,
@@ -469,8 +491,8 @@ export default function FormBuilder() {
         sourceFieldKey: f.sourceFieldKey,
       })),
       status: "live" as const,
-      formType: "standard" as const,
-      createdBy: "Admin User",
+      formType: existingForm?.formType || "standard",
+      createdBy: existingForm?.createdBy || "Admin User",
       fieldCount: formFields.length,
       submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
       enabled: true,
@@ -479,15 +501,28 @@ export default function FormBuilder() {
       autoCreateClient,
       autoCreateProcessId,
       autoCreateStageId,
+      category: existingForm?.category,
+      industry: existingForm?.industry,
+      scopingRules: existingForm?.scopingRules,
+      roles: existingForm?.roles,
+      permissions: existingForm?.permissions,
+      entity: existingForm?.entity,
     };
-    if (existingForm?.id) {
-      sessionStorage.setItem("webForms", JSON.stringify(forms.map((f: any) => f.id === formId ? updatedForm : f)));
-    } else {
-      sessionStorage.setItem("webForms", JSON.stringify([updatedForm, ...forms]));
-    }
+    const nextForms = existingForm?.id
+      ? forms.map((f: any) => f.id === formId ? updatedForm : f)
+      : [updatedForm, ...forms];
+
+    sessionStorage.setItem("webForms", JSON.stringify(nextForms));
+    localStorage.setItem("webForms", JSON.stringify(nextForms));
+    window.dispatchEvent(new CustomEvent("ma_web_forms_updated", { detail: nextForms }));
+
     toast.success("Form published successfully!");
     if (returnTo) {
-      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      if (typeof returnTo === "string") {
+        navigate(returnTo);
+      } else {
+        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      }
     } else {
       navigate("/web-forms");
     }
@@ -495,7 +530,11 @@ export default function FormBuilder() {
 
   const handleCancel = () => {
     if (returnTo) {
-      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      if (typeof returnTo === "string") {
+        navigate(returnTo);
+      } else {
+        navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+      }
     } else {
       navigate("/web-forms");
     }
@@ -612,11 +651,20 @@ export default function FormBuilder() {
       <div className="max-w-7xl mx-auto px-8 pt-8 pb-4">
         {/* Header */}
         <div className="border-b border-border pb-6 mb-6">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 transition-colors mb-2.5 cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{typeof returnTo === "string" && returnTo.includes("admin") ? "Back to Form Templates" : "Back to Forms"}</span>
+          </button>
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-            Create New Form
+            {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : "Create New Form"}
           </h1>
           <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-            Build, design, and publish your form
+            {existingForm?.name ? "Build, configure fields, and publish changes to this form template" : "Build, design, and publish your form"}
           </p>
         </div>
 

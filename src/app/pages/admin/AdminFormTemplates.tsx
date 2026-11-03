@@ -1,0 +1,1059 @@
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router";
+import {
+  CheckSquare,
+  Plus,
+  Trash2,
+  Pencil,
+  Globe,
+  SlidersHorizontal,
+  ChevronDown,
+  Copy,
+  CheckCircle2,
+  Shield,
+  Lock,
+  Layers,
+  ArrowRight,
+  FileText,
+  UserCheck,
+  Share2,
+  Eye,
+  Settings,
+  Sparkles,
+} from "lucide-react";
+import PageHeader from "../../components/layout/PageHeader";
+import PageTopBar from "../../components/layout/PageTopBar";
+import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
+import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
+import {
+  Form,
+  FormPermissions,
+  ScopingRule,
+  getStoredForms,
+  saveStoredForms,
+  saveForm,
+  deleteForm,
+  WEB_FORMS_EVENT,
+  isFormMatchingScope,
+} from "../../../data/forms";
+import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "./components/AdminControlAccordion";
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_INDUSTRIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../../data/industryReferenceData";
+import { toast } from "sonner";
+
+interface RoleOption {
+  id: string;
+  label: string;
+  desc: string;
+  badgeClass: string;
+}
+
+const AVAILABLE_ROLES: RoleOption[] = [
+  { id: "admin", label: "Admin", desc: "Full control over templates & settings", badgeClass: "bg-blue-50 text-blue-700 border-blue-200" },
+  { id: "manager", label: "Manager", desc: "Can manage and customize forms", badgeClass: "bg-purple-50 text-purple-700 border-purple-200" },
+  { id: "reception", label: "Reception", desc: "Front desk access & operations", badgeClass: "bg-amber-50 text-amber-700 border-amber-200" },
+  { id: "staff", label: "Staff / Provider", desc: "Clinical & team members", badgeClass: "bg-teal-50 text-teal-700 border-teal-200" },
+  { id: "client", label: "Client / Public", desc: "Public submission / fill access", badgeClass: "bg-slate-100 text-slate-700 border-slate-200" },
+];
+
+export default function AdminFormTemplates() {
+  const navigate = useNavigate();
+  const [forms, setForms] = useState<Form[]>(getStoredForms);
+
+  // Filters state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
+
+  // Create Modal State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createType, setCreateType] = useState<"standard" | "intake" | "meta-ads">("standard");
+  const [createCategory, setCreateCategory] = useState("Healthcare");
+  const [createScopingRules, setCreateScopingRules] = useState<ScopingRule[]>([]);
+  const [createRoles, setCreateRoles] = useState<string[]>(["admin", "manager", "reception"]);
+  const [createPermissions, setCreatePermissions] = useState<FormPermissions>({
+    canView: true,
+    canEdit: true,
+    canDelete: false,
+    canShare: true,
+  });
+
+  // Scope & Permissions Modal State (for existing template)
+  const [showScopeModal, setShowScopeModal] = useState(false);
+  const [scopingTargetForm, setScopingTargetForm] = useState<Form | null>(null);
+  const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
+  const [pendingRoles, setPendingRoles] = useState<string[]>([]);
+  const [pendingPermissions, setPendingPermissions] = useState<FormPermissions>({
+    canView: true,
+    canEdit: true,
+    canDelete: false,
+    canShare: true,
+  });
+
+  // Sync with storage changes
+  useEffect(() => {
+    const handleUpdate = () => {
+      setForms(getStoredForms());
+    };
+    window.addEventListener(WEB_FORMS_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(WEB_FORMS_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const availableIndustriesForFilter = useMemo(() => {
+    if (selectedCategoryFilter === "All") {
+      return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
+    }
+    return getIndustriesForCategory(selectedCategoryFilter);
+  }, [selectedCategoryFilter]);
+
+  // Filter forms list
+  const filteredForms = useMemo(() => {
+    return forms.filter((f) => {
+      // 1. Type filter
+      if (selectedTypeFilter !== "all" && f.formType !== selectedTypeFilter) {
+        return false;
+      }
+
+      // 2. Status filter
+      if (selectedStatusFilter !== "all" && f.status !== selectedStatusFilter) {
+        return false;
+      }
+
+      // 3. Admin Scope match
+      const matchesScope = isFormMatchingScope(f, {
+        category: selectedCategoryFilter,
+        industry: selectedIndustryFilter,
+        location: selectedLocationFilter,
+      });
+      if (!matchesScope) return false;
+
+      // 4. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = f.name.toLowerCase().includes(q);
+        const descMatch = (f.description || "").toLowerCase().includes(q);
+        const catMatch = (f.category || "").toLowerCase().includes(q);
+        if (!nameMatch && !descMatch && !catMatch) return false;
+      }
+
+      return true;
+    });
+  }, [
+    forms,
+    selectedTypeFilter,
+    selectedStatusFilter,
+    selectedCategoryFilter,
+    selectedIndustryFilter,
+    selectedLocationFilter,
+    searchQuery,
+  ]);
+
+  // Handlers
+  const handleOpenCreateModal = () => {
+    setCreateName("");
+    setCreateDescription("");
+    setCreateType("standard");
+    setCreateCategory(selectedCategoryFilter !== "All" ? selectedCategoryFilter : "Healthcare");
+    setCreateScopingRules([]);
+    setCreateRoles(["admin", "manager", "reception"]);
+    setCreatePermissions({
+      canView: true,
+      canEdit: true,
+      canDelete: false,
+      canShare: true,
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleContinueToFlowBuilder = () => {
+    if (!createName.trim()) {
+      toast.error("Please enter a form name before continuing to Flow Builder.");
+      return;
+    }
+
+    const newForm: Form = {
+      id: Date.now(),
+      name: createName.trim(),
+      description: createDescription.trim(),
+      formType: createType,
+      createdBy: "Admin User",
+      fieldCount: 0,
+      fields: [],
+      status: "draft",
+      submissions: 0,
+      enabled: false,
+      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      lastUpdated: new Date().toISOString(),
+      category: createCategory,
+      scopingRules: createScopingRules.length > 0 ? createScopingRules : undefined,
+      roles: createRoles,
+      permissions: createPermissions,
+    };
+
+    saveForm(newForm);
+    setIsCreateModalOpen(false);
+    toast.success(`Form template "${newForm.name}" created! Opening Flow Builder...`);
+
+    // Navigate directly into Flow Builder with form pre-populated and returnTo pointing back to /admin/forms
+    navigate("/web-forms/builder", {
+      state: {
+        form: newForm,
+        returnTo: "/admin/forms",
+      },
+    });
+  };
+
+  const handleEditInBuilder = (form: Form) => {
+    navigate("/web-forms/builder", {
+      state: {
+        form,
+        returnTo: "/admin/forms",
+      },
+    });
+  };
+
+  const handleOpenScopeModal = (form: Form) => {
+    setScopingTargetForm(form);
+    setPendingScopingRules(form.scopingRules ? [...form.scopingRules] : []);
+    setPendingRoles(form.roles ? [...form.roles] : ["admin", "manager", "reception"]);
+    setPendingPermissions(
+      form.permissions || {
+        canView: true,
+        canEdit: true,
+        canDelete: false,
+        canShare: true,
+      }
+    );
+    setShowScopeModal(true);
+  };
+
+  const handleSaveScopeModal = () => {
+    if (!scopingTargetForm) return;
+
+    const updated: Form = {
+      ...scopingTargetForm,
+      scopingRules: pendingScopingRules,
+      roles: pendingRoles,
+      permissions: pendingPermissions,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    saveForm(updated);
+    toast.success(`Scope and permissions updated for "${updated.name}" ✓`);
+    setShowScopeModal(false);
+    setScopingTargetForm(null);
+  };
+
+  const handleDuplicate = (form: Form) => {
+    const copy: Form = {
+      ...form,
+      id: Date.now(),
+      name: `${form.name} (Copy)`,
+      status: "draft",
+      submissions: 0,
+      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      lastUpdated: new Date().toISOString(),
+      createdBy: "Admin User",
+    };
+    saveForm(copy);
+    toast.success(`Duplicated "${form.name}" successfully!`);
+  };
+
+  const handleToggleStatus = (form: Form) => {
+    const nextStatus = form.status === "live" ? "draft" : "live";
+    const updated: Form = {
+      ...form,
+      status: nextStatus,
+      enabled: nextStatus === "live",
+      lastUpdated: new Date().toISOString(),
+    };
+    saveForm(updated);
+    toast.success(`Form "${form.name}" marked as ${nextStatus.toUpperCase()}`);
+  };
+
+  const handleDelete = (form: Form) => {
+    deleteForm(form.id);
+    toast.success(`Template "${form.name}" deleted.`);
+  };
+
+  // Helper for scope summary pill
+  const renderScopeSummary = (form: Form) => {
+    const rules = form.scopingRules || [];
+    if (rules.length === 0) {
+      return (
+        <span className="text-xs text-gray-600 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+          All industries, All countries
+        </span>
+      );
+    }
+
+    const categories: string[] = [];
+    const industries: string[] = [];
+    const locations: string[] = [];
+
+    for (const r of rules) {
+      if (r.industryCategory && r.industryCategory !== "All" && !categories.includes(r.industryCategory)) {
+        categories.push(r.industryCategory);
+      }
+      if (r.industries && r.industries.length > 0) {
+        for (const ind of r.industries) {
+          if (ind && ind !== "All" && !industries.includes(ind)) industries.push(ind);
+        }
+      }
+      if (r.locations && r.locations.length > 0) {
+        for (const loc of r.locations) {
+          if (loc && loc !== "All" && !locations.includes(loc)) locations.push(loc);
+        }
+      }
+    }
+
+    const indCount = industries.length > 0 ? industries.length : INITIAL_INDUSTRIES.length;
+    const locCount = locations.length > 0 ? locations.length : STANDARD_LOCATIONS.length;
+
+    return (
+      <span className="text-xs text-gray-600 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+        {indCount} {indCount === 1 ? "industry" : "industries"}, {locCount} {locCount === 1 ? "country" : "countries"}
+      </span>
+    );
+  };
+
+  // Table Columns
+  const columns: TableColumn<Form>[] = [
+    {
+      id: "name",
+      header: "Form Template",
+      align: "left",
+      width: "32%",
+      render: (f) => {
+        const typeLabels = {
+          standard: "Standard",
+          intake: "Intake Flow",
+          "meta-ads": "Meta Ads",
+        };
+        const typeColors = {
+          standard: "bg-blue-50 text-blue-700 border-blue-200",
+          intake: "bg-purple-50 text-purple-700 border-purple-200",
+          "meta-ads": "bg-amber-50 text-amber-700 border-amber-200",
+        };
+
+        return (
+          <div className="flex items-start gap-3 py-1">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+              <CheckSquare className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  onClick={() => handleEditInBuilder(f)}
+                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm truncate"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {f.name}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${
+                    typeColors[f.formType || "standard"]
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {typeLabels[f.formType || "standard"]}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {f.description || "No description provided."}
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "scope",
+      header: "Category & Scope",
+      align: "left",
+      width: "22%",
+      render: (f) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className="px-2 py-0.5 text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-md border border-gray-200"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {f.category || "General"}
+            </span>
+          </div>
+          <div>{renderScopeSummary(f)}</div>
+        </div>
+      ),
+    },
+    {
+      id: "roles",
+      header: "Roles & Permissions",
+      align: "left",
+      width: "22%",
+      render: (f) => {
+        const assignedRoles = f.roles && f.roles.length > 0 ? f.roles : ["admin", "manager"];
+        const perms = f.permissions || { canView: true, canEdit: true, canDelete: false, canShare: true };
+
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1 flex-wrap">
+              {assignedRoles.map((roleId) => {
+                const opt = AVAILABLE_ROLES.find((r) => r.id === roleId);
+                const label = opt ? opt.label : roleId;
+                const badgeClass = opt ? opt.badgeClass : "bg-gray-100 text-gray-700 border-gray-200";
+                return (
+                  <span
+                    key={roleId}
+                    className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${badgeClass}`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+              {perms.canView && <span className="text-gray-600">View</span>}
+              {perms.canEdit && <span>• Edit</span>}
+              {perms.canShare && <span>• Share</span>}
+              {perms.canDelete && <span>• Delete</span>}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "fields",
+      header: "Fields",
+      align: "left",
+      width: "8%",
+      render: (f) => {
+        const count = f.fieldCount ?? (f.fields ? f.fields.length : 0);
+        return (
+          <span
+            className="px-2 py-0.5 text-xs font-semibold rounded-md bg-gray-100 text-gray-700 border border-gray-200 inline-block"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {count} {count === 1 ? "field" : "fields"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      align: "left",
+      width: "8%",
+      render: (f) => {
+        const isLive = f.status === "live";
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleStatus(f);
+            }}
+            title="Click to toggle status"
+            className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
+              isLive
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {isLive ? "Live" : "Draft"}
+          </button>
+        );
+      },
+    },
+    {
+      id: "updated",
+      header: "Created / Updated",
+      align: "left",
+      width: "8%",
+      render: (f) => (
+        <span className="text-xs text-gray-600 font-medium block truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {f.createdAt || "Recent"}
+        </span>
+      ),
+    },
+  ];
+
+  const rowActions: TableRowAction<Form>[] = [
+    {
+      label: "Edit in Flow Builder",
+      icon: <Pencil className="w-3.5 h-3.5 text-blue-600" />,
+      onClick: (f) => handleEditInBuilder(f),
+    },
+    {
+      label: "Scope & Permissions",
+      icon: <Shield className="w-3.5 h-3.5 text-indigo-600" />,
+      onClick: (f) => handleOpenScopeModal(f),
+    },
+    {
+      label: "Duplicate Template",
+      icon: <Copy className="w-3.5 h-3.5 text-gray-600" />,
+      onClick: (f) => handleDuplicate(f),
+    },
+    {
+      label: "Toggle Live / Draft",
+      icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />,
+      onClick: (f) => handleToggleStatus(f),
+    },
+    {
+      label: "Delete",
+      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+      onClick: (f) => handleDelete(f),
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        {/* Page Header */}
+        <PageHeader
+          title="Form Templates"
+          subtitle="Manage standardized form templates, define industry scope rules, and establish role-based access permissions."
+          badge={`${filteredForms.length} Templates`}
+        />
+
+        {/* Top Action Bar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search form templates..."
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Category Filter */}
+              <select
+                value={selectedCategoryFilter}
+                onChange={(e) => {
+                  setSelectedCategoryFilter(e.target.value);
+                  setSelectedIndustryFilter("All");
+                }}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Categories</option>
+                {INITIAL_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Industry Filter */}
+              <select
+                value={selectedIndustryFilter}
+                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Industries</option>
+                {availableIndustriesForFilter.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+
+              {/* Location Filter */}
+              <select
+                value={selectedLocationFilter}
+                onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="All">All Locations</option>
+                {STANDARD_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+
+              {/* Form Type Filter */}
+              <select
+                value={selectedTypeFilter}
+                onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Form Types</option>
+                <option value="standard">Standard Web Forms</option>
+                <option value="intake">Intake Flow Forms</option>
+                <option value="meta-ads">Meta Ads Forms</option>
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={selectedStatusFilter}
+                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Statuses</option>
+                <option value="live">Live Only</option>
+                <option value="draft">Draft Only</option>
+              </select>
+            </div>
+          }
+          onClearAllFilters={() => {
+            setSelectedCategoryFilter("All");
+            setSelectedIndustryFilter("All");
+            setSelectedLocationFilter("All");
+            setSelectedTypeFilter("all");
+            setSelectedStatusFilter("all");
+            setSearchQuery("");
+          }}
+          primaryAction={{
+            label: "New Form",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            onClick: handleOpenCreateModal,
+          }}
+        />
+
+        {/* Templates Table View */}
+        <TableComponent
+          data={filteredForms}
+          columns={columns}
+          getRowId={(f) => String(f.id)}
+          rowActions={rowActions}
+          onRowClick={(f) => handleEditInBuilder(f)}
+          defaultRowsPerPage={10}
+          emptyMessage="No form templates found matching your filters. Click '+ New Form' to create one."
+          tableId="admin-form-templates-table"
+        />
+      </div>
+
+      {/* ─── CREATE FORM TEMPLATE MODAL ────────────────────────────────────── */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create Form Template"
+        maxWidth="lg"
+        footer={
+          <div className="flex items-center justify-end gap-3 w-full">
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateModalOpen(false)}
+              className="text-xs font-semibold"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleContinueToFlowBuilder}
+              className="text-xs font-semibold flex items-center gap-1.5"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <span>Continue to Flow Builder</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5 py-1 text-left">
+          {/* Subtitle / Intro */}
+          <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+            Configure basic details, industry scope, and role permissions. You will then proceed directly to the Flow Builder to arrange fields.
+          </p>
+
+          {/* Form Name */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Form Name <span className="text-red-500">*</span>
+            </label>
+            <Input
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              placeholder="e.g. New Patient Health History, Client Intake Form..."
+              className="w-full text-xs"
+              autoFocus
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Description
+            </label>
+            <textarea
+              value={createDescription}
+              onChange={(e) => setCreateDescription(e.target.value)}
+              placeholder="Describe the purpose of this form and instructions for respondents..."
+              rows={2}
+              className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+          </div>
+
+          {/* Form Type Selection */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Form Type
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCreateType("standard")}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  createType === "standard"
+                    ? "border-blue-500 bg-blue-50/50 shadow-2xs"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckSquare className={`w-4 h-4 ${createType === "standard" ? "text-blue-600" : "text-gray-500"}`} />
+                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Standard Form
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Single-page online form for inquiries and leads.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreateType("intake")}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  createType === "intake"
+                    ? "border-purple-500 bg-purple-50/50 shadow-2xs"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Layers className={`w-4 h-4 ${createType === "intake" ? "text-purple-600" : "text-gray-500"}`} />
+                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Intake Flow Form
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Multi-step patient or client onboarding workflow.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreateType("meta-ads")}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  createType === "meta-ads"
+                    ? "border-amber-500 bg-amber-50/50 shadow-2xs"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className={`w-4 h-4 ${createType === "meta-ads" ? "text-amber-600" : "text-gray-500"}`} />
+                  <span className="text-xs font-semibold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Meta Ads Form
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Lead capture connected to Meta ad campaigns.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* Admin Control (Scope Rules & Roles & Permissions) */}
+          <div className="pt-2">
+            <AdminControlAccordion
+              scopingRules={createScopingRules}
+              onScopingRulesChange={setCreateScopingRules}
+              allowEntities={false}
+              scopeTooltip="Define industry categories, industries, and locations that can access this form template."
+              permissionsTooltip="Configure assigned user roles and granular action permissions for this form."
+              defaultAdminControlOpen={true}
+              defaultScopeOpen={true}
+              defaultPermissionsOpen={false}
+              permissionsContent={
+                <div className="space-y-4">
+                  {/* Role Assignment */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Allowed Roles
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {AVAILABLE_ROLES.map((role) => {
+                        const isSelected = createRoles.includes(role.id);
+                        return (
+                          <label
+                            key={role.id}
+                            className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected ? "border-blue-400 bg-blue-50/40" : "border-gray-200 bg-gray-50/30 hover:bg-gray-50"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setCreateRoles((prev) =>
+                                  isSelected ? prev.filter((r) => r !== role.id) : [...prev, role.id]
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer mt-0.5"
+                            />
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-gray-800 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {role.label}
+                              </span>
+                              <span className="text-[11px] text-gray-500 block truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {role.desc}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Permission Flags */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Role Permissions
+                    </label>
+                    <div className="flex items-center gap-5 flex-wrap">
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createPermissions.canView !== false}
+                          onChange={(e) =>
+                            setCreatePermissions((prev) => ({ ...prev, canView: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can View
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createPermissions.canEdit !== false}
+                          onChange={(e) =>
+                            setCreatePermissions((prev) => ({ ...prev, canEdit: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Edit
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createPermissions.canShare !== false}
+                          onChange={(e) =>
+                            setCreatePermissions((prev) => ({ ...prev, canShare: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Share / Embed
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createPermissions.canDelete === true}
+                          onChange={(e) =>
+                            setCreatePermissions((prev) => ({ ...prev, canDelete: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Delete
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              }
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* ─── SCOPE & PERMISSIONS CONFIGURATION MODAL (EXISTING FORM) ───────── */}
+      {showScopeModal && scopingTargetForm && (
+        <Modal
+          isOpen={showScopeModal}
+          onClose={() => {
+            setShowScopeModal(false);
+            setScopingTargetForm(null);
+          }}
+          title={`Scope & Permissions: ${scopingTargetForm.name}`}
+          maxWidth="lg"
+          footer={
+            <div className="flex items-center justify-end gap-3 w-full">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowScopeModal(false);
+                  setScopingTargetForm(null);
+                }}
+                className="text-xs font-semibold"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSaveScopeModal}
+                className="text-xs font-semibold"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Save Changes
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4 py-1 text-left">
+            <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Configure industry visibility rules and role-based permissions for this form template.
+            </p>
+
+            <AdminControlAccordion
+              scopingRules={pendingScopingRules}
+              onScopingRulesChange={setPendingScopingRules}
+              allowEntities={false}
+              scopeTooltip="Define industry categories, industries, and locations that can access this form template."
+              permissionsTooltip="Configure assigned user roles and granular action permissions for this form."
+              defaultAdminControlOpen={true}
+              defaultScopeOpen={true}
+              defaultPermissionsOpen={true}
+              permissionsContent={
+                <div className="space-y-4">
+                  {/* Role Assignment */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Allowed Roles
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {AVAILABLE_ROLES.map((role) => {
+                        const isSelected = pendingRoles.includes(role.id);
+                        return (
+                          <label
+                            key={role.id}
+                            className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected ? "border-blue-400 bg-blue-50/40" : "border-gray-200 bg-gray-50/30 hover:bg-gray-50"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setPendingRoles((prev) =>
+                                  isSelected ? prev.filter((r) => r !== role.id) : [...prev, role.id]
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer mt-0.5"
+                            />
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-gray-800 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {role.label}
+                              </span>
+                              <span className="text-[11px] text-gray-500 block truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {role.desc}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Permission Flags */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Role Permissions
+                    </label>
+                    <div className="flex items-center gap-5 flex-wrap">
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pendingPermissions.canView !== false}
+                          onChange={(e) =>
+                            setPendingPermissions((prev) => ({ ...prev, canView: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can View
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pendingPermissions.canEdit !== false}
+                          onChange={(e) =>
+                            setPendingPermissions((prev) => ({ ...prev, canEdit: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Edit
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pendingPermissions.canShare !== false}
+                          onChange={(e) =>
+                            setPendingPermissions((prev) => ({ ...prev, canShare: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Share / Embed
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pendingPermissions.canDelete === true}
+                          onChange={(e) =>
+                            setPendingPermissions((prev) => ({ ...prev, canDelete: e.target.checked }))
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Can Delete
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              }
+            />
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+

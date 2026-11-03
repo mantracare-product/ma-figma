@@ -67,6 +67,7 @@ const AdminProcessTemplates = withLazy(() => import("./pages/admin/AdminProcessT
 const AvatarReceptionView = withLazy(() => import("../reception/avatar/AvatarReceptionView"), "AvatarReceptionView");
 const AdminAutomations = withLazy(() => import("./pages/admin/AdminAutomations"));
 const AdminDocumentTemplates = withLazy(() => import("./pages/admin/AdminDocumentTemplates"));
+const AdminFormTemplates = withLazy(() => import("./pages/admin/AdminFormTemplates"));
 const PatientPortalLayout = withLazy(() => import("./pages/patient/PatientPortalLayout"));
 const PatientStatusScreen = withLazy(() => import("./pages/patient/PatientStatusScreen"));
 const PatientBookingScreen = withLazy(() => import("./pages/patient/PatientBookingScreen"));
@@ -264,7 +265,8 @@ export const router = createBrowserRouter([
           { path: "document-template", Component: AdminDocumentTemplates },
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
-          { path: "forms", Component: WebForms },
+          { path: "forms", Component: AdminFormTemplates },
+          { path: "form-templates", Component: AdminFormTemplates },
           { path: "plans", Component: AdminPlans },
           { path: "plans-credits", Component: AdminPlans },
           { path: "billing", Component: AdminBilling },
