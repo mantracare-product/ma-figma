@@ -718,7 +718,12 @@ export default function ClaimDetailDrawer({
             stages={claimStages}
             activeStageId={currentClaimStage.id}
             activeStageName={currentClaimStage.name}
-            onStageClick={(stg) => handleStageSelect(stg as Stage)}
+            onStageClick={(stg) => {
+              const matched = claimStages.find(
+                (s) => String(s.id) === String(stg.id) || s.name.toLowerCase() === stg.name.toLowerCase()
+              );
+              if (matched) handleStageSelect(matched);
+            }}
           />
         </div>
 

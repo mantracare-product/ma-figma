@@ -750,10 +750,15 @@ export default function AppointmentDetailDrawer({
               isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "completed" || s.systemCategory === "cancelled",
               isFinal: s.isFinal || s.isFinalStage,
               systemCategory: s.systemCategory,
+              stageCategory: s.stageCategory,
+              stagePosition: s.stagePosition,
             }))}
             activeStageId={currentStage?.id}
+            activeStageName={currentStage?.name}
             onStageClick={(stg) => {
-              const matched = stages.find((s) => String(s.id) === String(stg.id));
+              const matched = stages.find(
+                (s) => String(s.id) === String(stg.id) || s.name.toLowerCase() === stg.name.toLowerCase()
+              );
               if (matched) handleStageSelect(matched);
             }}
             showAddButton={true}

@@ -1258,9 +1258,8 @@ export function getStoredProcesses(): Process[] {
     return p;
   });
 
-  // Ensure stageCategory is properly populated for outcome stages, strictly enforcing SINGLE WON STAGE per process
+  // Ensure stageCategory is properly populated for outcome stages, supporting multiple Won and Lost stages
   list = list.map((p) => {
-    let hasWonStage = false;
     const updatedStages = p.stages.map((st) => {
       const lower = (st.name || "").toLowerCase().trim();
 
@@ -1284,7 +1283,7 @@ export function getStoredProcesses(): Process[] {
         return st;
       }
 
-      // Check won candidate
+      // Check won candidate (supports multiple won stages)
       const isWonCandidate =
         !isLostExplicit &&
         (st.stageCategory === "success" ||
@@ -1297,29 +1296,15 @@ export function getStoredProcesses(): Process[] {
           lower.includes("success"));
 
       if (isWonCandidate) {
-        if (!hasWonStage) {
-          hasWonStage = true;
-          if (st.stageCategory !== "success") {
-            changed = true;
-            return { ...st, stageCategory: "success" as const };
-          }
-          return st;
-        } else {
-          // Process already has a won stage! Enforce single Won stage rule.
+        if (st.stageCategory !== "success" || !st.isFinalStage) {
           changed = true;
-          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
+          return { ...st, stageCategory: "success" as const, isFinalStage: true, isFinal: true };
         }
+        return st;
       }
 
-      // If stage was previously tagged success, check against single won constraint
       if (st.stageCategory === "success") {
-        if (!hasWonStage) {
-          hasWonStage = true;
-          return st;
-        } else {
-          changed = true;
-          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
-        }
+        return st;
       }
 
       return st;

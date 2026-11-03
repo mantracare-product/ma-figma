@@ -675,14 +675,22 @@ export default function ProcessDetailDrawer({
         isFinalStage: Boolean(s.isFinalStage || s.isFinal),
         isFinal: Boolean(s.isFinalStage || s.isFinal),
         systemCategory: s.systemCategory,
+        stageCategory: s.stageCategory,
+        stagePosition: s.stagePosition,
       }));
     }
-    return activeStageList.map((label, idx) => ({
-      id: `stage-${idx}`,
-      name: label,
-      color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
-      isFinalStage: idx === activeStageList.length - 1,
-    }));
+    return activeStageList.map((label, idx) => {
+      const lower = label.toLowerCase();
+      const isWon = lower.includes("won");
+      const isLost = lower.includes("lost") || lower.includes("abandon");
+      return {
+        id: `stage-${idx}`,
+        name: label,
+        color: isWon ? "#10B981" : isLost ? "#EF4444" : CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: isWon || isLost || idx === activeStageList.length - 1,
+        stageCategory: isWon ? ("success" as const) : isLost ? ("lost" as const) : ("in_progress" as const),
+      };
+    });
   }, [matchedProc, activeStageList]);
 
   const matchedIdx = log?.currentStage ? activeStageList.findIndex(
@@ -1090,8 +1098,14 @@ export default function ProcessDetailDrawer({
           <div className="flex-shrink-0 px-7 py-2.5 bg-white border-b border-slate-200">
             <ChevronStageRibbon
               stages={drawerStages}
+              activeStageId={currentStageObj?.id}
               activeStageName={currentStageName}
-              onStageClick={(_stg, origIdx) => handleStageClick(origIdx + 1)}
+              onStageClick={(stg, origIdx) => {
+                const targetIdx = drawerStages.findIndex(
+                  (s) => String(s.id) === String(stg.id) || s.name.toLowerCase() === stg.name.toLowerCase()
+                );
+                handleStageClick(targetIdx >= 0 ? targetIdx + 1 : origIdx + 1);
+              }}
               showAddButton={true}
             />
           </div>

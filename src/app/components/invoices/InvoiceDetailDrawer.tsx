@@ -784,13 +784,18 @@ export default function InvoiceDetailDrawer({
               id: s.id,
               name: s.name,
               color: s.color,
-              isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "paid" || s.systemCategory === "void",
+              isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "paid" || s.systemCategory === "void" || s.systemCategory === "overdue",
               isFinal: s.isFinal || s.isFinalStage,
               systemCategory: s.systemCategory,
+              stageCategory: s.stageCategory,
+              stagePosition: s.stagePosition,
             }))}
             activeStageId={currentInvoiceStage?.id}
+            activeStageName={currentInvoiceStage?.name}
             onStageClick={(stg) => {
-              const matched = invoiceStages.find((s) => String(s.id) === String(stg.id));
+              const matched = invoiceStages.find(
+                (s) => String(s.id) === String(stg.id) || s.name.toLowerCase() === stg.name.toLowerCase()
+              );
               if (matched) handleStageSelect(matched);
             }}
             showAddButton={true}

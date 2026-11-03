@@ -3002,14 +3002,6 @@ export default function AdminProcessTemplates() {
     const targetCategory: "in_progress" | "success" | "lost" =
       newStageCategory || (newStageOutcome === "lost" ? "lost" : "in_progress");
 
-    if (targetCategory === "success") {
-      const existingSuccess = selectedProc.stages.filter(s => s.stageCategory === "success");
-      if (existingSuccess.length >= 1) {
-        toast.error("Only one stage is allowed in the Success category");
-        return;
-      }
-    }
-
     const isLost = targetCategory === "lost";
     const isSuccess = targetCategory === "success";
 
@@ -3648,12 +3640,9 @@ export default function AdminProcessTemplates() {
                           return false;
                         });
 
-                        // Enforce single won stage only
-                        const successStages = rawSuccessStages.slice(0, 1);
-                        const extraSuccessAsLost = rawSuccessStages.slice(1);
-
+                        // Support multiple won stages
+                        const successStages = rawSuccessStages;
                         const lostStages = allStages.filter((s) => {
-                          if (extraSuccessAsLost.some((ex) => ex.id === s.id)) return true;
                           if (s.stageCategory === "lost") return true;
                           if (s.stageCategory === "in_progress" || s.stageCategory === "success") return false;
                           return !!(s.isFinalStage || s.isFinal);
@@ -3721,49 +3710,65 @@ export default function AdminProcessTemplates() {
                               </div>
                             </div>
 
-                            {/* 2. Won Category (Only 1 Stage Allowed) */}
-                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between" style={{ minWidth: "120px", maxWidth: "180px" }}>
+                            {/* 2. Won Category (Supports Multiple Won Stages) */}
+                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between" style={{ minWidth: "120px" }}>
                               <div className="flex items-center px-1 select-none">
                                 <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
                                   Won
                                 </span>
                               </div>
                               <div className="flex items-center w-full">
-                                <div className="flex-1 min-w-0 flex items-center w-full">
+                                <div className="flex-1 min-w-0 flex items-center w-full gap-1">
                                   {successStages.length > 0 ? (
-                                    successStages.map((stage, idx) => {
-                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
-                                      return (
-                                        <ChevronStageItem
-                                          key={stage.id}
-                                          stage={stage}
-                                          index={originalIndex >= 0 ? originalIndex : idx}
-                                          totalStages={allStages.length}
-                                          moveStage={moveStage}
-                                          onRemove={handleRemoveStage}
-                                          onEdit={handleEditStage}
-                                          onSelect={(s) => {
-                                            setExpandedStage(s.id);
-                                            setViewMode("stage");
-                                          }}
-                                          isSelected={expandedStage === stage.id}
-                                          isFirst={true}
-                                          isLast={true}
-                                          color={stage.color || "#10B981"}
-                                          isLastStage={true}
-                                          isFlexible={true}
-                                          onHoverStage={setHoveredStageTooltip}
-                                          onAddAfter={() => {
-                                            setNewStagePosition("final");
-                                            setNewStageCategory("lost");
-                                            setNewStageOutcome("lost");
-                                            setInsertAfterStageId(stage.id);
-                                            setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
-                                            setShowAddStageModal(true);
-                                          }}
-                                        />
-                                      );
-                                    })
+                                    <>
+                                      {successStages.map((stage, idx) => {
+                                        const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                        return (
+                                          <ChevronStageItem
+                                            key={stage.id}
+                                            stage={stage}
+                                            index={originalIndex >= 0 ? originalIndex : idx}
+                                            totalStages={allStages.length}
+                                            moveStage={moveStage}
+                                            onRemove={handleRemoveStage}
+                                            onEdit={handleEditStage}
+                                            onSelect={(s) => {
+                                              setExpandedStage(s.id);
+                                              setViewMode("stage");
+                                            }}
+                                            isSelected={expandedStage === stage.id}
+                                            isFirst={idx === 0}
+                                            isLast={idx === successStages.length - 1}
+                                            color={stage.color || "#10B981"}
+                                            isLastStage={true}
+                                            isFlexible={true}
+                                            onHoverStage={setHoveredStageTooltip}
+                                            onAddAfter={() => {
+                                              setNewStagePosition("final");
+                                              setNewStageCategory("success");
+                                              setNewStageOutcome("won");
+                                              setInsertAfterStageId(stage.id);
+                                              setNewStage((prev) => ({ ...prev, color: "#10B981" }));
+                                              setShowAddStageModal(true);
+                                            }}
+                                          />
+                                        );
+                                      })}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setNewStagePosition("final");
+                                          setNewStageCategory("success");
+                                          setNewStageOutcome("won");
+                                          setNewStage((prev) => ({ ...prev, color: "#10B981" }));
+                                          setShowAddStageModal(true);
+                                        }}
+                                        className="h-10 px-2 flex items-center justify-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 border border-dashed border-emerald-300 hover:border-emerald-400 rounded-md bg-emerald-50/40 hover:bg-emerald-50 transition-colors cursor-pointer shrink-0 ml-1"
+                                        title="Add another won stage"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
                                   ) : (
                                     <button
                                       type="button"
