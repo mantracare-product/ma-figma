@@ -539,6 +539,9 @@ export default function Deals() {
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>(() => {
     try {
+      const qp = new URLSearchParams(window.location.search);
+      const urlProc = qp.get("process") || qp.get("processName");
+      if (urlProc) return urlProc;
       const saved = sessionStorage.getItem("deals_selected_process");
       if (saved && saved !== "All Processes" && saved !== "null" && saved !== "undefined") {
         return saved;
@@ -765,12 +768,43 @@ export default function Deals() {
     return Array.from(new Set([...fromStore, ...defaults]));
   }, [clientProcesses]);
 
-  // Ensure selectedProcessFilter is always a valid specific process
+  // Synchronize process filter with URL search params whenever location.search changes
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const procParam = params.get("process") || params.get("processName");
+    const procIdParam = params.get("processId");
+
+    if (procParam) {
+      const matched = availableProcesses.find(
+        (p) => p.trim().toLowerCase() === procParam.trim().toLowerCase()
+      );
+      setSelectedProcessFilter(matched || procParam);
+      return;
+    }
+
+    if (procIdParam) {
+      const found = storedProcesses.find((p) => p.id === procIdParam);
+      if (found?.name) {
+        setSelectedProcessFilter(found.name);
+        return;
+      }
+    }
+
+    if (!procParam && !procIdParam && availableProcesses.length > 0) {
+      setSelectedProcessFilter(availableProcesses[0]);
+    }
+  }, [location.search, availableProcesses, storedProcesses]);
+
+  // Ensure selectedProcessFilter is always a valid specific process (unless set by URL)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const procParam = params.get("process") || params.get("processName");
+    if (procParam) return;
+
     if (availableProcesses.length > 0 && (!selectedProcessFilter || !availableProcesses.includes(selectedProcessFilter))) {
       setSelectedProcessFilter(availableProcesses[0]);
     }
-  }, [availableProcesses, selectedProcessFilter]);
+  }, [availableProcesses, selectedProcessFilter, location.search]);
 
   const handleOpenProcessInWorkflow = (processName?: string) => {
     const targetName = processName || selectedProcessFilter || (availableProcesses[0] || "Client Intake");
@@ -2190,6 +2224,7 @@ export default function Deals() {
                           onClick={() => {
                             setSelectedProcessFilter(process);
                             setShowProcessesDropdown(false);
+                            navigate(`/deals?process=${encodeURIComponent(process)}`, { replace: true });
                           }}
                           className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
                             selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import {
   Shield,
   Plus,
@@ -54,6 +54,8 @@ export default function Claims() {
     };
   }, []);
 
+  const location = useLocation();
+
   const insuranceProcesses = useMemo(() => {
     const procs = getStoredProcesses();
     const list = procs.filter((p) => p.entityType === "insurance");
@@ -61,6 +63,22 @@ export default function Claims() {
   }, [storeTick]);
 
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const procId = params.get("processId");
+    const procName = params.get("process") || params.get("processName");
+    if (procId && insuranceProcesses.some((p) => p.id === procId)) {
+      setSelectedProcessFilter(procId);
+    } else if (procName) {
+      const found = insuranceProcesses.find(
+        (p) => p.name.trim().toLowerCase() === procName.trim().toLowerCase()
+      );
+      if (found) setSelectedProcessFilter(found.id);
+    } else if (!procId && !procName && insuranceProcesses.length > 0) {
+      setSelectedProcessFilter(insuranceProcesses[0].id);
+    }
+  }, [location.search, insuranceProcesses]);
 
   const insuranceProcess = useMemo(() => {
     if (selectedProcessFilter) {
@@ -377,8 +395,13 @@ export default function Claims() {
                 <select
                   value={selectedProcessFilter || insuranceProcesses[0].id}
                   onChange={(e) => {
-                    setSelectedProcessFilter(e.target.value);
+                    const newId = e.target.value;
+                    setSelectedProcessFilter(newId);
                     setCurrentPage(1);
+                    const found = insuranceProcesses.find((p) => p.id === newId);
+                    if (found) {
+                      navigate(`/claims?processId=${encodeURIComponent(found.id)}&process=${encodeURIComponent(found.name)}`, { replace: true });
+                    }
                   }}
                   className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                   style={{ fontFamily: "Outfit, sans-serif" }}

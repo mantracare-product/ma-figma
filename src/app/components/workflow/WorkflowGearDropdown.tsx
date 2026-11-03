@@ -39,52 +39,138 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
   const getEntityConfig = () => {
     switch (entityType) {
       case "process": {
-        const pName = processName || "Process";
+        const pName = (processName || "").trim();
         const pId = processId || "";
+        const isSpecific = Boolean(
+          pName &&
+          pName.toLowerCase() !== "process" &&
+          pName.toLowerCase() !== "all processes"
+        );
+        const slug = pName
+          ? pName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+          : "";
+
+        if (isSpecific) {
+          return {
+            id: `process-${slug || pId}`,
+            label: pName,
+            iconName: "RefreshCw",
+            path: `/deals?process=${encodeURIComponent(pName)}`,
+            workflowPath: pId
+              ? `/process?processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`
+              : `/process?processName=${encodeURIComponent(pName)}`,
+            workflowState: { processId: pId, processName: pName },
+          };
+        }
+
         return {
-          id: pId ? `process-${pId}` : "processes",
-          label: pName,
+          id: "processes",
+          label: "Process",
           iconName: "RefreshCw",
-          path: pId ? `/deals?processId=${pId}` : "/deals",
-          workflowPath: pId
-            ? `/process?processId=${pId}&processName=${encodeURIComponent(pName)}`
-            : `/process?processName=${encodeURIComponent(pName)}`,
-          workflowState: { processId: pId, processName: pName },
+          path: "/deals",
+          workflowPath: "/process",
+          workflowState: {},
         };
       }
       case "appointment": {
-        const pName = processName || "Appointments";
-        const pId = processId || "process-appointment-default";
+        const pName = (processName || "").trim();
+        const pId = processId || "";
+        const isSpecific = Boolean(
+          pName &&
+          pName.toLowerCase() !== "appointments" &&
+          pName.toLowerCase() !== "all appointments"
+        );
+        const slug = pName
+          ? pName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+          : "";
+
+        if (isSpecific) {
+          const itemPath = pId
+            ? `/appointments?processId=${encodeURIComponent(pId)}&process=${encodeURIComponent(pName)}`
+            : `/appointments?process=${encodeURIComponent(pName)}`;
+
+          return {
+            id: `appointment-${slug || pId}`,
+            label: pName,
+            iconName: "Calendar",
+            path: itemPath,
+            workflowPath: `/process?entity=appointment&processId=${encodeURIComponent(pId || "process-appointment-default")}&processName=${encodeURIComponent(pName)}`,
+            workflowState: { processId: pId, processName: pName },
+          };
+        }
+
         return {
           id: "appointments",
           label: "Appointments",
           iconName: "Calendar",
           path: "/appointments",
-          workflowPath: `/process?entity=appointment&processId=${pId}`,
+          workflowPath: `/process?entity=appointment&processId=${encodeURIComponent(pId || "process-appointment-default")}`,
           workflowState: { processId: pId, processName: pName },
         };
       }
       case "invoice": {
-        const pName = processName || "Invoice";
+        const pName = (processName || "").trim();
         const pId = processId || "process-invoice-default";
+        const isSpecific = Boolean(
+          pName &&
+          pName.toLowerCase() !== "invoice" &&
+          pName.toLowerCase() !== "invoices"
+        );
+        const slug = pName
+          ? pName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+          : "";
+
+        if (isSpecific) {
+          return {
+            id: `invoice-${slug || pId}`,
+            label: pName,
+            iconName: "Receipt",
+            path: `/invoices?process=${encodeURIComponent(pName)}&processId=${encodeURIComponent(pId)}`,
+            workflowPath: `/process?entity=invoice&processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`,
+            workflowState: { processId: pId, processName: pName },
+          };
+        }
+
         return {
           id: "invoices",
           label: "Invoice",
           iconName: "Receipt",
           path: "/invoices",
-          workflowPath: `/process?entity=invoice&processId=${pId}`,
+          workflowPath: `/process?entity=invoice&processId=${encodeURIComponent(pId)}`,
           workflowState: { processId: pId, processName: pName },
         };
       }
       case "insurance": {
-        const pName = processName || "Insurance & Claims";
+        const pName = (processName || "").trim();
         const pId = processId || "process-insurance-default";
+        const isSpecific = Boolean(
+          pName &&
+          pName.toLowerCase() !== "insurance & claims" &&
+          pName.toLowerCase() !== "insurance and claims" &&
+          pName.toLowerCase() !== "claims" &&
+          pName.toLowerCase() !== "insurance"
+        );
+        const slug = pName
+          ? pName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+          : "";
+
+        if (isSpecific) {
+          return {
+            id: `insurance-${slug || pId}`,
+            label: pName,
+            iconName: "ShieldCheck",
+            path: `/claims?process=${encodeURIComponent(pName)}&processId=${encodeURIComponent(pId)}`,
+            workflowPath: `/process?entity=insurance&processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`,
+            workflowState: { processId: pId, processName: pName },
+          };
+        }
+
         return {
           id: "insurance-claims",
           label: "Insurance & Claims",
           iconName: "ShieldCheck",
           path: "/claims",
-          workflowPath: `/process?entity=insurance&processId=${pId}`,
+          workflowPath: `/process?entity=insurance&processId=${encodeURIComponent(pId)}`,
           workflowState: { processId: pId, processName: pName },
         };
       }

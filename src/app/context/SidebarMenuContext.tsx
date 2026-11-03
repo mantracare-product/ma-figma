@@ -171,7 +171,11 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
                 const newScribeIdx = items.findIndex((it) => it.id === "scribe");
                 items.splice(newScribeIdx, 0, apptItem);
               }
-              items = items.map((it) => (it.id === "clients" ? { ...it, label: "Contact" } : it));
+              items = items.map((it) => {
+                if (it.id === "clients") return { ...it, label: "Contact" };
+                if (it.id === "processes") return { ...it, label: "Process", path: "/deals" };
+                return it;
+              });
               return { ...sec, items };
             }
             if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };
@@ -339,12 +343,30 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
   const isInWorkspace = (pathOrId: string): boolean => {
     const wsSec = config.sections.find((s) => s.id === "workspace");
     if (!wsSec) return false;
-    const cleanTarget = pathOrId.toLowerCase().trim();
+    const cleanTarget = decodeURIComponent(pathOrId).toLowerCase().trim();
     return wsSec.items.some((i) => {
       if (!i.visible) return false;
-      if (i.id.toLowerCase() === cleanTarget) return true;
-      if (i.path.toLowerCase() === cleanTarget) return true;
-      if (i.path.split("?")[0].toLowerCase() === cleanTarget.split("?")[0]) return true;
+      const itemId = i.id.toLowerCase();
+      const itemPath = decodeURIComponent(i.path).toLowerCase();
+      const itemLabel = i.label.toLowerCase();
+
+      if (itemId === cleanTarget) return true;
+      if (itemPath === cleanTarget) return true;
+      if (!cleanTarget.startsWith("/") && itemLabel === cleanTarget) return true;
+
+      // Match query params if both have them
+      if (cleanTarget.includes("?") && itemPath.includes("?")) {
+        const [targetBase, targetQuery] = cleanTarget.split("?");
+        const [itemBase, itemQuery] = itemPath.split("?");
+        if (targetBase === itemBase) {
+          const targetParams = new URLSearchParams(targetQuery);
+          const itemParams = new URLSearchParams(itemQuery);
+          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
+          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+        }
+      }
+
       return false;
     });
   };
@@ -353,9 +375,30 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     const wsSec = config.sections.find((s) => s.id === "workspace");
     if (!wsSec) return;
 
-    const existsInWs = wsSec.items.some(
-      (i) => i.id === item.id || i.path === item.path || i.path.split("?")[0] === item.path.split("?")[0]
-    );
+    const normPath = decodeURIComponent(item.path).toLowerCase();
+    const itemIdLower = item.id.toLowerCase();
+
+    // Check if item already exists in workspace by id, exact path, or matching query
+    const existsInWs = wsSec.items.some((i) => {
+      const iId = i.id.toLowerCase();
+      const iPath = decodeURIComponent(i.path).toLowerCase();
+
+      if (iId === itemIdLower) return true;
+      if (iPath === normPath) return true;
+
+      if (normPath.includes("?") && iPath.includes("?")) {
+        const [targetBase, targetQuery] = normPath.split("?");
+        const [itemBase, itemQuery] = iPath.split("?");
+        if (targetBase === itemBase) {
+          const targetParams = new URLSearchParams(targetQuery);
+          const itemParams = new URLSearchParams(itemQuery);
+          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
+          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+        }
+      }
+      return false;
+    });
 
     let newSections: NavSectionConfig[];
 
@@ -365,7 +408,21 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         return {
           ...sec,
           items: sec.items.map((i) => {
-            if (i.id === item.id || i.path === item.path || i.path.split("?")[0] === item.path.split("?")[0]) {
+            const iId = i.id.toLowerCase();
+            const iPath = decodeURIComponent(i.path).toLowerCase();
+            let isMatch = iId === itemIdLower || iPath === normPath;
+            if (!isMatch && normPath.includes("?") && iPath.includes("?")) {
+              const [targetBase, targetQuery] = normPath.split("?");
+              const [itemBase, itemQuery] = iPath.split("?");
+              if (targetBase === itemBase) {
+                const targetParams = new URLSearchParams(targetQuery);
+                const itemParams = new URLSearchParams(itemQuery);
+                const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
+                const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+                if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) isMatch = true;
+              }
+            }
+            if (isMatch) {
               return {
                 ...i,
                 visible: true,
@@ -380,12 +437,16 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         };
       });
     } else {
+      // If it exists in another section (e.g., invoices or insurance-claims in billing), remove it from there
+      const isCrossSectionMove = item.id === "invoices" || item.id === "insurance-claims";
+
       const sectionsWithoutItem = config.sections.map((sec) => {
         if (sec.id === "workspace") return sec;
+        if (!isCrossSectionMove) return sec;
         return {
           ...sec,
           items: sec.items.filter(
-            (i) => i.id !== item.id && i.path !== item.path && i.path.split("?")[0] !== item.path.split("?")[0]
+            (i) => i.id !== item.id && decodeURIComponent(i.path).toLowerCase() !== normPath
           ),
         };
       });
@@ -415,13 +476,29 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     const wsSec = config.sections.find((s) => s.id === "workspace");
     if (!wsSec) return;
 
-    const cleanTarget = pathOrId.toLowerCase().trim();
-    const targetItem = wsSec.items.find(
-      (i) =>
-        i.id.toLowerCase() === cleanTarget ||
-        i.path.toLowerCase() === cleanTarget ||
-        i.path.split("?")[0].toLowerCase() === cleanTarget.split("?")[0]
-    );
+    const cleanTarget = decodeURIComponent(pathOrId).toLowerCase().trim();
+    const targetItem = wsSec.items.find((i) => {
+      const iId = i.id.toLowerCase();
+      const iPath = decodeURIComponent(i.path).toLowerCase();
+      const iLabel = i.label.toLowerCase();
+
+      if (iId === cleanTarget) return true;
+      if (iPath === cleanTarget) return true;
+      if (!cleanTarget.startsWith("/") && iLabel === cleanTarget) return true;
+
+      if (cleanTarget.includes("?") && iPath.includes("?")) {
+        const [targetBase, targetQuery] = cleanTarget.split("?");
+        const [itemBase, itemQuery] = iPath.split("?");
+        if (targetBase === itemBase) {
+          const targetParams = new URLSearchParams(targetQuery);
+          const itemParams = new URLSearchParams(itemQuery);
+          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
+          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+        }
+      }
+      return false;
+    });
 
     if (!targetItem) return;
 
@@ -430,9 +507,9 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
       targetItem.id === "insurance-claims" ||
       targetItem.id === "product-services" ||
       targetItem.id === "reports" ||
-      targetItem.path.includes("/invoices") ||
-      targetItem.path.includes("/claims") ||
-      targetItem.path.includes("/services");
+      targetItem.path === "/invoices" ||
+      targetItem.path === "/claims" ||
+      targetItem.path === "/services";
 
     const newSections = config.sections.map((sec) => {
       if (sec.id === "workspace") {

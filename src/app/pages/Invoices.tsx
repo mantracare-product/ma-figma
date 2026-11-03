@@ -35,7 +35,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, useLocation, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
@@ -254,10 +254,23 @@ export default function Invoices() {
     setOpenCardMenuId(null);
   };
 
+  const location = useLocation();
+
   const invoiceProcess = React.useMemo(() => {
     const procs = getStoredProcesses();
+    const params = new URLSearchParams(location.search);
+    const procId = params.get("processId");
+    const procName = params.get("process") || params.get("processName");
+    if (procId) {
+      const found = procs.find((p) => p.id === procId);
+      if (found) return found;
+    }
+    if (procName) {
+      const found = procs.find((p) => p.name.trim().toLowerCase() === procName.trim().toLowerCase());
+      if (found) return found;
+    }
     return procs.find((p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing") || DEFAULT_ENTITY_PROCESSES.invoice;
-  }, [storedProcesses, storeTick]);
+  }, [storedProcesses, storeTick, location.search]);
 
   const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
     const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);

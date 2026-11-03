@@ -54,7 +54,7 @@ import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppoin
 import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
 import TargetUserLocationBar from "../components/appointments/TargetUserLocationBar";
 import AppointmentCalendarView from "../components/appointments/AppointmentCalendarView";
-import { useSearchParams, useNavigate, Link } from "react-router";
+import { useSearchParams, useNavigate, Link, useLocation } from "react-router";
 import { useClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
@@ -183,14 +183,37 @@ export default function Appointments() {
     return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
   }, [activeOrganization, storeTick]);
 
+  const location = useLocation();
+
+  // Synchronize process filter with URL search params whenever location.search changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const procId = params.get("processId");
+    const procName = params.get("process") || params.get("processName");
+    if (procId && appointmentProcesses.some((p) => p.id === procId)) {
+      setSelectedProcessFilter(procId);
+    } else if (procName) {
+      const found = appointmentProcesses.find(
+        (p) => p.name.trim().toLowerCase() === procName.trim().toLowerCase()
+      );
+      if (found) setSelectedProcessFilter(found.id);
+    } else if (!procId && !procName && appointmentProcesses.length > 0) {
+      setSelectedProcessFilter(appointmentProcesses[0].id);
+    }
+  }, [location.search, appointmentProcesses]);
+
   // Keep selectedProcessFilter pointing to a specific appointment process
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const procId = params.get("processId");
+    if (procId && appointmentProcesses.some((p) => p.id === procId)) return;
+
     if (appointmentProcesses.length > 0) {
       if (!selectedProcessFilter || !appointmentProcesses.some((p) => p.id === selectedProcessFilter)) {
         setSelectedProcessFilter(appointmentProcesses[0].id);
       }
     }
-  }, [appointmentProcesses, selectedProcessFilter]);
+  }, [appointmentProcesses, selectedProcessFilter, location.search]);
 
   // Active appointment process for stages and execution
   const appointmentProcess: Process = useMemo(() => {
@@ -1075,6 +1098,7 @@ export default function Appointments() {
                             setSelectedProcessFilter(proc.id);
                             setStageFilter("all");
                             setShowProcessesDropdown(false);
+                            navigate(`/appointments?processId=${encodeURIComponent(proc.id)}&process=${encodeURIComponent(proc.name)}`, { replace: true });
                           }}
                           className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
                             selectedProcessFilter === proc.id ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"

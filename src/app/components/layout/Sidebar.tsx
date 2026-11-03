@@ -503,63 +503,55 @@ export default function Sidebar() {
     const currentSearch = location.search;
 
     if (itemPath === "/") {
-      return currentPath === "/";
+      return currentPath === "/" && !currentSearch;
     }
 
-    if (itemId === "settings-org") {
-      return (
-        currentPath === "/settings/organization" ||
-        (currentPath === "/settings" && (currentSearch.includes("tab=organization") || currentSearch === ""))
-      );
+    // Exact full match including query
+    const currentFull = `${currentPath}${currentSearch}`;
+    if (decodeURIComponent(itemPath).toLowerCase() === decodeURIComponent(currentFull).toLowerCase()) {
+      return true;
     }
-    if (itemId === "settings-team") {
-      return (
-        currentPath.startsWith("/settings/team") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=users"))
-      );
+
+    // Check query params if itemPath includes '?'
+    if (itemPath.includes("?")) {
+      const [itemBase, itemQueryStr] = itemPath.split("?");
+      if (currentPath !== itemBase) return false;
+
+      const itemParams = new URLSearchParams(itemQueryStr);
+      const currentParams = new URLSearchParams(currentSearch);
+
+      // Check if item process matches current URL process
+      const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+      const currentProc = currentParams.get("process") || currentParams.get("processName") || currentParams.get("processId");
+      if (itemProc && currentProc && decodeURIComponent(itemProc).toLowerCase() === decodeURIComponent(currentProc).toLowerCase()) {
+        return true;
+      }
+      return false;
     }
-    if (itemId === "settings-billing") {
-      return (
-        currentPath.startsWith("/settings/billing") ||
-        (currentPath === "/settings" &&
-          (currentSearch.includes("tab=plans") ||
-            currentSearch.includes("tab=payments") ||
-            currentSearch.includes("tab=credit-usage") ||
-            currentSearch.includes("tab=billing")))
+
+    // If itemPath has NO query params (e.g. generic /deals, /appointments, /claims):
+    // If the current URL HAS a specific process query param, check if any other item specifically matches that query.
+    // If another item matches, this generic item should NOT be highlighted!
+    const curParams = new URLSearchParams(currentSearch);
+    const hasCurProcessParam = Boolean(
+      curParams.get("process") || curParams.get("processName") || curParams.get("processId")
+    );
+
+    if (hasCurProcessParam && (itemId === "processes" || itemId === "deals" || itemId === "appointments" || itemId === "invoices" || itemId === "insurance-claims")) {
+      const curProcVal = curParams.get("process") || curParams.get("processName") || curParams.get("processId");
+      const hasSpecificMatchingItem = sections.some((sec) =>
+        sec.items.some((it) => {
+          if (!it.path || !it.path.includes("?")) return false;
+          const [b, q] = it.path.split("?");
+          if (b !== currentPath) return false;
+          const itP = new URLSearchParams(q);
+          const itProcVal = itP.get("process") || itP.get("processName") || itP.get("processId");
+          return itProcVal && curProcVal && decodeURIComponent(itProcVal).toLowerCase() === decodeURIComponent(curProcVal).toLowerCase();
+        })
       );
-    }
-    if (itemId === "settings-voices") {
-      return (
-        currentPath.startsWith("/settings/voices") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=voice-config"))
-      );
-    }
-    if (itemId === "settings-sections") {
-      return (
-        currentPath.startsWith("/settings/sections") ||
-        (currentPath === "/settings" &&
-          (currentSearch.includes("tab=custom-fields") || currentSearch.includes("tab=layout")))
-      );
-    }
-    if (itemId === "settings-integrations") {
-      return (
-        currentPath.startsWith("/settings/integrations") ||
-        currentPath.startsWith("/settings/numbers") ||
-        (currentPath === "/settings" &&
-          (currentSearch.includes("tab=integrations") || currentSearch.includes("tab=numbers")))
-      );
-    }
-    if (itemId === "settings-audit") {
-      return (
-        currentPath.startsWith("/settings/audit") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=audit-logs"))
-      );
-    }
-    if (itemId === "settings-security") {
-      return (
-        currentPath.startsWith("/settings/security") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=security"))
-      );
+      if (hasSpecificMatchingItem) {
+        return false;
+      }
     }
 
     if (itemId === "processes" || itemId === "deals") {
@@ -569,7 +561,7 @@ export default function Sidebar() {
       return currentPath.startsWith("/process");
     }
 
-    return currentPath.startsWith(itemPath);
+    return currentPath === itemPath || (itemPath !== "/" && currentPath.startsWith(itemPath));
   };
 
   // Auto-expand section containing current active path
