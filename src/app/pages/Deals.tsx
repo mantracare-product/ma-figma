@@ -37,6 +37,7 @@ import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useP
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
 import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
+import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { logStageMove } from "../../lib/useAutomationStore";
 import { appendActivity } from "../../lib/activityEngine";
 import { isDemoMantraActive, isFreshWorkspace } from "../../lib/onboardingWorkspace";
@@ -1854,157 +1855,14 @@ export default function Deals() {
       header: "Stage",
       render: (log) => {
         const stageObjs = getStageObjectsForProcess(log.process, log.currentStage);
-        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
-        const cleanCurrentStage = (log.currentStage || "").includes(":")
-          ? log.currentStage.split(":")[1].trim().toLowerCase()
-          : (log.currentStage || "").trim().toLowerCase();
-
-        const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
-        const isLostStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
-          if (!s) return false;
-          if (s.stageCategory === "lost") return true;
-          if (s.intentTrigger === "not_interested") return true;
-          const n = s.name.toLowerCase();
-          return n.includes("not interested") || n.includes("lost") || n.includes("cancelled") || n.includes("declined") || n.includes("failed") || n.includes("no-show");
-        };
-
-        const isWonStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
-          if (!s) return false;
-          if (s.stageCategory === "success") return true;
-          if (s.intentTrigger === "interested") return true;
-          const n = s.name.toLowerCase();
-          return n.includes("interested") || n.includes("won") || n.includes("reactivated") || n.includes("completed") || n.includes("closed");
-        };
-
-        const isLastOrFinalStageObj = (s?: { name: string; isFinalStage?: boolean; stagePosition?: string | null; stageCategory?: string; intentTrigger?: string }) => {
-          if (!s) return false;
-          return Boolean(s.isFinalStage || s.stagePosition === "final" || s.stageCategory === "lost" || s.stageCategory === "success" || isLostStageObj(s) || isWonStageObj(s));
-        };
-
-        const lightenHex = (hex: string, percent: number = 75): string => {
-          if (!hex || typeof hex !== "string") return "#F1F5F9";
-          let c = hex.replace("#", "").trim();
-          if (c.length === 3) c = c.split("").map((ch) => ch + ch).join("");
-          const num = parseInt(c, 16);
-          if (isNaN(num)) return hex;
-          const factor = percent / 100;
-          const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
-          const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
-          const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
-          return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-        };
-
-        const isCurrentFinal = isLastOrFinalStageObj(currentStageObj);
-
         return (
-          <div className="flex items-center justify-center -space-x-px">
-            {stageObjs.map((stg, i) => {
-              const stageName = stg.name;
-              const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
-              const segIdx = i + 1;
-              const isActive = segIdx === activeIdx;
-
-              const isThisFinal = isLastOrFinalStageObj(stg);
-              const isThisInProgress = !isThisFinal;
-
-              let isCompleted = false;
-              let isDeactivated = false;
-
-              if (isActive) {
-                // Active stage
-              } else if (isCurrentFinal) {
-                if (isThisInProgress && activeIdx >= 0 && segIdx < activeIdx) {
-                  // Keep reached in-progress stages completed with full color when lost or final stage is marked
-                  isCompleted = true;
-                } else {
-                  // Deactivate alternate outcome stages
-                  isDeactivated = true;
-                }
-              } else {
-                // Currently in an in-progress stage
-                if (isThisInProgress && segIdx < activeIdx) {
-                  isCompleted = true;
-                }
-              }
-
-              const isLocked = Boolean(isCurrentFinal);
-              const lightBg = lightenHex(stageColor, 78);
-              const lightBorder = lightenHex(stageColor, 40);
-
-              let bg = "transparent";
-              let border = "1px solid #CBD5E1";
-              let opacity = 1;
-
-              if (isActive) {
-                bg = stageColor;
-                border = "1.5px solid #0F172A";
-                opacity = 1;
-              } else if (isCompleted) {
-                bg = stageColor;
-                border = `1px solid ${stageColor}`;
-                opacity = 0.9;
-              } else {
-                // Inactive / unreached / deactivated stages: light grey to show inactive
-                bg = "#E2E8F0";
-                border = "1px solid #CBD5E1";
-                opacity = 0.9;
-              }
-
-              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
-              return (
-                <div
-                  key={stg.id || stageName}
-                  className="relative"
-                  style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
-                >
-                  {isHovered && (
-                    <div
-                      className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
-                      style={{ backgroundColor: "#1A2B4A", color: "#fff", fontSize: "12px" }}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: isDeactivated ? lightBg : stageColor }}
-                      />
-                      <span>{stageName}</span>
-                      {isDeactivated ? (
-                        <span className="text-[10px] text-gray-300 font-semibold">(Inactive)</span>
-                      ) : isActive ? (
-                        <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>
-                      ) : isCompleted ? (
-                        <span className="text-[10px] text-emerald-300 font-semibold">(Completed)</span>
-                      ) : null}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!isDeactivated) handleUpdateLogStage(log, stageName);
-                    }}
-                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
-                    onMouseLeave={() => setHoveredStageSegment(null)}
-                    style={{
-                      width: "18px",
-                      height: "8px",
-                      borderRadius: "0px",
-                      backgroundColor: bg,
-                      border: border,
-                      opacity: opacity,
-                      cursor: isDeactivated ? "not-allowed" : "pointer",
-                      display: "block",
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: "all 0.2s ease",
-                    }}
-                    title={`${stageName}${isActive ? " (Current)" : isDeactivated ? " (Inactive)" : isCompleted ? " (Completed)" : ""}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <SegmentedStageBar
+            stages={stageObjs}
+            currentStageName={log.currentStage}
+            onStageSelect={(stg) => handleUpdateLogStage(log, stg.name)}
+          />
         );
-      }
+      },
     },
     {
       key: "client",

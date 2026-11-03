@@ -1,12 +1,18 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { InvoiceStatus } from "../../types/invoiceTypes";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { SegmentedStageBar } from "../common/SegmentedStageBar";
 
 export interface InvoiceStageItem {
   id: string;
   name: string;
   color?: string;
   systemCategory?: string;
+  isInitial?: boolean;
+  isFinal?: boolean;
+  isFinalStage?: boolean;
+  stagePosition?: "initial" | "intermediate" | "final" | null;
+  stageCategory?: "in_progress" | "success" | "lost";
 }
 
 interface InvoiceProgressBarProps {
@@ -25,12 +31,7 @@ export default function InvoiceProgressBar({
   stages: propStages,
   onStatusChange,
   interactive = true,
-  logId = "inv",
 }: InvoiceProgressBarProps) {
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const [showPopover, setShowPopover] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   // Fallback internal stages from store if propStages is not provided
   const [internalStages, setInternalStages] = useState<InvoiceStageItem[]>(() => {
     const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
@@ -56,178 +57,39 @@ export default function InvoiceProgressBar({
     return internalStages;
   }, [propStages, internalStages]);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowPopover(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Determine active step position (1-based index)
-  const activeIndex = useMemo(() => {
+  const currentStageObj = useMemo(() => {
     if (currentStageId && currentStageId.trim() !== "") {
-      const idx = effectiveStages.findIndex(
+      const match = effectiveStages.find(
         (s) =>
           s.id.toLowerCase() === currentStageId.trim().toLowerCase() ||
           s.name.toLowerCase() === currentStageId.trim().toLowerCase()
       );
-      if (idx !== -1) return idx + 1;
+      if (match) return match;
     }
-    return -1;
-  }, [effectiveStages, currentStageId]);
-
-  const isOverdue = status === "overdue";
-  const isVoid = status === "void";
-  const currentStageObj = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
-  const isCurrentLostStage = isVoid || Boolean(currentStageObj && (currentStageObj.systemCategory === "void" || currentStageObj.systemCategory === "lost" || currentStageObj.name.toLowerCase().includes("void") || currentStageObj.name.toLowerCase().includes("cancel")));
+    if (status && typeof status === "string") {
+      const clean = status.trim().toLowerCase();
+      const match = effectiveStages.find(
+        (s) =>
+          s.name.toLowerCase() === clean ||
+          s.id.toLowerCase() === clean ||
+          (s.systemCategory && s.systemCategory.toLowerCase() === clean)
+      );
+      if (match) return match;
+    }
+    return effectiveStages[0];
+  }, [effectiveStages, currentStageId, status]);
 
   return (
-    <div className="relative inline-block" ref={containerRef}>
-      <div
-        className="flex items-center justify-center -space-x-px cursor-pointer p-0.5 rounded hover:bg-slate-100/50 transition-colors"
-        onClick={() => {
-          if (interactive && onStatusChange && !isVoid && !isCurrentLostStage) {
-            setShowPopover(!showPopover);
-          }
-        }}
-      >
-        {/* Render dynamic Visual Block Segments */}
-        {effectiveStages.map((stg, i) => {
-          const segIdx = i + 1;
-          const currentStage = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
-
-          const isStgSuccess = stg.systemCategory === "paid" || stg.name.toLowerCase().includes("paid");
-          const isStgLost = stg.systemCategory === "void" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("void") || stg.name.toLowerCase().includes("cancel");
-
-          const isCurrentSuccess = status === "paid" || (currentStage && (currentStage.systemCategory === "paid" || currentStage.name.toLowerCase().includes("paid")));
-          const isCurrentLost = status === "void" || (currentStage && (currentStage.systemCategory === "void" || currentStage.systemCategory === "lost" || currentStage.name.toLowerCase().includes("void")));
-
-          const isActive = activeIndex > 0 && segIdx === activeIndex;
-          const isCompleted = activeIndex > 0 && segIdx < activeIndex && !isStgLost;
-
-          let isDisabledGrey = false;
-          if (isCurrentSuccess && isStgLost) {
-            isDisabledGrey = true;
-          } else if (isCurrentLost && !isActive && !isCompleted) {
-            isDisabledGrey = true;
-          }
-
-          const isHovered = hoveredIdx === segIdx;
-
-          let bg = "#E2E8F0";
-          let border = "1px solid #CBD5E1";
-          let opacity = 0.9;
-
-          if (isActive) {
-            bg = isCurrentLost || isVoid ? "#EF4444" : (stg.color || "#1E88E5");
-            border = "1.5px solid #0F172A";
-            opacity = 1;
-          } else if (isCompleted) {
-            // Keep full stage color for completed stages even when void/lost
-            bg = stg.color || "#1E88E5";
-            border = `1px solid ${stg.color || "#1E88E5"}`;
-            opacity = 0.9;
-          } else if (isOverdue && (isActive || isCompleted)) {
-            bg = stg.systemCategory === "overdue" || isActive ? "#EF4444" : (stg.color || "#1E88E5");
-            border = "1.5px solid #EF4444";
-          } else {
-            bg = "#E2E8F0";
-            border = "1px solid #CBD5E1";
-            opacity = 0.9;
-          }
-
-          return (
-            <div
-              key={stg.id}
-              className="relative"
-              style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
-            >
-              {/* Dark Tooltip on Hover */}
-              {isHovered && !showPopover && (
-                <div
-                  className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 pointer-events-none z-50 shadow-md"
-                  style={{
-                    backgroundColor: "#1A2B4A",
-                    color: "#FFFFFF",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    borderRadius: "4px",
-                    fontFamily: "Outfit, sans-serif",
-                  }}
-                >
-                  {stg.name}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (interactive && onStatusChange) {
-                    onStatusChange(stg.id);
-                  }
-                }}
-                onMouseEnter={() => setHoveredIdx(segIdx)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                style={{
-                  width: "18px",
-                  height: "8px",
-                  borderRadius: "0px",
-                  backgroundColor: bg,
-                  border: border,
-                  opacity: opacity,
-                  cursor: isDisabledGrey ? "not-allowed" : (interactive && onStatusChange ? "pointer" : "default"),
-                  display: "block",
-                  padding: 0,
-                  flexShrink: 0,
-                  transition: "background-color 0.2s ease, transform 0.15s ease",
-                  transform: isHovered ? "scaleY(1.3)" : "scaleY(1)",
-                }}
-                aria-label={`Stage: ${stg.name}`}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Popover on click to choose stage */}
-      {showPopover && (
-        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-left">
-          <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
-            Set Stage Status ({effectiveStages.length} Stages)
-          </div>
-          {effectiveStages.map((stg, i) => {
-            const isSelected = (currentStageId && currentStageId === stg.id) || (!currentStageId && (status === stg.id || status === stg.systemCategory));
-            return (
-              <button
-                key={stg.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onStatusChange) onStatusChange(stg.id);
-                  setShowPopover(false);
-                }}
-                className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between font-medium ${
-                  isSelected ? "bg-slate-100 font-bold text-blue-600" : "text-slate-700"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: stg.color || "#3B82F6" }}
-                  />
-                  <span>
-                    {i + 1}. {stg.name}
-                  </span>
-                </div>
-                {isSelected && <span className="text-blue-600 font-bold">✓</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <SegmentedStageBar
+      stages={effectiveStages}
+      currentStageName={currentStageObj?.name || status}
+      currentStageId={currentStageId || currentStageObj?.id}
+      onStageSelect={(stg) => {
+        if (interactive && onStatusChange) {
+          onStatusChange(stg.id);
+        }
+      }}
+      interactive={interactive}
+    />
   );
 }

@@ -48,6 +48,7 @@ import { DataExportModal } from "../components/common/DataExportModal";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
 import AppointmentCard from "../components/appointments/AppointmentCard";
+import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
@@ -1364,95 +1365,12 @@ export default function Appointments() {
 
                     return (
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center -space-x-px">
-                          {stages.map((stg, i) => {
-                            const isStgLost = stg.isFinalStage || stg.isFinal || stg.systemCategory === "cancelled" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("cancel") || stg.name.toLowerCase().includes("lost") || stg.name.toLowerCase().includes("no-show");
-                            const isStgSuccess = stg.systemCategory === "completed" || stg.systemCategory === "won" || stg.name.toLowerCase().includes("completed") || stg.name.toLowerCase().includes("won");
-                            const isStgFinal = isStgLost || isStgSuccess || Boolean(stg.isFinalStage || stg.isFinal);
-                            const isStgInProgress = !isStgFinal;
-                            const isActive = activeIdx >= 0 && i === activeIdx;
-
-                            let isCompleted = false;
-                            let isDeactivated = false;
-
-                            if (isActive) {
-                              // Active stage
-                            } else if (isCurrentFinal) {
-                              // When lost/final stage is marked, prior reached stages remain completed with full color
-                              if (isStgInProgress && activeIdx >= 0 && i < activeIdx) {
-                                isCompleted = true;
-                              } else {
-                                isDeactivated = true;
-                              }
-                            } else {
-                              if (isStgInProgress && activeIdx >= 0 && i < activeIdx) {
-                                isCompleted = true;
-                              }
-                            }
-
-                            const isLocked = Boolean(isCurrentFinal);
-                            const stgColor = stg.color || "#1E88E5";
-                            const lightBg = lightenHex(stgColor, 78);
-                            const lightBorder = lightenHex(stgColor, 40);
-
-                            const isHovered = hoveredStageBox?.aptId === apt.id && hoveredStageBox?.stageIdx === i;
-
-                            let bg = "transparent";
-                            let border = "1px solid #CBD5E1";
-                            let opacity = 1;
-
-                            if (isActive) {
-                              bg = stgColor;
-                              border = "1.5px solid #0F172A";
-                              opacity = 1;
-                            } else if (isCompleted) {
-                              // Preserve full stage color on completed stages even when lost is marked
-                              bg = stgColor;
-                              border = `1px solid ${stgColor}`;
-                              opacity = 0.9;
-                            } else {
-                              // Inactive / unreached / deactivated stages: light grey to show inactive
-                              bg = "#E2E8F0";
-                              border = "1px solid #CBD5E1";
-                              opacity = 0.9;
-                            }
-
-                            return (
-                              <div key={stg.id} className="relative" style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}>
-                                {isHovered && (
-                                  <div
-                                    className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
-                                    style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
-                                  >
-                                    {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}{isLocked ? " [Locked]" : ""}
-                                  </div>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!isDeactivated && !isLocked) handleQuickStageChange(apt, stg);
-                                  }}
-                                  onMouseEnter={() => setHoveredStageBox({ aptId: apt.id, stageIdx: i })}
-                                  onMouseLeave={() => setHoveredStageBox(null)}
-                                  style={{
-                                    width: "18px",
-                                    height: "8px",
-                                    borderRadius: "0px",
-                                    backgroundColor: bg,
-                                    border: border,
-                                    opacity: opacity,
-                                    cursor: isDeactivated || isLocked ? "not-allowed" : "pointer",
-                                    display: "block",
-                                    padding: 0,
-                                    flexShrink: 0,
-                                    transition: "all 0.15s ease",
-                                  }}
-                                  title={stg.name}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <SegmentedStageBar
+                          stages={stages}
+                          currentStageName={matchedStage?.name || apt.status}
+                          currentStageId={matchedStage?.id || apt.currentStageId}
+                          onStageSelect={(stg) => handleQuickStageChange(apt, stg)}
+                        />
                       </div>
                     );
                   },
