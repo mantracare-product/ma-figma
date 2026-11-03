@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { createPortal } from "react-dom";
 import {
@@ -117,7 +117,7 @@ export default function FormBuilder({
   formId: propFormId,
   returnTo: propReturnTo,
   onSaveSuccess,
-}: FormBuilderProps = {}) {
+}: FormBuilderProps = {}): React.ReactElement | null {
   const navigate = useNavigate();
   const location = useLocation();
   const { getAllFields, addCustomField } = useFieldRegistry();
@@ -2591,6 +2591,6 @@ export default function FormBuilder({
   return contentJSX;
 }
 
-export function FormBuilderDrawer(props: Omit<FormBuilderProps, "isDrawer">) {
+export function FormBuilderDrawer(props: Omit<FormBuilderProps, "isDrawer">): React.ReactElement | null {
   return <FormBuilder {...props} isDrawer={true} />;
 }
