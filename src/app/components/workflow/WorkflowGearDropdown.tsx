@@ -138,24 +138,24 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
         <DropdownMenuContent
           align={align}
           sideOffset={6}
-          className="w-48 p-1 rounded-xl shadow-lg border border-slate-200/90 bg-white z-[99999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
+          className="w-52 p-1 rounded-xl shadow-lg border border-slate-200/90 bg-white z-[99999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
         >
           {/* 1. Edit workflow */}
           <DropdownMenuItem
             onClick={handleEditWorkflow}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 rounded-lg cursor-pointer transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 focus:bg-slate-100 focus:text-slate-900 hover:bg-slate-100 hover:text-slate-900 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900 rounded-lg cursor-pointer transition-colors outline-none"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span className="truncate">Edit workflow</span>
+            <span className="whitespace-nowrap">Edit workflow</span>
           </DropdownMenuItem>
 
           {/* 2. Add to workspace / Remove from workspace */}
           <DropdownMenuItem
             onClick={handleToggleWorkspace}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors outline-none ${
               inWorkspace
-                ? "text-rose-600 hover:text-rose-700 hover:bg-rose-50/70"
-                : "text-slate-700 hover:text-slate-900 hover:bg-slate-100/80"
+                ? "text-rose-600 focus:bg-slate-100 focus:text-rose-600 hover:bg-slate-100 hover:text-rose-600 data-[highlighted]:bg-slate-100 data-[highlighted]:text-rose-600"
+                : "text-slate-700 focus:bg-slate-100 focus:text-slate-900 hover:bg-slate-100 hover:text-slate-900 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900"
             }`}
           >
             {inWorkspace ? (
@@ -163,7 +163,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
             ) : (
               <FolderPlus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             )}
-            <span className="truncate">
+            <span className="whitespace-nowrap">
               {inWorkspace ? "Remove from workspace" : "Add to workspace"}
             </span>
           </DropdownMenuItem>
