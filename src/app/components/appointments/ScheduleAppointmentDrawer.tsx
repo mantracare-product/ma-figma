@@ -510,6 +510,9 @@ export default function ScheduleAppointmentDrawer({
               price: s.price,
               duration: s.slotDuration || s.duration || 30,
               tax: s.tax || 0,
+              isPrepaid: s.isPrepaid,
+              prepaidDepositType: s.prepaidDepositType,
+              prepaidDepositAmount: s.prepaidDepositAmount,
               assignedEmployees: s.assignedEmployees,
               locationIds: s.locationIds,
               maxSeats: s.maxSeats,
@@ -1133,7 +1136,7 @@ export default function ScheduleAppointmentDrawer({
       onChange({
         serviceId: String(srv.id), serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
-        generateInvoice: values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId),
+        generateInvoice: (srv as any).isPrepaid ? true : (values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId)),
         lineItems: [li],
         provider: nextProvider,
       });
@@ -1201,10 +1204,10 @@ export default function ScheduleAppointmentDrawer({
 
   const serviceOptions: DropdownOption[] = [
     { value: "", label: "Select a service" },
-    ...allAvailableServices.map((s) => ({
+    ...allAvailableServices.map((s: any) => ({
       value: String(s.id),
       label: s.name,
-      meta: `$${s.price} · ${s.duration} min`,
+      meta: `${s.isPrepaid ? '💳 Prepaid · ' : ''}$${s.price} · ${s.duration} min`,
     })),
   ];
 

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   Plus, Trash2, Search, Clock, Check, Briefcase,
   Layers, Building2, MapPin, Navigation,
-  Users, UserCheck, UserPlus, X
+  Users, UserCheck, UserPlus, X, CreditCard, ShieldCheck
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
@@ -102,6 +102,9 @@ export default function ServiceDrawer({
   const [drawerActiveTab, setDrawerActiveTab] = useState<"overview" | "availability">("overview");
   const [availableForAppointment, setAvailableForAppointment] = useState<boolean>(initialAvailableForAppointment);
   const [slotDuration, setSlotDuration] = useState<number>(30);
+  const [isPrepaid, setIsPrepaid] = useState<boolean>(false);
+  const [prepaidDepositType, setPrepaidDepositType] = useState<"full" | "deposit">("full");
+  const [prepaidDepositAmount, setPrepaidDepositAmount] = useState<number>(0);
   const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([]);
 
   const [activeStaffDropdownLocId, setActiveStaffDropdownLocId] = useState<string | null>(null);
@@ -223,6 +226,9 @@ export default function ServiceDrawer({
 
     if (mode === "edit" && service) {
       setAvailableForAppointment(service.availableForAppointment ?? true);
+      setIsPrepaid(Boolean(service.isPrepaid));
+      setPrepaidDepositType(service.prepaidDepositType || "full");
+      setPrepaidDepositAmount(service.prepaidDepositAmount ?? service.price ?? 0);
       const sDuration = service.slotDuration || service.duration || 30;
       setSlotDuration(sDuration);
 
@@ -293,6 +299,9 @@ export default function ServiceDrawer({
       // Add mode
       const isApptAvail = initialAvailableForAppointment;
       setAvailableForAppointment(isApptAvail);
+      setIsPrepaid(false);
+      setPrepaidDepositType("full");
+      setPrepaidDepositAmount(0);
       setSlotDuration(30);
       setDrawerActiveTab("overview");
       setActiveStaffDropdownLocId(null);
@@ -436,6 +445,10 @@ export default function ServiceDrawer({
     });
 
     const effectiveDuration = Number(slotDuration) || Number(fieldValues["duration"]) || 30;
+    const calculatedDeposit =
+      prepaidDepositType === "deposit"
+        ? Math.max(0, Number(prepaidDepositAmount) || 0)
+        : Number(fieldValues["price"]) || 0;
 
     let savedItem: Service;
     if (mode === "edit" && service) {
@@ -451,6 +464,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        isPrepaid: availableForAppointment ? isPrepaid : false,
+        prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
+        prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
         locationIds,
         maxSeats,
@@ -474,6 +490,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        isPrepaid: availableForAppointment ? isPrepaid : false,
+        prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
+        prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
         locationIds,
         maxSeats,
@@ -496,6 +515,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        isPrepaid: availableForAppointment ? isPrepaid : false,
+        prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
+        prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
         locationIds,
         maxSeats,
@@ -627,6 +649,148 @@ export default function ServiceDrawer({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* ── Prepaid Appointment / Upfront Collection Card ── */}
+        <div className={`border rounded-2xl p-4 shadow-2xs transition-all space-y-3 ${
+          isPrepaid ? "bg-blue-50/50 border-blue-200" : "bg-slate-50/90 border-slate-200"
+        }`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Require Upfront Payment (Prepaid)</span>
+                </label>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+                  isPrepaid 
+                    ? "bg-blue-100 text-blue-800 border-blue-200" 
+                    : "bg-white text-slate-500 border-slate-200/80"
+                }`}>
+                  {isPrepaid ? "Prepaid Active" : "Pay at Visit (Default)"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Collect payment from clients upfront when scheduling this appointment in the client portal. When active, booking confirmation is issued only upon successful payment.
+              </p>
+            </div>
+
+            {/* Toggle Switch */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPrepaid}
+              onClick={() => setIsPrepaid(!isPrepaid)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shrink-0 ${
+                isPrepaid ? "bg-blue-600" : "bg-slate-300"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  isPrepaid ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Conditional Options when Prepaid is enabled */}
+          {isPrepaid && (
+            <div className="pt-2 border-t border-blue-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Collection Requirement
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Full Service Price Option */}
+                  <label
+                    onClick={() => setPrepaidDepositType("full")}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      prepaidDepositType === "full"
+                        ? "bg-white border-blue-500 shadow-xs ring-1 ring-blue-500/20"
+                        : "bg-white/80 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="prepaidDepositType"
+                      checked={prepaidDepositType === "full"}
+                      onChange={() => setPrepaidDepositType("full")}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-800 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Full Service Amount (${Number(fieldValues.price || 0).toFixed(2)})
+                      </span>
+                      <span className="text-[10px] text-slate-500 block leading-tight">
+                        Client pays total price configured in Overview.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Partial Deposit Option */}
+                  <label
+                    onClick={() => setPrepaidDepositType("deposit")}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      prepaidDepositType === "deposit"
+                        ? "bg-white border-blue-500 shadow-xs ring-1 ring-blue-500/20"
+                        : "bg-white/80 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="prepaidDepositType"
+                      checked={prepaidDepositType === "deposit"}
+                      onChange={() => setPrepaidDepositType("deposit")}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="space-y-0.5 flex-1">
+                      <span className="text-xs font-bold text-slate-800 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Partial Deposit Fee
+                      </span>
+                      <span className="text-[10px] text-slate-500 block leading-tight">
+                        Fixed booking deposit to reserve the slot.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Deposit Amount input if "deposit" is selected */}
+              {prepaidDepositType === "deposit" && (
+                <div className="space-y-1 pt-1 animate-in fade-in duration-150">
+                  <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <span>Deposit Amount <span className="text-rose-500">*</span></span>
+                  </label>
+                  <div className="relative w-44">
+                    <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400 pointer-events-none">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={prepaidDepositAmount || ""}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setPrepaidDepositAmount(isNaN(val) ? 0 : Math.max(0, val));
+                      }}
+                      className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-xs font-bold text-slate-800 transition-all outline-none shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      placeholder="50.00"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Helpful Banner */}
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-blue-100/60 border border-blue-200/80 text-[11px] text-blue-900 leading-normal">
+                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Client Portal View:</strong> In the patient booking screen, clients selecting this service will be guided to a payment step to pay {prepaidDepositType === "full" ? `$${Number(fieldValues.price || 0).toFixed(2)}` : `$${Number(prepaidDepositAmount || 0).toFixed(2)}`} before their appointment booking is confirmed.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Location Availability Rules Cards */}

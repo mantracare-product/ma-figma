@@ -21,6 +21,9 @@ export interface Service {
   tax?: number;
   isActive: boolean;
   availableForAppointment?: boolean;
+  isPrepaid?: boolean;
+  prepaidDepositType?: "full" | "deposit";
+  prepaidDepositAmount?: number;
   assignedEmployees?: (number | string)[];
   createdAt?: string;
   activity?: string;
@@ -77,6 +80,9 @@ export const INIT_FORM = {
   tax: 0,
   isActive: true,
   availableForAppointment: false,
+  isPrepaid: false,
+  prepaidDepositType: "full" as "full" | "deposit",
+  prepaidDepositAmount: 0,
   assignedEmployeeIds: [] as (number | string)[],
   locationIds: [] as string[],
   maxSeats: 1,
@@ -86,7 +92,7 @@ export const INIT_FORM = {
 // ─── Default seed data ────────────────────────────────────────────────────────
 
 const DEFAULT_SERVICES: Service[] = [
-  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", cptCode: "99204", duration: 60, slotDuration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  availableForAppointment: true, assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
+  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", cptCode: "99204", duration: 60, slotDuration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  availableForAppointment: true, isPrepaid: true, prepaidDepositType: "full", prepaidDepositAmount: 150, assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
   { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", cptCode: "99213", duration: 30, slotDuration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  availableForAppointment: true, assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
   { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       cptCode: "D1110", duration: 45, slotDuration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  availableForAppointment: true, assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
   { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  cptCode: "70450", duration: 20, slotDuration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, availableForAppointment: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },

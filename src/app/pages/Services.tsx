@@ -4,7 +4,7 @@ import {
   Plus, Edit2, Trash2, Search, Clock,
   ChevronDown, Check, MoreVertical, ToggleLeft, ToggleRight, Briefcase,
   Settings, Tag, X, Percent, Layers, GripVertical, Building2, MapPin, Navigation, Video,
-  Users, UserCheck, UserPlus, AlertCircle, Copy
+  Users, UserCheck, UserPlus, AlertCircle, Copy, CreditCard
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -505,6 +505,12 @@ export default function Services() {
                     {service.availableForAppointment && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
                         Appointment
+                      </span>
+                    )}
+                    {service.availableForAppointment && service.isPrepaid && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shrink-0" title={`Prepaid ${service.prepaidDepositType === 'deposit' ? `Deposit: $${service.prepaidDepositAmount}` : 'Full Amount'}`}>
+                        <CreditCard className="w-2.5 h-2.5" />
+                        Prepaid
                       </span>
                     )}
                   </div>

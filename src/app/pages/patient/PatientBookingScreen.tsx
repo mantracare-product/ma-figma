@@ -21,10 +21,17 @@ import {
   UserCheck,
   Navigation,
   AlertTriangle,
+  CreditCard,
+  QrCode,
+  Receipt,
+  Loader2,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
 import { appointmentService, Appointment } from "../../../lib/appointmentService";
+import { invoiceService } from "../../../lib/invoiceService";
+import confetti from "canvas-confetti";
+import QRCode from "qrcode";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { getStoredServices } from "../../../lib/servicesStore";
 import { findRoomForAppointment } from "../../../lib/roomsStore";
@@ -158,7 +165,7 @@ export default function PatientBookingScreen() {
 
   // ── 3. Booking Modal State ──
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
+  const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1);
   const [openDropdown, setOpenDropdown] = useState<"service" | "physician" | "location" | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedServiceId, setSelectedServiceId] = useState<string>(() => String(services[0]?.id || ""));
@@ -168,6 +175,13 @@ export default function PatientBookingScreen() {
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [selectedTime, setSelectedTime] = useState("09:00 AM");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Upfront Payment / Prepaid State
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "qr">("card");
+  const [cardNumber, setCardNumber] = useState("•••• •••• •••• 4242");
+  const [cardExp, setCardExp] = useState("12/28");
+  const [cardCvc, setCardCvc] = useState("123");
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
 
   // Timezone string e.g. "(GMT+05:30) Asia/Calcutta"
   const userTimezoneLabel = useMemo(() => {
@@ -239,6 +253,48 @@ export default function PatientBookingScreen() {
   const selectedServiceObj = useMemo(() => {
     return services.find((s) => String(s.id) === String(selectedServiceId)) || services[0];
   }, [services, selectedServiceId]);
+
+  const isSelectedServicePrepaid = Boolean(selectedServiceObj?.isPrepaid);
+
+  const prepaidAmount = useMemo(() => {
+    if (!selectedServiceObj) return 0;
+    if (selectedServiceObj.prepaidDepositType === "deposit" && selectedServiceObj.prepaidDepositAmount !== undefined) {
+      return Number(selectedServiceObj.prepaidDepositAmount) || 0;
+    }
+    return Number(selectedServiceObj.price) || 0;
+  }, [selectedServiceObj]);
+
+  const taxAmount = useMemo(() => {
+    if (!selectedServiceObj?.tax) return 0;
+    return (prepaidAmount * (selectedServiceObj.tax / 100));
+  }, [selectedServiceObj, prepaidAmount]);
+
+  const totalPrepaidDue = useMemo(() => {
+    return prepaidAmount + taxAmount;
+  }, [prepaidAmount, taxAmount]);
+
+  // Generate QR code for touchless booking payment
+  useEffect(() => {
+    if (bookingStep === 3) {
+      const upiPayload = `upi://pay?pa=mantrahealth@icici&pn=Mantra+Health&am=${totalPrepaidDue.toFixed(2)}&cu=USD&tn=Booking+${encodeURIComponent(selectedServiceObj?.name || 'Appointment')}`;
+      QRCode.toDataURL(
+        upiPayload,
+        {
+          width: 180,
+          margin: 1,
+          color: {
+            dark: "#1e293b",
+            light: "#ffffff",
+          },
+        },
+        (err, url) => {
+          if (!err && url) {
+            setQrCodeDataUrl(url);
+          }
+        }
+      );
+    }
+  }, [bookingStep, totalPrepaidDue, selectedServiceObj?.name]);
 
   const selectedDoctorObj = useMemo(() => {
     if (!selectedDoctorId) return null;
@@ -613,7 +669,7 @@ export default function PatientBookingScreen() {
         employeeName: assignedEmpName,
       });
 
-      appointmentService.createAppointment(
+      const createdResult = appointmentService.createAppointment(
         {
           clientName: activeClient.name,
           clientEmail: activeClient.email || "patient@example.com",
@@ -631,6 +687,7 @@ export default function PatientBookingScreen() {
           roomName: roomToAssign?.name,
           bookingType: selectedDoctorId ? "specialist" : "service",
           source: "MA-Client",
+          generateInvoice: isSelectedServicePrepaid ? true : undefined,
         },
         { force: true, createdBy: "user" }
       );
@@ -641,15 +698,73 @@ export default function PatientBookingScreen() {
         c.id === activeClient.id
           ? {
               ...c,
-              stage: "Client Checked In",
+              stage: isSelectedServicePrepaid ? "Payment Done" : "Client Checked In",
               processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
             }
           : c
       );
       saveStoredClients(updated);
 
-      toast.success("Appointment booked successfully!");
+      if (isSelectedServicePrepaid) {
+        let invId = createdResult?.invoiceId || createdResult?.appointment?.invoiceId;
+        if (!invId) {
+          const invResult = invoiceService.createInvoiceFromAppointment(
+            {
+              id: createdResult?.appointment?.id || Date.now(),
+              clientId: activeClient.id || "c-1",
+              clientName: activeClient.name,
+              clientEmail: activeClient.email,
+              clientPhone: activeClient.phone,
+              title,
+            },
+            [
+              {
+                id: `li-${Date.now()}-1`,
+                source: "service",
+                serviceId: String(selectedServiceObj?.id),
+                description: `${selectedServiceObj?.name} (${selectedServiceObj?.prepaidDepositType === "deposit" ? "Booking Deposit" : "Prepaid Service"})`,
+                quantity: 1,
+                unitPrice: prepaidAmount,
+              },
+            ],
+            { createdBy: "user" }
+          );
+          invId = invResult?.invoice?.id;
+          if (invId && createdResult?.appointment?.id) {
+            appointmentService.updateAppointment(createdResult.appointment.id, { invoiceId: invId });
+          }
+        }
+
+        if (invId) {
+          invoiceService.recordPayment(
+            invId,
+            totalPrepaidDue,
+            paymentMethod === "qr" ? "qr_code" : "credit_card",
+            `Prepaid online booking via ${paymentMethod === "qr" ? "Touchless QR" : "Card"}`
+          );
+        }
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("mantra_payments_changed"));
+          window.dispatchEvent(new Event("mantra_invoices_changed"));
+          window.dispatchEvent(new Event("storage"));
+        }
+
+        try {
+          confetti({
+            particleCount: 70,
+            spread: 60,
+            origin: { y: 0.6 },
+          });
+        } catch {}
+
+        toast.success(`Appointment booked & prepaid payment of $${totalPrepaidDue.toFixed(2)} received!`);
+      } else {
+        toast.success("Appointment booked successfully!");
+      }
+
       setShowBookingModal(false);
+      setBookingStep(1);
     } catch {
       toast.error("Failed to book appointment. Please try again.");
     } finally {
@@ -735,9 +850,17 @@ export default function PatientBookingScreen() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold tracking-wider uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
-                      {appt.serviceName || (appt.bookingType === "service" ? "Service Visit" : "Consultation")}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
+                        {appt.serviceName || (appt.bookingType === "service" ? "Service Visit" : "Consultation")}
+                      </span>
+                      {appt.invoiceId && (
+                        <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 inline-flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" />
+                          Prepaid Paid
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                       {appt.title || "Clinical Appointment"}
                     </h3>
@@ -866,10 +989,18 @@ export default function PatientBookingScreen() {
                           : "border-slate-200 hover:border-slate-300 shadow-2xs"
                       }`}
                     >
-                      <span className="truncate">
-                        {selectedServiceObj
-                          ? `${selectedServiceObj.name} — $${selectedServiceObj.price || 75}`
-                          : "Select a service"}
+                      <span className="truncate flex items-center gap-2">
+                        <span>
+                          {selectedServiceObj
+                            ? `${selectedServiceObj.name} — $${selectedServiceObj.price || 75}`
+                            : "Select a service"}
+                        </span>
+                        {isSelectedServicePrepaid && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shrink-0">
+                            <CreditCard className="w-2.5 h-2.5" />
+                            Prepaid
+                          </span>
+                        )}
                       </span>
                       <ChevronDown
                         className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
@@ -877,6 +1008,15 @@ export default function PatientBookingScreen() {
                         }`}
                       />
                     </button>
+
+                    {isSelectedServicePrepaid && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-blue-50/70 border border-blue-200/60 text-xs text-blue-900 animate-in fade-in">
+                        <CreditCard className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>
+                          <strong>Prepaid Booking Required:</strong> An upfront fee of <strong>${totalPrepaidDue.toFixed(2)}</strong> {selectedServiceObj?.prepaidDepositType === 'deposit' ? '(Deposit)' : ''} will be collected to secure your appointment slot.
+                        </span>
+                      </div>
+                    )}
 
                     {openDropdown === "service" && (
                       <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-white border border-slate-100 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100 max-h-60 overflow-y-auto">
@@ -890,20 +1030,28 @@ export default function PatientBookingScreen() {
                                 setSelectedServiceId(String(srv.id));
                                 setOpenDropdown(null);
                               }}
-                              className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm transition-all flex items-center cursor-pointer ${
+                              className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm transition-all flex items-center justify-between cursor-pointer ${
                                 isSelected
                                   ? "bg-[#f0f6ff] text-slate-900 font-semibold"
                                   : "text-slate-700 hover:bg-slate-50 font-normal"
                               }`}
                             >
-                              {isSelected ? (
-                                <Check className="w-4 h-4 text-blue-600 stroke-[2.5] shrink-0 mr-2.5" />
-                              ) : (
-                                <span className="w-4 h-4 shrink-0 mr-2.5 invisible" />
+                              <div className="flex items-center min-w-0">
+                                {isSelected ? (
+                                  <Check className="w-4 h-4 text-blue-600 stroke-[2.5] shrink-0 mr-2.5" />
+                                ) : (
+                                  <span className="w-4 h-4 shrink-0 mr-2.5 invisible" />
+                                )}
+                                <span className="truncate">
+                                  {srv.name} — ${srv.price || 75}
+                                </span>
+                              </div>
+                              {srv.isPrepaid && (
+                                <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shrink-0">
+                                  <CreditCard className="w-2.5 h-2.5" />
+                                  Prepaid
+                                </span>
                               )}
-                              <span className="truncate">
-                                {srv.name} — ${srv.price || 75}
-                              </span>
                             </button>
                           );
                         })}
@@ -1059,7 +1207,7 @@ export default function PatientBookingScreen() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : bookingStep === 2 ? (
               /* ── STEP 2: Date & Available Slots Selection ── */
               <form onSubmit={handleCreateBooking} className="space-y-4">
                 {/* Step 2 Header with Back Button */}
@@ -1103,6 +1251,12 @@ export default function PatientBookingScreen() {
                     <span className="text-blue-600 font-medium truncate">
                       {selectedDoctorObj ? selectedDoctorObj.name : "Any Available Clinician"}
                     </span>
+                    {isSelectedServicePrepaid && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                        <CreditCard className="w-2.5 h-2.5" />
+                        ${totalPrepaidDue.toFixed(2)} Prepaid
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -1234,15 +1388,240 @@ export default function PatientBookingScreen() {
                   )}
                 </div>
 
-                {/* Step 2 CTA: Confirm Booking (Matches Reference Exactly) */}
+                {/* Step 2 CTA: Confirm Booking OR Proceed to Payment */}
+                <div className="pt-2">
+                  {isSelectedServicePrepaid ? (
+                    <button
+                      type="button"
+                      disabled={availableSlotsForPatient.length === 0}
+                      onClick={() => setBookingStep(3)}
+                      className="w-full py-3.5 px-6 rounded-full bg-[#1e293b] hover:bg-[#0f172a] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
+                    >
+                      <CreditCard className="w-4 h-4 stroke-[2.5]" />
+                      <span>Proceed to Payment (${totalPrepaidDue.toFixed(2)})</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || availableSlotsForPatient.length === 0}
+                      className="w-full py-3.5 px-6 rounded-full bg-[#1e293b] hover:bg-[#0f172a] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
+                    >
+                      <Check className="w-4 h-4 stroke-[2.5]" />
+                      <span>{isSubmitting ? "Confirming..." : "Confirm Booking"}</span>
+                    </button>
+                  )}
+                </div>
+              </form>
+            ) : (
+              /* ── STEP 3: Upfront Payment & Final Confirmation ── */
+              <form onSubmit={handleCreateBooking} className="space-y-4 animate-in fade-in duration-200">
+                {/* Step 3 Header with Back Button */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingStep(2)}
+                      className="p-1.5 -ml-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                      title="Back to Date & Time"
+                    >
+                      <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                    <div className="space-y-0.5">
+                      <h3 className="text-xl font-bold text-slate-900 tracking-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Confirm & Pay
+                      </h3>
+                      <p className="text-[13px] text-slate-500 font-normal">
+                        Complete upfront payment to secure your appointment
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBookingModal(false);
+                      setOpenDropdown(null);
+                      setBookingStep(1);
+                    }}
+                    className="p-1 -mr-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Booking Order Summary Card */}
+                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Appointment Details
+                      </h4>
+                      <p className="text-sm font-bold text-slate-800 mt-1">
+                        {selectedServiceObj?.name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {selectedDoctorObj ? selectedDoctorObj.name : "Any Available Clinician"} · {selectedLocation}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 border border-blue-200">
+                      {selectedServiceObj?.slotDuration || selectedServiceObj?.duration || 30} mins
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 border-t border-slate-200/60 text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="font-semibold text-slate-800">{date}</span>
+                    </div>
+                    <span className="text-slate-300">•</span>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="font-semibold text-slate-800">{selectedTime}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Summary Breakdown */}
+                <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>
+                      {selectedServiceObj?.prepaidDepositType === "deposit" ? "Booking Deposit" : "Service Fee"}
+                    </span>
+                    <span className="font-semibold text-slate-900">${prepaidAmount.toFixed(2)}</span>
+                  </div>
+                  {taxAmount > 0 && (
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Estimated Tax ({selectedServiceObj?.tax}%)</span>
+                      <span className="font-semibold text-slate-900">${taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-sm font-bold text-slate-900">
+                    <span>Total Due Now</span>
+                    <span className="text-blue-600 text-base font-extrabold">${totalPrepaidDue.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Payment Method Selector */}
+                <div className="space-y-2">
+                  <label className="text-[13px] font-semibold text-slate-700 block">
+                    Select Payment Method
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("card")}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                        paymentMethod === "card"
+                          ? "bg-blue-50/60 border-blue-500 ring-2 ring-blue-500/10 text-slate-900"
+                          : "bg-white border-slate-200 hover:border-slate-300 text-slate-600"
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        paymentMethod === "card" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold block" style={{ fontFamily: "Outfit, sans-serif" }}>Card / Wallet</span>
+                        <span className="text-[10px] text-slate-500 block">Instant pay</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("qr")}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                        paymentMethod === "qr"
+                          ? "bg-blue-50/60 border-blue-500 ring-2 ring-blue-500/10 text-slate-900"
+                          : "bg-white border-slate-200 hover:border-slate-300 text-slate-600"
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        paymentMethod === "qr" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        <QrCode className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold block" style={{ fontFamily: "Outfit, sans-serif" }}>Touchless QR</span>
+                        <span className="text-[10px] text-slate-500 block">Scan with app</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {paymentMethod === "card" ? (
+                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 animate-in fade-in duration-150">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-600">Card Number</label>
+                        <input
+                          type="text"
+                          value={cardNumber}
+                          onChange={(e) => setCardNumber(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:border-blue-500"
+                          placeholder="•••• •••• •••• 4242"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-slate-600">Expires</label>
+                          <input
+                            type="text"
+                            value={cardExp}
+                            onChange={(e) => setCardExp(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:border-blue-500"
+                            placeholder="MM/YY"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-slate-600">CVC</label>
+                          <input
+                            type="text"
+                            value={cardCvc}
+                            onChange={(e) => setCardCvc(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:border-blue-500"
+                            placeholder="123"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col items-center justify-center space-y-2 animate-in fade-in duration-150 text-center">
+                      {qrCodeDataUrl ? (
+                        <img src={qrCodeDataUrl} alt="Payment QR Code" className="w-32 h-32 rounded-xl border border-white shadow-xs" />
+                      ) : (
+                        <div className="w-32 h-32 bg-slate-200 rounded-xl flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                        </div>
+                      )}
+                      <span className="text-xs font-bold text-slate-800">Scan to pay ${totalPrepaidDue.toFixed(2)}</span>
+                      <span className="text-[10px] text-slate-500">Supports UPI, Google Pay, Apple Pay & Bank Apps</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Security info */}
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>256-bit encrypted checkout · Instant confirmation</span>
+                </div>
+
+                {/* Step 3 CTA Button */}
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting || availableSlotsForPatient.length === 0}
+                    disabled={isSubmitting}
                     className="w-full py-3.5 px-6 rounded-full bg-[#1e293b] hover:bg-[#0f172a] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
                   >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>{isSubmitting ? "Confirming..." : "Confirm Booking"}</span>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Processing Payment & Booking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                        <span>Pay ${totalPrepaidDue.toFixed(2)} & Confirm Booking</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
