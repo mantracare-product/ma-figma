@@ -95,6 +95,9 @@ interface SidebarMenuContextType {
   moveItem: (fromSectionId: string, toSectionId: string, fromIndex: number, toIndex: number) => void;
   reorderSectionItems: (sectionId: string, fromIndex: number, toIndex: number) => void;
   toggleSectionDefaultExpanded: (sectionId: string) => void;
+  addToWorkspace: (item: { id: string; label: string; iconName: string; path: string }) => void;
+  removeFromWorkspace: (pathOrId: string) => void;
+  isInWorkspace: (pathOrId: string) => boolean;
 }
 
 const SidebarMenuContext = createContext<SidebarMenuContextType | undefined>(undefined);
@@ -333,6 +336,126 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     saveConfig(updated);
   };
 
+  const isInWorkspace = (pathOrId: string): boolean => {
+    const wsSec = config.sections.find((s) => s.id === "workspace");
+    if (!wsSec) return false;
+    const cleanTarget = pathOrId.toLowerCase().trim();
+    return wsSec.items.some((i) => {
+      if (!i.visible) return false;
+      if (i.id.toLowerCase() === cleanTarget) return true;
+      if (i.path.toLowerCase() === cleanTarget) return true;
+      if (i.path.split("?")[0].toLowerCase() === cleanTarget.split("?")[0]) return true;
+      return false;
+    });
+  };
+
+  const addToWorkspace = (item: { id: string; label: string; iconName: string; path: string }) => {
+    const wsSec = config.sections.find((s) => s.id === "workspace");
+    if (!wsSec) return;
+
+    const existsInWs = wsSec.items.some(
+      (i) => i.id === item.id || i.path === item.path || i.path.split("?")[0] === item.path.split("?")[0]
+    );
+
+    let newSections: NavSectionConfig[];
+
+    if (existsInWs) {
+      newSections = config.sections.map((sec) => {
+        if (sec.id !== "workspace") return sec;
+        return {
+          ...sec,
+          items: sec.items.map((i) => {
+            if (i.id === item.id || i.path === item.path || i.path.split("?")[0] === item.path.split("?")[0]) {
+              return {
+                ...i,
+                visible: true,
+                isFeatured: true,
+                label: item.label || i.label,
+                path: item.path || i.path,
+                iconName: item.iconName || i.iconName,
+              };
+            }
+            return i;
+          }),
+        };
+      });
+    } else {
+      const sectionsWithoutItem = config.sections.map((sec) => {
+        if (sec.id === "workspace") return sec;
+        return {
+          ...sec,
+          items: sec.items.filter(
+            (i) => i.id !== item.id && i.path !== item.path && i.path.split("?")[0] !== item.path.split("?")[0]
+          ),
+        };
+      });
+
+      const newItem: NavItemConfig = {
+        id: item.id,
+        label: item.label,
+        iconName: item.iconName,
+        path: item.path,
+        visible: true,
+        isFeatured: true,
+      };
+
+      newSections = sectionsWithoutItem.map((sec) => {
+        if (sec.id !== "workspace") return sec;
+        return {
+          ...sec,
+          items: [...sec.items, newItem],
+        };
+      });
+    }
+
+    saveConfig({ ...config, sections: newSections });
+  };
+
+  const removeFromWorkspace = (pathOrId: string) => {
+    const wsSec = config.sections.find((s) => s.id === "workspace");
+    if (!wsSec) return;
+
+    const cleanTarget = pathOrId.toLowerCase().trim();
+    const targetItem = wsSec.items.find(
+      (i) =>
+        i.id.toLowerCase() === cleanTarget ||
+        i.path.toLowerCase() === cleanTarget ||
+        i.path.split("?")[0].toLowerCase() === cleanTarget.split("?")[0]
+    );
+
+    if (!targetItem) return;
+
+    const isBillingItem =
+      targetItem.id === "invoices" ||
+      targetItem.id === "insurance-claims" ||
+      targetItem.id === "product-services" ||
+      targetItem.id === "reports" ||
+      targetItem.path.includes("/invoices") ||
+      targetItem.path.includes("/claims") ||
+      targetItem.path.includes("/services");
+
+    const newSections = config.sections.map((sec) => {
+      if (sec.id === "workspace") {
+        return {
+          ...sec,
+          items: sec.items.filter((i) => i.id !== targetItem.id),
+        };
+      }
+      if (isBillingItem && sec.id === "billing") {
+        const alreadyInBilling = sec.items.some((i) => i.id === targetItem.id);
+        if (!alreadyInBilling) {
+          return {
+            ...sec,
+            items: [...sec.items, { ...targetItem, visible: true, isFeatured: false }],
+          };
+        }
+      }
+      return sec;
+    });
+
+    saveConfig({ ...config, sections: newSections });
+  };
+
   const toggleSectionDefaultExpanded = (sectionId: string) => {
     const updated = {
       ...config,
@@ -359,6 +482,9 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         moveItem,
         reorderSectionItems,
         toggleSectionDefaultExpanded,
+        addToWorkspace,
+        removeFromWorkspace,
+        isInWorkspace,
       }}
     >
       {children}

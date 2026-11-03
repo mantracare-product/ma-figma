@@ -17,6 +17,7 @@ import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { Tooltip } from "../components/ui/Tooltip";
 import { DataExportModal } from "../components/common/DataExportModal";
+import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import {
   Claim,
@@ -413,21 +414,12 @@ export default function Claims() {
                   <Download className="w-4 h-4 text-slate-600" />
                 </button>
               </Tooltip>
-              <Tooltip text="Configure Insurance & Claims Workflow">
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate(`/process?entity=insurance&processId=${insuranceProcess.id}`, {
-                      state: { processId: insuranceProcess.id, processName: insuranceProcess.name },
-                    });
-                  }}
-                  className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-                  aria-label="Configure Insurance & Claims Workflow"
-                  title="Configure Insurance & Claims Workflow"
-                >
-                  <SettingsIcon className="w-4 h-4 text-slate-600" />
-                </button>
-              </Tooltip>
+              <WorkflowGearDropdown
+                entityType="insurance"
+                processId={insuranceProcess.id}
+                processName={insuranceProcess.name}
+                buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              />
             </div>
           }
         />

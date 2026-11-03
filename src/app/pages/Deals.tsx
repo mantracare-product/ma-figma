@@ -27,6 +27,7 @@ import ProcessDetailDrawer, { ActivityLogEntry } from "../components/deals/Proce
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import { Mic } from "lucide-react";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
+import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessCallLogStage } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
@@ -2240,15 +2241,13 @@ export default function Deals() {
                 </button>
               </div>
 
-              {/* Gear Settings Icon */}
-              <button
-                type="button"
-                onClick={() => handleOpenProcessInWorkflow(selectedProcessFilter)}
-                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0 cursor-pointer"
-                title={`Open "${selectedProcessFilter}" in workflow`}
-              >
-                <SettingsIcon className="w-4 h-4" />
-              </button>
+              {/* Gear Settings Dropdown */}
+              <WorkflowGearDropdown
+                entityType="process"
+                processId={storedProcesses.find((p) => p.name.trim().toLowerCase() === (selectedProcessFilter || "").trim().toLowerCase())?.id}
+                processName={selectedProcessFilter}
+                buttonClassName="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0 cursor-pointer flex items-center justify-center"
+              />
             </div>
           }
           customFilterModalContent={

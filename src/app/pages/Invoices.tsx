@@ -38,6 +38,7 @@ import {
 import { useNavigate, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
+import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
 export default function Invoices() {
@@ -429,18 +430,12 @@ export default function Invoices() {
             onClick: handleCreateInvoice,
           }}
           afterPrimaryAction={
-            <button
-              type="button"
-              onClick={() => {
-                navigate("/process?entity=invoice&processId=process-invoice-default", {
-                  state: { processId: "process-invoice-default", processName: invoiceProcess.name },
-                });
-              }}
-              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-              title="Configure Invoice Workflow"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </button>
+            <WorkflowGearDropdown
+              entityType="invoice"
+              processId={invoiceProcess?.id || "process-invoice-default"}
+              processName={invoiceProcess?.name || "Invoice Processing"}
+              buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+            />
           }
         />
 

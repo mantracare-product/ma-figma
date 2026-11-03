@@ -33,6 +33,7 @@ import {
   UserX,
 } from "lucide-react";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
+import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { appointmentService, hasAppointmentAutomation, Appointment } from "../../lib/appointmentService";
 import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
@@ -1149,19 +1150,12 @@ export default function Appointments() {
             },
           }}
           afterPrimaryAction={
-            <button
-              type="button"
-              onClick={() => {
-                const targetProcId = selectedProcessFilter || appointmentProcess.id;
-                navigate(`/process?entity=appointment&processId=${targetProcId}`, {
-                  state: { processId: targetProcId, processName: appointmentProcess.name },
-                });
-              }}
-              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-              title="Configure Appointment Workflow"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+            <WorkflowGearDropdown
+              entityType="appointment"
+              processId={selectedProcessFilter || appointmentProcess.id}
+              processName={appointmentProcess.name}
+              buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+            />
           }
         />
 
