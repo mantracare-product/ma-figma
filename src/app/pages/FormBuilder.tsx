@@ -55,6 +55,7 @@ import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
 import FieldRenderer from "../components/form-builder/FieldRenderer";
 import FormSettings from "../components/form-builder/FormSettings";
+import PageHeader from "../components/layout/PageHeader";
 import { useClientFields } from "../context/ClientFieldsContext";
 import type { CustomField } from "../context/ClientFieldsContext";
 import { useFieldRegistry, FieldModule, FieldInputType } from "../context/FieldRegistryContext";
@@ -672,11 +673,19 @@ export default function FormBuilder({
 
   const contentJSX = (
     <div className="h-full flex flex-col bg-[#F8FAFC] overflow-hidden select-none">
-      {/* ── Header: "Back to Form Templates" + "Form Builder: <name>" ── */}
-      <header className="shrink-0 bg-white border-b border-gray-100 py-3">
+      {/* ── Topbar Portal: Mounts "Form Builder" directly into application PageHeader ── */}
+      {!isDrawer && (
+        <PageHeader
+          title="Form Builder"
+          subtitle="Build, configure fields, and publish your form"
+        />
+      )}
+
+      {/* ── Header Row: "← Back to Form Templates | Form Builder: <name>" ── */}
+      <div className="shrink-0 bg-white border-b border-gray-100 py-3.5">
         <div className="max-w-[1260px] mx-auto w-full px-4">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <button
                 type="button"
                 onClick={handleCancel}
@@ -686,10 +695,10 @@ export default function FormBuilder({
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{isDrawer ? "Back to Form Templates" : location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
               </button>
-              <div className="h-3.5 w-px bg-gray-200 shrink-0" />
+              <span className="text-gray-300 font-light select-none text-sm">|</span>
               <div className="min-w-0">
-                <h1 className="text-base font-bold text-gray-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : "Create New Form"}
+                <h1 className="text-sm sm:text-base font-bold text-gray-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : `Form Builder: ${formTitle || "New Form"}`}
                 </h1>
               </div>
             </div>
@@ -739,12 +748,12 @@ export default function FormBuilder({
             )}
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* ── Horizontal Progress-Bar Stepper Row (Centered) ── */}
-      <div className="shrink-0 bg-white border-b border-gray-200/80 py-3 shadow-2xs">
+      {/* ── Stepper Row: Matching media_1793689288159_f77e0e81.png ── */}
+      <div className="shrink-0 bg-white border-b border-gray-200/80 py-3.5">
         <div className="max-w-[1260px] mx-auto w-full px-4">
-          <div className="max-w-[620px] mx-auto">
+          <div className="max-w-[660px] mx-auto">
             <div className="flex items-center justify-between relative">
               {/* Step 1: Build */}
               <button
@@ -752,15 +761,15 @@ export default function FormBuilder({
                 onClick={() => setCurrentTab("build")}
                 className="flex items-center gap-2 z-10 bg-white pr-2.5 cursor-pointer group"
               >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                   currentTab === "build"
                     ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
                     : activeStepIndex > 1
                       ? "bg-blue-600 text-white shadow-2xs"
-                      : "border-2 border-gray-300 text-gray-400 bg-white"
+                      : "border border-gray-300 text-gray-400 bg-white"
                 }`}>
                   {activeStepIndex > 1 ? (
-                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                    <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
                   ) : (
                     <span>1</span>
                   )}
@@ -770,14 +779,14 @@ export default function FormBuilder({
                     ? "font-bold text-blue-600"
                     : activeStepIndex > 1
                       ? "font-semibold text-gray-800 group-hover:text-blue-600"
-                      : "font-medium text-gray-400"
+                      : "font-medium text-gray-500"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Build
                 </span>
               </button>
 
               {/* Progress Connector: 1 -> 2 */}
-              <div className="flex-1 mx-2 h-0.5 relative bg-gray-200 rounded-full overflow-hidden">
+              <div className="flex-1 mx-3 h-[1.5px] relative bg-gray-200 rounded-full overflow-hidden">
                 <div className={`h-full bg-blue-600 transition-all duration-300 ${
                   activeStepIndex >= 2 ? "w-full" : "w-0"
                 }`} />
@@ -789,15 +798,15 @@ export default function FormBuilder({
                 onClick={() => setCurrentTab("design")}
                 className="flex items-center gap-2 z-10 bg-white px-2.5 cursor-pointer group"
               >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                   currentTab === "design"
-                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs font-bold"
                     : activeStepIndex > 2
-                      ? "bg-blue-600 text-white shadow-2xs"
-                      : "border-2 border-gray-300 text-gray-400 bg-white"
+                      ? "bg-blue-600 text-white shadow-2xs font-bold"
+                      : "border border-gray-300 text-gray-400 bg-white"
                 }`}>
                   {activeStepIndex > 2 ? (
-                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                    <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
                   ) : (
                     <span>2</span>
                   )}
@@ -807,14 +816,14 @@ export default function FormBuilder({
                     ? "font-bold text-blue-600"
                     : activeStepIndex > 2
                       ? "font-semibold text-gray-800 group-hover:text-blue-600"
-                      : "font-medium text-gray-400"
+                      : "font-medium text-gray-500"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Design &amp; Preview
                 </span>
               </button>
 
               {/* Progress Connector: 2 -> 3 */}
-              <div className="flex-1 mx-2 h-0.5 relative bg-gray-200 rounded-full overflow-hidden">
+              <div className="flex-1 mx-3 h-[1.5px] relative bg-gray-200 rounded-full overflow-hidden">
                 <div className={`h-full bg-blue-600 transition-all duration-300 ${
                   activeStepIndex >= 3 ? "w-full" : "w-0"
                 }`} />
@@ -826,17 +835,17 @@ export default function FormBuilder({
                 onClick={() => setCurrentTab("live")}
                 className="flex items-center gap-2 z-10 bg-white pl-2.5 cursor-pointer group"
               >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                   currentTab === "live"
-                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs"
-                    : "border-2 border-gray-300 text-gray-400 bg-white"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-2xs font-bold"
+                    : "border border-gray-300 text-gray-400 bg-white"
                 }`}>
                   <span>3</span>
                 </div>
                 <span className={`text-xs transition-colors ${
                   currentTab === "live"
                     ? "font-bold text-blue-600"
-                    : "font-medium text-gray-400"
+                    : "font-medium text-gray-500"
                 }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                   Go Live
                 </span>
