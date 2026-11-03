@@ -713,8 +713,8 @@ export default function FormBuilder({
       {/* ── Premium SaaS Header Bar (Single 72px row: Back + Title Block | Ring Progress + Actions) ── */}
       <header className="shrink-0 bg-white h-[72px] border-b border-[#E2E8F0] flex items-center">
         <div className="max-w-[1260px] mx-auto w-full px-4 h-full flex items-center justify-between gap-4">
-          {/* Left Side: 36px Circular Back Button + Title Block */}
-          <div className="flex items-center gap-3 min-w-0">
+          {/* Left Side: 36px Circular Back Button + Title Block (20px gap) */}
+          <div className="flex items-center gap-5 min-w-0 max-w-[500px]">
             {/* 36px Circular Back Button */}
             <button
               type="button"
@@ -726,31 +726,39 @@ export default function FormBuilder({
               <ArrowLeft className="w-4 h-4 text-[#475569]" strokeWidth={2} />
             </button>
 
-            {/* Title Block: 18-20px semibold editable title + 12px row (category chip + editable description) */}
-            <div className="flex flex-col min-w-0">
+            {/* Title Block: Title (20px, 600, 28px line-height, #0F172A) + Description (13px, 400, 18px line-height, #64748B, 2px mt) */}
+            <div className="flex flex-col justify-center min-w-0 max-w-[480px]">
               <input
                 type="text"
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
                 placeholder="Untitled Form"
                 title="Click to edit form title"
-                className="text-[18px] sm:text-[19px] font-semibold text-[#0F172A] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1.5 -ml-1.5 py-0.5 truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px] xl:max-w-[520px] transition-colors leading-tight cursor-text"
+                className="text-[20px] font-semibold leading-[28px] text-[#0F172A] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1 -ml-1 py-0 truncate w-full transition-colors cursor-text"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               />
-              <div className="flex items-center gap-2 mt-0.5 min-w-0">
-                <span className="inline-flex items-center px-2 h-[22px] rounded-[6px] text-[11px] font-medium bg-[#F1F5F9] text-[#64748B] shrink-0 border border-slate-100/50">
-                  {existingForm?.category || existingForm?.industry || (existingForm?.formType === "intake" ? "Intake Flow" : existingForm?.formType === "meta-ads" ? "Meta Ads" : existingForm?.formType === "standard" ? "Standard Form" : "General")}
-                </span>
+              {formDescription ? (
                 <input
                   type="text"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="Add form description..."
-                  title={formDescription || "Add form description"}
-                  className="text-[12px] text-[#64748B] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1 -ml-1 py-0.5 truncate max-w-[200px] sm:max-w-[280px] md:max-w-[380px] xl:max-w-[480px] transition-colors cursor-text"
+                  placeholder="Add description..."
+                  title={formDescription}
+                  className="text-[13px] font-normal leading-[18px] text-[#64748B] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1 -ml-1 py-0 mt-[2px] truncate w-full transition-colors cursor-text placeholder:text-[#94A3B8]"
                   style={{ fontFamily: 'Outfit, sans-serif' }}
                 />
-              </div>
+              ) : (
+                <div className="group/desc relative">
+                  <input
+                    type="text"
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="+ Add description..."
+                    className="text-[13px] font-normal leading-[18px] text-[#94A3B8] opacity-0 group-hover/desc:opacity-100 focus:opacity-100 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1 -ml-1 py-0 mt-[2px] truncate w-full transition-opacity cursor-text"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -1000,7 +1008,7 @@ export default function FormBuilder({
         <div className="max-w-[1260px] mx-auto w-full px-4 h-full">
           {/* ── TAB 1: BUILD ── */}
           {currentTab === "build" && (
-            <div className="flex gap-5 h-full">
+            <div className="flex gap-5 h-full items-start">
               {/* Left: Canvas Area (scrolls independently, centers form card) */}
               <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1">
                 <div className="max-w-[740px] mx-auto space-y-3.5 pb-4">
@@ -1069,8 +1077,10 @@ export default function FormBuilder({
                 </div>
               </div>
 
-              {/* Right: Fixed-width (330px) sticky & scrolls independently */}
-              <div className="w-[330px] shrink-0 h-full bg-white border border-border rounded-xl shadow-2xs overflow-hidden flex flex-col">
+              {/* Right: Fixed-width (340px) sticky & scrolls independently */}
+              <div className={`w-[340px] shrink-0 sticky top-0 self-start max-h-[calc(100vh-104px)] bg-white border border-[#E2E8F0] rounded-xl shadow-2xs flex flex-col ${
+                showFieldSettings && selectedField ? "h-[calc(100vh-104px)] overflow-hidden" : "h-auto overflow-y-auto"
+              }`}>
                 {showFieldSettings && selectedField ? (
                   /* Field Settings Panel */
                   <div className="flex flex-col h-full">
@@ -2260,64 +2270,67 @@ export default function FormBuilder({
                   </div>
                 ) : (
                   /* Nothing selected: Form Elements & Create form using existing fields */
-                  <div className="flex flex-col h-full">
-                    <div className="shrink-0 p-3 border-b border-border bg-gray-50/70">
-                      <h3 className="text-xs font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  <div className="p-4 flex flex-col">
+                    <div className="mb-3">
+                      <h3 className="text-xs font-bold text-[#0F172A]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                         Form Elements
                       </h3>
-                      <p className="text-[10px] text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      <p className="text-[11px] text-[#64748B] mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                         Click or drag elements to canvas
                       </p>
                     </div>
 
-                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { type: "text", label: "Short Text", icon: Type },
-                          { type: "textarea", label: "Long Text", icon: AlignLeft },
-                          { type: "number", label: "Number", icon: Hash },
-                          { type: "date", label: "Date", icon: Calendar },
-                          { type: "select", label: "Dropdown", icon: ChevronDown },
-                          { type: "multiselect", label: "Multi-Select", icon: ListChecks },
-                          { type: "radio", label: "Radio Button", icon: Circle },
-                          { type: "checkbox", label: "Checkbox", icon: Square },
-                          { type: "file", label: "File Upload", icon: Upload },
-                        ].map((item) => (
-                          <button
-                            key={item.type}
-                            type="button"
-                            draggable
-                            onDragStart={() => handleDragStart(item.type, item.label)}
-                            onClick={() => handleAddField(item.type, item.label)}
-                            className="group flex flex-col items-center gap-1 p-2 bg-white border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-2xs hover:bg-blue-50/30 transition-all cursor-grab active:cursor-grabbing text-center"
-                          >
-                            <div className="w-6 h-6 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                              <item.icon className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-[10px] font-medium leading-tight truncate w-full text-gray-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              {item.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="pt-2 border-t border-gray-100 space-y-1.5">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          Existing Fields
-                        </span>
-                        <p className="text-[10px] text-gray-400">
-                          Import configured fields from your CRM, Process, or Appointments.
-                        </p>
+                    {/* 8px gaps between the field tiles (rows and columns) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { type: "text", label: "Short Text", icon: Type },
+                        { type: "textarea", label: "Long Text", icon: AlignLeft },
+                        { type: "number", label: "Number", icon: Hash },
+                        { type: "date", label: "Date", icon: Calendar },
+                        { type: "select", label: "Dropdown", icon: ChevronDown },
+                        { type: "multiselect", label: "Multi-Select", icon: ListChecks },
+                        { type: "radio", label: "Radio Button", icon: Circle },
+                        { type: "checkbox", label: "Checkbox", icon: Square },
+                        { type: "file", label: "File Upload", icon: Upload },
+                      ].map((item) => (
                         <button
+                          key={item.type}
                           type="button"
-                          onClick={() => setShowSelectFieldModal(true)}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-blue-300 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/50 transition-colors cursor-pointer"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                          draggable
+                          onDragStart={() => handleDragStart(item.type, item.label)}
+                          onClick={() => handleAddField(item.type, item.label)}
+                          className="group flex flex-col items-center gap-1.5 p-2.5 bg-white border border-[#E2E8F0] rounded-lg hover:border-[#2563EB] hover:shadow-2xs hover:bg-blue-50/20 transition-all cursor-grab active:cursor-grabbing text-center"
                         >
-                          <Sliders className="w-3.5 h-3.5" />
-                          <span>Select from Field Library</span>
+                          <div className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-[#64748B] group-hover:bg-blue-100 group-hover:text-[#2563EB] transition-colors">
+                            <item.icon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-[11px] font-medium leading-tight truncate w-full text-[#0F172A]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            {item.label}
+                          </span>
                         </button>
-                      </div>
+                      ))}
+                    </div>
+
+                    {/* Section label "EXISTING FIELDS": 11px, weight 600, letter-spacing 0.06em, color #64748B, uppercase. 16px margin-top above it, separated from the tiles by a 1px #E2E8F0 divider. */}
+                    <div className="mt-4 pt-4 border-t border-[#E2E8F0]">
+                      <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748B]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        EXISTING FIELDS
+                      </span>
+                      {/* Helper text under it: 12px, line-height 18px, color #64748B, 4px margin-top, 12px margin-bottom. Keep it to its existing wording. */}
+                      <p className="text-[12px] leading-[18px] text-[#64748B] mt-1 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        Import configured fields from your CRM, Process, or Appointments.
+                      </p>
+                      {/* Button: full width of the panel, 40px height, 8px radius, white background, 1px SOLID #E2E8F0 border (replace the dashed blue border), #0F172A text at 13px weight 500, with the existing icon in #475569 at 16px and an 8px gap to the label. No blue text.
+                          Hover: #F8FAFC background and #CBD5E1 border. Focus: 2px brand-blue focus ring. Active: #F1F5F9 background. */}
+                      <button
+                        type="button"
+                        onClick={() => setShowSelectFieldModal(true)}
+                        className="w-full h-10 rounded-lg bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] active:bg-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 text-[#0F172A] text-[13px] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                        style={{ fontFamily: 'DM Sans, sans-serif' }}
+                      >
+                        <Sliders className="w-4 h-4 text-[#475569]" />
+                        <span>Select from Field Library</span>
+                      </button>
                     </div>
                   </div>
                 )}
