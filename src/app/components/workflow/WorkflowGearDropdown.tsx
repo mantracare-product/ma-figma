@@ -5,14 +5,12 @@ import {
   SlidersHorizontal,
   FolderPlus,
   FolderMinus,
-  Zap,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
 import { toast } from "sonner";
@@ -52,11 +50,10 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
             ? `/process?processId=${pId}&processName=${encodeURIComponent(pName)}`
             : `/process?processName=${encodeURIComponent(pName)}`,
           workflowState: { processId: pId, processName: pName },
-          automationPath: `/automation?entity=processes${pId ? `&processId=${pId}` : ""}`,
         };
       }
       case "appointment": {
-        const pName = processName || "Appointment Scheduling";
+        const pName = processName || "Appointments";
         const pId = processId || "process-appointment-default";
         return {
           id: "appointments",
@@ -65,11 +62,10 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
           path: "/appointments",
           workflowPath: `/process?entity=appointment&processId=${pId}`,
           workflowState: { processId: pId, processName: pName },
-          automationPath: "/automation?entity=appointment",
         };
       }
       case "invoice": {
-        const pName = processName || "Invoice Processing";
+        const pName = processName || "Invoice";
         const pId = processId || "process-invoice-default";
         return {
           id: "invoices",
@@ -78,11 +74,10 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
           path: "/invoices",
           workflowPath: `/process?entity=invoice&processId=${pId}`,
           workflowState: { processId: pId, processName: pName },
-          automationPath: "/automation?entity=invoice",
         };
       }
       case "insurance": {
-        const pName = processName || "Insurance & Claims Management";
+        const pName = processName || "Insurance & Claims";
         const pId = processId || "process-insurance-default";
         return {
           id: "insurance-claims",
@@ -91,7 +86,6 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
           path: "/claims",
           workflowPath: `/process?entity=insurance&processId=${pId}`,
           workflowState: { processId: pId, processName: pName },
-          automationPath: "/automation?entity=insurance",
         };
       }
     }
@@ -111,7 +105,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
   const handleToggleWorkspace = () => {
     if (inWorkspace) {
       removeFromWorkspace(target.id);
-      toast.success(`${target.label} removed from Workspace navigation`);
+      toast.success(`${target.label} removed from Workspace`);
     } else {
       addToWorkspace({
         id: target.id,
@@ -119,13 +113,8 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
         iconName: target.iconName,
         path: target.path,
       });
-      toast.success(`${target.label} added to Workspace navigation`);
+      toast.success(`${target.label} added to Workspace`);
     }
-  };
-
-  // 3. Workflow Automations
-  const handleWorkflowAutomations = () => {
-    navigate(target.automationPath);
   };
 
   // Default button styling if not provided
@@ -149,66 +138,34 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
         <DropdownMenuContent
           align={align}
           sideOffset={6}
-          className="w-56 p-1.5 rounded-2xl shadow-xl border border-slate-200/90 bg-white/98 backdrop-blur-md z-[99999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
+          className="w-48 p-1 rounded-xl shadow-lg border border-slate-200/90 bg-white z-[99999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
         >
-          <div className="px-3 py-1.5 border-b border-slate-100 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Workflow Options
-            </span>
-          </div>
-
           {/* 1. Edit workflow */}
           <DropdownMenuItem
             onClick={handleEditWorkflow}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-blue-50/70 rounded-xl cursor-pointer transition-colors group"
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 rounded-lg cursor-pointer transition-colors"
           >
-            <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-            </div>
-            <span className="flex-1">Edit workflow</span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="truncate">Edit workflow</span>
           </DropdownMenuItem>
 
           {/* 2. Add to workspace / Remove from workspace */}
           <DropdownMenuItem
             onClick={handleToggleWorkspace}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors group"
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
+              inWorkspace
+                ? "text-rose-600 hover:text-rose-700 hover:bg-rose-50/70"
+                : "text-slate-700 hover:text-slate-900 hover:bg-slate-100/80"
+            }`}
           >
-            <div
-              className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                inWorkspace
-                  ? "bg-rose-50 text-rose-600 group-hover:bg-rose-100"
-                  : "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100"
-              }`}
-            >
-              {inWorkspace ? (
-                <FolderMinus className="w-3.5 h-3.5" />
-              ) : (
-                <FolderPlus className="w-3.5 h-3.5" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <span className={inWorkspace ? "text-rose-600 font-semibold" : "font-semibold"}>
-                {inWorkspace ? "Remove from workspace" : "Add to workspace"}
-              </span>
-            </div>
-            {inWorkspace && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                In Workspace
-              </span>
+            {inWorkspace ? (
+              <FolderMinus className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+            ) : (
+              <FolderPlus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             )}
-          </DropdownMenuItem>
-
-          <DropdownMenuSeparator className="my-1 bg-slate-100" />
-
-          {/* 3. Workflow automations */}
-          <DropdownMenuItem
-            onClick={handleWorkflowAutomations}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-amber-50/70 rounded-xl cursor-pointer transition-colors group"
-          >
-            <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:bg-amber-100 transition-colors">
-              <Zap className="w-3.5 h-3.5" />
-            </div>
-            <span className="flex-1">Workflow automations</span>
+            <span className="truncate">
+              {inWorkspace ? "Remove from workspace" : "Add to workspace"}
+            </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -217,4 +174,3 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
 };
 
 export default WorkflowGearDropdown;
-
