@@ -704,6 +704,10 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
             lower.includes("closed won") ||
             (lower.includes("interested") && !lower.includes("not")) ||
             lower.includes("qualified") ||
+            lower.includes("payment done") ||
+            lower.includes("paid") ||
+            lower.includes("settled") ||
+            lower.includes("completed") ||
             lower.includes("success"));
 
         const isLost =
@@ -3996,10 +4000,20 @@ export default function Process() {
                           return true;
                         });
 
-                        const rawSuccessStages = allStages.filter((s, idx) => {
+                        const rawSuccessStages = allStages.filter((s) => {
                           if (s.stageCategory === "success") return true;
                           if (s.stageCategory === "in_progress" || s.stageCategory === "lost") return false;
-                          if (s.isFinalStage || s.isFinal) return false;
+                          const nameLower = (s.name || "").toLowerCase().trim();
+                          if (
+                            nameLower.includes("won") ||
+                            nameLower.includes("completed") ||
+                            nameLower.includes("payment done") ||
+                            nameLower.includes("paid") ||
+                            nameLower.includes("settled") ||
+                            (s.color && ["#10b981", "#059669", "#16a34a", "#22c55e"].includes(s.color.toLowerCase()))
+                          ) {
+                            return true;
+                          }
                           const nonFinal = allStages.filter((x) => !x.isFinalStage && !x.isFinal);
                           if (!hasExplicitCategories && nonFinal.length > 0 && s.id === nonFinal[nonFinal.length - 1].id) {
                             return true;
@@ -4012,6 +4026,19 @@ export default function Process() {
                         const lostStages = allStages.filter((s) => {
                           if (s.stageCategory === "lost") return true;
                           if (s.stageCategory === "in_progress" || s.stageCategory === "success") return false;
+                          if (successStages.some((ws) => ws.id === s.id)) return false;
+                          const nameLower = (s.name || "").toLowerCase().trim();
+                          if (
+                            nameLower.includes("lost") ||
+                            nameLower.includes("not interested") ||
+                            nameLower.includes("cancel") ||
+                            nameLower.includes("denied") ||
+                            nameLower.includes("void") ||
+                            nameLower.includes("failed") ||
+                            (s.color && ["#ef4444", "#dc2626", "#f43f5e", "#e11d48"].includes(s.color.toLowerCase()))
+                          ) {
+                            return true;
+                          }
                           return !!(s.isFinalStage || s.isFinal);
                         });
 

@@ -1,5 +1,17 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { GripVertical, Check, Plus, ChevronDown, X, Trophy, XCircle, Sparkles } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  GripVertical,
+  Check,
+  Plus,
+  ChevronDown,
+  X,
+  Trophy,
+  XCircle,
+  Sparkles,
+  ArrowLeft,
+  ChevronRight,
+} from "lucide-react";
 
 export const CHEVRON_PALETTE = [
   "#3B82F6", // Royal Blue
@@ -46,7 +58,6 @@ export function categorizeChevronStage(
   // 1. Explicit stageCategory
   if (stage.stageCategory === "success") return "won";
   if (stage.stageCategory === "lost") return "lost";
-  if (stage.stageCategory === "in_progress") return "in_progress";
 
   // 2. Explicit systemCategory
   const sys = (stage.systemCategory || "").toLowerCase().trim();
@@ -97,6 +108,7 @@ export function categorizeChevronStage(
     nameLower === "won" ||
     nameLower === "completed" ||
     nameLower === "paid" ||
+    nameLower.includes("payment done") ||
     nameLower.includes("paid & settled") ||
     nameLower.includes("qualified") ||
     nameLower === "interested"
@@ -115,6 +127,8 @@ export function categorizeChevronStage(
     return index === total - 1 ? "won" : "lost";
   }
 
+  if (stage.stageCategory === "in_progress") return "in_progress";
+
   return "in_progress";
 }
 
@@ -129,7 +143,11 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
   className = "",
 }) => {
   const [isOutcomePopupOpen, setIsOutcomePopupOpen] = useState(false);
-  const outcomeRef = useRef<HTMLDivElement>(null);
+  const [outcomeStep, setOutcomeStep] = useState<"choose_category" | "won_stages" | "lost_stages">("choose_category");
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [popupCoords, setPopupCoords] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null);
 
   // Group stages into In-Progress, Won, and Lost
   const { inProgressStages, wonStages, lostStages, hasOutcomes } = useMemo(() => {
@@ -178,11 +196,60 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
     }
   }, [activeOutcomeStage, activeInProgressIndex]);
 
+  const handleOpenOutcomePopup = () => {
+    setOutcomeStep("choose_category");
+    setIsOutcomePopupOpen((prev) => !prev);
+  };
+
+  // Position popup relative to viewport (page) using button bounding client rect
+  useEffect(() => {
+    if (!isOutcomePopupOpen) return;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const popupWidth = 280;
+      const popupHeight = 220;
+
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const placeAbove = spaceBelow < popupHeight && spaceAbove >= popupHeight;
+
+      let left = rect.right - popupWidth;
+      if (left < 10) left = 10;
+      if (left + popupWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - popupWidth - 10);
+      }
+
+      let top = placeAbove ? rect.top - popupHeight - 8 : rect.bottom + 8;
+      if (top < 10) top = 10;
+      if (top + popupHeight > window.innerHeight - 10) {
+        top = Math.max(10, window.innerHeight - popupHeight - 10);
+      }
+
+      setPopupCoords({ top, left, placeAbove });
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [isOutcomePopupOpen]);
+
   // Close popup on outside click or Escape key
   useEffect(() => {
     if (!isOutcomePopupOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (outcomeRef.current && !outcomeRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        popupRef.current &&
+        !popupRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target)
+      ) {
         setIsOutcomePopupOpen(false);
       }
     };
@@ -340,14 +407,14 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
 
     return (
       <div
-        ref={outcomeRef}
         className={`relative group flex items-center flex-1 min-w-[130px] ${
           isFirst ? "" : "-ml-3.5"
         }`}
       >
         <button
+          ref={buttonRef}
           type="button"
-          onClick={() => setIsOutcomePopupOpen((prev) => !prev)}
+          onClick={handleOpenOutcomePopup}
           className={`relative flex items-center justify-between h-10 select-none cursor-pointer transition-all w-full min-w-0 rounded-r-md ${
             isFirst ? "rounded-l-md" : ""
           } ${
@@ -406,38 +473,113 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
           </div>
         </button>
 
-        {/* ── Outcome Selection Popup ── */}
-        {isOutcomePopupOpen && (
+        {/* ── Outcome Selection Popup in React Portal (Page-relative z-index) ── */}
+        {isOutcomePopupOpen && popupCoords && typeof document !== "undefined" && createPortal(
           <div
-            className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 py-2.5 px-2 z-[9999] animate-in fade-in slide-in-from-top-1 duration-150"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+            ref={popupRef}
+            className="fixed z-[99999] w-[280px] max-h-[min(380px,calc(100vh-20px))] overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-2.5 px-2.5 text-left animate-in fade-in zoom-in-95 duration-150"
+            style={{
+              top: `${popupCoords.top}px`,
+              left: `${popupCoords.left}px`,
+              fontFamily: "Outfit, sans-serif",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-2.5 pb-2 mb-1.5 border-b border-slate-100">
+            {outcomeStep === "choose_category" ? (
               <div>
-                <p className="text-xs font-bold text-slate-800">Select Final Outcome</p>
-                <p className="text-[11px] text-slate-500">Choose Won or Lost stage</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsOutcomePopupOpen(false)}
-                className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                title="Close popup"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Stages List */}
-            <div className="max-h-72 overflow-y-auto space-y-2.5 pr-0.5">
-              {/* Won Stages Section */}
-              <div>
-                <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50/80 rounded-md mb-1">
-                  <Trophy className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Won Stages ({wonStages.length})</span>
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Select Outcome</p>
+                    <p className="text-[10px] text-slate-500">Was this Won or Lost?</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsOutcomePopupOpen(false)}
+                    className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="space-y-0.5">
+
+                {/* Two Outcome Cards: Won or Lost */}
+                <div className="space-y-2">
+                  {/* Won Choice */}
+                  <button
+                    type="button"
+                    onClick={() => setOutcomeStep("won_stages")}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-emerald-200/90 bg-emerald-50/60 hover:bg-emerald-100/70 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600/10 flex items-center justify-center shrink-0">
+                        <Trophy className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          Won
+                          {isCurrentOutcomeWon && (
+                            <span className="text-[9px] px-1 py-0.2 bg-emerald-200/70 text-emerald-800 rounded font-semibold">Current</span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-emerald-700/80">
+                          {wonStages.length} {wonStages.length === 1 ? "stage" : "stages"} available
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-emerald-600/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </button>
+
+                  {/* Lost Choice */}
+                  <button
+                    type="button"
+                    onClick={() => setOutcomeStep("lost_stages")}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-rose-200/90 bg-rose-50/60 hover:bg-rose-100/70 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-600/10 flex items-center justify-center shrink-0">
+                        <XCircle className="w-4 h-4 text-rose-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                          Lost
+                          {isCurrentOutcomeLost && (
+                            <span className="text-[9px] px-1 py-0.2 bg-rose-200/70 text-rose-800 rounded font-semibold">Current</span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-rose-700/80">
+                          {lostStages.length} {lostStages.length === 1 ? "stage" : "stages"} available
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-rose-600/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </button>
+                </div>
+              </div>
+            ) : outcomeStep === "won_stages" ? (
+              <div>
+                {/* Header with Back button */}
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setOutcomeStep("choose_category")}
+                    className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer group"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Won Stages</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsOutcomePopupOpen(false)}
+                    className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Won Stages List */}
+                <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
                   {wonStages.length > 0 ? (
                     wonStages.map((stg) => {
                       const origIdx = stages.findIndex((s) => String(s.id) === String(stg.id));
@@ -463,31 +605,43 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
                           }`}
                         >
                           <span
-                            className="w-3 h-3 rounded-full shrink-0 border border-white shadow-xs"
+                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
                             style={{ backgroundColor: stgColor }}
                           />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs truncate font-medium">{stg.name}</p>
-                          </div>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />
-                          )}
+                          <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
+                          {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />}
                         </button>
                       );
                     })
                   ) : (
-                    <p className="text-[11px] text-slate-400 px-2.5 py-1 italic">No won stages defined</p>
+                    <p className="text-xs text-slate-400 px-2 py-3 text-center italic">No Won stages configured</p>
                   )}
                 </div>
               </div>
-
-              {/* Lost Stages Section */}
+            ) : (
               <div>
-                <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-rose-700 bg-rose-50/80 rounded-md mb-1">
-                  <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Lost Stages ({lostStages.length})</span>
+                {/* Header with Back button */}
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setOutcomeStep("choose_category")}
+                    className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer group"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Lost Stages</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsOutcomePopupOpen(false)}
+                    className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="space-y-0.5">
+
+                {/* Lost Stages List */}
+                <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
                   {lostStages.length > 0 ? (
                     lostStages.map((stg) => {
                       const origIdx = stages.findIndex((s) => String(s.id) === String(stg.id));
@@ -513,25 +667,22 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
                           }`}
                         >
                           <span
-                            className="w-3 h-3 rounded-full shrink-0 border border-white shadow-xs"
+                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
                             style={{ backgroundColor: stgColor }}
                           />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs truncate font-medium">{stg.name}</p>
-                          </div>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-rose-600 shrink-0 stroke-[2.5]" />
-                          )}
+                          <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
+                          {isSelected && <Check className="w-4 h-4 text-rose-600 shrink-0 stroke-[2.5]" />}
                         </button>
                       );
                     })
                   ) : (
-                    <p className="text-[11px] text-slate-400 px-2.5 py-1 italic">No lost stages defined</p>
+                    <p className="text-xs text-slate-400 px-2 py-3 text-center italic">No Lost stages configured</p>
                   )}
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+          </div>,
+          document.body
         )}
       </div>
     );

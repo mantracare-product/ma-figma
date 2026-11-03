@@ -1265,6 +1265,7 @@ export function getStoredProcesses(): Process[] {
 
       // Check explicit lost intents first to avoid substring collision (e.g. "not interested" containing "interested")
       const isLostExplicit =
+        st.stageCategory === "lost" ||
         st.intentTrigger === "not_interested" ||
         st.intentTrigger === "call_back" ||
         lower.includes("not interested") ||
@@ -1272,13 +1273,15 @@ export function getStoredProcesses(): Process[] {
         lower.includes("lost") ||
         lower.includes("unqualified") ||
         lower.includes("cancel") ||
+        lower.includes("denied") ||
+        lower.includes("void") ||
         lower.includes("call back") ||
         (lower.includes("not") && lower.includes("interest"));
 
       if (isLostExplicit) {
         if (st.stageCategory !== "lost" || !st.isFinalStage) {
           changed = true;
-          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
+          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true, stagePosition: "final" as const };
         }
         return st;
       }
@@ -1293,12 +1296,16 @@ export function getStoredProcesses(): Process[] {
           lower.includes("closed won") ||
           (lower.includes("interested") && !lower.includes("not")) ||
           lower.includes("qualified") ||
-          lower.includes("success"));
+          lower.includes("success") ||
+          lower.includes("payment done") ||
+          lower.includes("paid") ||
+          lower.includes("settled") ||
+          lower.includes("completed"));
 
       if (isWonCandidate) {
         if (st.stageCategory !== "success" || !st.isFinalStage) {
           changed = true;
-          return { ...st, stageCategory: "success" as const, isFinalStage: true, isFinal: true };
+          return { ...st, stageCategory: "success" as const, isFinalStage: true, isFinal: true, stagePosition: "final" as const };
         }
         return st;
       }

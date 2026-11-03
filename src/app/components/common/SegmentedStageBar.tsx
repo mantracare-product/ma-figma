@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Check, X, Trophy, XCircle } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, X, Trophy, XCircle, ArrowLeft, ChevronRight } from "lucide-react";
 import { CHEVRON_PALETTE, categorizeChevronStage, ChevronStage } from "./ChevronStageRibbon";
 
 export interface SegmentedStageBarProps {
@@ -31,7 +32,11 @@ export const SegmentedStageBar: React.FC<SegmentedStageBarProps> = ({
 }) => {
   const [hoveredSegIdx, setHoveredSegIdx] = useState<number | null>(null);
   const [isOutcomePopupOpen, setIsOutcomePopupOpen] = useState(false);
-  const outcomeRef = useRef<HTMLDivElement>(null);
+  const [outcomeStep, setOutcomeStep] = useState<"choose_category" | "won_stages" | "lost_stages">("choose_category");
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [popupCoords, setPopupCoords] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null);
 
   // Categorize into in-progress, won, and lost
   const { inProgressStages, wonStages, lostStages, hasOutcomes } = useMemo(() => {
@@ -70,14 +75,68 @@ export const SegmentedStageBar: React.FC<SegmentedStageBarProps> = ({
   const activeOutcomeStage = activeWonStage || activeLostStage;
   const isOutcomeActive = Boolean(activeOutcomeStage);
   const isCurrentWon = Boolean(activeWonStage);
+  const isCurrentLost = Boolean(activeLostStage);
 
   const activeInProgressIdx = inProgressStages.findIndex(isCurrentStage);
 
-  // Close outcome popup on click outside or Escape
+  // Reset to category choice whenever popup opens
+  const handleOpenOutcomePopup = () => {
+    if (!interactive) return;
+    setOutcomeStep("choose_category");
+    setIsOutcomePopupOpen((prev) => !prev);
+  };
+
+  // Position popup relative to viewport (page) using button bounding client rect
+  useEffect(() => {
+    if (!isOutcomePopupOpen) return;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const popupWidth = 270;
+      const popupHeight = 220;
+
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // Prefer below unless space below is constrained and space above is sufficient
+      const placeAbove = spaceBelow < popupHeight && spaceAbove >= popupHeight;
+
+      let left = rect.right - popupWidth;
+      if (left < 10) left = 10;
+      if (left + popupWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - popupWidth - 10);
+      }
+
+      let top = placeAbove ? rect.top - popupHeight - 8 : rect.bottom + 8;
+      // Guarantee top is strictly within visible viewport bounds
+      if (top < 10) top = 10;
+      if (top + popupHeight > window.innerHeight - 10) {
+        top = Math.max(10, window.innerHeight - popupHeight - 10);
+      }
+
+      setPopupCoords({ top, left, placeAbove });
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [isOutcomePopupOpen]);
+
+  // Close popup on click outside or Escape
   useEffect(() => {
     if (!isOutcomePopupOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (outcomeRef.current && !outcomeRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        popupRef.current &&
+        !popupRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target)
+      ) {
         setIsOutcomePopupOpen(false);
       }
     };
@@ -245,7 +304,6 @@ export const SegmentedStageBar: React.FC<SegmentedStageBarProps> = ({
 
       {/* 2. Unified Final Outcome Segment (Won or Lost) */}
       <div
-        ref={outcomeRef}
         className="relative"
         style={{ zIndex: isOutcomeActive ? 10 : isOutcomeHovered || isOutcomePopupOpen ? 30 : 1 }}
       >
@@ -270,12 +328,9 @@ export const SegmentedStageBar: React.FC<SegmentedStageBarProps> = ({
         )}
 
         <button
+          ref={buttonRef}
           type="button"
-          onClick={() => {
-            if (interactive) {
-              setIsOutcomePopupOpen((prev) => !prev);
-            }
-          }}
+          onClick={handleOpenOutcomePopup}
           onMouseEnter={() => setHoveredSegIdx(inProgressStages.length)}
           onMouseLeave={() => setHoveredSegIdx(null)}
           style={{
@@ -293,119 +348,211 @@ export const SegmentedStageBar: React.FC<SegmentedStageBarProps> = ({
           }}
           title={isOutcomeActive ? `${outcomeDisplayName} (${isCurrentWon ? "Won" : "Lost"})` : "Won / Lost"}
         />
-
-        {/* ── Table Row Outcome Selection Dropdown ── */}
-        {isOutcomePopupOpen && (
-          <div
-            className="absolute right-0 bottom-full mb-2 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 py-2.5 px-2 z-[300] text-left animate-in fade-in slide-in-from-bottom-1 duration-150"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-2 pb-2 mb-1.5 border-b border-slate-100">
-              <div>
-                <p className="text-xs font-bold text-slate-800">Select Final Outcome</p>
-                <p className="text-[10px] text-slate-500">Choose Won or Lost stage</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsOutcomePopupOpen(false)}
-                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Stages Scroll Container */}
-            <div className="max-h-56 overflow-y-auto space-y-2 pr-0.5">
-              {/* Won Stages Section */}
-              <div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50/80 rounded mb-1">
-                  <Trophy className="w-3 h-3 text-emerald-600" />
-                  <span>Won Stages ({wonStages.length})</span>
-                </div>
-                <div className="space-y-0.5">
-                  {wonStages.length > 0 ? (
-                    wonStages.map((stg) => {
-                      const isSelected = isCurrentStage(stg);
-                      const stgColor = stg.color || "#10B981";
-
-                      return (
-                        <button
-                          key={String(stg.id)}
-                          type="button"
-                          onClick={() => {
-                            if (onStageSelect) onStageSelect(stg);
-                            setIsOutcomePopupOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-emerald-50/90 text-emerald-950 font-semibold ring-1 ring-emerald-400"
-                              : "hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
-                            style={{ backgroundColor: stgColor }}
-                          />
-                          <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[2.5]" />}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="text-[10px] text-slate-400 px-2 py-0.5 italic">No won stages</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Lost Stages Section */}
-              <div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-rose-700 bg-rose-50/80 rounded mb-1">
-                  <XCircle className="w-3 h-3 text-rose-600" />
-                  <span>Lost Stages ({lostStages.length})</span>
-                </div>
-                <div className="space-y-0.5">
-                  {lostStages.length > 0 ? (
-                    lostStages.map((stg) => {
-                      const isSelected = isCurrentStage(stg);
-                      const stgColor = stg.color || "#EF4444";
-
-                      return (
-                        <button
-                          key={String(stg.id)}
-                          type="button"
-                          onClick={() => {
-                            if (onStageSelect) onStageSelect(stg);
-                            setIsOutcomePopupOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-rose-50/90 text-rose-950 font-semibold ring-1 ring-rose-400"
-                              : "hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
-                            style={{ backgroundColor: stgColor }}
-                          />
-                          <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-rose-600 shrink-0 stroke-[2.5]" />}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="text-[10px] text-slate-400 px-2 py-0.5 italic">No lost stages</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* ── Table Row Outcome Selection Dropdown in React Portal (Page-relative z-index) ── */}
+      {isOutcomePopupOpen && popupCoords && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popupRef}
+          className="fixed z-[99999] w-[270px] max-h-[min(380px,calc(100vh-20px))] overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-2.5 px-2.5 text-left animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            top: `${popupCoords.top}px`,
+            left: `${popupCoords.left}px`,
+            fontFamily: "Outfit, sans-serif",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {outcomeStep === "choose_category" ? (
+            <div>
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Select Outcome</p>
+                  <p className="text-[10px] text-slate-500">Was this Won or Lost?</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOutcomePopupOpen(false)}
+                  className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Two Outcome Choices: Won or Lost */}
+              <div className="space-y-2">
+                {/* Won Choice */}
+                <button
+                  type="button"
+                  onClick={() => setOutcomeStep("won_stages")}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl border border-emerald-200/90 bg-emerald-50/60 hover:bg-emerald-100/70 transition-all text-left cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600/10 flex items-center justify-center shrink-0">
+                      <Trophy className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                        Won
+                        {isCurrentWon && (
+                          <span className="text-[9px] px-1 py-0.2 bg-emerald-200/70 text-emerald-800 rounded font-semibold">Current</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-emerald-700/80">
+                        {wonStages.length} {wonStages.length === 1 ? "stage" : "stages"} available
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-600/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                </button>
+
+                {/* Lost Choice */}
+                <button
+                  type="button"
+                  onClick={() => setOutcomeStep("lost_stages")}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl border border-rose-200/90 bg-rose-50/60 hover:bg-rose-100/70 transition-all text-left cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-rose-600/10 flex items-center justify-center shrink-0">
+                      <XCircle className="w-4 h-4 text-rose-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                        Lost
+                        {isCurrentLost && (
+                          <span className="text-[9px] px-1 py-0.2 bg-rose-200/70 text-rose-800 rounded font-semibold">Current</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-rose-700/80">
+                        {lostStages.length} {lostStages.length === 1 ? "stage" : "stages"} available
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-rose-600/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                </button>
+              </div>
+            </div>
+          ) : outcomeStep === "won_stages" ? (
+            <div>
+              {/* Header with Back button */}
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setOutcomeStep("choose_category")}
+                  className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Won Stages</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOutcomePopupOpen(false)}
+                  className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Won Stages List */}
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
+                {wonStages.length > 0 ? (
+                  wonStages.map((stg) => {
+                    const isSelected = isCurrentStage(stg);
+                    const stgColor = stg.color || "#10B981";
+
+                    return (
+                      <button
+                        key={String(stg.id)}
+                        type="button"
+                        onClick={() => {
+                          if (onStageSelect) onStageSelect(stg);
+                          setIsOutcomePopupOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-emerald-50/90 text-emerald-950 font-semibold ring-1 ring-emerald-400"
+                            : "hover:bg-slate-50 text-slate-700"
+                        }`}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
+                          style={{ backgroundColor: stgColor }}
+                        />
+                        <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-slate-400 px-2 py-3 text-center italic">No Won stages configured</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* Header with Back button */}
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setOutcomeStep("choose_category")}
+                  className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Lost Stages</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOutcomePopupOpen(false)}
+                  className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Lost Stages List */}
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
+                {lostStages.length > 0 ? (
+                  lostStages.map((stg) => {
+                    const isSelected = isCurrentStage(stg);
+                    const stgColor = stg.color || "#EF4444";
+
+                    return (
+                      <button
+                        key={String(stg.id)}
+                        type="button"
+                        onClick={() => {
+                          if (onStageSelect) onStageSelect(stg);
+                          setIsOutcomePopupOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-rose-50/90 text-rose-950 font-semibold ring-1 ring-rose-400"
+                            : "hover:bg-slate-50 text-slate-700"
+                        }`}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-2xs"
+                          style={{ backgroundColor: stgColor }}
+                        />
+                        <span className="text-xs truncate flex-1 font-medium">{stg.name}</span>
+                        {isSelected && <Check className="w-4 h-4 text-rose-600 shrink-0 stroke-[2.5]" />}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-slate-400 px-2 py-3 text-center italic">No Lost stages configured</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
 
 export default SegmentedStageBar;
-
