@@ -26,6 +26,7 @@ import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import {
   Form,
   FormPermissions,
