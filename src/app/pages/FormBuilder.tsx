@@ -178,6 +178,22 @@ export default function FormBuilder({
   // State for SelectFieldsModal
   const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
 
+  // Step progress ring popover state
+  const [isProgressPopoverOpen, setIsProgressPopoverOpen] = useState(false);
+  const progressPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (progressPopoverRef.current && !progressPopoverRef.current.contains(event.target as Node)) {
+        setIsProgressPopoverOpen(false);
+      }
+    }
+    if (isProgressPopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isProgressPopoverOpen]);
+
   const toggleSidebarSection = (section: string) => {
     setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -694,112 +710,247 @@ export default function FormBuilder({
         />
       )}
 
-      {/* ── Production Form Editor Header Bar (Single row: Back + Title + Action Buttons) ── */}
-      <header className="shrink-0 bg-white min-h-[72px] sm:h-20 flex items-center">
-        <div className="max-w-[1260px] mx-auto w-full px-4 sm:px-6">
-          <div className="flex items-center justify-between gap-4">
-            {/* Left Group: Round Back Button + Title Block */}
-            <div className="flex items-center gap-3 min-w-0">
-              {/* Circular Back Button (40x40px, light grey border #E2E8F0, dark slate icon #0F172A) */}
-              <button
-                type="button"
-                onClick={handleCancel}
-                title="Back to Form Templates"
-                aria-label="Back to Form Templates"
-                className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2 transition-all cursor-pointer shrink-0 shadow-2xs"
-              >
-                <ArrowLeft className="w-5 h-5 text-[#0F172A]" strokeWidth={2} />
-              </button>
+      {/* ── Premium SaaS Header Bar (Single 72px row: Back + Title Block | Ring Progress + Actions) ── */}
+      <header className="shrink-0 bg-white h-[72px] border-b border-[#E2E8F0] flex items-center">
+        <div className="max-w-[1260px] mx-auto w-full px-4 h-full flex items-center justify-between gap-4">
+          {/* Left Side: 36px Circular Back Button + Title Block */}
+          <div className="flex items-center gap-3 min-w-0">
+            {/* 36px Circular Back Button */}
+            <button
+              type="button"
+              onClick={handleCancel}
+              title="Back to Form Templates"
+              aria-label="Back to Form Templates"
+              className="w-9 h-9 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-all cursor-pointer shrink-0 shadow-2xs"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#475569]" strokeWidth={2} />
+            </button>
 
-              {/* Title Block: Form Title (bold, ~24px, dark navy #0F172A) + Muted Chip (#F1F5F9 / #64748B) + Description */}
-              <div className="flex flex-col min-w-0">
-                <h1
-                  className="text-2xl font-bold text-[#0F172A] tracking-tight truncate leading-tight"
-                  style={{ fontFamily: 'DM Sans, sans-serif' }}
-                >
-                  {formTitle || existingForm?.name || "New Form"}
-                </h1>
-                <div className="flex items-center gap-2 mt-1 min-w-0">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F1F5F9] text-[#64748B] shrink-0">
-                    {existingForm?.category || (existingForm?.formType === "intake" ? "Intake Flow" : existingForm?.formType === "meta-ads" ? "Meta Ads" : existingForm?.formType === "standard" ? "Standard Form" : existingForm?.status ? (existingForm.status.charAt(0).toUpperCase() + existingForm.status.slice(1)) : "Draft")}
-                  </span>
-                  <span
-                    className="text-xs text-[#64748B] truncate max-w-[280px] md:max-w-[380px] lg:max-w-[500px] xl:max-w-[620px]"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                    title={formDescription || existingForm?.description || "Build, configure fields, and publish changes to this form template."}
-                  >
-                    {formDescription || existingForm?.description || "Build, configure fields, and publish changes to this form template."}
-                  </span>
-                </div>
+            {/* Title Block: 18-20px semibold editable title + 12px row (category chip + editable description) */}
+            <div className="flex flex-col min-w-0">
+              <input
+                type="text"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="Untitled Form"
+                title="Click to edit form title"
+                className="text-[18px] sm:text-[19px] font-semibold text-[#0F172A] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1.5 -ml-1.5 py-0.5 truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px] xl:max-w-[520px] transition-colors leading-tight cursor-text"
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
+              />
+              <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                <span className="inline-flex items-center px-2 h-[22px] rounded-[6px] text-[11px] font-medium bg-[#F1F5F9] text-[#64748B] shrink-0 border border-slate-100/50">
+                  {existingForm?.category || existingForm?.industry || (existingForm?.formType === "intake" ? "Intake Flow" : existingForm?.formType === "meta-ads" ? "Meta Ads" : existingForm?.formType === "standard" ? "Standard Form" : "General")}
+                </span>
+                <input
+                  type="text"
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Add form description..."
+                  title={formDescription || "Add form description"}
+                  className="text-[12px] text-[#64748B] bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] focus:outline-none rounded px-1 -ml-1 py-0.5 truncate max-w-[200px] sm:max-w-[280px] md:max-w-[380px] xl:max-w-[480px] transition-colors cursor-text"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
               </div>
             </div>
+          </div>
 
-            {/* Right Group: Action buttons on same horizontal center line, right-aligned to container */}
-            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-              {currentTab !== "build" && (
-                <button
-                  type="button"
-                  onClick={handleBackTab}
-                  className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ fontFamily: 'DM Sans, sans-serif' }}
-                >
-                  <ArrowLeft className="w-4 h-4 text-[#0F172A]" />
-                  <span>Back</span>
-                </button>
+          {/* Right Side: Circular Ring Progress + Divider + Action Buttons */}
+          <div className="flex items-center gap-6 shrink-0">
+            {/* Circular Ring Progress with Jump Popover */}
+            <div className="relative" ref={progressPopoverRef}>
+              <button
+                type="button"
+                onClick={() => setIsProgressPopoverOpen(!isProgressPopoverOpen)}
+                role="progressbar"
+                aria-valuenow={activeStepIndex}
+                aria-valuemin={1}
+                aria-valuemax={3}
+                aria-label={`Form Builder progress: step ${activeStepIndex} of 3, ${currentTab === "build" ? "Build" : currentTab === "design" ? "Design & Preview" : "Go Live"}`}
+                className="flex items-center gap-3 p-1 -m-1 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 group"
+              >
+                {/* 40px SVG Ring Progress */}
+                <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
+                  <svg className="w-10 h-10 -rotate-90 transform" viewBox="0 0 40 40">
+                    <circle
+                      cx="20"
+                      cy="20"
+                      r="16"
+                      fill="none"
+                      stroke="#E2E8F0"
+                      strokeWidth="4"
+                    />
+                    <circle
+                      cx="20"
+                      cy="20"
+                      r="16"
+                      fill="none"
+                      stroke={activeStepIndex === 3 ? "#10B981" : "#2563EB"}
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeDasharray={100.53}
+                      strokeDashoffset={100.53 - (activeStepIndex / 3) * 100.53}
+                      style={{ transition: "stroke-dashoffset 300ms ease-out, stroke 300ms ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {activeStepIndex === 3 ? (
+                      <Check className="w-4 h-4 text-[#10B981] stroke-[2.5]" />
+                    ) : (
+                      <span className="text-[11px] font-semibold text-[#0F172A]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        {activeStepIndex}/3
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Two lines of text next to ring */}
+                <div className="flex flex-col min-w-0 pr-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-semibold text-[#0F172A] leading-tight" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      {currentTab === "build" ? "Build" : currentTab === "design" ? "Design & Preview" : "Go Live"}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                  </div>
+                  <span className="text-[12px] text-[#64748B] leading-tight mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    {currentTab === "build"
+                      ? "Next: Design & Preview"
+                      : currentTab === "design"
+                        ? "Next: Go Live"
+                        : "Ready to publish"}
+                  </span>
+                </div>
+              </button>
+
+              {/* Steps Jump Popover */}
+              {isProgressPopoverOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#E2E8F0] rounded-[12px] shadow-lg p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#64748B] border-b border-gray-100 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Step Navigation
+                  </div>
+                  <div className="space-y-1">
+                    {[
+                      { tab: "build", step: 1, title: "1. Build", desc: "Form fields and canvas" },
+                      { tab: "design", step: 2, title: "2. Design & Preview", desc: "Branding, theme & preview" },
+                      { tab: "live", step: 3, title: "3. Go Live", desc: "Publish settings & share URL" },
+                    ].map((item) => {
+                      const isDone = activeStepIndex > item.step || (item.step === 3 && activeStepIndex === 3);
+                      const isCurrent = currentTab === item.tab;
+                      return (
+                        <button
+                          key={item.tab}
+                          type="button"
+                          onClick={() => {
+                            setCurrentTab(item.tab as "build" | "design" | "live");
+                            setIsProgressPopoverOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors cursor-pointer ${
+                            isCurrent ? "bg-blue-50/70 text-blue-900" : "hover:bg-slate-50 text-[#0F172A]"
+                          }`}
+                        >
+                          <div className="shrink-0">
+                            {isDone && !isCurrent ? (
+                              <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                                <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                              </div>
+                            ) : isCurrent ? (
+                              <div className="w-6 h-6 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-xs font-bold ring-2 ring-blue-200">
+                                {item.step === 3 ? <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" /> : item.step}
+                              </div>
+                            ) : (
+                              <div className="w-6 h-6 rounded-full border border-gray-300 bg-white text-gray-400 flex items-center justify-center text-xs font-medium">
+                                {item.step}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[13px] font-semibold ${isCurrent ? "text-[#2563EB]" : "text-[#0F172A]"}`} style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              {item.title}
+                            </p>
+                            <p className="text-[11px] text-[#64748B] truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {item.desc}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
+            </div>
 
+            {/* Thin 1px vertical divider (24px tall, #E2E8F0) */}
+            <div className="h-6 w-px bg-[#E2E8F0] shrink-0" />
+
+            {/* Action Buttons: 8px gap, 36px tall, 8px radius, 13px font, weight 500 */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Cancel: Ghost button */}
               <button
                 type="button"
                 onClick={handleCancel}
-                className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-9 px-3.5 rounded-lg text-[#475569] hover:bg-[#F1F5F9] text-[13px] font-medium transition-colors cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               >
                 Cancel
               </button>
 
+              {/* Back: Outline button on Design & Preview and Go Live */}
+              {currentTab !== "build" && (
+                <button
+                  type="button"
+                  onClick={handleBackTab}
+                  className="h-9 px-3.5 rounded-lg bg-white border border-[#E2E8F0] text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 text-[13px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-[#0F172A]" />
+                  <span>Back</span>
+                </button>
+              )}
+
+              {/* Save Draft: White, 1px #E2E8F0 border, #0F172A text */}
               <button
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={isSaving}
-                className="h-10 px-4 sm:px-5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-medium hover:bg-[#F8FAFC] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-9 px-3.5 rounded-lg bg-white border border-[#E2E8F0] text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 text-[13px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               >
                 {isSaving && (
-                  <span className="w-4 h-4 border-2 border-[#0F172A] border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span className="w-3.5 h-3.5 border-2 border-[#0F172A] border-t-transparent rounded-full animate-spin shrink-0" />
                 )}
                 <span>Save Draft</span>
               </button>
 
+              {/* Primary: Solid #0F172A background, white text */}
               {currentTab !== "live" ? (
                 <button
                   type="button"
                   onClick={handleNextTab}
-                  className="h-10 px-4 sm:px-5 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0F172A] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 px-4 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-[13px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: 'DM Sans, sans-serif' }}
                 >
                   <span>Next</span>
-                  <ArrowRight className="w-4 h-4 text-white" />
+                  <ArrowRight className="w-3.5 h-3.5 text-white" />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handlePublishForm}
                   disabled={isPublishing}
-                  className="h-10 px-4 sm:px-5 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0F172A] focus:ring-offset-1 transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 px-4 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-[13px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: 'DM Sans, sans-serif' }}
                 >
                   {isPublishing ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
                   ) : (
-                    <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                    <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
                   )}
                   <span>Publish Form</span>
                 </button>
               )}
 
-              {/* If in drawer mode: Full Screen expand & Close X */}
+              {/* Drawer Controls (Full Screen & Close X) if in Drawer mode */}
               {isDrawer && (
-                <div className="flex items-center gap-2 pl-2 border-l border-[#E2E8F0] shrink-0">
+                <div className="flex items-center gap-1.5 pl-2 border-l border-[#E2E8F0] shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -824,18 +975,18 @@ export default function FormBuilder({
                       const targetRoute = location.pathname.startsWith("/admin") ? "/admin/form-builder" : "/web-forms/builder";
                       navigate(targetRoute, { state: { form: currentForm, returnTo: location.pathname } });
                     }}
-                    className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition-colors cursor-pointer shrink-0"
                     title="Expand to Full Page"
                   >
-                    <Maximize2 className="w-4 h-4 text-[#0F172A]" />
+                    <Maximize2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="w-10 h-10 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-[#0F172A] hover:bg-[#F8FAFC] hover:border-gray-300 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition-colors cursor-pointer shrink-0"
                     title="Close Drawer"
                   >
-                    <X className="w-4 h-4 text-[#0F172A]" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
@@ -843,111 +994,6 @@ export default function FormBuilder({
           </div>
         </div>
       </header>
-
-      {/* ── Stepper Row: Directly below header row, centered with 16-24px spacing above & below, no background band or border ── */}
-      <div className="shrink-0 bg-white py-4 sm:py-5">
-        <div className="max-w-[1260px] mx-auto w-full px-4 sm:px-6">
-          <div className="max-w-[620px] mx-auto">
-            <div className="flex items-center justify-between relative">
-              {/* Step 1: Build */}
-              <button
-                type="button"
-                onClick={() => setCurrentTab("build")}
-                className="flex items-center gap-2.5 z-10 bg-white pr-2.5 cursor-pointer group"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  currentTab === "build"
-                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs"
-                    : activeStepIndex > 1
-                      ? "bg-[#2563EB] text-white shadow-2xs"
-                      : "border border-[#E2E8F0] text-[#64748B] bg-white"
-                }`}>
-                  {activeStepIndex > 1 ? (
-                    <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
-                  ) : (
-                    <span>1</span>
-                  )}
-                </div>
-                <span className={`text-xs transition-colors ${
-                  currentTab === "build"
-                    ? "font-bold text-[#2563EB]"
-                    : activeStepIndex > 1
-                      ? "font-semibold text-[#0F172A] group-hover:text-[#2563EB]"
-                      : "font-medium text-[#64748B]"
-                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Build
-                </span>
-              </button>
-
-              {/* Progress Connector: 1 -> 2 */}
-              <div className="flex-1 mx-3 h-[1.5px] relative bg-[#E2E8F0] rounded-full overflow-hidden">
-                <div className={`h-full bg-[#2563EB] transition-all duration-300 ${
-                  activeStepIndex >= 2 ? "w-full" : "w-0"
-                }`} />
-              </div>
-
-              {/* Step 2: Design & Preview */}
-              <button
-                type="button"
-                onClick={() => setCurrentTab("design")}
-                className="flex items-center gap-2.5 z-10 bg-white px-2.5 cursor-pointer group"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                  currentTab === "design"
-                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs font-bold"
-                    : activeStepIndex > 2
-                      ? "bg-[#2563EB] text-white shadow-2xs font-bold"
-                      : "border border-[#E2E8F0] text-[#64748B] bg-white"
-                }`}>
-                  {activeStepIndex > 2 ? (
-                    <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
-                  ) : (
-                    <span>2</span>
-                  )}
-                </div>
-                <span className={`text-xs transition-colors ${
-                  currentTab === "design"
-                    ? "font-bold text-[#2563EB]"
-                    : activeStepIndex > 2
-                      ? "font-semibold text-[#0F172A] group-hover:text-[#2563EB]"
-                      : "font-medium text-[#64748B]"
-                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Design &amp; Preview
-                </span>
-              </button>
-
-              {/* Progress Connector: 2 -> 3 */}
-              <div className="flex-1 mx-3 h-[1.5px] relative bg-[#E2E8F0] rounded-full overflow-hidden">
-                <div className={`h-full bg-[#2563EB] transition-all duration-300 ${
-                  activeStepIndex >= 3 ? "w-full" : "w-0"
-                }`} />
-              </div>
-
-              {/* Step 3: Go Live */}
-              <button
-                type="button"
-                onClick={() => setCurrentTab("live")}
-                className="flex items-center gap-2.5 z-10 bg-white pl-2.5 cursor-pointer group"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                  currentTab === "live"
-                    ? "bg-[#2563EB] text-white ring-4 ring-blue-100 shadow-2xs font-bold"
-                    : "border border-[#E2E8F0] text-[#64748B] bg-white"
-                }`}>
-                  <span>3</span>
-                </div>
-                <span className={`text-xs transition-colors ${
-                  currentTab === "live"
-                    ? "font-bold text-[#2563EB]"
-                    : "font-medium text-[#64748B]"
-                }`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Go Live
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Main content area: strictly fixed-height, child panes scroll independently ── */}
       <main className="flex-1 min-h-0 overflow-hidden py-4">
@@ -958,42 +1004,6 @@ export default function FormBuilder({
               {/* Left: Canvas Area (scrolls independently, centers form card) */}
               <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1">
                 <div className="max-w-[740px] mx-auto space-y-3.5 pb-4">
-                {/* Form Title & Description Compact Card */}
-                <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-3">
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      Form Title
-                    </label>
-                    <input
-                      type="text"
-                      value={formTitle}
-                      onChange={(e) => setFormTitle(e.target.value)}
-                      placeholder="e.g. Patient Intake Form"
-                      className="w-full px-3 py-1.5 text-sm font-semibold border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Description
-                      </label>
-                      <span className="text-[10px] text-gray-400 font-mono" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {formDescription.length} / 500
-                      </span>
-                    </div>
-                    <textarea
-                      value={formDescription}
-                      onChange={(e) => setFormDescription(e.target.value)}
-                      maxLength={500}
-                      rows={2}
-                      placeholder="Brief instructions or summary..."
-                      className="w-full px-3 py-1.5 text-xs border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-600"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    />
-                  </div>
-                </div>
-
                 {/* Form Fields Canvas Drop Zone */}
                 <div
                   onDragOver={handleDragOver}
