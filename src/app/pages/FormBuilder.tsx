@@ -51,6 +51,7 @@ import {
   ArrowRight,
   Check,
   Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -127,6 +128,9 @@ export default function FormBuilder({
   const locationForm = location.state?.form as any;
   const existingForm = propInitialForm !== undefined ? propInitialForm : locationForm;
   const returnTo = propReturnTo !== undefined ? propReturnTo : location.state?.returnTo;
+
+  // Drawer Fullscreen expansion state
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Stable formId for new or existing forms
   const [formId, setFormId] = useState<number>(() => Number(existingForm?.id ?? propFormId ?? Date.now()));
@@ -956,43 +960,28 @@ export default function FormBuilder({
                 </button>
               )}
 
-              {/* Drawer Controls (Full Screen & Close X) if in Drawer mode */}
+              {/* Drawer Controls (Full Screen Expand/Collapse & Close X) if in Drawer mode */}
               {isDrawer && (
                 <div className="flex items-center gap-1.5 pl-2 border-l border-[#E2E8F0] shrink-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      const currentForm = {
-                        id: formId,
-                        name: formTitle,
-                        description: formDescription,
-                        fields: formFields,
-                        submitButtonText,
-                        status: existingForm?.status || "draft",
-                        autoCreateClient,
-                        autoCreateProcessId,
-                        autoCreateStageId,
-                        customUrlSlug,
-                        theme: { backgroundTheme, typography, buttonColor },
-                        category: existingForm?.category,
-                        scopingRules: existingForm?.scopingRules,
-                        roles: existingForm?.roles,
-                        permissions: existingForm?.permissions,
-                      };
-                      onClose?.();
-                      const targetRoute = location.pathname.startsWith("/admin") ? "/admin/form-builder" : "/web-forms/builder";
-                      navigate(targetRoute, { state: { form: currentForm, returnTo: location.pathname } });
-                    }}
+                    onClick={() => setIsFullscreen((prev) => !prev)}
                     className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition-colors cursor-pointer shrink-0"
-                    title="Expand to Full Page"
+                    title={isFullscreen ? "Exit Full Screen" : "Expand to Full Screen"}
+                    aria-label={isFullscreen ? "Exit Full Screen" : "Expand to Full Screen"}
                   >
-                    <Maximize2 className="w-3.5 h-3.5" />
+                    {isFullscreen ? (
+                      <Minimize2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={handleCancel}
                     className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition-colors cursor-pointer shrink-0"
                     title="Close Drawer"
+                    aria-label="Close Drawer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -2598,13 +2587,19 @@ export default function FormBuilder({
     return (
       <div className="fixed inset-0 flex justify-end overflow-hidden z-[650] select-none">
         {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
-          onClick={handleCancel}
-        />
+        {!isFullscreen && (
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+            onClick={handleCancel}
+          />
+        )}
 
-        {/* Drawer Panel */}
-        <div className="relative w-full max-w-[95vw] 2xl:max-w-[1550px] h-full bg-[#F8FAFC] shadow-2xl flex flex-col z-50 border-l border-gray-200 overflow-hidden transform transition-transform duration-300 ease-out">
+        {/* Drawer Panel: Normal 95vw/1550px max width or 100vw when Fullscreen */}
+        <div
+          className={`relative h-full bg-[#F8FAFC] shadow-2xl flex flex-col z-50 border-l border-gray-200 overflow-hidden transform transition-all duration-300 ease-out ${
+            isFullscreen ? "w-full max-w-full" : "w-full max-w-[95vw] 2xl:max-w-[1550px]"
+          }`}
+        >
           {contentJSX}
         </div>
       </div>

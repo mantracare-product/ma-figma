@@ -18,6 +18,8 @@ import {
   Share2,
   Eye,
   Settings,
+  Search,
+  X,
 } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
@@ -319,13 +321,13 @@ export default function AdminFormTemplates() {
     );
   };
 
-  // Table Columns
+  // Table Columns (Roles & Permissions and Status removed, remaining columns share width evenly)
   const columns: TableColumn<Form>[] = [
     {
       id: "name",
       header: "Template Name",
       align: "left",
-      width: "35%",
+      width: "45%",
       render: (f) => (
         <span
           onClick={() => handleEditInBuilder(f)}
@@ -340,51 +342,14 @@ export default function AdminFormTemplates() {
       id: "scope",
       header: "Scope",
       align: "left",
-      width: "25%",
+      width: "35%",
       render: (f) => renderScopeSummary(f),
-    },
-    {
-      id: "roles",
-      header: "Roles & Permissions",
-      align: "left",
-      width: "22%",
-      render: (f) => {
-        const assignedRoles = f.roles && f.roles.length > 0 ? f.roles : ["admin", "manager"];
-        const perms = f.permissions || { canView: true, canEdit: true, canDelete: false, canShare: true };
-
-        return (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 flex-wrap">
-              {assignedRoles.map((roleId) => {
-                const opt = AVAILABLE_ROLES.find((r) => r.id === roleId);
-                const label = opt ? opt.label : roleId;
-                const badgeClass = opt ? opt.badgeClass : "bg-gray-100 text-gray-700 border-gray-200";
-                return (
-                  <span
-                    key={roleId}
-                    className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${badgeClass}`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {label}
-                  </span>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {perms.canView && <span className="text-gray-600">View</span>}
-              {perms.canEdit && <span>• Edit</span>}
-              {perms.canShare && <span>• Share</span>}
-              {perms.canDelete && <span>• Delete</span>}
-            </div>
-          </div>
-        );
-      },
     },
     {
       id: "fields",
       header: "Fields",
       align: "left",
-      width: "8%",
+      width: "10%",
       render: (f) => {
         const count = f.fieldCount ?? (f.fields ? f.fields.length : 0);
         return (
@@ -398,37 +363,10 @@ export default function AdminFormTemplates() {
       },
     },
     {
-      id: "status",
-      header: "Status",
-      align: "left",
-      width: "8%",
-      render: (f) => {
-        const isLive = f.status === "live";
-        return (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleStatus(f);
-            }}
-            title="Click to toggle status"
-            className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
-              isLive
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {isLive ? "Live" : "Draft"}
-          </button>
-        );
-      },
-    },
-    {
       id: "updated",
       header: "Created / Updated",
       align: "left",
-      width: "8%",
+      width: "10%",
       render: (f) => (
         <span className="text-xs text-gray-600 font-medium block truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
           {f.createdAt || "Recent"}
@@ -475,87 +413,136 @@ export default function AdminFormTemplates() {
           badge={`${filteredForms.length} Templates`}
         />
 
-        {/* Top Action Bar */}
-        <PageTopBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Search form templates..."
-          leftElement={
+        {/* Reordered Toolbar: Search first, then compact filters, then New Form on the far right */}
+        <div className="bg-white p-2.5 px-3.5 border border-[#E2E8F0] rounded-xl shadow-xs flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 min-w-0">
+          {/* Left: Search (max-w ~360px) + 12px gap + Compact Filters (8px gap) */}
+          <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap lg:flex-nowrap">
+            {/* Search Input (flexible up to 360px, height matching New Form button 36px) */}
+            <div className="relative flex-1 max-w-[360px] min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8] pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search form templates..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-9 pl-9 pr-8 bg-[#F8FAFC] hover:bg-white focus:bg-white border border-[#E2E8F0] rounded-lg text-[13px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] p-0.5 rounded cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Compact Filters: 8px gap between filters, height 32px, 13px font, weight 500, 8px radius */}
             <div className="flex items-center gap-2 flex-wrap">
               {/* Category Filter */}
-              <select
-                value={selectedCategoryFilter}
-                onChange={(e) => {
-                  setSelectedCategoryFilter(e.target.value);
-                  setSelectedIndustryFilter("All");
-                }}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Categories</option>
-                {INITIAL_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedCategoryFilter}
+                  onChange={(e) => {
+                    setSelectedCategoryFilter(e.target.value);
+                    setSelectedIndustryFilter("All");
+                  }}
+                  className={`h-8 pl-3 pr-7 appearance-none rounded-lg text-[13px] font-medium border cursor-pointer outline-none transition-all w-auto max-w-[160px] min-w-[120px] truncate ${
+                    selectedCategoryFilter !== "All"
+                      ? "bg-[#F1F5F9] text-[#0F172A] font-semibold border-[#CBD5E1]"
+                      : "bg-white text-gray-700 border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                  } focus:ring-2 focus:ring-[#2563EB] focus:border-transparent`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Categories</option>
+                  {INITIAL_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
 
               {/* Industry Filter */}
-              <select
-                value={selectedIndustryFilter}
-                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Industries</option>
-                {availableIndustriesForFilter.map((ind) => (
-                  <option key={ind} value={ind}>
-                    {ind}
-                  </option>
-                ))}
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedIndustryFilter}
+                  onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                  className={`h-8 pl-3 pr-7 appearance-none rounded-lg text-[13px] font-medium border cursor-pointer outline-none transition-all w-auto max-w-[160px] min-w-[120px] truncate ${
+                    selectedIndustryFilter !== "All"
+                      ? "bg-[#F1F5F9] text-[#0F172A] font-semibold border-[#CBD5E1]"
+                      : "bg-white text-gray-700 border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                  } focus:ring-2 focus:ring-[#2563EB] focus:border-transparent`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Industries</option>
+                  {availableIndustriesForFilter.map((ind) => (
+                    <option key={ind} value={ind}>
+                      {ind}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
 
               {/* Location Filter */}
-              <select
-                value={selectedLocationFilter}
-                onChange={(e) => setSelectedLocationFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Locations</option>
-                {STANDARD_LOCATIONS.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedLocationFilter}
+                  onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                  className={`h-8 pl-3 pr-7 appearance-none rounded-lg text-[13px] font-medium border cursor-pointer outline-none transition-all w-auto max-w-[160px] min-w-[120px] truncate ${
+                    selectedLocationFilter !== "All"
+                      ? "bg-[#F1F5F9] text-[#0F172A] font-semibold border-[#CBD5E1]"
+                      : "bg-white text-gray-700 border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                  } focus:ring-2 focus:ring-[#2563EB] focus:border-transparent`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Locations</option>
+                  {STANDARD_LOCATIONS.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
 
               {/* Status Filter */}
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Statuses</option>
-                <option value="live">Live Only</option>
-                <option value="draft">Draft Only</option>
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedStatusFilter}
+                  onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                  className={`h-8 pl-3 pr-7 appearance-none rounded-lg text-[13px] font-medium border cursor-pointer outline-none transition-all w-auto max-w-[150px] min-w-[115px] truncate ${
+                    selectedStatusFilter !== "all"
+                      ? "bg-[#F1F5F9] text-[#0F172A] font-semibold border-[#CBD5E1]"
+                      : "bg-white text-gray-700 border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                  } focus:ring-2 focus:ring-[#2563EB] focus:border-transparent`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="live">Live Only</option>
+                  <option value="draft">Draft Only</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
             </div>
-          }
-          onClearAllFilters={() => {
-            setSelectedCategoryFilter("All");
-            setSelectedIndustryFilter("All");
-            setSelectedLocationFilter("All");
-            setSelectedStatusFilter("all");
-            setSearchQuery("");
-          }}
-          primaryAction={{
-            label: "New Form",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: handleOpenCreateModal,
-          }}
-        />
+          </div>
+
+          {/* Right: New Form Button (height matches search input: 36px, h-9) */}
+          <button
+            type="button"
+            onClick={handleOpenCreateModal}
+            className="h-9 px-4 rounded-lg bg-black hover:bg-black/90 text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shrink-0 shadow-2xs cursor-pointer transition-colors ml-auto lg:ml-0"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Form</span>
+          </button>
+        </div>
 
         {/* Templates Table View */}
         <TableComponent

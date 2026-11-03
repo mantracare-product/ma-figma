@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
-import { FieldDef, Form, INITIAL_FORMS } from "../../data/forms";
+import { FieldDef, Form, INITIAL_FORMS, getStoredForms, WEB_FORMS_EVENT } from "../../data/forms";
 import { FlowStep, IntakeFlow, INITIAL_FLOWS } from "../../data/intakeFlows";
 import ClientProfile, { Client, initialClients } from "./ClientProfile";
 import ShareFormDrawer from "../components/webform/ShareFormDrawer";
@@ -20,6 +20,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import FormBuilderDrawer from "../components/form-builder/FormBuilderDrawer";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -270,12 +271,13 @@ function SubStatusBadge({ status }: { status?: string }) {
 }
 
 // Submissions Tab
-function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMainTab }: {
+function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMainTab, onNewForm }: {
   submissions: Submission[];
   forms: Form[];
   onViewSubmission: (sub: Submission) => void;
   mainTab: "submissions" | "forms";
   setMainTab: (tab: "submissions" | "forms") => void;
+  onNewForm?: () => void;
 }) {
   const navigate = useNavigate();
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
@@ -412,7 +414,7 @@ function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMain
         primaryAction={{
           label: "New form",
           icon: <Plus className="w-4 h-4" />,
-          onClick: () => navigate("/web-forms/new"),
+          onClick: () => (onNewForm ? onNewForm() : setMainTab("forms")),
         }}
       />
 
@@ -1035,6 +1037,42 @@ export default function WebForms() {
     const saved = sessionStorage.getItem("webForms");
     return saved ? JSON.parse(saved) : INITIAL_FORMS;
   });
+  // Form Builder Drawer State
+  const [isBuilderDrawerOpen, setIsBuilderDrawerOpen] = useState(false);
+  const [activeBuilderForm, setActiveBuilderForm] = useState<Form | null>(null);
+
+  // Sync with storage changes
+  useEffect(() => {
+    const handleUpdate = () => {
+      setForms(getStoredForms());
+    };
+    window.addEventListener(WEB_FORMS_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(WEB_FORMS_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const handleOpenNewFormBuilder = () => {
+    const newForm: Form = {
+      id: Date.now(),
+      name: "Untitled Form",
+      description: "",
+      formType: "standard",
+      createdBy: "Current User",
+      fieldCount: 0,
+      fields: [],
+      status: "draft",
+      submissions: 0,
+      enabled: false,
+      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      lastUpdated: new Date().toISOString(),
+    };
+    setActiveBuilderForm(newForm);
+    setIsBuilderDrawerOpen(true);
+  };
+
   // Forms sub-tab
   const [formsSubTab, setFormsSubTab] = useState<"forms" | "flows">("forms");
   const [viewingClient, setViewingClient] = useState<{ clientId: string; formId: number; submissionDate: string } | null>(null);
@@ -1448,7 +1486,8 @@ export default function WebForms() {
   };
 
   const handleEdit = (form: Form) => {
-    navigate("/web-forms/builder", { state: { form } });
+    setActiveBuilderForm(form);
+    setIsBuilderDrawerOpen(true);
   };
 
   // Drag handlers for flow steps
@@ -1538,7 +1577,8 @@ export default function WebForms() {
       setAddNewTitle("");
       setAddRequired(true);
       setAddConfirmOpen(false);
-      navigate("/web-forms/builder", { state: { form: newForm, returnTo: { tab: "flows", flowId: activeFlow.id } } });
+      setActiveBuilderForm(newForm);
+      setIsBuilderDrawerOpen(true);
     }
   };
 
@@ -1611,6 +1651,7 @@ export default function WebForms() {
             onViewSubmission={sub => setViewingClient({ clientId: sub.clientId, formId: sub.formId, submissionDate: sub.date })}
             mainTab={mainTab}
             setMainTab={setMainTab}
+            onNewForm={handleOpenNewFormBuilder}
           />
         )}
 
@@ -1719,7 +1760,7 @@ export default function WebForms() {
                   primaryAction={{
                     label: "New form",
                     icon: <Plus className="w-4 h-4" />,
-                    onClick: () => navigate("/web-forms/new"),
+                    onClick: handleOpenNewFormBuilder,
                   }}
                 />
 
@@ -1735,7 +1776,7 @@ export default function WebForms() {
                           type="button"
                           className="text-xs font-semibold cursor-pointer hover:underline text-[#020817] text-left"
                           style={{ fontFamily: "DM Sans, sans-serif" }}
-                          onClick={() => handlePreviewClick(form)}
+                          onClick={() => handleEdit(form)}
                         >
                           {form.name}
                         </button>
@@ -2575,6 +2616,20 @@ export default function WebForms() {
         onClose={() => setDrawerFlow(null)}
         onEdit={fl => { setDrawerFlow(null); setActiveFlow(fl); }}
         onOpenPreview={fl => { setDrawerFlow(null); setActiveFlow(fl); setPreviewOpen(true); setPreviewStep(0); }}
+      />
+
+      {/* ─── Shared Form Builder Side Drawer ─── */}
+      <FormBuilderDrawer
+        isOpen={isBuilderDrawerOpen}
+        onClose={() => {
+          setIsBuilderDrawerOpen(false);
+          setActiveBuilderForm(null);
+        }}
+        initialForm={activeBuilderForm}
+        returnTo="/web-forms"
+        onSaveSuccess={(savedForm) => {
+          setForms(getStoredForms());
+        }}
       />
 
       {viewingClient && (
