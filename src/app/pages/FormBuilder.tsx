@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router";
 import { createPortal } from "react-dom";
 import {
   Plus,
-  FileText,
   Sliders,
   X,
   Trash2,
@@ -21,7 +20,6 @@ import {
   Minus as MinusIcon,
   Palette,
   Copy,
-  Zap,
   User,
   Users,
   Workflow,
@@ -39,9 +37,6 @@ import {
   ShieldCheck,
   EyeOff,
   Eye,
-  CheckCircle2,
-  Globe,
-  Layout,
   Type,
   AlignLeft,
   Circle,
@@ -136,8 +131,8 @@ export default function FormBuilder({
   const sidebarSelectRef = useRef<HTMLInputElement>(null);
   // optionSourceRefs not needed with replace mode — removed
 
-  const [currentTab, setCurrentTab] = useState<"build" | "design" | "live">("build");
-  const activeStepIndex = currentTab === "build" ? 1 : currentTab === "design" ? 2 : 3;
+  const [currentTab, setCurrentTab] = useState<"build" | "design">("build");
+  const activeStepIndex = currentTab === "build" ? 1 : 2;
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formFields, setFormFields] = useState<FormField[]>([]);
@@ -422,16 +417,12 @@ export default function FormBuilder({
   const handleNextTab = () => {
     if (currentTab === "build") {
       setCurrentTab("design");
-    } else if (currentTab === "design") {
-      setCurrentTab("live");
     }
   };
 
   const handleBackTab = () => {
     if (currentTab === "design") {
       setCurrentTab("build");
-    } else if (currentTab === "live") {
-      setCurrentTab("design");
     }
   };
 
@@ -794,8 +785,8 @@ export default function FormBuilder({
                 role="progressbar"
                 aria-valuenow={activeStepIndex}
                 aria-valuemin={1}
-                aria-valuemax={3}
-                aria-label={`Form Builder progress: step ${activeStepIndex} of 3, ${currentTab === "build" ? "Build" : currentTab === "design" ? "Design & Preview" : "Go Live"}`}
+                aria-valuemax={2}
+                aria-label={`Form Builder progress: step ${activeStepIndex} of 2, ${currentTab === "build" ? "Build" : "Design & Preview"}`}
                 className="flex items-center gap-3 p-1 -m-1 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 group"
               >
                 {/* 40px SVG Ring Progress */}
@@ -814,20 +805,20 @@ export default function FormBuilder({
                       cy="20"
                       r="16"
                       fill="none"
-                      stroke={activeStepIndex === 3 ? "#10B981" : "#2563EB"}
+                      stroke={activeStepIndex === 2 ? "#10B981" : "#2563EB"}
                       strokeWidth="4"
                       strokeLinecap="round"
                       strokeDasharray={100.53}
-                      strokeDashoffset={100.53 - (activeStepIndex / 3) * 100.53}
+                      strokeDashoffset={100.53 - (activeStepIndex / 2) * 100.53}
                       style={{ transition: "stroke-dashoffset 300ms ease-out, stroke 300ms ease" }}
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    {activeStepIndex === 3 ? (
+                    {activeStepIndex === 2 ? (
                       <Check className="w-4 h-4 text-[#10B981] stroke-[2.5]" />
                     ) : (
                       <span className="text-[11px] font-semibold text-[#0F172A]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        {activeStepIndex}/3
+                        {activeStepIndex}/2
                       </span>
                     )}
                   </div>
@@ -837,16 +828,14 @@ export default function FormBuilder({
                 <div className="flex flex-col min-w-0 pr-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[13px] font-semibold text-[#0F172A] leading-tight" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      {currentTab === "build" ? "Build" : currentTab === "design" ? "Design & Preview" : "Go Live"}
+                      {currentTab === "build" ? "Build" : "Design & Preview"}
                     </span>
                     <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
                   </div>
                   <span className="text-[12px] text-[#64748B] leading-tight mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                     {currentTab === "build"
                       ? "Next: Design & Preview"
-                      : currentTab === "design"
-                        ? "Next: Go Live"
-                        : "Ready to publish"}
+                      : "Ready to publish"}
                   </span>
                 </div>
               </button>
@@ -861,16 +850,15 @@ export default function FormBuilder({
                     {[
                       { tab: "build", step: 1, title: "1. Build", desc: "Form fields and canvas" },
                       { tab: "design", step: 2, title: "2. Design & Preview", desc: "Branding, theme & preview" },
-                      { tab: "live", step: 3, title: "3. Go Live", desc: "Publish settings & share URL" },
                     ].map((item) => {
-                      const isDone = activeStepIndex > item.step || (item.step === 3 && activeStepIndex === 3);
+                      const isDone = activeStepIndex > item.step || (item.step === 2 && activeStepIndex === 2);
                       const isCurrent = currentTab === item.tab;
                       return (
                         <button
                           key={item.tab}
                           type="button"
                           onClick={() => {
-                            setCurrentTab(item.tab as "build" | "design" | "live");
+                            setCurrentTab(item.tab as "build" | "design");
                             setIsProgressPopoverOpen(false);
                           }}
                           className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors cursor-pointer ${
@@ -884,7 +872,7 @@ export default function FormBuilder({
                               </div>
                             ) : isCurrent ? (
                               <div className="w-6 h-6 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-xs font-bold ring-2 ring-blue-200">
-                                {item.step === 3 ? <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" /> : item.step}
+                                {item.step === 2 ? <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" /> : item.step}
                               </div>
                             ) : (
                               <div className="w-6 h-6 rounded-full border border-gray-300 bg-white text-gray-400 flex items-center justify-center text-xs font-medium">
@@ -923,7 +911,7 @@ export default function FormBuilder({
                 Cancel
               </button>
 
-              {/* Back: Outline button on Design & Preview and Go Live */}
+              {/* Back: Outline button on Design & Preview (Step 2) */}
               {currentTab !== "build" && (
                 <button
                   type="button"
@@ -950,8 +938,8 @@ export default function FormBuilder({
                 <span>Save Draft</span>
               </button>
 
-              {/* Primary: Solid #0F172A background, white text */}
-              {currentTab !== "live" ? (
+              {/* Primary Action Button: "Next" on Build (Step 1), "Publish Form" on Design & Preview (Step 2) */}
+              {currentTab === "build" ? (
                 <button
                   type="button"
                   onClick={handleNextTab}
@@ -2352,28 +2340,10 @@ export default function FormBuilder({
 
           {/* ── TAB 2: DESIGN & PREVIEW ── */}
           {currentTab === "design" && (
-            <div className="flex gap-4 h-full">
-              {/* Left: Settings (~40-42%) */}
-              <div className="w-[380px] xl:w-[420px] shrink-0 h-full">
-                <FormSettings
-                  formTitle={formTitle}
-                  formDescription={formDescription}
-                  onTitleChange={setFormTitle}
-                  onDescriptionChange={setFormDescription}
-                  onPreview={() => toast.info("Live preview updated")}
-                  onPublish={handlePublishForm}
-                  autoCreateClient={autoCreateClient}
-                  onAutoCreateClientChange={setAutoCreateClient}
-                  autoCreateProcessId={autoCreateProcessId}
-                  onAutoCreateProcessIdChange={setAutoCreateProcessId}
-                  autoCreateStageId={autoCreateStageId}
-                  onAutoCreateStageIdChange={setAutoCreateStageId}
-                />
-              </div>
-
-              {/* Right: Live Preview (~58-60%) */}
-              <div className="flex-1 min-w-0 h-full flex flex-col bg-slate-100/70 border border-border rounded-xl shadow-2xs overflow-hidden">
-                <div className="shrink-0 p-3 px-4 bg-white border-b border-border flex items-center justify-between">
+            <div className="flex gap-4 h-full min-h-0">
+              {/* Left: Live End-User Preview (~55-60%) */}
+              <div className="flex-1 min-w-0 h-full flex flex-col bg-slate-100/70 border border-[#E2E8F0] rounded-xl shadow-2xs overflow-hidden">
+                <div className="shrink-0 p-3 px-4 bg-white border-b border-[#E2E8F0] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Eye className="w-4 h-4 text-gray-500" />
                     <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'DM Sans, sans-serif' }}>
@@ -2388,10 +2358,10 @@ export default function FormBuilder({
 
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 flex justify-center items-start">
                   <div className={`w-full max-w-[560px] p-6 rounded-2xl border shadow-sm space-y-5 transition-all ${
-                    backgroundTheme === "dark" ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-border text-foreground"
+                    backgroundTheme === "dark" ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-[#E2E8F0] text-foreground"
                   }`}>
-                    <div className="border-b border-border pb-3">
-                      <h2 className="text-xl font-bold mb-1" style={{ fontFamily: typography.includes("Outfit") ? "Outfit, sans-serif" : typography.includes("Roboto") ? "Roboto, sans-serif" : "DM Sans, sans-serif" }}>
+                    <div className="border-b border-[#E2E8F0] pb-3">
+                      <h2 className="text-xl font-bold mb-1" style={{ fontFamily: typography.includes("Outfit") ? "Outfit, sans-serif" : typography.includes("Roboto") ? "Roboto, sans-serif" : typography.includes("Inter") ? "Inter, sans-serif" : typography.includes("Montserrat") ? "Montserrat, sans-serif" : "DM Sans, sans-serif" }}>
                         {formTitle || "Untitled Form"}
                       </h2>
                       {formDescription && (
@@ -2425,7 +2395,7 @@ export default function FormBuilder({
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-border">
+                    <div className="pt-2 border-t border-[#E2E8F0]">
                       <button
                         type="button"
                         style={{ backgroundColor: buttonColor, fontFamily: "DM Sans, sans-serif" }}
@@ -2437,145 +2407,33 @@ export default function FormBuilder({
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* ── TAB 3: GO LIVE ── */}
-          {currentTab === "live" && (
-            <div className="h-full overflow-y-auto">
-              <div className="max-w-[740px] mx-auto py-2 space-y-3.5 pb-4">
-              {/* Header */}
-              <div className="text-center py-2">
-                <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-1.5">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  Your Form is Ready!
-                </h2>
-                <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                  Review form details below and publish to make it live.
-                </p>
-              </div>
-
-              {/* 1. Form Summary Card */}
-              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                  <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                    Form Summary
-                  </h3>
-                  <span className="text-[11px] text-gray-500 font-medium">
-                    {formFields.length} {formFields.length === 1 ? 'field' : 'fields'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-1 bg-gray-50 px-2.5 rounded-lg text-xs">
-                  <span className="text-gray-500 font-medium">Title:</span>
-                  <span className="font-semibold text-gray-900 truncate max-w-[400px]">{formTitle || "Untitled Form"}</span>
-                </div>
-                {formFields.length > 0 && (
-                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    {formFields.map((field) => (
-                      <div key={field.id} className="flex items-center justify-between py-1 px-2.5 bg-gray-50/60 rounded-md text-xs">
-                        <span className="text-gray-700 font-medium truncate max-w-[280px]">{field.name}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {field.required && (
-                            <span className="text-[10px] px-1.5 py-0.2 bg-red-100 text-red-700 rounded font-medium">Required</span>
-                          )}
-                          {field.essential && (
-                            <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded font-medium">Essential</span>
-                          )}
-                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded font-mono uppercase">
-                            {field.type === "tel" ? "PHONE" : field.type === "page-break" ? "PAGE BREAK" : field.type === "section-break" ? "SECTION BREAK" : field.type === "html" ? "HTML BLOCK" : field.type}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 2. Design Settings Card */}
-              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
-                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                  Design Settings
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Theme</p>
-                    <p className="text-xs font-semibold text-gray-900 capitalize mt-0.5">{backgroundTheme}</p>
-                  </div>
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Typography</p>
-                    <p className="text-xs font-semibold text-gray-900 truncate mt-0.5">{typography.split('(')[0].trim()}</p>
-                  </div>
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Button Color</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <div className="w-3.5 h-3.5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: buttonColor }} />
-                      <p className="text-xs font-mono font-semibold text-gray-900">{buttonColor}</p>
-                    </div>
-                  </div>
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Button Text</p>
-                    <p className="text-xs font-semibold text-gray-900 truncate mt-0.5">{submitButtonText}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Client Auto-Creation Setting Card */}
-              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
-                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  <Zap className="w-3.5 h-3.5 text-purple-600" />
-                  Client Auto-Creation Setting
-                </h3>
-                <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-600">Auto-create clients from submissions</span>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800">
-                    <span className={`w-2 h-2 rounded-full ${autoCreateClient ? "bg-green-500" : "bg-gray-400"}`} />
-                    {autoCreateClient ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-                {autoCreateClient && (
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="p-2 bg-purple-50/50 border border-purple-100 rounded-lg">
-                      <p className="text-[10px] text-purple-600 uppercase font-semibold">Assigned Process</p>
-                      <p className="font-semibold text-gray-900 mt-0.5">{autoCreateProcessId || "Default"}</p>
-                    </div>
-                    <div className="p-2 bg-purple-50/50 border border-purple-100 rounded-lg">
-                      <p className="text-[10px] text-purple-600 uppercase font-semibold">Initial Stage</p>
-                      <p className="font-semibold text-gray-900 mt-0.5">{autoCreateStageId || "Default"}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 4. Share Your Form Card */}
-              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
-                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  <Globe className="w-3.5 h-3.5 text-blue-600" />
-                  Share Your Form
-                </h3>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    Custom URL Slug (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={customUrlSlug}
-                    onChange={(e) => setCustomUrlSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                    placeholder="my-custom-form"
-                    className="w-full px-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    Add a slug to personalize the public URL. A default unique ID will be used if left blank.
-                  </p>
-                </div>
-                <div className="bg-blue-50/70 border border-blue-200/60 rounded-lg p-2.5 text-xs text-blue-800">
-                  Your form link will become active immediately upon publishing.
-                </div>
-                </div>
+              {/* Right: Settings Pane (40-45%, min-w-[420px]) */}
+              <div className="w-[42%] min-w-[420px] max-w-[480px] shrink-0 h-full">
+                <FormSettings
+                  formTitle={formTitle}
+                  formDescription={formDescription}
+                  onTitleChange={setFormTitle}
+                  onDescriptionChange={setFormDescription}
+                  onPreview={() => toast.info("Live preview updated")}
+                  onPublish={handlePublishForm}
+                  autoCreateClient={autoCreateClient}
+                  onAutoCreateClientChange={setAutoCreateClient}
+                  autoCreateProcessId={autoCreateProcessId}
+                  onAutoCreateProcessIdChange={setAutoCreateProcessId}
+                  autoCreateStageId={autoCreateStageId}
+                  onAutoCreateStageIdChange={setAutoCreateStageId}
+                  customUrlSlug={customUrlSlug}
+                  onCustomUrlSlugChange={setCustomUrlSlug}
+                  backgroundTheme={backgroundTheme}
+                  onBackgroundThemeChange={setBackgroundTheme}
+                  typography={typography}
+                  onTypographyChange={setTypography}
+                  buttonColor={buttonColor}
+                  onButtonColorChange={setButtonColor}
+                  submitButtonText={submitButtonText}
+                  onSubmitButtonTextChange={setSubmitButtonText}
+                />
               </div>
             </div>
           )}
