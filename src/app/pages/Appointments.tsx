@@ -185,6 +185,11 @@ export default function Appointments() {
 
   const location = useLocation();
 
+  const isProcessFixed = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
+  }, [location.search]);
+
   // Synchronize process filter with URL search params whenever location.search changes
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1039,8 +1044,8 @@ export default function Appointments() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Appointments"
-          subtitle="Schedule and manage appointments with your clients"
+          title={isProcessFixed && appointmentProcess.name ? appointmentProcess.name : "Appointments"}
+          subtitle={isProcessFixed && appointmentProcess.name ? `Schedule and manage ${appointmentProcess.name}` : "Schedule and manage appointments with your clients"}
           badge={
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Schedule
@@ -1068,50 +1073,63 @@ export default function Appointments() {
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-1.5">
-              {/* Specific Appointment Process Selector (Only specific appointment processes, no "All Processes") */}
+              {/* Specific Appointment Process Selector / Fixed Badge */}
               <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                  title="Select Appointment Process"
-                >
-                  <span className="truncate max-w-[160px] font-semibold text-gray-800">
-                    {appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Appointment Flow"}
-                  </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                </button>
-
-                {showProcessesDropdown && (
+                {isProcessFixed ? (
+                  <div
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 select-none cursor-default"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    title={`Fixed workflow: ${appointmentProcess.name}`}
+                  >
+                    <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                      {appointmentProcess.name}
+                    </span>
+                  </div>
+                ) : (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowProcessesDropdown(false)}
-                    />
-                    <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      {appointmentProcesses.map((proc) => (
-                        <button
-                          key={proc.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedProcessFilter(proc.id);
-                            setStageFilter("all");
-                            setShowProcessesDropdown(false);
-                            navigate(`/appointments?processId=${encodeURIComponent(proc.id)}&process=${encodeURIComponent(proc.name)}`, { replace: true });
-                          }}
-                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                            selectedProcessFilter === proc.id ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          <span className="truncate">{proc.name}</span>
-                          {selectedProcessFilter === proc.id && (
-                            <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                      title="Select Appointment Process"
+                    >
+                      <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                        {appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Appointment Flow"}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    </button>
+
+                    {showProcessesDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowProcessesDropdown(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                          {appointmentProcesses.map((proc) => (
+                            <button
+                              key={proc.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProcessFilter(proc.id);
+                                setStageFilter("all");
+                                setShowProcessesDropdown(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                selectedProcessFilter === proc.id ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                              }`}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              <span className="truncate">{proc.name}</span>
+                              {selectedProcessFilter === proc.id && (
+                                <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

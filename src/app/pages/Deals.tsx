@@ -537,6 +537,10 @@ export default function Deals() {
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
+  const isProcessFixed = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
+  }, [location.search]);
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>(() => {
     try {
       const qp = new URLSearchParams(window.location.search);
@@ -2155,8 +2159,8 @@ export default function Deals() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Process"
-          subtitle="View and manage process pipeline"
+          title={isProcessFixed && selectedProcessFilter ? selectedProcessFilter : "Process"}
+          subtitle={isProcessFixed && selectedProcessFilter ? `View and manage ${selectedProcessFilter} pipeline` : "View and manage process pipeline"}
           badge={
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Pipeline
@@ -2198,46 +2202,57 @@ export default function Deals() {
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-1.5">
-              {/* Process Filter Dropdown */}
+              {/* Process Filter Dropdown / Fixed Workflow Badge */}
               <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                >
-                  <span className="truncate max-w-[140px] font-semibold text-gray-800">{selectedProcessFilter}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                </button>
-
-                {/* Processes Dropdown Menu */}
-                {showProcessesDropdown && (
+                {isProcessFixed ? (
+                  <div
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 select-none cursor-default"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    title={`Fixed workflow: ${selectedProcessFilter}`}
+                  >
+                    <span className="truncate max-w-[160px] font-semibold text-gray-800">{selectedProcessFilter}</span>
+                  </div>
+                ) : (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowProcessesDropdown(false)}
-                    />
-                    <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      {availableProcesses.map((process) => (
-                        <button
-                          key={process}
-                          onClick={() => {
-                            setSelectedProcessFilter(process);
-                            setShowProcessesDropdown(false);
-                            navigate(`/deals?process=${encodeURIComponent(process)}`, { replace: true });
-                          }}
-                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
-                            selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                          }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          <span className="truncate">{process}</span>
-                          {selectedProcessFilter === process && (
-                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <span className="truncate max-w-[140px] font-semibold text-gray-800">{selectedProcessFilter}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    </button>
+
+                    {/* Processes Dropdown Menu */}
+                    {showProcessesDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowProcessesDropdown(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                          {availableProcesses.map((process) => (
+                            <button
+                              key={process}
+                              onClick={() => {
+                                setSelectedProcessFilter(process);
+                                setShowProcessesDropdown(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
+                                selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                              }`}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              <span className="truncate">{process}</span>
+                              {selectedProcessFilter === process && (
+                                <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

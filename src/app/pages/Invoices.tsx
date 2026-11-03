@@ -272,6 +272,11 @@ export default function Invoices() {
     return procs.find((p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing") || DEFAULT_ENTITY_PROCESSES.invoice;
   }, [storedProcesses, storeTick, location.search]);
 
+  const isProcessFixed = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
+  }, [location.search]);
+
   const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
     const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
     if (stage) {
@@ -320,8 +325,8 @@ export default function Invoices() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Invoices"
-          subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
+          title={isProcessFixed && invoiceProcess?.name ? invoiceProcess.name : "Invoices"}
+          subtitle={isProcessFixed && invoiceProcess?.name ? `Manage ${invoiceProcess.name} billing and payments` : "Manage client billing, view automated call-flow invoices, and collect payments"}
         >
           <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />

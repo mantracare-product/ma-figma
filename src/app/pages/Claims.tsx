@@ -56,6 +56,11 @@ export default function Claims() {
 
   const location = useLocation();
 
+  const isProcessFixed = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
+  }, [location.search]);
+
   const insuranceProcesses = useMemo(() => {
     const procs = getStoredProcesses();
     const list = procs.filter((p) => p.entityType === "insurance");
@@ -248,8 +253,8 @@ export default function Claims() {
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         {/* Top Header */}
         <PageHeader
-          title="Insurance & Claims"
-          subtitle="End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."
+          title={isProcessFixed && insuranceProcess.name ? insuranceProcess.name : "Insurance & Claims"}
+          subtitle={isProcessFixed && insuranceProcess.name ? `Manage ${insuranceProcess.name} lifecycle` : "End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."}
         />
 
         {/* Filter and Search Bar powered by PageTopBar */}
@@ -391,27 +396,33 @@ export default function Claims() {
                   </option>
                 ))}
               </select>
-              {insuranceProcesses.length > 1 && (
-                <select
-                  value={selectedProcessFilter || insuranceProcesses[0].id}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    setSelectedProcessFilter(newId);
-                    setCurrentPage(1);
-                    const found = insuranceProcesses.find((p) => p.id === newId);
-                    if (found) {
-                      navigate(`/claims?processId=${encodeURIComponent(found.id)}&process=${encodeURIComponent(found.name)}`, { replace: true });
-                    }
-                  }}
-                  className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+              {isProcessFixed ? (
+                <div
+                  className="h-[36px] flex items-center px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 select-none shadow-2xs cursor-default"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={`Fixed workflow: ${insuranceProcess.name}`}
                 >
-                  {insuranceProcesses.map((proc) => (
-                    <option key={proc.id} value={proc.id}>
-                      {proc.name}
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate max-w-[160px]">{insuranceProcess.name}</span>
+                </div>
+              ) : (
+                insuranceProcesses.length > 1 && (
+                  <select
+                    value={selectedProcessFilter || insuranceProcesses[0].id}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setSelectedProcessFilter(newId);
+                      setCurrentPage(1);
+                    }}
+                    className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {insuranceProcesses.map((proc) => (
+                      <option key={proc.id} value={proc.id}>
+                        {proc.name}
+                      </option>
+                    ))}
+                  </select>
+                )
               )}
             </div>
           }
