@@ -32,7 +32,7 @@ export default function App() {
                           <InvoiceProvider>
                             <DndProvider backend={HTML5Backend}>
                               <RouterProvider router={router} />
-                              <Toaster position="bottom-right" />
+                              <Toaster position="top-right" />
                             </DndProvider>
                           </InvoiceProvider>
                         </ClientFieldsProvider>

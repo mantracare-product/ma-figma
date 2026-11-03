@@ -65,24 +65,26 @@ export default function FormSettings({
   ];
 
   return (
-    <div className="flex h-full">
-      {/* Vertical Tabs */}
-      <div className="w-48 border-r border-gray-200 bg-gray-50/50 overflow-y-auto">
-        <div className="p-3 space-y-1">
+    <div className="flex flex-col h-full bg-white border border-border rounded-xl shadow-2xs overflow-hidden">
+      {/* Horizontal Segmented Tabs at Top */}
+      <div className="shrink-0 p-2.5 border-b border-border bg-gray-50/70">
+        <div className="grid grid-cols-4 gap-1 bg-gray-200/60 p-1 rounded-lg">
           {tabs.map((tab) => {
             const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-3 ${
-                  activeTab === tab.id
-                    ? "bg-white text-primary shadow-sm border border-gray-200"
-                    : "text-gray-700 hover:bg-white/60 hover:text-gray-900"
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition-all cursor-pointer truncate ${
+                  isActive
+                    ? "bg-white text-blue-600 shadow-2xs border border-gray-200/80"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-white/40"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
+                <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{tab.label}</span>
               </button>
             );
@@ -91,8 +93,8 @@ export default function FormSettings({
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto p-8">
+      <div className="flex-1 min-h-0 overflow-y-auto p-5">
+        <div className="space-y-5">
           {/* GENERAL SETTINGS */}
           {activeTab === "general" && (
             <div className="space-y-6">

@@ -38,6 +38,9 @@ import {
   ToggleLeft,
   ShieldCheck,
   EyeOff,
+  Eye,
+  CheckCircle2,
+  Globe,
   Layout,
   Type,
   AlignLeft,
@@ -143,14 +146,10 @@ export default function FormBuilder() {
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const [hoveredFieldId, setHoveredFieldId] = useState<number | null>(null);
   const [fieldValues, setFieldValues] = useState<{ [key: number]: any }>({});
-  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
-    general: true,
-    appearance: false,
-    validation: false,
-    conditionalLogic: false,
-    advanced: false,
-    integrations: false,
-  });
+  const [activeSection, setActiveSection] = useState<string>("general");
+  const toggleSection = (section: string) => {
+    setActiveSection((prev) => (prev === section ? "" : section));
+  };
 
   // Auto-create client state
   const [autoCreateClient, setAutoCreateClient] = useState(existingForm?.autoCreateClient ?? false);
@@ -572,6 +571,12 @@ export default function FormBuilder() {
   const handleFieldClick = (field: FormField) => {
     setSelectedField(field);
     setShowFieldSettings(true);
+    setActiveSection("general");
+  };
+
+  const handleCloseFieldSettings = () => {
+    setShowFieldSettings(false);
+    setSelectedField(null);
   };
 
   const handleUpdateField = (updatedField: FormField) => {
@@ -642,126 +647,155 @@ export default function FormBuilder() {
     }
   };
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 pt-8 pb-4">
-        {/* Header */}
-        <div className="border-b border-border pb-6 mb-6">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 transition-colors mb-2.5 cursor-pointer"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
-          </button>
-          <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-            {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : "Create New Form"}
-          </h1>
-          <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-            {existingForm?.name ? "Build, configure fields, and publish changes to this form template" : "Build, design, and publish your form"}
-          </p>
+    <div className="h-full flex flex-col bg-[#F8FAFC] overflow-hidden select-none">
+      {/* ── Compact Header & Sticky Tab Bar ── */}
+      <header className="shrink-0 bg-white border-b border-border px-6 pt-3 pb-0">
+        <div className="max-w-[1600px] mx-auto">
+          {/* Top row: Back link + Title */}
+          <div className="flex items-center justify-between gap-4 pb-2.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 transition-colors cursor-pointer shrink-0"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{location.pathname.startsWith("/admin") || (typeof returnTo === "string" && returnTo.includes("admin")) ? "Back to Form Templates" : "Back to Forms"}</span>
+              </button>
+              <div className="h-3.5 w-px bg-gray-200 shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-gray-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {existingForm?.name ? `Form Builder: ${formTitle || existingForm.name}` : "Create New Form"}
+                </h1>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom row: Tabs Left-Aligned directly under title with active underline and step numbers */}
+          <div className="flex items-center gap-6 border-t border-gray-100 pt-1 -mb-px">
+            <button
+              type="button"
+              onClick={() => setCurrentTab("build")}
+              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
+                currentTab === "build"
+                  ? "text-blue-600"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
+                currentTab === "build" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
+              }`}>1</span>
+              <span>Build</span>
+              {currentTab === "build" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTab("design")}
+              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
+                currentTab === "design"
+                  ? "text-blue-600"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
+                currentTab === "design" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
+              }`}>2</span>
+              <span>Design &amp; Preview</span>
+              {currentTab === "design" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTab("live")}
+              className={`pb-2.5 px-1 text-xs font-semibold transition-colors relative cursor-pointer flex items-center gap-1.5 ${
+                currentTab === "live"
+                  ? "text-blue-600"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
+                currentTab === "live" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
+              }`}>3</span>
+              <span>Go Live</span>
+              {currentTab === "live" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+              )}
+            </button>
+          </div>
         </div>
+      </header>
 
-        {/* Tabs - Horizontal Aligned Right */}
-        <div className="flex items-center justify-end gap-8 border-b border-border pb-2 mb-4">
-          <button
-            onClick={() => setCurrentTab("build")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "build"
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground"
-              }`}
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            Build
-            {currentTab === "build" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
-            )}
-          </button>
-          <button
-            onClick={() => setCurrentTab("design")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "design"
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground"
-              }`}
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            Design & Preview
-            {currentTab === "design" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
-            )}
-          </button>
-          <button
-            onClick={() => setCurrentTab("live")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "live"
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground"
-              }`}
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            Go Live
-            {currentTab === "live" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
-            )}
-          </button>
-        </div>
-
-        <div className="flex gap-8">
-          {/* Left - Form Content */}
-          <div className="flex-1">
-            {/* Build Tab */}
-            {currentTab === "build" && (
-              <div className="space-y-4">
-                {/* Form Title */}
-                <div>
-                  <label className="block text-xs font-medium uppercase tracking-wide mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                    FORM TITLE
-                  </label>
-                  <input
-                    type="text"
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    className="w-full px-4 py-2 border border-border rounded-lg text-base font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-xs font-medium uppercase tracking-wide mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                    DESCRIPTION
-                  </label>
-                  <textarea
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    maxLength={500}
-                    className="w-full px-4 py-3 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 h-20"
-                    style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}
-                  />
-                  <div className="text-xs text-right mt-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#94A3B8' }}>
-                    {formDescription.length} / 500
+      {/* ── Main content area: strictly fixed-height, child panes scroll independently ── */}
+      <main className="flex-1 min-h-0 overflow-hidden px-6 py-4">
+        <div className="max-w-[1600px] h-full mx-auto">
+          {/* ── TAB 1: BUILD ── */}
+          {currentTab === "build" && (
+            <div className="flex gap-4 h-full">
+              {/* Left: Canvas Area (scrolls independently) */}
+              <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1 space-y-3">
+                {/* Form Title & Description Compact Card */}
+                <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      Form Title
+                    </label>
+                    <input
+                      type="text"
+                      value={formTitle}
+                      onChange={(e) => setFormTitle(e.target.value)}
+                      placeholder="e.g. Patient Intake Form"
+                      className="w-full px-3 py-1.5 text-sm font-semibold border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        Description
+                      </label>
+                      <span className="text-[10px] text-gray-400 font-mono" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        {formDescription.length} / 500
+                      </span>
+                    </div>
+                    <textarea
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                      maxLength={500}
+                      rows={2}
+                      placeholder="Brief instructions or summary..."
+                      className="w-full px-3 py-1.5 text-xs border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-600"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    />
                   </div>
                 </div>
 
-                {/* Form Fields Drop Zone */}
+                {/* Form Fields Canvas Drop Zone */}
                 <div
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
-                  className={`space-y-3 min-h-[200px] p-4 border-2 border-dashed rounded-lg transition-colors ${draggedFieldType ? "border-primary bg-blue-50" : "border-gray-300"
-                    }`}
+                  className={`space-y-2.5 min-h-[160px] p-3.5 border-2 border-dashed rounded-xl transition-colors bg-white/60 ${
+                    draggedFieldType ? "border-blue-500 bg-blue-50/50" : "border-gray-300 hover:border-gray-400"
+                  }`}
                 >
                   {formFields.length === 0 ? (
-                    <div className="text-center py-12">
-                      <p className="text-sm text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Drag and drop fields here or click on fields to add them
+                    <div className="text-center py-7">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                        <LayoutGrid className="w-5 h-5" />
+                      </div>
+                      <p className="text-xs font-semibold text-gray-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        Form Canvas is Empty
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        Click or drag fields from the right panel to build your form
                       </p>
                     </div>
                   ) : (
@@ -785,321 +819,56 @@ export default function FormBuilder() {
                   )}
                 </div>
 
-                {/* Submit Button */}
-                <div>
-                  <label className="block text-xs font-medium uppercase tracking-wide mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                    SUBMIT BUTTON TEXT
-                  </label>
-                  <input
-                    type="text"
-                    value={submitButtonText}
-                    onChange={(e) => setSubmitButtonText(e.target.value)}
-                    maxLength={30}
-                    className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  />
-                  <div className="text-xs text-right mt-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#94A3B8' }}>
-                    {submitButtonText.length} / 30
+                {/* Slim Submit Button Text Row */}
+                <div className="bg-white border border-border rounded-xl p-3 shadow-2xs flex items-center justify-between gap-3">
+                  <div className="shrink-0">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      Submit Button Text
+                    </label>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Design Tab */}
-            {currentTab === "design" && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <div>
-                  <FormSettings
-                    formTitle={formTitle}
-                    formDescription={formDescription}
-                    onTitleChange={setFormTitle}
-                    onDescriptionChange={setFormDescription}
-                    onPreview={() => toast.info("Live preview updated")}
-                    onPublish={handlePublishForm}
-                    autoCreateClient={autoCreateClient}
-                    onAutoCreateClientChange={setAutoCreateClient}
-                    autoCreateProcessId={autoCreateProcessId}
-                    onAutoCreateProcessIdChange={setAutoCreateProcessId}
-                    autoCreateStageId={autoCreateStageId}
-                    onAutoCreateStageIdChange={setAutoCreateStageId}
-                  />
-                </div>
-                {/* Live Form Preview Panel */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Live End-User Preview
-                    </h3>
-                    <span className="text-xs px-2.5 py-1 bg-green-100 text-green-700 rounded-full font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      ● Real-time
+                  <div className="flex-1 max-w-xs flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={submitButtonText}
+                      onChange={(e) => setSubmitButtonText(e.target.value)}
+                      maxLength={30}
+                      className="w-full px-3 py-1.5 text-xs font-medium border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    />
+                    <span className="text-[10px] text-gray-400 font-mono shrink-0">
+                      {submitButtonText.length}/30
                     </span>
                   </div>
-                  <div className={`p-8 rounded-2xl border shadow-md space-y-6 transition-all ${backgroundTheme === "dark" ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-border text-foreground"
-                    }`}>
-                    <div className="border-b border-border pb-4">
-                      <h2 className="text-2xl font-bold mb-1.5" style={{ fontFamily: typography.includes("Outfit") ? "Outfit, sans-serif" : typography.includes("Roboto") ? "Roboto, sans-serif" : "DM Sans, sans-serif" }}>
-                        {formTitle || "Untitled Form"}
-                      </h2>
-                      {formDescription && (
-                        <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {formDescription}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-5">
-                      {formFields.length === 0 ? (
-                        <p className="text-sm text-muted-foreground italic text-center py-8">No fields added to form yet.</p>
-                      ) : (
-                        formFields.map(field => (
-                          <FieldRenderer
-                            key={field.id}
-                            field={field}
-                            isSelected={false}
-                            isDropTarget={false}
-                            fieldValue={fieldValues[field.id]}
-                            onFieldClick={() => { }}
-                            onFieldChange={(val) => setFieldValues({ ...fieldValues, [field.id]: val })}
-                            onDuplicate={() => { }}
-                            onDelete={() => { }}
-                            onDragStart={() => { }}
-                            onDragOver={() => { }}
-                            onDrop={() => { }}
-                            onConditionalLogic={() => { }}
-                          />
-                        ))
-                      )}
-                    </div>
-                    <div className="pt-3 border-t border-border">
-                      <button
-                        style={{ backgroundColor: buttonColor, fontFamily: "DM Sans, sans-serif" }}
-                        className="w-full py-3 px-6 rounded-lg text-white font-semibold shadow hover:opacity-90 transition-opacity text-sm"
-                      >
-                        {submitButtonText || "Submit"}
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Go Live Tab */}
-            {currentTab === "live" && (
-              <div className="space-y-6">
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                    Your Form is Ready!
-                  </h2>
-                  <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                    Review your form details below and publish it to make it live.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Column 1 */}
-                  <div className="space-y-6">
-                    {/* Form Summary */}
-                    <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-sm font-semibold flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                        <FileText className="w-4 h-4" />
-                        Form Summary
-                      </h3>
-
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Form Title
-                          </p>
-                          <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                            {formTitle}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Form Fields ({formFields.length})
-                          </p>
-                          <div className="space-y-2">
-                            {formFields.map((field) => (
-                              <div key={field.id} className="flex items-center justify-between text-sm">
-                                <div className="flex items-center gap-2">
-                                  <span style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                    {field.name}
-                                  </span>
-                                  <div className="flex gap-1">
-                                    {field.required && (
-                                      <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">
-                                        Required
-                                      </span>
-                                    )}
-                                    {field.essential && (
-                                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
-                                        Essential
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="text-xs px-2 py-1 bg-gray-200 rounded" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                                  {field.type}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Design Settings */}
-                    <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-sm font-semibold flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                        <Sliders className="w-4 h-4" />
-                        Design Settings
-                      </h3>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Theme
-                          </p>
-                          <p className="text-sm font-semibold capitalize" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                            {backgroundTheme}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Typography
-                          </p>
-                          <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                            {typography.split('(')[0].trim()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Button Color
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-6 h-6 rounded border border-border"
-                              style={{ backgroundColor: buttonColor }}
-                            />
-                            <p className="text-sm font-mono font-semibold" style={{ color: '#020817' }}>
-                              {buttonColor}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            Button Text
-                          </p>
-                          <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                            {submitButtonText}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Column 2 */}
-                  <div className="space-y-6">
-                    {/* Client Auto-Creation Settings */}
-                    <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-sm font-semibold flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                        <Zap className="w-4 h-4 text-purple-600" />
-                        Client Auto-Creation Setting
-                      </h3>
-                      <div>
-                        <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                          Status
-                        </p>
-                        <p className="text-sm font-semibold flex items-center gap-1.5" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                          <span className={`w-2 h-2 rounded-full ${autoCreateClient ? "bg-green-500" : "bg-gray-400"}`} />
-                          {autoCreateClient ? "Enabled — Submissions will automatically create/link client profiles" : "Disabled — Submissions will not create client profiles"}
-                        </p>
-                      </div>
-                      {autoCreateClient && (
-                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200/50">
-                          <div>
-                            <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                              Assign to Process
-                            </p>
-                            <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                              {autoCreateProcessId || "None"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                              Initial Stage
-                            </p>
-                            <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                              {autoCreateStageId || "None"}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Share Your Form */}
-                    <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-base font-bold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                        Share Your Form
-                      </h3>
-                      <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                        Configure your form URL now. Once published, your form will be live and accessible via this link.
-                      </p>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                          Custom URL Slug (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          value={customUrlSlug}
-                          onChange={(e) => setCustomUrlSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                          placeholder="https://app.myaifrontdesk.com/forms/[uniqueId]/ my-custom-form"
-                          className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        />
-                        <p className="text-xs mt-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          Add a custom slug to make your form URL more readable. Leave empty for default URL.
-                        </p>
-                      </div>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-xs" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                          Your custom URL will be saved with the form. The complete link will be available after you publish.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right - Field Categories / Settings (Build Tab Only) */}
-          {currentTab === "build" && (
-            <div className="w-80 flex-shrink-0">
-              <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              {/* Right: Fixed-width (340px) sticky & scrolls independently */}
+              <div className="w-[340px] shrink-0 h-full bg-white border border-border rounded-xl shadow-2xs overflow-hidden flex flex-col">
                 {showFieldSettings && selectedField ? (
                   /* Field Settings Panel */
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
-                      <h3 className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                        Field Settings
-                      </h3>
+                  <div className="flex flex-col h-full">
+                    {/* Pinned header with field name, type, and close button */}
+                    <div className="shrink-0 p-3 border-b border-border bg-gray-50/70 flex items-center justify-between">
+                      <div className="min-w-0 pr-2">
+                        <h3 className="text-xs font-bold text-gray-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                          {selectedField.label || selectedField.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-gray-500 uppercase">
+                          {selectedField.type} Settings
+                        </span>
+                      </div>
                       <button
-                        onClick={() => setShowFieldSettings(false)}
-                        className="p-1 hover:bg-gray-100 rounded"
+                        type="button"
+                        onClick={handleCloseFieldSettings}
+                        className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 rounded-md transition-colors cursor-pointer shrink-0"
+                        title="Close Settings (Return to Elements)"
                       >
-                        <X className="w-4 h-4 text-gray-600" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                    {/* Scrollable accordion: exactly 1 open at a time */}
+                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
                       {/* GENERAL SECTION */}
                       <div className="border border-gray-200 rounded-lg">
                         <button
@@ -1109,9 +878,9 @@ export default function FormBuilder() {
                           <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                             General
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.general ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${activeSection === 'general' ? 'rotate-180' : ''}`} />
                         </button>
-                        {expandedSections.general && (
+                        {activeSection === 'general' && (
                           <div className="p-3 space-y-3 border-t border-gray-200">
                             {/* Field Label */}
                             <div>
@@ -1937,9 +1706,9 @@ export default function FormBuilder() {
                           <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                             Appearance
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.appearance ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${activeSection === 'appearance' ? 'rotate-180' : ''}`} />
                         </button>
-                        {expandedSections.appearance && (
+                        {activeSection === 'appearance' && (
                           <div className="p-3 space-y-3 border-t border-gray-200">
                             {/* Custom CSS Class */}
                             <div>
@@ -1997,9 +1766,9 @@ export default function FormBuilder() {
                               {selectedField.required ? "Required" : "Optional"}
                             </span>
                           </div>
-                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.validation ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${activeSection === 'validation' ? 'rotate-180' : ''}`} />
                         </button>
-                        {expandedSections.validation && (
+                        {activeSection === 'validation' && (
                           <div className="p-3 space-y-3 border-t border-gray-200">
                             {/* Validation Summary */}
                             <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 text-xs space-y-1">
@@ -2118,9 +1887,9 @@ export default function FormBuilder() {
                           <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                             Advanced
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.advanced ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${activeSection === 'advanced' ? 'rotate-180' : ''}`} />
                         </button>
-                        {expandedSections.advanced && (
+                        {activeSection === 'advanced' && (
                           <div className="p-3 space-y-3 border-t border-gray-200">
                             {/* Field ID */}
                             <div>
@@ -2161,9 +1930,9 @@ export default function FormBuilder() {
                           <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                             Integrations
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.integrations ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${activeSection === 'integrations' ? 'rotate-180' : ''}`} />
                         </button>
-                        {expandedSections.integrations && (
+                        {activeSection === 'integrations' && (
                           <div className="p-3 border-t border-gray-200 space-y-3">
                             <div>
                               <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
@@ -2247,138 +2016,347 @@ export default function FormBuilder() {
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      {/* Delete Button */}
+                    {/* Pinned Footer with Delete Field Button */}
+                    <div className="shrink-0 p-3 border-t border-border bg-gray-50/60">
                       <button
+                        type="button"
                         onClick={() => handleDeleteField(selectedField.id)}
-                        className="w-full px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                        className="w-full px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border border-red-200/60"
                         style={{ fontFamily: 'Outfit, sans-serif' }}
                       >
-                        <Trash2 className="w-4 h-4" />
-                        Delete Field
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Field</span>
                       </button>
                     </div>
                   </div>
                 ) : (
-                  /* Field Categories — Restructured into Exactly Two Sections */
-                  <div className="divide-y divide-gray-100/80">
-                    {/* ── Form Elements ── */}
-                    <div>
-                      <button
-                        onClick={() => toggleSidebarSection("formElements")}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${sidebarSections.formElements
-                            ? "bg-gray-50/80 border-l-2 border-gray-400"
-                            : "hover:bg-gray-50"
-                          }`}
-                      >
-                        <span className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${sidebarSections.formElements ? "text-[#374151]" : "text-[#475569]"
-                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          <LayoutGrid className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarSections.formElements ? "text-gray-500" : "text-gray-400"
-                            }`} />
-                          Form Elements
-                        </span>
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${sidebarSections.formElements ? "text-gray-500 rotate-180" : "text-gray-300"
-                          }`} />
-                      </button>
-
-                      {sidebarSections.formElements && (
-                        <div className="px-3 pt-2 pb-3 grid grid-cols-2 gap-2">
-                          {[
-                            { type: "text", label: "Short Text", icon: Type },
-                            { type: "textarea", label: "Long Text", icon: AlignLeft },
-                            { type: "number", label: "Number", icon: Hash },
-                            { type: "date", label: "Date", icon: Calendar },
-                            { type: "select", label: "Dropdown", icon: ChevronDown },
-                            { type: "multiselect", label: "Multi-Select", icon: ListChecks },
-                            { type: "radio", label: "Radio Button", icon: Circle },
-                            { type: "checkbox", label: "Checkbox", icon: Square },
-                            { type: "file", label: "File Upload", icon: Upload },
-                          ].map((item) => (
-                            <button
-                              key={item.type}
-                              draggable
-                              onDragStart={() => handleDragStart(item.type, item.label)}
-                              onClick={() => handleAddField(item.type, item.label)}
-                              className="group flex flex-col items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-sm hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing"
-                            >
-                              <div className="w-7 h-7 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-gray-100 transition-colors">
-                                <item.icon className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="text-[10px] font-medium text-center leading-tight truncate w-full" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                                {item.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  /* Nothing selected: Form Elements & Create form using existing fields */
+                  <div className="flex flex-col h-full">
+                    <div className="shrink-0 p-3 border-b border-border bg-gray-50/70">
+                      <h3 className="text-xs font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        Form Elements
+                      </h3>
+                      <p className="text-[10px] text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        Click or drag elements to canvas
+                      </p>
                     </div>
 
-                    {/* ── Create form using existing fields ── */}
-                    <div className="border-t border-gray-100/80">
-                      <button
-                        onClick={() => toggleSidebarSection("existingFields")}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${sidebarSections.existingFields
-                            ? "bg-gray-50/80 border-l-2 border-gray-400"
-                            : "hover:bg-gray-50"
-                          }`}
-                      >
-                        <span className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${sidebarSections.existingFields ? "text-[#374151]" : "text-[#475569]"
-                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          <Sliders className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarSections.existingFields ? "text-gray-500" : "text-gray-400"
-                            }`} />
-                          Create form using existing fields
-                        </span>
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${sidebarSections.existingFields ? "text-gray-500 rotate-180" : "text-gray-300"
-                          }`} />
-                      </button>
-
-                      {sidebarSections.existingFields && (
-                        <div className="px-3 pt-3 pb-3">
+                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { type: "text", label: "Short Text", icon: Type },
+                          { type: "textarea", label: "Long Text", icon: AlignLeft },
+                          { type: "number", label: "Number", icon: Hash },
+                          { type: "date", label: "Date", icon: Calendar },
+                          { type: "select", label: "Dropdown", icon: ChevronDown },
+                          { type: "multiselect", label: "Multi-Select", icon: ListChecks },
+                          { type: "radio", label: "Radio Button", icon: Circle },
+                          { type: "checkbox", label: "Checkbox", icon: Square },
+                          { type: "file", label: "File Upload", icon: Upload },
+                        ].map((item) => (
                           <button
-                            onClick={() => setShowSelectFieldModal(true)}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-blue-300 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/50 transition-colors cursor-pointer"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                            key={item.type}
+                            type="button"
+                            draggable
+                            onDragStart={() => handleDragStart(item.type, item.label)}
+                            onClick={() => handleAddField(item.type, item.label)}
+                            className="group flex flex-col items-center gap-1 p-2 bg-white border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-2xs hover:bg-blue-50/30 transition-all cursor-grab active:cursor-grabbing text-center"
                           >
-                            <Sliders className="w-3.5 h-3.5" />
-                            Select
+                            <div className="w-6 h-6 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                              <item.icon className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-[10px] font-medium leading-tight truncate w-full text-gray-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {item.label}
+                            </span>
                           </button>
-                        </div>
-                      )}
+                        ))}
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          Existing Fields
+                        </span>
+                        <p className="text-[10px] text-gray-400">
+                          Import configured fields from your CRM, Process, or Appointments.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowSelectFieldModal(true)}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-blue-300 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                          <span>Select from Field Library</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             </div>
           )}
-        </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-2 mt-4 border-t border-border">
-          <div>
+          {/* ── TAB 2: DESIGN & PREVIEW ── */}
+          {currentTab === "design" && (
+            <div className="flex gap-4 h-full">
+              {/* Left: Settings (~40-42%) */}
+              <div className="w-[420px] xl:w-[460px] shrink-0 h-full">
+                <FormSettings
+                  formTitle={formTitle}
+                  formDescription={formDescription}
+                  onTitleChange={setFormTitle}
+                  onDescriptionChange={setFormDescription}
+                  onPreview={() => toast.info("Live preview updated")}
+                  onPublish={handlePublishForm}
+                  autoCreateClient={autoCreateClient}
+                  onAutoCreateClientChange={setAutoCreateClient}
+                  autoCreateProcessId={autoCreateProcessId}
+                  onAutoCreateProcessIdChange={setAutoCreateProcessId}
+                  autoCreateStageId={autoCreateStageId}
+                  onAutoCreateStageIdChange={setAutoCreateStageId}
+                />
+              </div>
+
+              {/* Right: Live Preview (~58-60%) */}
+              <div className="flex-1 min-w-0 h-full flex flex-col bg-slate-100/70 border border-border rounded-xl shadow-2xs overflow-hidden">
+                <div className="shrink-0 p-3 px-4 bg-white border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-gray-500" />
+                    <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Live End-User Preview
+                    </h3>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 bg-green-50 text-green-700 border border-green-200/60 rounded-full font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    Real-time
+                  </span>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto p-6 flex justify-center items-start">
+                  <div className={`w-full max-w-[560px] p-6 rounded-2xl border shadow-sm space-y-5 transition-all ${
+                    backgroundTheme === "dark" ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-border text-foreground"
+                  }`}>
+                    <div className="border-b border-border pb-3">
+                      <h2 className="text-xl font-bold mb-1" style={{ fontFamily: typography.includes("Outfit") ? "Outfit, sans-serif" : typography.includes("Roboto") ? "Roboto, sans-serif" : "DM Sans, sans-serif" }}>
+                        {formTitle || "Untitled Form"}
+                      </h2>
+                      {formDescription && (
+                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {formDescription}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      {formFields.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic text-center py-8">No fields added to form yet.</p>
+                      ) : (
+                        formFields.map(field => (
+                          <FieldRenderer
+                            key={field.id}
+                            field={field}
+                            isSelected={false}
+                            isDropTarget={false}
+                            fieldValue={fieldValues[field.id]}
+                            onFieldClick={() => { }}
+                            onFieldChange={(val) => setFieldValues({ ...fieldValues, [field.id]: val })}
+                            onDuplicate={() => { }}
+                            onDelete={() => { }}
+                            onDragStart={() => { }}
+                            onDragOver={() => { }}
+                            onDrop={() => { }}
+                            onConditionalLogic={() => { }}
+                          />
+                        ))
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-border">
+                      <button
+                        type="button"
+                        style={{ backgroundColor: buttonColor, fontFamily: "DM Sans, sans-serif" }}
+                        className="w-full py-2.5 px-5 rounded-lg text-white font-semibold shadow-2xs hover:opacity-90 transition-opacity text-xs cursor-pointer"
+                      >
+                        {submitButtonText || "Submit"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 3: GO LIVE ── */}
+          {currentTab === "live" && (
+            <div className="max-w-[720px] mx-auto h-full overflow-y-auto px-4 py-2 space-y-3.5">
+              {/* Header */}
+              <div className="text-center py-2">
+                <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-1.5">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Your Form is Ready!
+                </h2>
+                <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Review form details below and publish to make it live.
+                </p>
+              </div>
+
+              {/* 1. Form Summary Card */}
+              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    Form Summary
+                  </h3>
+                  <span className="text-[11px] text-gray-500 font-medium">
+                    {formFields.length} {formFields.length === 1 ? 'field' : 'fields'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1 bg-gray-50 px-2.5 rounded-lg text-xs">
+                  <span className="text-gray-500 font-medium">Title:</span>
+                  <span className="font-semibold text-gray-900 truncate max-w-[400px]">{formTitle || "Untitled Form"}</span>
+                </div>
+                {formFields.length > 0 && (
+                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                    {formFields.map((field) => (
+                      <div key={field.id} className="flex items-center justify-between py-1 px-2.5 bg-gray-50/60 rounded-md text-xs">
+                        <span className="text-gray-700 font-medium truncate max-w-[280px]">{field.name}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {field.required && (
+                            <span className="text-[10px] px-1.5 py-0.2 bg-red-100 text-red-700 rounded font-medium">Required</span>
+                          )}
+                          {field.essential && (
+                            <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded font-medium">Essential</span>
+                          )}
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded font-mono uppercase">{field.type}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Design Settings Card */}
+              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
+                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                  Design Settings
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Theme</p>
+                    <p className="text-xs font-semibold text-gray-900 capitalize mt-0.5">{backgroundTheme}</p>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Typography</p>
+                    <p className="text-xs font-semibold text-gray-900 truncate mt-0.5">{typography.split('(')[0].trim()}</p>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Button Color</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-3.5 h-3.5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: buttonColor }} />
+                      <p className="text-xs font-mono font-semibold text-gray-900">{buttonColor}</p>
+                    </div>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Button Text</p>
+                    <p className="text-xs font-semibold text-gray-900 truncate mt-0.5">{submitButtonText}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Client Auto-Creation Setting Card */}
+              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
+                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  <Zap className="w-3.5 h-3.5 text-purple-600" />
+                  Client Auto-Creation Setting
+                </h3>
+                <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
+                  <span className="text-xs text-gray-600">Auto-create clients from submissions</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+                    <span className={`w-2 h-2 rounded-full ${autoCreateClient ? "bg-green-500" : "bg-gray-400"}`} />
+                    {autoCreateClient ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+                {autoCreateClient && (
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div className="p-2 bg-purple-50/50 border border-purple-100 rounded-lg">
+                      <p className="text-[10px] text-purple-600 uppercase font-semibold">Assigned Process</p>
+                      <p className="font-semibold text-gray-900 mt-0.5">{autoCreateProcessId || "Default"}</p>
+                    </div>
+                    <div className="p-2 bg-purple-50/50 border border-purple-100 rounded-lg">
+                      <p className="text-[10px] text-purple-600 uppercase font-semibold">Initial Stage</p>
+                      <p className="font-semibold text-gray-900 mt-0.5">{autoCreateStageId || "Default"}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Share Your Form Card */}
+              <div className="bg-white border border-border rounded-xl p-4 shadow-2xs space-y-2.5">
+                <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2 pb-2 border-b border-gray-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  <Globe className="w-3.5 h-3.5 text-blue-600" />
+                  Share Your Form
+                </h3>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Custom URL Slug (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={customUrlSlug}
+                    onChange={(e) => setCustomUrlSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    placeholder="my-custom-form"
+                    className="w-full px-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Add a slug to personalize the public URL. A default unique ID will be used if left blank.
+                  </p>
+                </div>
+                <div className="bg-blue-50/70 border border-blue-200/60 rounded-lg p-2.5 text-xs text-blue-800">
+                  Your form link will become active immediately upon publishing.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ── Sticky Bottom Footer: Always visible ── */}
+      <footer className="shrink-0 bg-white border-t border-border px-6 py-2.5">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
             {currentTab !== "build" && (
               <Button
                 variant="outline"
+                size="sm"
                 onClick={handleBackTab}
-                className="text-sm"
+                className="text-xs font-semibold h-8 cursor-pointer"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               >
                 ← Back
               </Button>
             )}
-          </div>
-          <div className="flex items-center gap-3">
             <Button
               variant="outline"
+              size="sm"
               onClick={handleCancel}
-              className="text-sm"
+              className="text-xs font-semibold text-gray-600 hover:text-gray-900 h-8 cursor-pointer"
               style={{ fontFamily: 'DM Sans, sans-serif' }}
             >
               Cancel
             </Button>
+          </div>
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              size="sm"
               onClick={handleSaveDraft}
-              className="text-sm"
+              className="text-xs font-semibold text-gray-700 h-8 cursor-pointer"
               style={{ fontFamily: 'DM Sans, sans-serif' }}
             >
               Save Draft
@@ -2386,8 +2364,9 @@ export default function FormBuilder() {
             {currentTab !== "live" ? (
               <Button
                 variant="primary"
+                size="sm"
                 onClick={handleNextTab}
-                className="text-sm bg-primary hover:bg-primary/90"
+                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white h-8 px-4 cursor-pointer"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               >
                 Next →
@@ -2395,8 +2374,9 @@ export default function FormBuilder() {
             ) : (
               <Button
                 variant="primary"
+                size="sm"
                 onClick={handlePublishForm}
-                className="text-sm bg-black hover:bg-black/90 text-white"
+                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white h-8 px-4 cursor-pointer"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               >
                 Publish Form
@@ -2404,7 +2384,7 @@ export default function FormBuilder() {
             )}
           </div>
         </div>
-      </div>
+      </footer>
 
       {showSelectFieldModal && (
         <SelectFieldsModal
@@ -2428,6 +2408,7 @@ export default function FormBuilder() {
           }}
         />
       )}
+    
     </div>
   );
 }
