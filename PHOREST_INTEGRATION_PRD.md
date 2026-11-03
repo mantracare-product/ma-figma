@@ -110,6 +110,77 @@ Phorest routes requests based on the physical jurisdiction of the clinic:
 * **Optimistic Locking:** When updating clients via `PUT /client/{clientId}`, the request body **must include the current `version` integer**. Increment the version on subsequent writes.
 * **Pagination Format:** 0-indexed (`page=0&size=20`). Embedded items reside under `_embedded.{resourcePlural}` with a `page` metadata block.
 
+### 4.4 Ready-to-Run cURL Commands for Tech Team
+
+#### 1. Branch Discovery & Handshake (GET /branch)
+```bash
+# Europe / UK Clinics (e.g. Swiss Care Clinic):
+curl -X GET "https://api-gateway-eu.phorest.com/third-party-api-server/api/business/YOUR_BUSINESS_ID/branch" \
+  -u "global/YOUR_USERNAME:YOUR_PASSWORD" \
+  -H "Accept: application/json"
+
+# North America / Australia Clinics:
+curl -X GET "https://api-gateway-us.phorest.com/third-party-api-server/api/business/YOUR_BUSINESS_ID/branch" \
+  -u "global/YOUR_USERNAME:YOUR_PASSWORD" \
+  -H "Accept: application/json"
+```
+
+#### 2. Query Clients List (GET /client)
+```bash
+curl -X GET "https://api-gateway-eu.phorest.com/third-party-api-server/api/business/YOUR_BUSINESS_ID/client?size=5" \
+  -u "global/YOUR_USERNAME:YOUR_PASSWORD" \
+  -H "Accept: application/json"
+```
+
+#### 3. Check Appointment Slot Availability (POST /appointments/availability)
+```bash
+curl -X POST "https://api-gateway-eu.phorest.com/third-party-api-server/api/business/YOUR_BUSINESS_ID/branch/YOUR_BRANCH_ID/appointments/availability" \
+  -u "global/YOUR_USERNAME:YOUR_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "startTime": "2026-11-10T09:00:00Z",
+    "endTime": "2026-11-10T18:00:00Z",
+    "isOnlineAvailability": true,
+    "clientServiceSelections": [
+      {
+        "serviceSelections": [
+          { "serviceId": "SERVICE_ID_HERE" }
+        ]
+      }
+    ]
+  }'
+```
+
+#### 4. Lead Capture (POST /leads)
+```bash
+curl -X POST "https://api-gateway-eu.phorest.com/third-party-api-server/api/business/YOUR_BUSINESS_ID/branch/YOUR_BRANCH_ID/leads" \
+  -u "global/YOUR_USERNAME:YOUR_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "businessId": "YOUR_BUSINESS_ID",
+    "branchId": "YOUR_BRANCH_ID",
+    "firstName": "John",
+    "lastName": "Doe",
+    "mobile": "+447911123456",
+    "email": "johndoe@example.com",
+    "source": "MantraAssist AI Receptionist",
+    "contactableByMobile": true,
+    "contactableByEmail": true,
+    "marketingOptIn": true,
+    "note": "Caller inquired about clinic treatment pricing"
+  }'
+```
+
+### 4.5 Common API Troubleshooting Guide
+* **`401 Unauthorized`**:
+  1. Missing the `global/` prefix in the username (e.g. `global/user@domain.com` is required).
+  2. Querying the wrong regional gateway (e.g. UK/EU accounts must use `api-gateway-eu.phorest.com`; US accounts must use `api-gateway-us.phorest.com`).
+  3. Missing the `/third-party-api-server` segment from the path.
+* **`500 Call to the external system failed`**:
+  * The gateway authenticated the user, but the downstream clinic instance / database for that `businessId` could not be reached. Confirm with Phorest Support (`api-requests@phorest.com`) that third-party API sync is enabled for that business ID.
+
 ---
 
 ## 5. Feature Implementation & API Contracts
