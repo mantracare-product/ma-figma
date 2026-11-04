@@ -497,11 +497,11 @@ export default function IntegrationConfigDrawer({
 
         {/* ── TAB CONTENT SCROLL AREA ── */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          {/* ═════════ TAB 1: CONNECTION & HEALTH ═════════ */}
+          {/* ═════════ TAB 1: CONNECTION & HEALTH (VERTICAL STACK) ═════════ */}
           {activeTab === "connection" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              {/* Left Column: API Credentials (7 cols) */}
-              <div className="lg:col-span-7 space-y-5">
+            <div className="space-y-6 max-w-3xl">
+              {/* 1. API Credentials & Gateway Section */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white space-y-5">
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     API Credentials & Gateway
@@ -527,7 +527,7 @@ export default function IntegrationConfigDrawer({
                         <select
                           value={config.credentials[field.name] || field.defaultValue || ""}
                           onChange={(e) => handleCredentialChange(field.name, e.target.value)}
-                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all"
+                          className="w-full px-3.5 py-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all"
                         >
                           {field.options?.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -542,7 +542,7 @@ export default function IntegrationConfigDrawer({
                             value={config.credentials[field.name] || ""}
                             onChange={(e) => handleCredentialChange(field.name, e.target.value)}
                             placeholder={field.placeholder}
-                            className="w-full px-3.5 py-2 pr-10 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all"
+                            className="w-full px-3.5 py-2.5 pr-10 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all"
                           />
                           {field.type === "password" && (
                             <button
@@ -562,109 +562,116 @@ export default function IntegrationConfigDrawer({
                 </div>
               </div>
 
-              {/* Right Column: Engine, Webhook & Diagnostic Status (5 cols) */}
-              <div className="lg:col-span-5 space-y-6">
-                {/* Synchronization Schedule */}
-                <div className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+              {/* 2. Synchronization Schedule Section */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white space-y-4">
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Sync Frequency
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Delta-polling schedule for appointments and intake updates.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { id: "5m", label: "Every 5 mins", desc: "High frequency" },
+                    { id: "15m", label: "Every 15 mins", desc: "Recommended" },
+                    { id: "30m", label: "Every 30 mins", desc: "Standard" },
+                    { id: "1h", label: "Every 1 hour", desc: "Batch" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setConfig({ ...config, syncInterval: opt.id as any })}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        config.syncInterval === opt.id
+                          ? "border-slate-900 bg-slate-900 text-white shadow-xs"
+                          : "border-slate-200 bg-slate-50/60 hover:bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      <div className={`text-xs font-semibold ${config.syncInterval === opt.id ? "text-white" : "text-slate-900"}`}>
+                        {opt.label}
+                      </div>
+                      <div className={`text-[10px] font-mono mt-1 ${config.syncInterval === opt.id ? "text-slate-300" : "text-slate-500"}`}>
+                        {opt.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Inbound Webhook URL Section */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white space-y-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-semibold text-slate-800">Sync Frequency</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Delta-polling schedule for appointments and intake updates.
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Inbound Webhook URL
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      For real-time booking push events from {integration.name}.
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyWebhook}
+                    className="text-xs font-medium text-slate-700 hover:text-slate-900 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                    <span>{copiedWebhook ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+                <div className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 truncate select-all">
+                  {webhookUrl}
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: "5m", label: "Every 5 mins", desc: "High frequency" },
-                      { id: "15m", label: "Every 15 mins", desc: "Recommended" },
-                      { id: "30m", label: "Every 30 mins", desc: "Standard" },
-                      { id: "1h", label: "Every 1 hour", desc: "Batch" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setConfig({ ...config, syncInterval: opt.id as any })}
-                        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                          config.syncInterval === opt.id
-                            ? "border-slate-900 bg-white shadow-xs"
-                            : "border-slate-200 bg-white/60 hover:bg-white text-slate-600"
-                        }`}
-                      >
-                        <div className="text-xs font-semibold text-slate-900">{opt.label}</div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{opt.desc}</div>
-                      </button>
-                    ))}
+              {/* 4. Connection Health Check Section */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Connection Health
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Send verification ping to {integration.name} endpoint.
+                    </p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    loading={isTesting}
+                    onClick={handleTestConnection}
+                    className="font-semibold text-xs"
+                  >
+                    Test Connection
+                  </Button>
                 </div>
 
-                {/* Webhook Listener URL */}
-                <div className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-800">Inbound Webhook URL</h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        For real-time booking push events from {integration.name}.
-                      </p>
+                {testStatus === "success" && testResult && (
+                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-2 animate-in fade-in">
+                    <div className="flex items-center gap-2 text-emerald-900 text-xs font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{testResult.message}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyWebhook}
-                      className="text-xs font-medium text-slate-700 hover:text-slate-900 flex items-center gap-1 px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
-                    >
-                      {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedWebhook ? "Copied" : "Copy"}</span>
-                    </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2.5 border-t border-emerald-200 text-[11px] font-mono text-emerald-800">
+                      <div>Latency: {testResult.latencyMs}ms</div>
+                      <div>Status: 200 OK</div>
+                      <div className="truncate">Account: {testResult.accountName}</div>
+                    </div>
                   </div>
-                  <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[11px] font-mono text-slate-600 truncate select-all">
-                    {webhookUrl}
+                )}
+
+                {testStatus === "error" && testResult && (
+                  <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/70 space-y-1.5 animate-in fade-in">
+                    <div className="flex items-center gap-2 text-rose-900 text-xs font-semibold">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>Handshake Failed</span>
+                    </div>
+                    <p className="text-xs text-rose-700">{testResult.message}</p>
                   </div>
-                </div>
-
-                {/* Handshake Diagnostic Test Card */}
-                <div className="p-5 rounded-xl border border-slate-200 bg-white space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-900">Connection Health</h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Send verification ping to {integration.name} endpoint.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      loading={isTesting}
-                      onClick={handleTestConnection}
-                      className="font-semibold text-xs"
-                    >
-                      Test Connection
-                    </Button>
-                  </div>
-
-                  {testStatus === "success" && testResult && (
-                    <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/60 space-y-2 animate-in fade-in">
-                      <div className="flex items-center gap-2 text-emerald-900 text-xs font-semibold">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>{testResult.message}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 text-[11px] font-mono text-emerald-800">
-                        <div>Latency: {testResult.latencyMs}ms</div>
-                        <div>Status: 200 OK</div>
-                        <div className="col-span-2 truncate">Account: {testResult.accountName}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {testStatus === "error" && testResult && (
-                    <div className="p-3.5 rounded-lg border border-rose-200 bg-rose-50/60 space-y-1.5 animate-in fade-in">
-                      <div className="flex items-center gap-2 text-rose-900 text-xs font-semibold">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>Handshake Failed</span>
-                      </div>
-                      <p className="text-xs text-rose-700">{testResult.message}</p>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           )}
