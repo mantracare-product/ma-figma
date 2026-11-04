@@ -16,6 +16,7 @@ export interface SyncCapability {
   hasWorkflow: boolean;
   defaultWorkflowName?: string;
   direction: "two-way" | "inbound" | "outbound";
+  syncedFields?: string[];
 }
 
 export interface IntegrationField {
@@ -35,6 +36,9 @@ export interface IntegrationDefinition {
   description: string;
   category: IntegrationCategory;
   badge?: string;
+  brandColor?: string;
+  accentBg?: string;
+  docsUrl?: string;
   syncMechanism: "polling" | "webhook" | "hybrid";
   defaultSyncInterval: "5m" | "15m" | "30m" | "1h";
   fields: IntegrationField[];
@@ -60,6 +64,10 @@ export interface SyncLogEntry {
   status: "success" | "failed" | "skipped";
   itemsCount: number;
   message: string;
+  endpoint?: string;
+  httpStatus?: number;
+  latencyMs?: number;
+  payload?: Record<string, any>;
 }
 
 // ── Standard Capabilities Library ───────────────────────────────────────────
@@ -72,6 +80,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     module: "appointments",
     hasWorkflow: false,
     direction: "two-way",
+    syncedFields: ["Patient Name", "Phone", "Slot Time", "Service Type", "Practitioner"],
   },
   "appointments.reminders": {
     id: "appointments.reminders",
@@ -81,6 +90,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     hasWorkflow: true,
     defaultWorkflowName: "Appointment Reminders Workflow",
     direction: "outbound",
+    syncedFields: ["Mobile Phone", "Start Time", "Clinic Address", "Confirmation Status"],
   },
   "appointments.feedback": {
     id: "appointments.feedback",
@@ -90,6 +100,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     hasWorkflow: true,
     defaultWorkflowName: "Post-Consultation Feedback Workflow",
     direction: "outbound",
+    syncedFields: ["Patient Email", "Phone", "NPS Rating", "Review Link"],
   },
   "appointments.calendar_sync": {
     id: "appointments.calendar_sync",
@@ -98,6 +109,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     module: "appointments",
     hasWorkflow: false,
     direction: "two-way",
+    syncedFields: ["Roster Availability", "Room Allocations", "Status Flags"],
   },
 
   // Leads
@@ -109,6 +121,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     hasWorkflow: true,
     defaultWorkflowName: "Instant Lead Outreach Workflow",
     direction: "inbound",
+    syncedFields: ["Full Name", "Phone", "Campaign ID", "Source Form", "UTM Tags"],
   },
   "leads.client_sync": {
     id: "leads.client_sync",
@@ -117,6 +130,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     module: "leads",
     hasWorkflow: false,
     direction: "two-way",
+    syncedFields: ["First/Last Name", "DOB", "Mobile", "Email", "Emergency Contact"],
   },
 
   // RCM & Billing
@@ -128,6 +142,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     hasWorkflow: true,
     defaultWorkflowName: "Completed Visit RCM Invoicing Workflow",
     direction: "outbound",
+    syncedFields: ["Visit ID", "CPT Codes", "Itemized Fees", "Superbill PDF"],
   },
   "rcm.payments": {
     id: "rcm.payments",
@@ -136,6 +151,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     module: "rcm",
     hasWorkflow: false,
     direction: "two-way",
+    syncedFields: ["Payment Method", "Amount", "Balance Due", "Receipt Number"],
   },
 
   // Clinical & Forms
@@ -147,6 +163,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     hasWorkflow: true,
     defaultWorkflowName: "Patient Intake Form Workflow",
     direction: "two-way",
+    syncedFields: ["Questionnaire Answers", "Digital Signature", "Consent Flags"],
   },
   "clinical.telehealth": {
     id: "clinical.telehealth",
@@ -155,6 +172,7 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     module: "clinical",
     hasWorkflow: false,
     direction: "two-way",
+    syncedFields: ["Video Meeting URL", "Access Pin", "Duration Minutes"],
   },
 };
 
@@ -167,6 +185,9 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
     description: "Allied health practice management software for patients, appointments & billing",
     category: "ehr",
     badge: "Popular in UK & AU",
+    brandColor: "#2B4B80",
+    accentBg: "#F0F4FA",
+    docsUrl: "https://help.cliniko.com/en/articles/api-keys",
     syncMechanism: "hybrid",
     defaultSyncInterval: "15m",
     fields: [
@@ -215,6 +236,9 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
     description: "Comprehensive EHR, telehealth, and coaching platform for dietetics & wellness",
     category: "ehr",
     badge: "Telehealth Ready",
+    brandColor: "#764ABC",
+    accentBg: "#F5F0FB",
+    docsUrl: "https://help.gethealthie.com/article/developer-api",
     syncMechanism: "hybrid",
     defaultSyncInterval: "15m",
     fields: [
@@ -532,27 +556,86 @@ export function getStoredSyncLogs(integrationId: string): SyncLogEntry[] {
     console.error("Failed to load sync logs:", e);
   }
 
-  // Initial mock logs for demonstration
+  if (integrationId === "phorest") {
+    return [
+      {
+        id: "log-ph-1",
+        integrationId: "phorest",
+        timestamp: "10:48 AM",
+        module: "Appointments",
+        action: "Delta Schedule Pull",
+        status: "success",
+        itemsCount: 12,
+        message: "Retrieved 12 booked visits for Swiss Care Clinic",
+        endpoint: "GET /api-gateway/v2/business/qjqSM2Q_ThtV-pl5ECVmyg/appointment",
+        httpStatus: 200,
+        latencyMs: 148,
+        payload: {
+          businessId: "qjqSM2Q_ThtV-pl5ECVmyg",
+          itemsSynced: 12,
+          window: "2026-11-04 00:00:00 to 2026-11-05 23:59:59",
+          syncEngine: "MantraAssist Delta Poller v2.4",
+        },
+      },
+      {
+        id: "log-ph-2",
+        integrationId: "phorest",
+        timestamp: "10:45 AM",
+        module: "Clients",
+        action: "External Link Verification",
+        status: "failed",
+        itemsCount: 0,
+        message: "Call to the external system failed with 500 status code",
+        endpoint: "GET /api-gateway/v2/business/qjqSM2Q_ThtV-pl5ECVmyg/client",
+        httpStatus: 500,
+        latencyMs: 312,
+        payload: {
+          statusCode: 500,
+          id: "bf690345-1e80-4f8a-bb45-6061a93ae526",
+          detail: "Call to the external system failed with 500 status code",
+          resolution: "Notify api-requests@phorest.com with correlation ID bf690345 to enable database routing.",
+        },
+      },
+    ];
+  }
+
   return [
     {
-      id: `log-${Date.now() - 600000}`,
+      id: `log-${Date.now() - 300000}`,
       integrationId,
-      timestamp: new Date(Date.now() - 600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date(Date.now() - 300000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       module: "Appointments",
       action: "Delta Schedule Pull",
       status: "success",
       itemsCount: 14,
-      message: "Synced 14 upcoming appointment slots and doctor rosters",
+      message: "Synced 14 upcoming appointment slots and practitioner schedules",
+      endpoint: "GET /v1/appointments?updated_since=PT15M",
+      httpStatus: 200,
+      latencyMs: 132,
+      payload: {
+        recordsReceived: 14,
+        reconciledNew: 3,
+        updated: 11,
+        syncMode: "IncrementalDelta",
+      },
     },
     {
-      id: `log-${Date.now() - 3600000}`,
+      id: `log-${Date.now() - 1800000}`,
       integrationId,
-      timestamp: new Date(Date.now() - 3600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date(Date.now() - 1800000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       module: "Clients",
       action: "Demographic Records Sync",
       status: "success",
       itemsCount: 6,
-      message: "Updated 6 patient profiles with verified phone numbers",
+      message: "Updated 6 patient records with normalized phone numbers",
+      endpoint: "GET /v1/patients?limit=50",
+      httpStatus: 200,
+      latencyMs: 185,
+      payload: {
+        recordsChecked: 50,
+        demographicsUpdated: 6,
+        duplicatesResolved: 0,
+      },
     },
   ];
 }
@@ -566,3 +649,4 @@ export function addSyncLog(integrationId: string, log: Omit<SyncLogEntry, "id">)
     console.error("Failed to append sync log:", e);
   }
 }
+
