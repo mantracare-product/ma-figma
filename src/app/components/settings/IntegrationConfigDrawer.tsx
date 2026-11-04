@@ -55,7 +55,7 @@ export default function IntegrationConfigDrawer({
   onClose,
   onSaved,
 }: IntegrationConfigDrawerProps) {
-  const { processes, addProcess } = useProcessStore();
+  const { processes, setProcesses } = useProcessStore();
 
   const [activeTab, setActiveTab] = useState<"connection" | "configs" | "logs">("connection");
   const [config, setConfig] = useState<IntegrationSyncConfig | null>(null);
@@ -263,36 +263,35 @@ export default function IntegrationConfigDrawer({
           {
             id: `stg-${Date.now()}-1`,
             name: "Triggered / Incoming",
+            description: "Initial stage for incoming events",
+            status: "pending",
             color: "#3b82f6",
-            order: 1,
-            isDefault: true,
+            isPredefined: true,
           },
           {
             id: `stg-${Date.now()}-2`,
             name: "Automated Follow-up",
+            description: "Automated follow-up stage",
+            status: "in-progress",
             color: "#8b5cf6",
-            order: 2,
           },
           {
             id: `stg-${Date.now()}-3`,
             name: "Completed / Synced",
+            description: "Final completed stage",
+            status: "completed",
             color: "#10b981",
-            order: 3,
             stageCategory: "success",
             isFinalStage: true,
           },
         ],
         aiSettings: {
-          enabled: true,
-          model: "gpt-4o",
-          temperature: 0.3,
-          systemPrompt: `Assistant managing automated events for ${integration.name}. Reconcile data and notify patients cleanly.`,
+          platform: "OpenAI",
+          voiceSpeed: 1,
         },
       };
 
-      if (addProcess) {
-        addProcess(newProcess);
-      }
+      setProcesses((prev) => [...prev, newProcess]);
 
       toast.success(`Created workflow: "${defaultName}"`);
 
