@@ -825,8 +825,11 @@ export default function Settings() {
 
     if (rawTab === "organization") {
       setActiveTab("organization");
-    } else if (rawTab === "team" || rawTab === "users") {
+    } else if (rawTab === "team" || rawTab === "users" || rawTab === "roles") {
       setActiveTab("users");
+      if (rawTab === "roles" || queryTab === "roles" || path.endsWith("/roles")) {
+        setTeamSubTab("roles");
+      }
     } else if (rawTab === "voices" || rawTab === "voice-config") {
       setActiveTab("voice-config");
       const sub = searchParams.get("sub") || urlSubtab;
@@ -1299,6 +1302,7 @@ export default function Settings() {
     }
   });
   const [showRolesDrawer, setShowRolesDrawer] = useState(false);
+  const [editingClientRole, setEditingClientRole] = useState<Role | null>(null);
 
   const handleSaveRoles = (updatedRoles: Role[]) => {
     setRoles(updatedRoles);
@@ -4858,6 +4862,7 @@ export default function Settings() {
                     icon: <Plus className="w-3.5 h-3.5" />,
                     onClick: () => {
                       if (teamSubTab === "roles") {
+                        setEditingClientRole(null);
                         setShowRolesDrawer(true);
                       } else if (teamSubTab === "departments") {
                         toast.info("Create department");
@@ -4885,11 +4890,13 @@ export default function Settings() {
                       render: (r) => (
                         <button
                           type="button"
-                          onClick={() => setShowRolesDrawer(true)}
-                          className="text-xs font-bold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
+                          onClick={() => {
+                            setEditingClientRole(r);
+                            setShowRolesDrawer(true);
+                          }}
+                          className="text-xs font-semibold text-[#0F172A] hover:text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <Shield className="w-3.5 h-3.5" />
                           {r.name}
                         </button>
                       ),
@@ -4921,30 +4928,17 @@ export default function Settings() {
                       },
                     },
                     {
-                      key: "permissions",
-                      header: "PERMISSIONS",
-                      align: "center",
-                      render: (r) => (
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
-                            r.isDefault
-                              ? "bg-blue-50 text-blue-700 border border-blue-200/60"
-                              : "bg-purple-50 text-purple-700 border border-purple-200/60"
-                          }`}
-                        >
-                          {r.isDefault ? "SYSTEM DEFAULT" : "CUSTOM ROLE"}
-                        </span>
-                      ),
-                    },
-                    {
                       key: "actions",
                       header: "ACTIONS",
                       align: "center",
-                      render: () => (
+                      render: (r) => (
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setShowRolesDrawer(true)}
+                            onClick={() => {
+                              setEditingClientRole(r);
+                              setShowRolesDrawer(true);
+                            }}
                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                             title="Edit Role Permissions"
                           >
@@ -13426,10 +13420,14 @@ export default function Settings() {
 
         <RolesPermissionsDrawer
           isOpen={showRolesDrawer}
-          onClose={() => setShowRolesDrawer(false)}
+          onClose={() => {
+            setShowRolesDrawer(false);
+            setEditingClientRole(null);
+          }}
           roles={roles}
           onSaveRoles={handleSaveRoles}
           assignedUserCounts={assignedUserCounts}
+          editingRole={editingClientRole}
         />
 
         <AddTeamMemberDrawer

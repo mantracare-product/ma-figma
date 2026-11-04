@@ -83,6 +83,9 @@ const PatientCareBotScreen = withLazy(() => import("./pages/patient/PatientCareB
 const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
 const AdminPlans = withLazy(() => import("./pages/admin/AdminPlans"));
 const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
+const AdminProductsServices = withLazy(() => import("./pages/admin/AdminProductsServices"));
+const AdminKnowledgeBase = withLazy(() => import("./pages/admin/AdminKnowledgeBase"));
+const AdminRolesPermissions = withLazy(() => import("./pages/admin/AdminRolesPermissions"));
 
 export const router = createBrowserRouter([
   {
@@ -235,6 +238,7 @@ export const router = createBrowserRouter([
             ],
           },
           { path: "services", Component: Services },
+          { path: "roles", element: <Navigate to="/settings/team?tab=roles" replace /> },
           { path: "appointments", Component: Appointments },
           { path: "chats", Component: Chats },
           { path: "email-agent", element: <Navigate to="/chats?channel=email&subMode=agent" replace /> },
@@ -271,6 +275,15 @@ export const router = createBrowserRouter([
           { path: "form-templates", Component: AdminFormTemplates },
           { path: "form-builder", element: <Navigate to="/admin/forms" replace /> },
           { path: "form-builder/:formId", element: <Navigate to="/admin/forms" replace /> },
+          { path: "services", Component: AdminProductsServices },
+          { path: "products-services", Component: AdminProductsServices },
+          { path: "product-services", Component: AdminProductsServices },
+          { path: "industry-services", Component: AdminProductsServices },
+          { path: "knowledge-base", Component: AdminKnowledgeBase },
+          { path: "knowledge", Component: AdminKnowledgeBase },
+          { path: "roles", Component: AdminRolesPermissions },
+          { path: "roles-permissions", Component: AdminRolesPermissions },
+          { path: "roles-and-permissions", Component: AdminRolesPermissions },
           { path: "plans", Component: AdminPlans },
           { path: "plans-credits", Component: AdminPlans },
           { path: "billing", Component: AdminBilling },

@@ -740,7 +740,7 @@ export default function ReportViewerModal({
                         return (
                           <tr>
                             {orderedCols.map((col, colIdx) => {
-                              const colKey = col.id || col.key || col.header;
+                              const colKey = String(col.id || col.key || (typeof col.header === "string" ? col.header : colIdx));
                               const func = report.fieldCalculations?.[colKey];
                               if (!func) {
                                 return (

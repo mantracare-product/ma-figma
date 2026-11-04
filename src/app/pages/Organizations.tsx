@@ -689,9 +689,7 @@ export default function Organizations() {
     setSelectedTeamSize("2–5");
     setSelectedCallVolume("25–100 a day");
     setSelectedRequirements(["24/7 AI Receptionist", "Appointment Scheduling & Reminders"]);
-    setSelectedIntl("No");
-    setSelectedPhone("Use a number from MantraAssist");
-    setUploadedDocs([
+        setUploadedDocs([
       { id: "kb-1", name: "Eye_Mantra_Clinical_Overview_&_Hours.pdf", sizeLabel: "1.8 MB" },
       { id: "kb-2", name: "Eye_Care_Services_Pricing_&_Treatment_Guide.pdf", sizeLabel: "2.4 MB" },
       { id: "kb-3", name: "Patient_Eye_Care_Preparation_&_Insurance_Policy.pdf", sizeLabel: "1.2 MB" },

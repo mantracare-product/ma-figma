@@ -488,6 +488,9 @@ export default function ScheduleAppointmentDrawer({
       price: number;
       duration: number;
       tax?: number;
+      isPrepaid?: boolean;
+      prepaidDepositType?: "full" | "deposit";
+      prepaidDepositAmount?: number;
       assignedEmployees?: (number | string)[];
       locationIds?: string[];
       maxSeats?: number;

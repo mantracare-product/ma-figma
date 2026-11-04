@@ -35,6 +35,8 @@ import {
   Sparkles,
   User,
   ChevronsUpDown,
+  Tag,
+  BookOpen,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
@@ -116,6 +118,8 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
         { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
+        { id: "services", label: "Product / Services", icon: Tag, path: "/admin/services" },
+        { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge-base" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
         { id: "roles", label: "Roles & Permissions", icon: Shield, path: "/admin/roles" },
       ],
@@ -182,6 +186,27 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         location.pathname === "/admin/form-templates" ||
         location.pathname === "/admin/form-builder" ||
         location.pathname.startsWith("/admin/form-builder")
+      );
+    }
+    if (itemPath === "/admin/services") {
+      return (
+        location.pathname === "/admin/services" ||
+        location.pathname === "/admin/products-services" ||
+        location.pathname === "/admin/product-services" ||
+        location.pathname === "/admin/industry-services"
+      );
+    }
+    if (itemPath === "/admin/knowledge-base") {
+      return (
+        location.pathname === "/admin/knowledge-base" ||
+        location.pathname === "/admin/knowledge"
+      );
+    }
+    if (itemPath === "/admin/roles") {
+      return (
+        location.pathname === "/admin/roles" ||
+        location.pathname === "/admin/roles-permissions" ||
+        location.pathname === "/admin/roles-and-permissions"
       );
     }
     return location.pathname === itemPath;
