@@ -39,6 +39,111 @@ export const PLAN_CATEGORIES = [
 
 export type PlanCategory = (typeof PLAN_CATEGORIES)[number] | "AI EHR" | "AI RCM";
 
+export interface AdminPlanCategory {
+  id: string;
+  name: string;
+  description?: string;
+  scopingRules?: ScopingRule[];
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const PLAN_CATEGORIES_STORAGE_KEY = "mantra_admin_plan_categories_v1";
+
+export const INITIAL_PLAN_CATEGORIES: AdminPlanCategory[] = [
+  {
+    id: "pcat-ai-receptionist",
+    name: "AI Receptionist",
+    description: "24/7 AI-powered voice receptionist, triage, and multi-channel call handling.",
+    scopingRules: [
+      {
+        id: "sr-pcat-ai-rec",
+        industryCategory: "All",
+        industries: [],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "pcat-ai-scribe",
+    name: "AI Scribe",
+    description: "Automated clinical ambient documentation and notes transcription for healthcare practices.",
+    scopingRules: [
+      {
+        id: "sr-pcat-ai-scribe",
+        industryCategory: "Healthcare",
+        industries: ["General Physician", "Dentist", "Dermatologist", "Therapist", "Cardiologist"],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "pcat-ehr",
+    name: "EHR",
+    description: "Electronic Health Records, patient charting, and medical workflow management.",
+    scopingRules: [
+      {
+        id: "sr-pcat-ehr",
+        industryCategory: "Healthcare",
+        industries: ["General Physician", "Dentist", "Dermatologist", "Therapist", "Cardiologist"],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "pcat-rcm",
+    name: "RCM",
+    description: "Revenue Cycle Management, electronic claims submission, and billing automation.",
+    scopingRules: [
+      {
+        id: "sr-pcat-rcm",
+        industryCategory: "Healthcare",
+        industries: ["General Physician", "Dentist", "Dermatologist", "Therapist", "Cardiologist"],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "pcat-internal",
+    name: "Internal",
+    description: "Internal staff, administrative and operational capabilities.",
+    scopingRules: [
+      {
+        id: "sr-pcat-internal",
+        industryCategory: "All",
+        industries: [],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "pcat-onboarding",
+    name: "Onboarding",
+    description: "Free onboarding and trial tier for newly signed up workspaces.",
+    scopingRules: [
+      {
+        id: "sr-pcat-onboarding",
+        industryCategory: "All",
+        industries: [],
+        locations: [],
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+];
+
 export function isCategoryMatch(a?: string | null, b?: string | null): boolean {
   if (!a || !b) return false;
   const la = a.trim().toLowerCase();
@@ -1362,6 +1467,142 @@ export function deletePlan(id: string): void {
   } catch (err) {
     console.error("Error deleting plan:", err);
   }
+}
+
+// ── PLAN CATEGORIES CRUD & SCOPE MATCHING ──
+
+export function getStoredPlanCategories(): AdminPlanCategory[] {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(PLAN_CATEGORIES_STORAGE_KEY) : null;
+    if (!raw) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PLAN_CATEGORIES_STORAGE_KEY, JSON.stringify(INITIAL_PLAN_CATEGORIES));
+      }
+      return INITIAL_PLAN_CATEGORIES;
+    }
+    const parsed: AdminPlanCategory[] = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PLAN_CATEGORIES_STORAGE_KEY, JSON.stringify(INITIAL_PLAN_CATEGORIES));
+      }
+      return INITIAL_PLAN_CATEGORIES;
+    }
+    return parsed;
+  } catch (err) {
+    console.error("Error loading stored plan categories:", err);
+    return INITIAL_PLAN_CATEGORIES;
+  }
+}
+
+export function savePlanCategory(category: AdminPlanCategory): void {
+  try {
+    const current = getStoredPlanCategories();
+    const existingIndex = current.findIndex((c) => c.id === category.id);
+    let next: AdminPlanCategory[];
+    if (existingIndex >= 0) {
+      next = [...current];
+      next[existingIndex] = { ...category, updatedAt: new Date().toISOString() };
+    } else {
+      next = [{ ...category, createdAt: category.createdAt || new Date().toISOString() }, ...current];
+    }
+    localStorage.setItem(PLAN_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(
+      new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "plan_category_saved", category } })
+    );
+  } catch (err) {
+    console.error("Error saving plan category:", err);
+  }
+}
+
+export function deletePlanCategory(id: string): void {
+  try {
+    const current = getStoredPlanCategories();
+    const next = current.filter((c) => c.id !== id);
+    localStorage.setItem(PLAN_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(
+      new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "plan_category_deleted", id } })
+    );
+  } catch (err) {
+    console.error("Error deleting plan category:", err);
+  }
+}
+
+/**
+ * Checks whether a Plan Category matches a given admin scope (or plan scope).
+ * - Universal plan categories (no scoping rules, or rule with All / Global) match all scopes.
+ * - Categories scoped to a specific industry category (e.g. Healthcare) only match if the target scope is Healthcare (or Universal).
+ */
+export function isCategoryMatchingScope(
+  category: AdminPlanCategory,
+  targetRules?: ScopingRule[],
+  fallbackCategory?: string
+): boolean {
+  const catRules = category.scopingRules || [];
+  const isCatUniversal =
+    catRules.length === 0 ||
+    catRules.every(
+      (r) =>
+        !r.industryCategory ||
+        r.industryCategory === "All" ||
+        r.industryCategory === "Global" ||
+        r.industryCategory === "*"
+    );
+
+  const targetActiveRules = (targetRules || []).filter(
+    (r) =>
+      r.industryCategory &&
+      r.industryCategory !== "All" &&
+      r.industryCategory !== "Global" &&
+      r.industryCategory !== "*"
+  );
+
+  const targetCatName =
+    targetActiveRules[0]?.industryCategory ||
+    (fallbackCategory && fallbackCategory !== "Global" && fallbackCategory !== "All"
+      ? fallbackCategory
+      : null);
+
+  // If target has no specific scope, universal or any category can match
+  if (!targetCatName && targetActiveRules.length === 0) {
+    return true;
+  }
+
+  // A universal category always matches any target scope (e.g. AI Receptionist, Internal, Onboarding)
+  if (isCatUniversal) {
+    return true;
+  }
+
+  // Check if any rule in the category matches the target scope
+  return catRules.some((cRule) => {
+    const cCat = (cRule.industryCategory || "").trim().toLowerCase();
+    if (!cCat || cCat === "all" || cCat === "global" || cCat === "*") return true;
+
+    if (targetCatName) {
+      if (cCat !== targetCatName.trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    const cInds = (cRule.industries || []).filter((i) => i && i !== "All");
+    const targetInds = targetActiveRules.flatMap((r) => r.industries || []).filter((i) => i && i !== "All");
+
+    if (cInds.length > 0 && targetInds.length > 0) {
+      const hasOverlap = cInds.some((ci) =>
+        targetInds.some((ti) => ti.toLowerCase() === ci.toLowerCase())
+      );
+      if (!hasOverlap) return false;
+    }
+
+    return true;
+  });
+}
+
+export function getPlanCategoriesForScope(
+  targetRules?: ScopingRule[],
+  fallbackCategory?: string
+): AdminPlanCategory[] {
+  const categories = getStoredPlanCategories().filter((c) => c.isActive !== false);
+  return categories.filter((cat) => isCategoryMatchingScope(cat, targetRules, fallbackCategory));
 }
 
 export function getStoredCreditPackages(): CreditPackage[] {

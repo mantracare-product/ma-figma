@@ -43,6 +43,7 @@ import {
   CartItem,
   PLAN_CATEGORIES,
   PlanCategory,
+  getPlanCategoriesForScope,
   DEFAULT_COUNTRY_PRICING,
   isCategoryMatch,
   getStoredPlans,
@@ -78,6 +79,25 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   const [globalSettings, setGlobalSettings] = useState<GlobalBillingSettings>(getStoredGlobalBillingSettings());
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
 
+  // Scope-filtered categories for this workspace
+  const availableCategories = useMemo(() => {
+    const scopeRules = activeOrganization?.industryCategory
+      ? [
+          {
+            id: "org-scope",
+            industryCategory: activeOrganization.industryCategory,
+            industries: activeOrganization.industry ? [activeOrganization.industry] : [],
+            locations: activeOrganization.location ? [activeOrganization.location] : [],
+          },
+        ]
+      : undefined;
+    const matching = getPlanCategoriesForScope(scopeRules, activeOrganization?.industryCategory);
+    const names = matching
+      .filter((c) => c.name !== "Internal" && c.name !== "Onboarding")
+      .map((c) => c.name);
+    return names.length > 0 ? names : Array.from(PLAN_CATEGORIES).filter((c) => c !== "Internal" && c !== "Onboarding");
+  }, [activeOrganization?.industryCategory, activeOrganization?.industry, activeOrganization?.location]);
+
   // Category filter state (strictly category-wise: "AI Receptionist", "AI Scribe", "EHR", "RCM")
   // Preselect category tab that matches default_category on first open.
   // Existing organizations with no saved answers open Plans on the first tab as it does today.
@@ -91,10 +111,10 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   useEffect(() => {
     if (activeOrganization?.default_category) {
       setSelectedCategory(normalizeCategoryToTabName(activeOrganization.default_category));
-    } else {
-      setSelectedCategory(PLAN_CATEGORIES[0]);
+    } else if (availableCategories.length > 0 && !availableCategories.some((c) => isCategoryMatch(selectedCategory, c))) {
+      setSelectedCategory(availableCategories[0]);
     }
-  }, [activeOrganization?.id, activeOrganization?.default_category]);
+  }, [activeOrganization?.id, activeOrganization?.default_category, availableCategories]);
 
   // Cart modal/slide-over state
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -263,7 +283,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
         {/* Categories selector pills placed BEFORE monthly / yearly */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          {PLAN_CATEGORIES.filter((cat) => cat !== "Internal" && cat !== "Onboarding").map((cat) => {
+          {availableCategories.map((cat) => {
             const isSelected = isCategoryMatch(selectedCategory, cat);
             return (
               <button

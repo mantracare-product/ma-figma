@@ -26,7 +26,6 @@ import {
   Tag,
   Search,
   Filter,
-  CheckCircle2,
   AlertTriangle,
   Building2,
   ArrowUpRight,
@@ -58,6 +57,13 @@ import {
   PlanTier,
   PLAN_CATEGORIES,
   PlanCategory,
+  AdminPlanCategory,
+  getStoredPlanCategories,
+  savePlanCategory,
+  deletePlanCategory,
+  isCategoryMatchingScope,
+  getPlanCategoriesForScope,
+  isCategoryMatch,
   CountryPricing,
   CountryPackagePrice,
   getDefaultPackageCountryPricing,
@@ -77,28 +83,93 @@ import {
   saveCreditAction,
   deleteCreditAction,
   getStoredSubscriptions,
-  getWorkspaceSubscription,
-  assignPlanToWorkspace,
-  getAvailablePlansForWorkspace,
   AVAILABLE_PLAN_MODULES,
   PLAN_AVAILABLE_TEMPLATES,
   SUPPORTED_COUNTRIES,
   DEFAULT_COUNTRY_PRICING,
   PLANS_BILLING_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
-import { INITIAL_CATEGORIES } from "../../../data/industryReferenceData";
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_INDUSTRIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../../data/industryReferenceData";
 import { TableComponent, TableColumn, TableRowAction } from "../../components/ui/TableComponent";
-import { useOrganization } from "../../context/OrganizationContext";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
+import { AdminControlAccordion } from "./components/AdminControlAccordion";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 
-type AdminBillingTab = "plans" | "packed-pricing" | "credit-actions" | "assignment" | "credit-pricing" | "team-pricing";
+function getScopingSummary(scopingRules?: ScopingRule[], fallbackCategory?: string, fallbackIndustry?: string): string {
+  const rules = scopingRules || [];
+  if (rules.length === 0) {
+    if (fallbackCategory && fallbackCategory !== "Global / Cross-Domain" && fallbackCategory !== "Global" && fallbackCategory !== "All") {
+      return `${fallbackCategory} (All industries, All countries)`;
+    }
+    return "All industries, All countries";
+  }
+
+  const categories = new Set<string>();
+  const industries = new Set<string>();
+  const locations = new Set<string>();
+
+  for (const r of rules) {
+    if (r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "Global") {
+      categories.add(r.industryCategory);
+    }
+    if (r.industries && r.industries.length > 0) {
+      for (const ind of r.industries) {
+        if (ind && ind !== "All") industries.add(ind);
+      }
+    }
+    if (r.locations && r.locations.length > 0) {
+      for (const loc of r.locations) {
+        if (loc && loc !== "All") locations.add(loc);
+      }
+    }
+  }
+
+  const isAllCats = categories.size === 0;
+  const isAllInds = industries.size === 0;
+  const isAllLocs = locations.size === 0;
+
+  if (isAllCats && isAllInds && isAllLocs) {
+    return "All industries, All countries";
+  }
+
+  const catPrefix = categories.size === 1 ? Array.from(categories)[0] : `${categories.size} categories`;
+
+  let indCount = industries.size;
+  if (isAllInds) {
+    if (!isAllCats) {
+      let total = 0;
+      for (const cat of categories) {
+        total += getIndustriesForCategory(cat).length;
+      }
+      indCount = total > 0 ? total : INITIAL_INDUSTRIES.length;
+    } else {
+      indCount = INITIAL_INDUSTRIES.length;
+    }
+  }
+
+  let locCount = locations.size;
+  if (isAllLocs) {
+    locCount = STANDARD_LOCATIONS.length;
+  }
+
+  if (categories.size === 1) {
+    return `${catPrefix} (${isAllInds ? "All industries" : `${indCount} ${indCount === 1 ? "industry" : "industries"}`}, ${isAllLocs ? "All countries" : `${locCount} ${locCount === 1 ? "country" : "countries"}`})`;
+  }
+
+  return `${catPrefix}, ${indCount} ${indCount === 1 ? "industry" : "industries"}, ${locCount} ${locCount === 1 ? "country" : "countries"}`;
+}
+
+type AdminBillingTab = "plans" | "plan-categories" | "packed-pricing" | "credit-actions" | "credit-pricing" | "team-pricing";
 type PackedPricingMode = "team" | "credits";
 
 export default function AdminPlans() {
-  const { organizations } = useOrganization();
   const [activeTab, setActiveTab] = useState<AdminBillingTab>("plans");
   const [packedPricingMode, setPackedPricingMode] = useState<PackedPricingMode>("team");
 
@@ -195,14 +266,30 @@ export default function AdminPlans() {
     description: "",
   });
 
-  // Plan Assignment Modal State (FR-10)
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [selectedOrgId, setSelectedOrgId] = useState("");
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [selectedBillingCycle, setSelectedBillingCycle] = useState<"monthly" | "yearly">("monthly");
+  // Plan Categories Store & Drawer State
+  const [planCategories, setPlanCategories] = useState<AdminPlanCategory[]>([]);
+  const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<AdminPlanCategory | null>(null);
+  const [categoryForm, setCategoryForm] = useState<{
+    name: string;
+    description: string;
+    scopingRules: ScopingRule[];
+    isActive: boolean;
+  }>({
+    name: "",
+    description: "",
+    scopingRules: [],
+    isActive: true,
+  });
+
+  // Dynamically compute available categories for the plan currently being edited/created based on its admin scope
+  const availablePlanCategories = useMemo(() => {
+    return getPlanCategoriesForScope(planForm.scopingRules, planForm.targetCategory);
+  }, [planCategories, planForm.scopingRules, planForm.targetCategory]);
 
   const loadData = () => {
     setPlans(getStoredPlans());
+    setPlanCategories(getStoredPlanCategories());
     setCreditPackages(getStoredCreditPackages());
     setTeamPacks(getStoredTeamMemberPacks());
     setGlobalSettings(getStoredGlobalBillingSettings());
@@ -294,6 +381,102 @@ export default function AdminPlans() {
       return matchType && matchIndustry && matchQuery;
     });
   }, [templateTypeFilter, templateIndustryFilter, templateSearchQuery]);
+
+  // Filtered Plan Categories
+  const filteredPlanCategories = useMemo(() => {
+    return planCategories.filter((cat) => {
+      const matchQuery =
+        cat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (cat.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (cat.scopingRules &&
+          cat.scopingRules.some(
+            (r) =>
+              (r.industryCategory || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (r.industries || []).some((i) => i.toLowerCase().includes(searchQuery.toLowerCase()))
+          ));
+      return matchQuery;
+    });
+  }, [planCategories, searchQuery]);
+
+  // ── PLAN CATEGORY HANDLERS ──
+  const handleOpenCreateCategory = () => {
+    setEditingCategory(null);
+    setCategoryForm({
+      name: "",
+      description: "",
+      scopingRules: [
+        {
+          id: `sr_${Date.now()}`,
+          industryCategory: "Healthcare",
+          industries: [],
+          locations: [],
+        },
+      ],
+      isActive: true,
+    });
+    setIsCategoryDrawerOpen(true);
+  };
+
+  const handleOpenEditCategory = (cat: AdminPlanCategory) => {
+    setEditingCategory(cat);
+    setCategoryForm({
+      name: cat.name,
+      description: cat.description || "",
+      scopingRules:
+        cat.scopingRules && cat.scopingRules.length > 0
+          ? [...cat.scopingRules]
+          : [
+              {
+                id: `sr_${Date.now()}`,
+                industryCategory: "All",
+                industries: [],
+                locations: [],
+              },
+            ],
+      isActive: cat.isActive !== false,
+    });
+    setIsCategoryDrawerOpen(true);
+  };
+
+  const handleSaveCategorySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryForm.name.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+    const item: AdminPlanCategory = {
+      id: editingCategory ? editingCategory.id : `pcat-${Date.now()}`,
+      name: categoryForm.name.trim(),
+      description: categoryForm.description.trim(),
+      scopingRules: categoryForm.scopingRules,
+      isActive: categoryForm.isActive,
+      createdAt: editingCategory?.createdAt,
+    };
+    savePlanCategory(item);
+    loadData();
+    setIsCategoryDrawerOpen(false);
+    toast.success(editingCategory ? `Updated category "${item.name}"` : `Created plan category "${item.name}"`);
+  };
+
+  const handleDeleteCategoryConfirm = (id: string, name: string) => {
+    const plansUsing = plans.filter((p) => isCategoryMatch(p.category, name));
+    if (plansUsing.length > 0) {
+      toast.error(`Cannot delete category "${name}" because it is currently used by ${plansUsing.length} plan(s).`);
+      return;
+    }
+    if (window.confirm(`Are you sure you want to delete the plan category "${name}"?`)) {
+      deletePlanCategory(id);
+      loadData();
+      toast.success(`Category "${name}" deleted`);
+    }
+  };
+
+  const handleToggleCategoryActive = (cat: AdminPlanCategory) => {
+    const updated = { ...cat, isActive: !cat.isActive };
+    savePlanCategory(updated);
+    loadData();
+    toast.success(`Category "${cat.name}" is now ${updated.isActive ? "active" : "inactive"}`);
+  };
 
   // ── PLAN HANDLERS ──
   const handleOpenCreatePlan = () => {
@@ -755,61 +938,18 @@ export default function AdminPlans() {
     toast.success(`Credit rate for "${actionForm.name}" updated ✓`);
   };
 
-  // ── PLAN ASSIGNMENT HANDLERS (FR-10) ──
-  const selectedOrg = useMemo(() => {
-    return organizations.find((o) => o.id === selectedOrgId) || organizations[0];
-  }, [organizations, selectedOrgId]);
-
-  const availablePlansForSelectedOrg = useMemo(() => {
-    if (!selectedOrg) return [];
-    return getAvailablePlansForWorkspace(plans, {
-      industryCategory: selectedOrg.industryCategory,
-      industry: selectedOrg.industry,
-      country: selectedOrg.country || selectedOrg.location || "United States",
-    });
-  }, [plans, selectedOrg]);
-
-  // Auto-sync selectedPlanId when modal is open and available plans update
-  useEffect(() => {
-    if (isAssignModalOpen && availablePlansForSelectedOrg.length > 0) {
-      const exists = availablePlansForSelectedOrg.some((a) => a.plan.id === selectedPlanId);
-      if (!selectedPlanId || !exists) {
-        setSelectedPlanId(availablePlansForSelectedOrg[0].plan.id);
-      }
-    }
-  }, [isAssignModalOpen, availablePlansForSelectedOrg, selectedPlanId]);
-
-  const handleOpenAssignModal = (orgId?: string) => {
-    const targetOrgId = orgId || organizations[0]?.id || "demo";
-    setSelectedOrgId(targetOrgId);
-    const org = organizations.find((o) => o.id === targetOrgId) || organizations[0];
-    const available = org
-      ? getAvailablePlansForWorkspace(plans, {
-          industryCategory: org.industryCategory,
-          industry: org.industry,
-          country: org.country || org.location || "United States",
-        })
-      : [];
-    const sub = getWorkspaceSubscription(targetOrgId);
-    const hasExistingAvailable = available.some((a) => a.plan.id === sub.planId);
-    setSelectedPlanId(hasExistingAvailable ? sub.planId : (available[0]?.plan.id || ""));
-    setSelectedBillingCycle(sub.billingCycle || "monthly");
-    setIsAssignModalOpen(true);
+  const handleToggleTeamPackActive = (pack: TeamMemberPack) => {
+    const updated: TeamMemberPack = { ...pack, isActive: !pack.isActive };
+    saveTeamMemberPack(updated);
+    loadData();
+    toast.success(`Team Pack "${pack.name}" is now ${updated.isActive ? "active" : "inactive"}`);
   };
 
-  const handleAssignPlanSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const effectivePlanId = selectedPlanId || availablePlansForSelectedOrg[0]?.plan.id;
-    if (!selectedOrgId || !effectivePlanId) {
-      toast.error("Please select both an organisation and an available plan");
-      return;
-    }
-    const targetOrg = organizations.find((o) => o.id === selectedOrgId);
-    const currency = targetOrg?.currency || "USD";
-    const updated = assignPlanToWorkspace(selectedOrgId, effectivePlanId, selectedBillingCycle, currency);
-    setSubscriptions(getStoredSubscriptions());
-    setIsAssignModalOpen(false);
-    toast.success(`Assigned plan "${updated.planName}" to ${targetOrg?.name || "organization"}! ✓`);
+  const handleTogglePackageActive = (pkg: CreditPackage) => {
+    const updated: CreditPackage = { ...pkg, isActive: !pkg.isActive };
+    saveCreditPackage(updated);
+    loadData();
+    toast.success(`Credit Package "${pkg.name}" is now ${updated.isActive ? "active" : "inactive"}`);
   };
 
   // ── GLOBAL SETTINGS UPDATE (FR-5, FR-8) ──
@@ -891,40 +1031,12 @@ export default function AdminPlans() {
         header: "ADMIN SCOPE",
         align: "left",
         width: "18%",
-        render: (plan) => {
-          const rules = plan.scopingRules || [];
-          if (rules.length === 0 && (!plan.targetCategory || plan.targetCategory === "Global")) {
-            return (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                <Globe className="w-3 h-3 text-gray-500" />
-                <span>All Orgs (Global)</span>
-              </span>
-            );
-          }
-
-          const categories = rules.length > 0
-            ? Array.from(new Set(rules.map((r) => r.industryCategory || "Global")))
-            : [plan.targetCategory];
-
-          return (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {categories.slice(0, 2).map((cat, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
-                >
-                  <Globe className="w-2.5 h-2.5 text-blue-500" />
-                  <span>{cat}</span>
-                </span>
-              ))}
-              {categories.length > 2 && (
-                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
-                  +{categories.length - 2}
-                </span>
-              )}
-            </div>
-          );
-        },
+        render: (plan) => (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 border border-slate-200/80">
+            <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>{getScopingSummary(plan.scopingRules, plan.targetCategory)}</span>
+          </span>
+        ),
       },
       {
         id: "seats",
@@ -1012,6 +1124,107 @@ export default function AdminPlans() {
       },
     ],
     []
+  );
+
+  // ── TABLE COLUMNS: PLAN CATEGORIES ──
+  const categoryColumns: TableColumn<AdminPlanCategory>[] = useMemo(
+    () => [
+      {
+        id: "name",
+        header: "CATEGORY NAME",
+        align: "left",
+        width: "30%",
+        render: (cat) => (
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <span
+                onClick={() => handleOpenEditCategory(cat)}
+                className="font-bold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {cat.name}
+              </span>
+            </div>
+            {cat.description && (
+              <span className="text-[11px] text-gray-500 line-clamp-1">
+                {cat.description}
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "adminScope",
+        header: "ADMIN SCOPE",
+        align: "left",
+        width: "35%",
+        render: (cat) => (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 border border-slate-200/80">
+            <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>{getScopingSummary(cat.scopingRules)}</span>
+          </span>
+        ),
+      },
+      {
+        id: "plansCount",
+        header: "PLANS USING",
+        align: "center",
+        width: "15%",
+        render: (cat) => {
+          const count = plans.filter((p) => isCategoryMatch(p.category, cat.name)).length;
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              {count} {count === 1 ? "plan" : "plans"}
+            </span>
+          );
+        },
+      },
+      {
+        id: "status",
+        header: "STATUS",
+        align: "center",
+        width: "10%",
+        render: (cat) => (
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+              cat.isActive !== false
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : "bg-gray-100 text-gray-600 border border-gray-200"
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                cat.isActive !== false ? "bg-emerald-500" : "bg-gray-400"
+              }`}
+            />
+            {cat.isActive !== false ? "Active" : "Inactive"}
+          </span>
+        ),
+      },
+    ],
+    [plans]
+  );
+
+  const categoryRowActions: TableRowAction<AdminPlanCategory>[] = useMemo(
+    () => [
+      {
+        label: "Edit Category",
+        icon: <Edit2 className="w-3.5 h-3.5 text-blue-600" />,
+        onClick: (cat) => handleOpenEditCategory(cat),
+      },
+      {
+        label: "Toggle Active",
+        icon: <Eye className="w-3.5 h-3.5 text-gray-600" />,
+        onClick: (cat) => handleToggleCategoryActive(cat),
+      },
+      {
+        label: "Delete Category",
+        icon: <Trash2 className="w-3.5 h-3.5 text-red-600" />,
+        isDanger: true,
+        onClick: (cat) => handleDeleteCategoryConfirm(cat.id, cat.name),
+      },
+    ],
+    [plans]
   );
 
   // ── TABLE COLUMNS: CREDIT PACKS ──
@@ -1262,149 +1475,13 @@ export default function AdminPlans() {
     []
   );
 
-  // ── TABLE COLUMNS: PLAN ASSIGNMENT (FR-10) ──
-  interface OrgAssignmentRow {
-    orgId: string;
-    orgName: string;
-    industry: string;
-    planName: string;
-    tier: string;
-    billingCycle: string;
-    seatsTotal: number;
-    creditsTotal: number;
-    status: string;
-    hasPlan: boolean;
-  }
-
-  const assignmentRows: OrgAssignmentRow[] = useMemo(() => {
-    return organizations.map((org) => {
-      const sub = getWorkspaceSubscription(org.id);
-      const hasPlan = Boolean(sub.planId && sub.planName && sub.planName !== "No Plan Assigned");
-      return {
-        orgId: org.id,
-        orgName: org.name,
-        industry: org.industryCategory || "General",
-        planName: hasPlan ? sub.planName : "No Plan Assigned",
-        tier: hasPlan ? sub.tier : "—",
-        billingCycle: hasPlan ? sub.billingCycle : "—",
-        seatsTotal: hasPlan ? (sub.includedSeats || 0) + (sub.extraSeatsPurchased || 0) : 0,
-        creditsTotal: hasPlan ? sub.totalCredits : 0,
-        status: hasPlan ? (sub.status || "Active") : "Unassigned",
-        hasPlan,
-      };
-    });
-  }, [organizations, subscriptions]);
-
-  const filteredAssignmentRows = useMemo(() => {
-    if (!searchQuery.trim()) return assignmentRows;
-    const q = searchQuery.toLowerCase();
-    return assignmentRows.filter(
-      (r) =>
-        r.orgName.toLowerCase().includes(q) ||
-        r.industry.toLowerCase().includes(q) ||
-        r.planName.toLowerCase().includes(q) ||
-        r.tier.toLowerCase().includes(q)
-    );
-  }, [assignmentRows, searchQuery]);
-
-  const assignmentColumns: TableColumn<OrgAssignmentRow>[] = useMemo(
-    () => [
-      {
-        id: "orgName",
-        header: "ORGANISATION",
-        align: "left",
-        width: "25%",
-        render: (row) => (
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-slate-100 border border-slate-300 text-slate-700 flex items-center justify-center shrink-0">
-              <Building2 className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-900">{row.orgName}</p>
-              <p className="text-[11px] text-gray-500">{row.industry}</p>
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "planName",
-        header: "ACTIVE PLAN",
-        align: "left",
-        width: "25%",
-        render: (row) =>
-          row.hasPlan ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-blue-600">{row.planName}</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase font-semibold">
-                {row.tier}
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs text-gray-400 italic font-medium">No Plan Assigned</span>
-          ),
-      },
-      {
-        id: "billingCycle",
-        header: "BILLING CYCLE",
-        align: "left",
-        width: "15%",
-        render: (row) => (
-          <span className="text-xs capitalize font-medium text-gray-700">
-            {row.hasPlan ? row.billingCycle : "—"}
-          </span>
-        ),
-      },
-      {
-        id: "seatsTotal",
-        header: "ALLOWED SEATS",
-        align: "left",
-        width: "15%",
-        render: (row) => (
-          <span className="text-xs font-bold text-gray-800">
-            {row.hasPlan ? `${row.seatsTotal} members` : "—"}
-          </span>
-        ),
-      },
-      {
-        id: "status",
-        header: "STATUS",
-        align: "left",
-        width: "10%",
-        render: (row) =>
-          row.hasPlan ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              {row.status}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-              Unassigned
-            </span>
-          ),
-      },
-    ],
-    []
-  );
-
-  const assignmentRowActions: TableRowAction<OrgAssignmentRow>[] = useMemo(
-    () => [
-      {
-        label: "Assign Plan",
-        icon: <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />,
-        onClick: (row) => handleOpenAssignModal(row.orgId),
-      },
-    ],
-    []
-  );
-
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7 animate-in fade-in duration-200">
         {/* Top Header - Portals directly into the topbar */}
         <PageHeader
           title="Plans & Credits"
-          subtitle="Admin control console for subscription tiers, included quotas, add-on packs, credit actions, and plan assignment."
+          subtitle="Admin control console for subscription tiers, plan categories, add-on packs, and modular credit action rates."
         />
 
         {/* Action Bar powered by PageTopBar with dropdown modes, search, and quick actions */}
@@ -1426,9 +1503,9 @@ export default function AdminPlans() {
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   <option value="plans">Industry Plans</option>
+                  <option value="plan-categories">Plan Categories</option>
                   <option value="packed-pricing">Packed Pricing</option>
                   <option value="credit-actions">Credit Actions</option>
-                  <option value="assignment">Plan Assignment</option>
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -1495,13 +1572,13 @@ export default function AdminPlans() {
           searchPlaceholder={
             activeTab === "plans"
               ? "Search plans by name or admin scope..."
+              : activeTab === "plan-categories"
+              ? "Search plan categories by name or admin scope..."
               : activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing"
               ? packedPricingMode === "credits"
                 ? "Search credit packs..."
                 : "Search team member packs..."
-              : activeTab === "credit-actions"
-              ? "Search credit action items..."
-              : "Search organizations or plans..."
+              : "Search credit action items..."
           }
           secondaryActions={
             activeTab === "plans" ? (
@@ -1566,6 +1643,12 @@ export default function AdminPlans() {
                   icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
                   onClick: handleOpenCreatePlan,
                 }
+              : activeTab === "plan-categories"
+              ? {
+                  label: "Create Plan Category",
+                  icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
+                  onClick: handleOpenCreateCategory,
+                }
               : activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing"
               ? packedPricingMode === "credits"
                 ? {
@@ -1578,12 +1661,6 @@ export default function AdminPlans() {
                     icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
                     onClick: handleOpenCreateTeamPack,
                   }
-              : activeTab === "assignment"
-              ? {
-                  label: "Assign Plan",
-                  icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-                  onClick: () => handleOpenAssignModal(),
-                }
               : undefined
           }
         />
@@ -1604,6 +1681,25 @@ export default function AdminPlans() {
               pageSizeOptions={[20, 50, 100]}
               emptyMessage="No industry plans found matching criteria."
               tableId="admin-industry-plans-table"
+            />
+          </div>
+        )}
+
+        {/* ── TAB: PLAN CATEGORIES ── */}
+        {activeTab === "plan-categories" && (
+          <div className="space-y-4">
+            <TableComponent<AdminPlanCategory>
+              data={filteredPlanCategories}
+              columns={categoryColumns}
+              getRowId={(c) => c.id}
+              rowActions={categoryRowActions}
+              actionIcon="menu"
+              enableSelection={false}
+              enableColumnCustomization={true}
+              defaultRowsPerPage={20}
+              pageSizeOptions={[20, 50, 100]}
+              emptyMessage="No plan categories found. Click 'Create Plan Category' to add one."
+              tableId="admin-plan-categories-table"
             />
           </div>
         )}
@@ -1647,20 +1743,130 @@ export default function AdminPlans() {
                   </div>
                 </div>
 
-                {/* Team Member Packs Table */}
-                <div>
-                  <TableComponent<TeamMemberPack>
-                    data={filteredTeamPacks}
-                    columns={teamPackColumns}
-                    getRowId={(p) => p.id}
-                    rowActions={teamPackRowActions}
-                    actionIcon="menu"
-                    enableSelection={false}
-                    defaultRowsPerPage={20}
-                    emptyMessage="No team member packs configured."
-                    tableId="admin-team-packs-table"
-                  />
-                </div>
+                {/* Team Member Packs Cards */}
+                {filteredTeamPacks.length === 0 ? (
+                  <div className="bg-white border border-dashed border-gray-200 rounded-2xl p-12 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        No team member packs found
+                      </h4>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
+                        Create team seat bundles so client organizations can add seats in bulk at discounted rates.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreateTeamPack}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Create Team Pack</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredTeamPacks.map((pack) => {
+                      const perMember = pack.members > 0 ? (pack.totalPrice / pack.members).toFixed(2) : "0.00";
+                      return (
+                        <div
+                          key={pack.id}
+                          className={`bg-white rounded-2xl border transition-all duration-200 p-5.5 flex flex-col justify-between hover:shadow-md relative group ${
+                            pack.isActive ? "border-slate-200/90 shadow-2xs" : "border-slate-200/60 opacity-75 bg-slate-50/50"
+                          }`}
+                        >
+                          {/* Card Top: Badges & Status */}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
+                                  <Users className="w-3 h-3" />
+                                  <span>+{pack.members} {pack.members === 1 ? "Member" : "Members"}</span>
+                                </span>
+                                {pack.badge && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                                    {pack.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTeamPackActive(pack)}
+                                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full transition-colors cursor-pointer ${
+                                  pack.isActive
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"
+                                }`}
+                                title="Click to toggle active status"
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${pack.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
+                                <span>{pack.isActive ? "Active" : "Inactive"}</span>
+                              </button>
+                            </div>
+
+                            {/* Pack Title & Meta */}
+                            <h4
+                              className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors cursor-pointer"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                              onClick={() => handleOpenEditTeamPack(pack)}
+                            >
+                              {pack.name}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Bundle of {pack.members} additional team member {pack.members === 1 ? "seat" : "seats"} with priority provisioning.
+                            </p>
+
+                            {/* Price section */}
+                            <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-baseline justify-between">
+                              <div>
+                                <span className="text-2xl font-black text-slate-900 font-mono" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {pack.currencySymbol || "$"}{pack.totalPrice.toLocaleString()}
+                                </span>
+                                <span className="text-xs text-slate-500 font-medium ml-1">/ pack / mo</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-xs font-semibold text-slate-600 font-mono">
+                                  {pack.currencySymbol || "$"}{perMember}
+                                </span>
+                                <span className="text-[11px] text-slate-400 block">/ member / mo</span>
+                              </div>
+                            </div>
+
+                            {/* Country localized pricing pill */}
+                            {(pack.countryPricing?.length || 0) > 1 && (
+                              <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+                                <Globe className="w-3 h-3 text-slate-400" />
+                                <span>Available in {pack.countryPricing?.length} currencies</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Bottom: Quick Actions */}
+                          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditTeamPack(pack)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Edit Pack</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTeamPackConfirm(pack.id, pack.name)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete pack"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1700,20 +1906,135 @@ export default function AdminPlans() {
                   </div>
                 </div>
 
-                {/* Credit Packs Table (FR-6) */}
-                <div>
-                  <TableComponent<CreditPackage>
-                    data={filteredPackages}
-                    columns={packageColumns}
-                    getRowId={(pkg) => pkg.id}
-                    rowActions={packageRowActions}
-                    actionIcon="menu"
-                    enableSelection={false}
-                    defaultRowsPerPage={20}
-                    emptyMessage="No credit packs created yet."
-                    tableId="admin-credit-packages-table"
-                  />
-                </div>
+                {/* Credit Packs Cards (FR-6) */}
+                {filteredPackages.length === 0 ? (
+                  <div className="bg-white border border-dashed border-gray-200 rounded-2xl p-12 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                      <Coins className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        No credit packs found
+                      </h4>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
+                        Create pre-packaged credit bundles for AI voice minutes, transcription, and workflow automation.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreatePackage}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Create Credit Pack</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredPackages.map((pkg) => {
+                      const perCredit = pkg.credits > 0 ? (pkg.totalPrice / pkg.credits).toFixed(4) : "0.0000";
+                      return (
+                        <div
+                          key={pkg.id}
+                          className={`bg-white rounded-2xl border transition-all duration-200 p-5.5 flex flex-col justify-between hover:shadow-md relative group ${
+                            pkg.isActive ? "border-slate-200/90 shadow-2xs" : "border-slate-200/60 opacity-75 bg-slate-50/50"
+                          }`}
+                        >
+                          {/* Card Top: Badges & Status */}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+                                  <Coins className="w-3 h-3 text-amber-500" />
+                                  <span>{pkg.credits.toLocaleString()} Credits</span>
+                                </span>
+                                {pkg.badge && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                    {pkg.badge}
+                                  </span>
+                                )}
+                                {pkg.isInternalStaffOnly && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                    Internal Only
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePackageActive(pkg)}
+                                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full transition-colors cursor-pointer ${
+                                  pkg.isActive
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"
+                                }`}
+                                title="Click to toggle active status"
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${pkg.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
+                                <span>{pkg.isActive ? "Active" : "Inactive"}</span>
+                              </button>
+                            </div>
+
+                            {/* Pack Title & Meta */}
+                            <h4
+                              className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors cursor-pointer"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                              onClick={() => handleOpenEditPackage(pkg)}
+                            >
+                              {pkg.name}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Top-up package of {pkg.credits.toLocaleString()} modular workspace credits with instant provisioning.
+                            </p>
+
+                            {/* Price Section */}
+                            <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-baseline justify-between">
+                              <div>
+                                <span className="text-2xl font-black text-slate-900 font-mono" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {pkg.currencySymbol || "$"}{pkg.totalPrice.toLocaleString()}
+                                </span>
+                                <span className="text-xs text-slate-500 font-medium ml-1">/ one-time</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-xs font-semibold text-slate-600 font-mono">
+                                  {pkg.currencySymbol || "$"}{perCredit}
+                                </span>
+                                <span className="text-[11px] text-slate-400 block">/ credit</span>
+                              </div>
+                            </div>
+
+                            {/* Country localized pricing pill */}
+                            {(pkg.countryPricing?.length || 0) > 1 && (
+                              <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+                                <Globe className="w-3 h-3 text-slate-400" />
+                                <span>Available in {pkg.countryPricing?.length} currencies</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Bottom: Quick Actions */}
+                          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPackage(pkg)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Edit Pack</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePackageConfirm(pkg.id, pkg.name)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete pack"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1743,23 +2064,6 @@ export default function AdminPlans() {
               defaultRowsPerPage={20}
               emptyMessage="No credit actions found."
               tableId="admin-credit-actions-table"
-            />
-          </div>
-        )}
-
-        {/* ── TAB 5: PLAN ASSIGNMENT ── */}
-        {activeTab === "assignment" && (
-          <div className="space-y-4">
-            <TableComponent<OrgAssignmentRow>
-              data={filteredAssignmentRows}
-              columns={assignmentColumns}
-              getRowId={(row) => row.orgId}
-              rowActions={assignmentRowActions}
-              actionIcon="menu"
-              enableSelection={false}
-              defaultRowsPerPage={20}
-              emptyMessage="No organizations found."
-              tableId="admin-plan-assignments-table"
             />
           </div>
         )}
@@ -1832,7 +2136,7 @@ export default function AdminPlans() {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1">Tier *</label>
                         <select
@@ -1848,52 +2152,26 @@ export default function AdminPlans() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Plan Category *</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-gray-700">Plan Category *</label>
+                          <span className="text-[10px] text-blue-600 font-semibold">
+                            {availablePlanCategories.length} {availablePlanCategories.length === 1 ? "category" : "categories"} available
+                          </span>
+                        </div>
                         <select
-                          value={planForm.category || "AI Receptionist"}
+                          value={planForm.category || (availablePlanCategories[0]?.name ?? "AI Receptionist")}
                           onChange={(e) => setPlanForm({ ...planForm, category: e.target.value })}
                           className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                         >
-                          {PLAN_CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Industry Category *</label>
-                        <select
-                          value={planForm.targetCategory || "Global"}
-                          onChange={(e) => {
-                            const selectedCat = e.target.value;
-                            const newRules: ScopingRule[] =
-                              selectedCat === "Global" || selectedCat === "All Industries"
-                                ? []
-                                : [
-                                    {
-                                      id: `rule_${Date.now()}`,
-                                      industryCategory: selectedCat,
-                                      industries: [],
-                                      locations: [],
-                                    },
-                                  ];
-                            setPlanForm({
-                              ...planForm,
-                              targetCategory: selectedCat,
-                              scopingRules: newRules,
-                            });
-                          }}
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
-                        >
-                          <option value="Global">Universal (All Industries)</option>
-                          {INITIAL_CATEGORIES.map((cat) => (
+                          {availablePlanCategories.map((cat) => (
                             <option key={cat.id} value={cat.name}>
                               {cat.name}
                             </option>
                           ))}
                         </select>
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Filtered by the plan&apos;s configured Admin Scope below.
+                        </p>
                       </div>
                     </div>
 
@@ -1905,6 +2183,37 @@ export default function AdminPlans() {
                         onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
                         placeholder="Short summary of this tier's target audience and benefits..."
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                      />
+                    </div>
+
+                    {/* Admin Scope Card via AdminControlAccordion */}
+                    <div className="sm:col-span-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Admin Scope &amp; Target Visibility</span>
+                        </label>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {getScopingSummary(planForm.scopingRules, planForm.targetCategory)}
+                        </span>
+                      </div>
+                      <AdminControlAccordion
+                        scopingRules={planForm.scopingRules || []}
+                        onScopingRulesChange={(newRules) => {
+                          const derivedCat = newRules[0]?.industryCategory || "Global";
+                          const newAvailable = getPlanCategoriesForScope(newRules, derivedCat);
+                          const currentValid = newAvailable.some((c) => isCategoryMatch(c.name, planForm.category));
+                          setPlanForm((prev) => ({
+                            ...prev,
+                            scopingRules: newRules,
+                            targetCategory: derivedCat,
+                            category: currentValid ? prev.category : (newAvailable[0]?.name || prev.category),
+                          }));
+                        }}
+                        defaultAdminControlOpen={true}
+                        defaultScopeOpen={true}
+                        defaultPermissionsOpen={false}
+                        scopeTooltip="Define which tenant organization categories, industries, and locations have visibility to this subscription plan tier."
                       />
                     </div>
                   </div>
@@ -2808,139 +3117,114 @@ export default function AdminPlans() {
         </div>
       )}
 
-      {/* ── PLAN ASSIGNMENT MODAL (FR-10) ── */}
-      {isAssignModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Assign Plan to Organisation
-                </h3>
-                <p className="text-xs text-gray-500">Brings back direct plan provisioning by admins</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAssignModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAssignPlanSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Target Organisation *</label>
-                <select
-                  value={selectedOrgId}
-                  onChange={(e) => {
-                    const newOrgId = e.target.value;
-                    setSelectedOrgId(newOrgId);
-                    const org = organizations.find((o) => o.id === newOrgId);
-                    const available = org
-                      ? getAvailablePlansForWorkspace(plans, {
-                          industryCategory: org.industryCategory,
-                          industry: org.industry,
-                          country: org.country || org.location || "United States",
-                        })
-                      : [];
-                    setSelectedPlanId(available[0]?.plan.id || "");
-                  }}
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
-                >
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name} ({org.industryCategory || "General"})
-                    </option>
-                  ))}
-                </select>
-                {selectedOrg && (
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Admin Scope: <span className="font-semibold text-gray-700">{selectedOrg.industryCategory || "General"} · {selectedOrg.industry}</span> ({selectedOrg.country || selectedOrg.location || "United States"})
+      {/* ── CREATE / EDIT PLAN CATEGORY DRAWER ── */}
+      {isCategoryDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
+          <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-gray-200 shrink-0 bg-gray-50/70">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {editingCategory ? `Edit Category: ${editingCategory.name}` : "Create Plan Category"}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    Configure the plan category name, description, and assign its Admin Scope.
                   </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Plan to Assign (Available for this Scope) *
-                </label>
-                {availablePlansForSelectedOrg.length === 0 ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-                    <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span>No matching active plans available</span>
-                    </p>
-                    <p className="text-[11px] text-amber-700 leading-relaxed">
-                      There are currently no active plans provisioned matching {selectedOrg?.name}&apos;s Admin Scope ({selectedOrg?.industryCategory || "General"}). Go to &quot;Industry Plans&quot; and create a plan with matching or Global scope first.
-                    </p>
-                  </div>
-                ) : (
-                  <select
-                    value={selectedPlanId}
-                    onChange={(e) => setSelectedPlanId(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
-                  >
-                    {availablePlansForSelectedOrg.map(({ plan: p, pricing, isIndustrySpecific }) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} [{p.tier} · {p.includedSeats || 2} seats · {p.monthlyCredits.toLocaleString()} credits/mo · {pricing.currencySymbol}{pricing.monthlyPrice}/mo] {isIndustrySpecific ? "(Scoped)" : "(Global)"}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Billing Cadence</label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBillingCycle("monthly")}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
-                      selectedBillingCycle === "monthly"
-                        ? "bg-blue-50 text-blue-700 border-blue-300"
-                        : "bg-white text-gray-600 border-gray-200"
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBillingCycle("yearly")}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
-                      selectedBillingCycle === "yearly"
-                        ? "bg-blue-50 text-blue-700 border-blue-300"
-                        : "bg-white text-gray-600 border-gray-200"
-                    }`}
-                  >
-                    Yearly (20% Off)
-                  </button>
                 </div>
-              </div>
-
-              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-blue-900">
-                <p>
-                  <strong>Note:</strong> Once assigned, this plan will immediately become the organisation&apos;s active plan in Plan Overview. Included seats and plan credits will be provisioned according to the plan rules.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setIsAssignModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold cursor-pointer"
+                  onClick={() => setIsCategoryDrawerOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl cursor-pointer"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={availablePlansForSelectedOrg.length === 0}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Confirm &amp; Assign Plan
+                  <X className="w-5 h-5" />
                 </button>
               </div>
+            </div>
+
+            {/* Drawer Body */}
+            <form id="category-form" onSubmit={handleSaveCategorySubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Category Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={categoryForm.name}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                    placeholder="e.g. AI Scribe, EHR, Fleet Telematics..."
+                    className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
+                  <textarea
+                    rows={2}
+                    value={categoryForm.description}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                    placeholder="Summary of this category and what plans under it represent..."
+                    className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Admin Scope Accordion */}
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Admin Scope &amp; Target Visibility</span>
+                    </label>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {getScopingSummary(categoryForm.scopingRules)}
+                    </span>
+                  </div>
+                  <AdminControlAccordion
+                    scopingRules={categoryForm.scopingRules}
+                    onScopingRulesChange={(newRules) =>
+                      setCategoryForm((prev) => ({ ...prev, scopingRules: newRules }))
+                    }
+                    defaultAdminControlOpen={true}
+                    defaultScopeOpen={true}
+                    defaultPermissionsOpen={false}
+                    scopeTooltip="Define which tenant organization categories, industries, and locations this plan category applies to."
+                  />
+                </div>
+
+                {/* Active Toggle */}
+                <div className="pt-2 flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Active Status</span>
+                    <span className="text-[11px] text-slate-500">Allow plans to use this category</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={categoryForm.isActive}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, isActive: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 border-gray-300 cursor-pointer"
+                  />
+                </div>
+              </div>
             </form>
+
+            {/* Drawer Footer */}
+            <div className="p-4 border-t border-gray-200 shrink-0 bg-white flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsCategoryDrawerOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="category-form"
+                className="px-5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Category</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
