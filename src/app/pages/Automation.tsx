@@ -4,6 +4,9 @@ import {
   Plus,
   Trash2,
   Pencil,
+  Activity,
+  PlayCircle,
+  AlertCircle,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -29,7 +32,7 @@ export default function Automation() {
   const { activeOrganization } = useOrganization();
 
   // Filter state
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "failed">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
@@ -46,6 +49,7 @@ export default function Automation() {
     return rules.filter((r) => {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
+      if (statusFilter === "failed" && r.health !== "failed") return false;
 
       // Product-level rules must match active organization scope
       if (isAdminAutomationRule(r) && activeOrganization) {
@@ -67,6 +71,29 @@ export default function Automation() {
       return true;
     });
   }, [rules, statusFilter, searchQuery, activeOrganization]);
+
+  // Automation stats for capsule pills
+  const stats = useMemo(() => {
+    const total = rules.length;
+    const active = rules.filter((r) => r.enabled).length;
+    const paused = total - active;
+    const failed = rules.filter((r) => r.health === "failed").length;
+
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const runsCount = rules.filter((r) => {
+      if (!r.lastRunAt) return false;
+      const t = new Date(r.lastRunAt).getTime();
+      return !isNaN(t) && t >= oneWeekAgo;
+    }).length;
+
+    return {
+      total,
+      active,
+      paused,
+      failed,
+      runsThisWeek: runsCount,
+    };
+  }, [rules]);
 
   // Set default active rule
   useEffect(() => {
@@ -247,6 +274,120 @@ export default function Automation() {
           subtitle="Visual rule engine connecting lifecycle events directly to pipeline actions."
         />
 
+        {/* Stats Cards — thin capsule style matching WebForms */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+          {/* Pill 1: Total Automations */}
+          <div
+            onClick={() => setStatusFilter("all")}
+            className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:border-slate-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Activity className="w-3.5 h-3.5 text-blue-500" />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+              >
+                TOTAL AUTOMATIONS
+              </span>
+            </div>
+            <span
+              className="text-base font-bold flex-1 text-center"
+              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+            >
+              {stats.total}
+            </span>
+            <span
+              className="text-[10px] shrink-0 whitespace-nowrap"
+              style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+            >
+              {stats.paused > 0 ? `${stats.paused} paused` : "all active"}
+            </span>
+          </div>
+
+          {/* Pill 2: Active */}
+          <div
+            onClick={() => setStatusFilter("active")}
+            className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:border-slate-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <PlayCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-wide shrink-0"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+              >
+                ACTIVE
+              </span>
+            </div>
+            <span
+              className="text-base font-bold flex-1 text-center"
+              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+            >
+              {stats.active}
+            </span>
+            <span
+              className="text-[10px] shrink-0 whitespace-nowrap"
+              style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+            >
+              {stats.active} live
+            </span>
+          </div>
+
+          {/* Pill 3: Runs this week */}
+          <div
+            className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2 hover:border-slate-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Zap className="w-3.5 h-3.5 text-blue-500" />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-wide shrink-0"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+              >
+                RUNS THIS WEEK
+              </span>
+            </div>
+            <span
+              className="text-base font-bold flex-1 text-center"
+              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+            >
+              {stats.runsThisWeek}
+            </span>
+            <span
+              className="text-[10px] shrink-0 whitespace-nowrap"
+              style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+            >
+              7d total
+            </span>
+          </div>
+
+          {/* Pill 4: Failed Automations */}
+          <div
+            onClick={() => setStatusFilter("failed")}
+            className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:border-slate-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <AlertCircle className={`w-3.5 h-3.5 ${stats.failed > 0 ? "text-rose-500" : "text-gray-400"}`} />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-wide shrink-0"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+              >
+                FAILED
+              </span>
+            </div>
+            <span
+              className="text-base font-bold flex-1 text-center"
+              style={{ fontFamily: "DM Sans, sans-serif", color: stats.failed > 0 ? "#E11D48" : "#020817" }}
+            >
+              {stats.failed}
+            </span>
+            <span
+              className="text-[10px] shrink-0 whitespace-nowrap"
+              style={{ fontFamily: "Outfit, sans-serif", color: stats.failed > 0 ? "#E11D48" : "#94A3B8" }}
+            >
+              {stats.failed > 0 ? "Needs action" : "All healthy"}
+            </span>
+          </div>
+        </div>
+
         {/* Action Bar powered by PageTopBar without entity modes */}
         <PageTopBar
           searchQuery={searchQuery}
@@ -273,6 +414,13 @@ export default function Automation() {
               count: rules.filter((r) => !r.enabled).length,
               isActive: statusFilter === "paused",
               onClick: () => setStatusFilter("paused"),
+            },
+            {
+              id: "failed",
+              label: "Failed",
+              count: stats.failed,
+              isActive: statusFilter === "failed",
+              onClick: () => setStatusFilter("failed"),
             },
           ]}
           primaryAction={{
