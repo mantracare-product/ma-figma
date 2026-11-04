@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { useOrganization } from "./OrganizationContext";
+import { useOrganization, Organization } from "./OrganizationContext";
+import {
+  AdminSidebarTemplate,
+  resolveSidebarTemplateForOrg,
+  SIDEBAR_TEMPLATES_EVENT,
+  SIDEBAR_TEMPLATES_STORAGE_KEY,
+} from "../../lib/sidebarTemplateStore";
 
 export interface NavItemConfig {
   id: string;
@@ -9,6 +15,8 @@ export interface NavItemConfig {
   visible: boolean;
   isFeatured?: boolean;
   badge?: string;
+  isWorkflow?: boolean;
+  workflowId?: string;
 }
 
 export interface NavSectionConfig {
@@ -22,6 +30,9 @@ export interface SidebarMenuConfig {
   sections: NavSectionConfig[];
   version: number;
   defaultStartPage?: string;
+  templateId?: string;
+  templateName?: string;
+  isCustomizedByUser?: boolean;
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
@@ -84,10 +95,12 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
 
 interface SidebarMenuContextType {
   config: SidebarMenuConfig;
+  activeAdminTemplate: AdminSidebarTemplate | null;
   defaultStartPage: string;
   setDefaultStartPage: (path: string) => void;
   updateConfig: (newConfig: SidebarMenuConfig) => void;
   resetToDefault: () => void;
+  resetToAdminTemplate: () => void;
   isConfiguring: boolean;
   setIsConfiguring: (configuring: boolean) => void;
   toggleItemVisibility: (sectionId: string, itemId: string) => void;
@@ -100,14 +113,22 @@ interface SidebarMenuContextType {
   isInWorkspace: (pathOrId: string) => boolean;
 }
 
-const SidebarMenuContext = createContext<SidebarMenuContextType | undefined>(undefined);
+const globalForSidebar = typeof window !== "undefined" ? (window as any) : (globalThis as any);
+const SidebarMenuContext: React.Context<SidebarMenuContextType | undefined> =
+  globalForSidebar.__MANTRA_SIDEBAR_MENU_CONTEXT__ ||
+  (globalForSidebar.__MANTRA_SIDEBAR_MENU_CONTEXT__ = createContext<SidebarMenuContextType | undefined>(undefined));
 
-function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
+function loadAndMigrateConfig(storageKey: string, org?: Organization | null): SidebarMenuConfig {
+  const matchedTemplate = resolveSidebarTemplateForOrg(org);
+
   try {
     const saved = localStorage.getItem(storageKey);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed.sections && Array.isArray(parsed.sections)) {
+      // ONLY keep custom layout if the saved layout belongs to the EXACT template matching the current scope
+      const isSameTemplate = Boolean(parsed.templateId && parsed.templateId === matchedTemplate.id);
+
+      if (isSameTemplate && parsed.isCustomizedByUser && parsed.sections && Array.isArray(parsed.sections)) {
         if (!parsed.version || parsed.version < 6) {
           // Migrate: ensure workspace items default to isFeatured: true, appointments above scribe, remove legacy settings-numbers item, update billing to REVENUE & INSIGHTS, and automation to CUSTOMIZATIONS
           const migratedSections = parsed.sections.map((sec: NavSectionConfig) => {
@@ -153,6 +174,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
+
         // Always ensure billing and automation sections have correct titles and items, and billing is above automation
         if (parsed.sections) {
           const sectionOrder = ["workspace", "billing", "automation", "settings"];
@@ -210,21 +232,92 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
       }
     }
   } catch {}
-  return DEFAULT_SIDEBAR_CONFIG;
+
+  // Apply resolved matching Admin Scoped Template for this organization
+  const newConfig: SidebarMenuConfig = {
+    version: 7,
+    defaultStartPage: matchedTemplate.defaultStartPage || "/",
+    templateId: matchedTemplate.id,
+    templateName: matchedTemplate.name,
+    isCustomizedByUser: false,
+    sections: JSON.parse(JSON.stringify(matchedTemplate.sections)),
+  };
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(newConfig));
+  } catch {}
+
+  return newConfig;
 }
 
 export function SidebarMenuProvider({ children }: { children: React.ReactNode }) {
   const { activeOrganization } = useOrganization();
   const storageKey = `mantra_sidebar_config_${activeOrganization?.id || "default"}`;
 
-  const [config, setConfig] = useState<SidebarMenuConfig>(() => loadAndMigrateConfig(storageKey));
+  const activeAdminTemplate = React.useMemo(() => {
+    return resolveSidebarTemplateForOrg(activeOrganization);
+  }, [
+    activeOrganization?.id,
+    activeOrganization?.industryCategory,
+    activeOrganization?.industry,
+    activeOrganization?.location,
+    activeOrganization?.locations?.join(","),
+  ]);
+
+  const [config, setConfig] = useState<SidebarMenuConfig>(() =>
+    loadAndMigrateConfig(storageKey, activeOrganization)
+  );
 
   const [isConfiguring, setIsConfiguring] = useState(false);
 
-  // Sync with localStorage when active org changes
+  // Sync with localStorage when active org or its admin scope changes
   useEffect(() => {
-    setConfig(loadAndMigrateConfig(storageKey));
-  }, [storageKey]);
+    setConfig(loadAndMigrateConfig(storageKey, activeOrganization));
+  }, [
+    storageKey,
+    activeOrganization?.id,
+    activeOrganization?.industryCategory,
+    activeOrganization?.industry,
+    activeOrganization?.location,
+    activeOrganization?.locations?.join(","),
+  ]);
+
+  // Sync with admin sidebar template updates and org updates across tabs & local events
+  useEffect(() => {
+    const handleAdminOrOrgUpdate = () => {
+      setConfig(loadAndMigrateConfig(storageKey, activeOrganization));
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (
+        e.key === SIDEBAR_TEMPLATES_STORAGE_KEY ||
+        e.key === "mantra_organizations_v1" ||
+        e.key === "mantra_active_org_id_v1" ||
+        (e.key && e.key === storageKey)
+      ) {
+        handleAdminOrOrgUpdate();
+      }
+    };
+
+    window.addEventListener(SIDEBAR_TEMPLATES_EVENT, handleAdminOrOrgUpdate);
+    window.addEventListener("organizationChanged", handleAdminOrOrgUpdate);
+    window.addEventListener("mantra_organization_changed", handleAdminOrOrgUpdate);
+    window.addEventListener("storage", handleStorageEvent);
+
+    return () => {
+      window.removeEventListener(SIDEBAR_TEMPLATES_EVENT, handleAdminOrOrgUpdate);
+      window.removeEventListener("organizationChanged", handleAdminOrOrgUpdate);
+      window.removeEventListener("mantra_organization_changed", handleAdminOrOrgUpdate);
+      window.removeEventListener("storage", handleStorageEvent);
+    };
+  }, [
+    storageKey,
+    activeOrganization?.id,
+    activeOrganization?.industryCategory,
+    activeOrganization?.industry,
+    activeOrganization?.location,
+    activeOrganization?.locations?.join(","),
+  ]);
 
   const saveConfig = (newConfig: SidebarMenuConfig) => {
     setConfig(newConfig);
@@ -236,11 +329,24 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
   };
 
   const updateConfig = (newConfig: SidebarMenuConfig) => {
-    saveConfig(newConfig);
+    saveConfig({ ...newConfig, isCustomizedByUser: true });
+  };
+
+  const resetToAdminTemplate = () => {
+    const matched = resolveSidebarTemplateForOrg(activeOrganization);
+    const resetConfig: SidebarMenuConfig = {
+      version: 7,
+      defaultStartPage: matched.defaultStartPage || "/",
+      templateId: matched.id,
+      templateName: matched.name,
+      isCustomizedByUser: false,
+      sections: JSON.parse(JSON.stringify(matched.sections)),
+    };
+    saveConfig(resetConfig);
   };
 
   const resetToDefault = () => {
-    saveConfig(DEFAULT_SIDEBAR_CONFIG);
+    resetToAdminTemplate();
   };
 
   const toggleItemVisibility = (sectionId: string, itemId: string) => {
@@ -548,10 +654,12 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     <SidebarMenuContext.Provider
       value={{
         config,
+        activeAdminTemplate,
         defaultStartPage: config.defaultStartPage || "/",
         setDefaultStartPage,
         updateConfig,
         resetToDefault,
+        resetToAdminTemplate,
         isConfiguring,
         setIsConfiguring,
         toggleItemVisibility,
@@ -569,10 +677,28 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
   );
 }
 
-export function useSidebarMenu() {
+export function useSidebarMenu(): SidebarMenuContextType {
   const context = useContext(SidebarMenuContext);
   if (!context) {
-    throw new Error("useSidebarMenu must be used within a SidebarMenuProvider");
+    return {
+      config: DEFAULT_SIDEBAR_CONFIG,
+      activeAdminTemplate: null,
+      defaultStartPage: "/",
+      setDefaultStartPage: () => {},
+      updateConfig: () => {},
+      resetToDefault: () => {},
+      resetToAdminTemplate: () => {},
+      isConfiguring: false,
+      setIsConfiguring: () => {},
+      toggleItemVisibility: () => {},
+      toggleItemFeatured: () => {},
+      moveItem: () => {},
+      reorderSectionItems: () => {},
+      toggleSectionDefaultExpanded: () => {},
+      addToWorkspace: () => {},
+      removeFromWorkspace: () => {},
+      isInWorkspace: () => false,
+    };
   }
   return context;
 }

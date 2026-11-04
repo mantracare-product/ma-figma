@@ -251,6 +251,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("mantra_organizations_v1", JSON.stringify(next));
       return next;
     });
+
+    if (id === activeOrgId && updates.name) {
+      localStorage.setItem("active_organization_name", updates.name);
+    }
+
+    const detail = { id, ...updates };
+    window.dispatchEvent(new CustomEvent("organizationChanged", { detail }));
+    window.dispatchEvent(new CustomEvent("mantra_organization_changed", { detail }));
+    window.dispatchEvent(new Event("storage"));
   };
 
   const contextValue = useMemo(() => ({

@@ -471,7 +471,7 @@ export default function AddAutomationDrawer({
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [isStepDetailOpen, setIsStepDetailOpen] = useState(false);
   const [stepTrigger, setStepTrigger] = useState("stage");
-  const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
+  const [executionType, setExecutionType] = useState<"instant" | "wait" | "parallel">("wait");
   const [delayValue, setDelayValue] = useState<number>(0);
   const [delayUnit, setDelayUnit] = useState<string>("minutes");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);

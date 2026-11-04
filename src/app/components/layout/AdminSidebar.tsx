@@ -121,6 +121,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         { id: "services", label: "Product / Services", icon: Tag, path: "/admin/services" },
         { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge-base" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
+        { id: "sidebar-config", label: "Sidebar Navigation", icon: LayoutTemplate, path: "/admin/sidebar-config" },
         { id: "roles", label: "Roles & Permissions", icon: Shield, path: "/admin/roles" },
       ],
     },

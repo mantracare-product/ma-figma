@@ -42,6 +42,9 @@ import {
   getIndustriesForCategory,
 } from "../../../../data/industryReferenceData";
 
+import { getStoredDepartments } from "../../../../lib/departmentStore";
+import type { Department } from "../../../../types/permissions";
+
 export type PermissionScope = "deny" | "own" | "department" | "all" | "allow";
 
 export const STANDARD_MODULES = [
@@ -119,6 +122,7 @@ interface RoleStudioModalProps {
     roleName: string;
     category: string;
     industry: string;
+    department?: string;
     description?: string;
     isSystem?: boolean;
     permissions?: Record<string, ModulePermissionConfig>;
@@ -128,6 +132,7 @@ interface RoleStudioModalProps {
     roleName: string;
     category: string;
     industry: string;
+    department?: string;
     description: string;
     permissions: Record<string, ModulePermissionConfig>;
   }) => void;
@@ -143,6 +148,8 @@ export function RoleStudioModal({
   const [category, setCategory] = useState("Healthcare");
   const [industry, setIndustry] = useState("Hospital & Clinics");
   const [description, setDescription] = useState("");
+  const [department, setDepartment] = useState("");
+  const [departmentsList, setDepartmentsList] = useState<Department[]>(() => getStoredDepartments());
   const [activeTab, setActiveTab] = useState<"standard" | "operational" | "settings">("standard");
 
   // Dynamic available industries
@@ -171,7 +178,15 @@ export function RoleStudioModal({
       const actionList = isSettings ? SETTINGS_ACTIONS : isStandard ? FULL_ACTIONS : FOUR_ACTIONS;
 
       actionList.forEach((act) => {
-        actions[act.id] = preset === "full" ? true : act.id === "read";
+        if (preset === "full") {
+          actions[act.id] = true;
+        } else if (preset === "standard") {
+          // Write has all access (read, add, edit, delete)
+          actions[act.id] = act.id !== "import";
+        } else {
+          // viewonly: read only (and can export)
+          actions[act.id] = act.id === "read" || act.id === "export";
+        }
       });
 
       perm[modId] = {
@@ -193,7 +208,9 @@ export function RoleStudioModal({
       setRoleName(initialRole.roleName || "");
       setCategory(initialRole.category || "Healthcare");
       setIndustry(initialRole.industry || "Hospital & Clinics");
+      setDepartment(initialRole.department || "");
       setDescription(initialRole.description || "");
+      setDepartmentsList(getStoredDepartments());
       if (initialRole.permissions && Object.keys(initialRole.permissions).length > 0) {
         setPermissions(initialRole.permissions);
       } else {
@@ -253,6 +270,7 @@ export function RoleStudioModal({
       roleName: roleName.trim(),
       category,
       industry,
+      department: department.trim() || undefined,
       description: description.trim(),
       permissions,
     });
@@ -294,7 +312,7 @@ export function RoleStudioModal({
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Section 1: Role Metadata */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-gray-50/60 border border-gray-200/70">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-gray-50/60 border border-gray-200/70">
             <div>
               <label className="block text-xs font-semibold text-gray-800 mb-1">
                 Role Name <span className="text-red-500">*</span>
@@ -336,7 +354,22 @@ export function RoleStudioModal({
                 ))}
               </select>
             </div>
-            <div className="sm:col-span-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-800 mb-1">Department</label>
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+              >
+                <option value="">No Department Assigned</option>
+                {departmentsList.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-4">
               <label className="block text-xs font-semibold text-gray-800 mb-1">Role Scope Description</label>
               <input
                 type="text"
@@ -446,7 +479,7 @@ export function RoleStudioModal({
                             className="w-full px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           >
                             <option value="all">All Records (Global)</option>
-                            <option value="department">Department / Branch</option>
+                            <option value="department">Role</option>
                             <option value="own">Own Assigned Only</option>
                             <option value="allow">Allow (Full Flag)</option>
                             <option value="deny">Deny Access</option>

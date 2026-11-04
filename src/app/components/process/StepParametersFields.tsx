@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
-  User, PhoneForwarded, Phone, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
+  User, Users, Shield, Layers, PhoneForwarded, Phone, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
   ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Workflow, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap, CornerDownRight
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +25,38 @@ import {
 } from "../../../lib/documentTemplatesStore";
 import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
 import { SelectFieldsModal } from "../help/FieldManager";
+
+const STANDARD_CALL_FIELDS = [
+  { key: "call_status", label: "Call Status", module: "call" },
+  { key: "call_duration", label: "Call Duration (seconds)", module: "call" },
+  { key: "call_direction", label: "Call Direction (Inbound/Outbound)", module: "call" },
+  { key: "caller_phone", label: "Caller Phone Number", module: "call" },
+  { key: "recording_url", label: "Recording Available", module: "call" },
+  { key: "caller_sentiment", label: "Caller Sentiment", module: "call" },
+  { key: "transferred_to", label: "Transferred Agent / Number", module: "call" },
+  { key: "hangup_cause", label: "Hangup Reason", module: "call" },
+];
+
+const STANDARD_CLIENT_FIELDS = [
+  { key: "client_name", label: "Client Full Name", module: "client" },
+  { key: "client_email", label: "Client Email", module: "client" },
+  { key: "client_phone", label: "Client Phone Number", module: "client" },
+  { key: "status", label: "Client Status", module: "client" },
+  { key: "client_type", label: "Client Category", module: "client" },
+];
+
+const STANDARD_APPT_FIELDS = [
+  { key: "appointment_status", label: "Appointment Status", module: "appointment" },
+  { key: "appointment_date", label: "Appointment Date", module: "appointment" },
+  { key: "service_name", label: "Appointment Service", module: "appointment" },
+  { key: "practitioner_name", label: "Assigned Practitioner", module: "appointment" },
+];
+
+const STANDARD_INVOICE_FIELDS = [
+  { key: "invoice_status", label: "Invoice Status", module: "invoice" },
+  { key: "invoice_amount", label: "Invoice Total Amount", module: "invoice" },
+  { key: "payment_method", label: "Payment Method", module: "invoice" },
+];
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -1315,15 +1347,17 @@ export default function StepParametersFields({
     updateCases(nextCases);
   };
 
-  const handleAddConditionToCase = (caseIndex: number) => {
+  const handleAddConditionToCase = (caseIndex: number, kind: "field" | "intent" = "field") => {
     const newCond: ConditionCaseRule = {
       id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      field: "",
-      fieldLabel: "",
-      fieldSource: "client",
-      operator: "Equal To",
+      kind,
+      field: kind === "intent" ? "caller_intent" : "",
+      fieldLabel: kind === "intent" ? "Caller Intent" : "",
+      fieldSource: kind === "intent" ? "call" : "client",
+      operator: kind === "intent" ? "Matches Intent" : "Equal To",
       valueType: "static",
       value: "",
+      intentPrompt: "",
       logicOp: "AND",
     };
     const nextCases = conditionCases.map((c, idx) =>
@@ -1365,6 +1399,12 @@ export default function StepParametersFields({
   };
 
   const renderConditionCasesBuilder = () => {
+    const isCallTrigger =
+      params.triggerType === "call" ||
+      params.category === "call" ||
+      (typeof params.selectedEvent === "string" && params.selectedEvent.startsWith("call.")) ||
+      (typeof params.triggerEvent === "string" && params.triggerEvent.startsWith("call.")) ||
+      (typeof stepTrigger === "string" && (stepTrigger.toLowerCase().includes("call") || stepTrigger === "incall"));
     return (
       <div className="space-y-4">
         {/* Header */}
@@ -1465,10 +1505,55 @@ export default function StepParametersFields({
                     return (
                       <React.Fragment key={cond.id || `cond-${condIdx}`}>
                         <div className="border border-slate-200 rounded-xl bg-slate-50/40 p-3.5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              Condition #{condIdx + 1}
-                            </span>
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-slate-700">
+                                Condition #{condIdx + 1}
+                              </span>
+
+                              {/* Condition Mode Selector (Field vs Intent) */}
+                              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleUpdateConditionInCase(caseIndex, condIdx, {
+                                      kind: "field",
+                                      field: "",
+                                      fieldLabel: "",
+                                      operator: "Equal To",
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer ${
+                                    cond.kind !== "intent"
+                                      ? "bg-white text-blue-700 shadow-2xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  Standard Field
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleUpdateConditionInCase(caseIndex, condIdx, {
+                                      kind: "intent",
+                                      field: "caller_intent",
+                                      fieldLabel: "Caller Intent",
+                                      operator: "Matches Intent",
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center gap-1 ${
+                                    cond.kind === "intent"
+                                      ? "bg-purple-600 text-white shadow-2xs"
+                                      : "text-purple-700 hover:bg-purple-50"
+                                  }`}
+                                  title="Evaluate caller natural language intent from conversation"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Caller Intent</span>
+                                </button>
+                              </div>
+                            </div>
+
                             {caseItem.conditions.length > 1 && (
                               <button
                                 type="button"
@@ -1480,163 +1565,238 @@ export default function StepParametersFields({
                             )}
                           </div>
 
-                          {/* Primary Field Selection */}
-                          <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                                Primary Field
+                          {/* If Intent Condition */}
+                          {cond.kind === "intent" ? (
+                            <div className="space-y-2 p-1">
+                              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                Caller Intent Prompt
                               </label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTargetCaseIndex(caseIndex);
-                                  setTargetCaseConditionIndex(condIdx);
-                                  setFieldModalMode("caseConditionSingle");
-                                  setIsFieldRegistryModalOpen(true);
-                                }}
-                                className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                              >
-                                {cond.field ? "Change Field" : "Select Field"}
-                              </button>
+                              <textarea
+                                rows={4}
+                                value={cond.intentPrompt || cond.value || ""}
+                                onChange={(e) =>
+                                  handleUpdateConditionInCase(caseIndex, condIdx, {
+                                    intentPrompt: e.target.value,
+                                    value: e.target.value,
+                                  })
+                                }
+                                placeholder="Describe what the caller intends or asks during the call (e.g. Caller wants to reschedule or cancel appointment, or asking about prescription refill)..."
+                                className="w-full px-3.5 py-2.5 text-xs border border-purple-200 bg-white rounded-xl focus:outline-none focus:border-purple-500 text-slate-800 resize-y transition-all shadow-2xs font-medium"
+                              />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetCaseIndex(caseIndex);
-                                setTargetCaseConditionIndex(condIdx);
-                                setFieldModalMode("caseConditionSingle");
-                                setIsFieldRegistryModalOpen(true);
-                              }}
-                              className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
-                            >
-                              {cond.field ? (
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                                    {cond.fieldSource || fieldDef?.module || "field"}
-                                  </span>
-                                  <span className="font-semibold text-slate-900 truncate">
-                                    {cond.fieldLabel || fieldDef?.label || cond.field}
-                                  </span>
-                                  <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400">Select field...</span>
-                              )}
-                              <Sliders className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
-                            </button>
-                          </div>
-
-                          {/* Operator */}
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                              Operator
-                            </label>
-                            <select
-                              value={cond.operator || "Equal To"}
-                              onChange={(e) => handleUpdateConditionInCase(caseIndex, condIdx, { operator: e.target.value })}
-                              className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
-                            >
-                              {operators.map((op) => (
-                                <option key={op.value} value={op.value}>
-                                  {op.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Comparison Value (Matching Field Type by Default) */}
-                          {!isNullaryOp && (
-                            <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                              <div className="flex items-center justify-between">
-                                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                                  Comparison Value
-                                </label>
-                                {isDynamic && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleUpdateConditionInCase(caseIndex, condIdx, {
-                                        valueType: "static",
-                                        dynamicField: "",
-                                        dynamicFieldLabel: "",
-                                        dynamicFieldSource: "",
-                                      })
-                                    }
-                                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                                  >
-                                    Clear field
-                                  </button>
-                                )}
-                              </div>
-
-                              {isDynamic && cond.dynamicField ? (
-                                <div className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-blue-200 rounded-xl bg-blue-50/40 text-left">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                                      {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
-                                    </span>
-                                    <span className="font-semibold text-slate-900 truncate">
-                                      {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
-                                    </span>
-                                    <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0 ml-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setTargetCaseIndex(caseIndex);
-                                        setTargetCaseConditionIndex(condIdx);
-                                        setFieldModalMode("caseConditionDynamic");
-                                        setIsFieldRegistryModalOpen(true);
-                                      }}
-                                      className="p-1 rounded text-blue-600 hover:text-blue-700 hover:bg-blue-100/60 cursor-pointer transition-colors"
-                                      title="Select field"
-                                      aria-label="Select field"
-                                    >
-                                      <Sliders className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleUpdateConditionInCase(caseIndex, condIdx, {
-                                          valueType: "static",
-                                          dynamicField: "",
-                                          dynamicFieldLabel: "",
-                                          dynamicFieldSource: "",
-                                        })
-                                      }
-                                      className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
-                                      title="Clear and switch to static value"
-                                      aria-label="Clear"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                renderFieldValueInput(
-                                  cond.field,
-                                  cond.fieldSource || fieldDef?.module,
-                                  cond.value,
-                                  (newVal) => handleUpdateConditionInCase(caseIndex, condIdx, { value: newVal, valueType: "static" }),
-                                  "Enter value...",
+                          ) : (
+                            <>
+                              {/* Primary Field Selection as a Dropdown */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                    Primary Field (Dropdown)
+                                  </label>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setTargetCaseIndex(caseIndex);
                                       setTargetCaseConditionIndex(condIdx);
-                                      setFieldModalMode("caseConditionDynamic");
+                                      setFieldModalMode("caseConditionSingle");
                                       setIsFieldRegistryModalOpen(true);
                                     }}
-                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                                    title="Select field from modal"
-                                    aria-label="Select field"
+                                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer flex items-center gap-1"
+                                    title="Open Field Registry Browser"
                                   >
                                     <Sliders className="w-3.5 h-3.5" />
+                                    <span>Browse Registry</span>
                                   </button>
-                                )
+                                </div>
+
+                                <div className="relative">
+                                  <select
+                                    value={cond.field || ""}
+                                    onChange={(e) => {
+                                      const selectedKey = e.target.value;
+                                      if (selectedKey === "__intent_condition__") {
+                                        handleUpdateConditionInCase(caseIndex, condIdx, {
+                                          kind: "intent",
+                                          field: "caller_intent",
+                                          fieldLabel: "Caller Intent",
+                                          operator: "Matches Intent",
+                                        });
+                                        return;
+                                      }
+                                      if (selectedKey === "__browse_all__") {
+                                        setTargetCaseIndex(caseIndex);
+                                        setTargetCaseConditionIndex(condIdx);
+                                        setFieldModalMode("caseConditionSingle");
+                                        setIsFieldRegistryModalOpen(true);
+                                        return;
+                                      }
+                                      const allMerged = [
+                                        ...STANDARD_CALL_FIELDS,
+                                        ...STANDARD_CLIENT_FIELDS,
+                                        ...STANDARD_APPT_FIELDS,
+                                        ...STANDARD_INVOICE_FIELDS,
+                                      ];
+                                      const found = allMerged.find((f) => f.key === selectedKey);
+                                      handleUpdateConditionInCase(caseIndex, condIdx, {
+                                        field: selectedKey,
+                                        fieldLabel: found?.label || selectedKey,
+                                        fieldSource: found?.module || "field",
+                                      });
+                                    }}
+                                    className="w-full h-10 px-3 pr-8 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-800 hover:border-slate-300 focus:border-blue-500 outline-none transition-all cursor-pointer shadow-2xs"
+                                  >
+                                    <option value="">Select field...</option>
+                                    <optgroup label="✨ Caller Intent">
+                                      <option value="__intent_condition__">🎯 Caller Intent Condition (Prompt Match)</option>
+                                    </optgroup>
+                                    <optgroup label="📞 Call Session Fields">
+                                      {STANDARD_CALL_FIELDS.map((f) => (
+                                        <option key={f.key} value={f.key}>
+                                          {f.label} ({f.key})
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="👤 Client Fields">
+                                      {STANDARD_CLIENT_FIELDS.map((f) => (
+                                        <option key={f.key} value={f.key}>
+                                          {f.label} ({f.key})
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="📅 Appointment Fields">
+                                      {STANDARD_APPT_FIELDS.map((f) => (
+                                        <option key={f.key} value={f.key}>
+                                          {f.label} ({f.key})
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="🧾 Invoice Fields">
+                                      {STANDARD_INVOICE_FIELDS.map((f) => (
+                                        <option key={f.key} value={f.key}>
+                                          {f.label} ({f.key})
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="⚡ More Fields">
+                                      <option value="__browse_all__">🔍 Browse All Custom Fields & Registry...</option>
+                                    </optgroup>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Operator */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  Operator
+                                </label>
+                                <select
+                                  value={cond.operator || "Equal To"}
+                                  onChange={(e) => handleUpdateConditionInCase(caseIndex, condIdx, { operator: e.target.value })}
+                                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
+                                >
+                                  {operators.map((op) => (
+                                    <option key={op.value} value={op.value}>
+                                      {op.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Comparison Value (Matching Field Type by Default) */}
+                              {!isNullaryOp && (
+                                <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                      Comparison Value
+                                    </label>
+                                    {isDynamic && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleUpdateConditionInCase(caseIndex, condIdx, {
+                                            valueType: "static",
+                                            dynamicField: "",
+                                            dynamicFieldLabel: "",
+                                            dynamicFieldSource: "",
+                                          })
+                                        }
+                                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                                      >
+                                        Clear field
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {isDynamic && cond.dynamicField ? (
+                                    <div className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-blue-200 rounded-xl bg-blue-50/40 text-left">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                                          {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
+                                        </span>
+                                        <span className="font-semibold text-slate-900 truncate">
+                                          {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
+                                        </span>
+                                        <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setTargetCaseIndex(caseIndex);
+                                            setTargetCaseConditionIndex(condIdx);
+                                            setFieldModalMode("caseConditionDynamic");
+                                            setIsFieldRegistryModalOpen(true);
+                                          }}
+                                          className="p-1 rounded text-blue-600 hover:text-blue-700 hover:bg-blue-100/60 cursor-pointer transition-colors"
+                                          title="Select field"
+                                          aria-label="Select field"
+                                        >
+                                          <Sliders className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleUpdateConditionInCase(caseIndex, condIdx, {
+                                              valueType: "static",
+                                              dynamicField: "",
+                                              dynamicFieldLabel: "",
+                                              dynamicFieldSource: "",
+                                            })
+                                          }
+                                          className="p-1 rounded text-rose-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                                          title="Remove dynamic field"
+                                          aria-label="Remove dynamic field"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    renderFieldValueInput(
+                                      cond.field,
+                                      cond.fieldSource || fieldDef?.module,
+                                      cond.value,
+                                      (newVal) => handleUpdateConditionInCase(caseIndex, condIdx, { value: newVal, valueType: "static" }),
+                                      "Enter value...",
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTargetCaseIndex(caseIndex);
+                                          setTargetCaseConditionIndex(condIdx);
+                                          setFieldModalMode("caseConditionDynamic");
+                                          setIsFieldRegistryModalOpen(true);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                        title="Compare with another CRM field"
+                                        aria-label="Compare with another CRM field"
+                                      >
+                                        <Sliders className="w-3.5 h-3.5" />
+                                      </button>
+                                    )
+                                  )}
+                                </div>
                               )}
-                            </div>
+                            </>
                           )}
                         </div>
 
@@ -1669,23 +1829,11 @@ export default function StepParametersFields({
                 </div>
 
                 {/* Case Actions */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <div className="pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => {
-                      setTargetCaseIndex(caseIndex);
-                      setFieldModalMode("caseConditionMulti");
-                      setIsFieldRegistryModalOpen(true);
-                    }}
-                    className="flex-1 py-2 text-xs border border-dashed border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Select Fields</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddConditionToCase(caseIndex)}
-                    className="flex-1 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
+                    onClick={() => handleAddConditionToCase(caseIndex, "field")}
+                    className="w-full py-2.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Condition</span>
@@ -1719,11 +1867,10 @@ export default function StepParametersFields({
       params.selectedEvent?.startsWith("appointment") ? "appointment" :
       params.selectedEvent?.startsWith("invoice") ? "invoice" :
       params.selectedEvent?.startsWith("call") ? "call" :
-      params.selectedEvent?.startsWith("ai") ? "ai" :
       "process"
     )).toLowerCase();
 
-    const currentEvent = params.selectedEvent || (activeCategory === "ai" ? "ai.prompt" : `${activeCategory}.created`);
+    const currentEvent = params.selectedEvent || `${activeCategory}.created`;
 
     const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
       process: [
@@ -1745,9 +1892,6 @@ export default function StepParametersFields({
       call: [
         { event: "call.created", label: "Created", desc: "Fires when a new call session is initiated or logged", iconKey: "phone" },
         { event: "call.updated", label: "Updated", desc: "Fires when call metadata, transcript, or status updates", iconKey: "phone" },
-      ],
-      ai: [
-        { event: "ai.prompt", label: "AI Prompt Trigger", desc: "Fires when prompt evaluation matches", iconKey: "sparkles" },
       ],
     };
 
@@ -1796,76 +1940,44 @@ export default function StepParametersFields({
           </div>
         )}
 
-        {/* Events: For Non-AI Categories: ONLY Created or Updated */}
-        {activeCategory !== "ai" ? (
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Event: Created or Updated
-            </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              {currentOptions.map((opt) => {
-                const isSelected = currentEvent === opt.event;
-                return (
+        {/* Events: Created or Updated */}
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+            Event: Created or Updated
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            {currentOptions.map((opt) => {
+              const isSelected = currentEvent === opt.event;
+              return (
+                <div
+                  key={opt.event}
+                  onClick={() => handleEventSelect(opt)}
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                    isSelected
+                      ? "bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-2xs"
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60"
+                  }`}
+                >
                   <div
-                    key={opt.event}
-                    onClick={() => handleEventSelect(opt)}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                      isSelected
-                        ? "bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-2xs"
-                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60"
+                    className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                      isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
                     }`}
                   >
-                    <div
-                      className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                        isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
-                      }`}
-                    >
-                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-bold ${isSelected ? "text-blue-900" : "text-slate-900"}`}>
-                        {opt.label}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                        {opt.desc}
-                      </p>
-                    </div>
+                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${isSelected ? "text-blue-900" : "text-slate-900"}`}>
+                      {opt.label}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                      {opt.desc}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ) : (
-          /* Clean Prompt Adding Area */
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <label className="text-xs font-semibold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Trigger Prompt <span className="text-rose-500">*</span>
-                </label>
-                <InfoTooltip text="Specify natural language conditions for the AI to evaluate. When met, this automation triggers." />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setFieldModalMode("aiTriggerPromptToken");
-                  setIsFieldRegistryModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Select Field</span>
-              </button>
-            </div>
-            <textarea
-              rows={4}
-              value={params.prompt || params.aiTriggerPrompt || ""}
-              onChange={(e) => onChange({ prompt: e.target.value, aiTriggerPrompt: e.target.value })}
-              placeholder="e.g. Trigger when client requests urgent prescription refill, or expresses intent to cancel contract..."
-              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-y"
-            />
-          </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -2633,18 +2745,215 @@ export default function StepParametersFields({
               );
             })()}
 
-            {(stepKey === "assignhuman" || stepKey === "assign-responsible") && renderField(
-              "Assign To",
-              <select
-                value={assignedUser}
-                onChange={e => onChange({ assignedUser: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-              >
-                <option value="">Select user...</option>
-                {availableEmployees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
+            {(stepKey === "assignhuman" || stepKey === "assign-responsible") && (
+              <div className="space-y-4 p-4 border border-slate-200 rounded-2xl bg-slate-50/50">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
+                        Assign Responsible
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Filter by Entity, Role, or distribute across All Users
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. Filter Mode Selector: Entity, Role, All Users */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Assignment Filter
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "all_users", label: "All Users", icon: Users, desc: "Auto-distribution" },
+                      { id: "role", label: "By Role", icon: Shield, desc: "Filter by role" },
+                      { id: "entity", label: "By Entity", icon: Layers, desc: "Entity owner" },
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      const isSelected = (params.assignmentFilter || "all_users") === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => onChange({ assignmentFilter: tab.id })}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            isSelected
+                              ? "bg-blue-50/90 border-blue-500 text-blue-900 shadow-2xs ring-1 ring-blue-500/20"
+                              : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                            <span className="text-xs font-bold">{tab.label}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium">{tab.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. When ALL USERS is selected: show Priority (Round Robin, Random) */}
+                {(params.assignmentFilter || "all_users") === "all_users" && (
+                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                        Distribution Priority <span className="text-rose-500">*</span>
+                      </label>
+                      <p className="text-[11px] text-slate-500 mb-2.5">
+                        Choose how assignments are distributed across team members:
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {[
+                          {
+                            id: "round_robin",
+                            label: "Round Robin",
+                            badge: "Sequential",
+                            desc: "Cycles through team members in order for equal workload distribution.",
+                          },
+                          {
+                            id: "random",
+                            label: "Random",
+                            badge: "Balanced",
+                            desc: "Randomly distributes assignments among all active team members.",
+                          },
+                        ].map((prio) => {
+                          const isSelected = (params.distributionPriority || "round_robin") === prio.id;
+                          return (
+                            <label
+                              key={prio.id}
+                              onClick={() => onChange({ distributionPriority: prio.id })}
+                              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                                isSelected
+                                  ? "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500/20 shadow-2xs"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="distributionPriority"
+                                value={prio.id}
+                                checked={isSelected}
+                                onChange={() => onChange({ distributionPriority: prio.id })}
+                                className="mt-0.5 accent-blue-600"
+                              />
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-slate-900">{prio.label}</span>
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                                    {prio.badge}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 leading-tight block mt-1">{prio.desc}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. When ROLE is selected */}
+                {params.assignmentFilter === "role" && (
+                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                        Select Target Role
+                      </label>
+                      <select
+                        value={params.assignedRole || "Care Coordinator"}
+                        onChange={(e) => onChange({ assignedRole: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer font-medium"
+                      >
+                        {[
+                          "Doctor / Physician",
+                          "Care Coordinator",
+                          "Intake Specialist",
+                          "Receptionist",
+                          "Billing Specialist",
+                          "Manager",
+                          "Administration",
+                          "Support Agent",
+                        ].map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                        Role Distribution Priority
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "round_robin", label: "Round Robin (Role)" },
+                          { id: "random", label: "Random (Role)" },
+                        ].map((opt) => {
+                          const isSelected = (params.distributionPriority || "round_robin") === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => onChange({ distributionPriority: opt.id })}
+                              className={`py-2 px-3 text-xs font-semibold rounded-xl border text-center transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. When ENTITY is selected */}
+                {params.assignmentFilter === "entity" && (
+                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                        Entity Responsible Source
+                      </label>
+                      <select
+                        value={params.entityAssignee || "process_owner"}
+                        onChange={(e) => onChange({ entityAssignee: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer font-medium"
+                      >
+                        <option value="process_owner">Current Process / Workflow Owner</option>
+                        <option value="client_doctor">Client Primary Attending Doctor</option>
+                        <option value="client_manager">Client Relationship / Account Manager</option>
+                        <option value="appointment_host">Appointment Host Practitioner</option>
+                        <option value="call_agent">Call Handling Agent</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Fallback Team Member (if entity has no owner)
+                      </label>
+                      <select
+                        value={assignedUser}
+                        onChange={(e) => onChange({ assignedUser: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer"
+                      >
+                        <option value="">Unassigned</option>
+                        {availableEmployees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {(stepKey === "callaction" || stepKey === "call-transfer" || stepKey === "call-transfer-human" || stepKey === "call-transfer-ai") && (

@@ -155,6 +155,9 @@ import BusinessProfileModal from "../components/settings/BusinessProfileModal";
 import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
+import { DepartmentDrawer } from "../components/settings/DepartmentDrawer";
+import { getStoredDepartments, saveStoredDepartments } from "../../lib/departmentStore";
+import type { Department } from "../../types/permissions";
 import OrganizationDetailDrawer, { OrganizationDetail } from "../components/settings/OrganizationDetailDrawer";
 import AddTeamMemberDrawer from "../components/team/AddTeamMemberDrawer";
 import type { ActionScope, Action, ModulePermissions, ItemPermissions, Role } from "../../types/permissions";
@@ -1303,6 +1306,9 @@ export default function Settings() {
   });
   const [showRolesDrawer, setShowRolesDrawer] = useState(false);
   const [editingClientRole, setEditingClientRole] = useState<Role | null>(null);
+  const [departments, setDepartments] = useState<Department[]>(() => getStoredDepartments());
+  const [isDepartmentDrawerOpen, setIsDepartmentDrawerOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
 
   const handleSaveRoles = (updatedRoles: Role[]) => {
     setRoles(updatedRoles);
@@ -4793,7 +4799,7 @@ export default function Settings() {
                   modes={[
                     { id: "users", label: "Users", badge: allUsers.length },
                     { id: "roles", label: "Roles", badge: roles.length },
-                    { id: "departments", label: "Departments", badge: 3 },
+                    { id: "departments", label: "Departments", badge: departments.length },
                   ]}
                   activeMode={teamSubTab}
                   onModeChange={(m) => setTeamSubTab(m as any)}
@@ -4865,7 +4871,8 @@ export default function Settings() {
                         setEditingClientRole(null);
                         setShowRolesDrawer(true);
                       } else if (teamSubTab === "departments") {
-                        toast.info("Create department");
+                        setEditingDepartment(null);
+                        setIsDepartmentDrawerOpen(true);
                       } else {
                         setShowAddUserModal(true);
                       }
@@ -4899,6 +4906,21 @@ export default function Settings() {
                         >
                           {r.name}
                         </button>
+                      ),
+                    },
+                    {
+                      key: "department",
+                      header: "DEPARTMENT",
+                      align: "left",
+                      render: (r) => (
+                        r.department ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                            <Building2 className="w-3 h-3 text-slate-500" />
+                            {r.department}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Unassigned</span>
+                        )
                       ),
                     },
                     {
@@ -5082,13 +5104,117 @@ export default function Settings() {
                 })()}
 
                 {/* VIEW 3: DEPARTMENTS TABLE */}
-                {teamSubTab === "departments" && (
-                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs p-8 text-center text-slate-500 text-xs">
-                    <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="font-semibold text-slate-700">3 Active Departments</p>
-                    <p className="text-slate-400 mt-0.5">Clinical Operations · Administration · Customer Support</p>
-                  </div>
-                )}
+                {teamSubTab === "departments" && (() => {
+                  const filteredDepartments = departments.filter(
+                    (d) =>
+                      !teamSearchQuery.trim() ||
+                      d.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      (d.description && d.description.toLowerCase().includes(teamSearchQuery.toLowerCase()))
+                  );
+
+                  const deptColumns: TableColumn<Department>[] = [
+                    {
+                      key: "name",
+                      header: "DEPARTMENT NAME",
+                      align: "left",
+                      render: (dept) => (
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                            <Building2 className="w-3.5 h-3.5 text-slate-700" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDepartment(dept);
+                              setIsDepartmentDrawerOpen(true);
+                            }}
+                            className="text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {dept.name}
+                          </button>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "description",
+                      header: "DESCRIPTION",
+                      align: "left",
+                      render: (dept) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {dept.description || "—"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "roles",
+                      header: "ASSIGNED ROLES",
+                      align: "left",
+                      render: (dept) => {
+                        const assignedRoles = roles.filter(
+                          (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
+                        );
+                        if (assignedRoles.length === 0) {
+                          return <span className="text-xs text-slate-400 italic">No roles assigned</span>;
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {assignedRoles.map((r) => (
+                              <span
+                                key={r.id}
+                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                              >
+                                {r.name}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      },
+                    },
+                    {
+                      key: "actions",
+                      header: "ACTIONS",
+                      align: "center",
+                      render: (dept) => (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDepartment(dept);
+                              setIsDepartmentDrawerOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Department"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = departments.filter((d) => d.id !== dept.id);
+                              setDepartments(updated);
+                              saveStoredDepartments(updated);
+                              toast.success(`Department "${dept.name}" removed.`);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Department"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={deptColumns}
+                      data={filteredDepartments}
+                      getRowId={(d) => d.id}
+                      emptyMessage="No departments found. Click 'Create Department' to add one."
+                    />
+                  );
+                })()}
               </div>
             )}
 
@@ -13428,6 +13554,18 @@ export default function Settings() {
           onSaveRoles={handleSaveRoles}
           assignedUserCounts={assignedUserCounts}
           editingRole={editingClientRole}
+        />
+
+        <DepartmentDrawer
+          isOpen={isDepartmentDrawerOpen}
+          onClose={() => {
+            setIsDepartmentDrawerOpen(false);
+            setEditingDepartment(null);
+          }}
+          roles={roles}
+          initialEditDepartment={editingDepartment}
+          onDepartmentsChange={(updated) => setDepartments(updated)}
+          zIndex={10100}
         />
 
         <AddTeamMemberDrawer

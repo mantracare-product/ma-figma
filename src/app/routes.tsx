@@ -86,6 +86,7 @@ const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
 const AdminProductsServices = withLazy(() => import("./pages/admin/AdminProductsServices"));
 const AdminKnowledgeBase = withLazy(() => import("./pages/admin/AdminKnowledgeBase"));
 const AdminRolesPermissions = withLazy(() => import("./pages/admin/AdminRolesPermissions"));
+const AdminSidebarConfig = withLazy(() => import("./pages/admin/AdminSidebarConfig"));
 
 export const router = createBrowserRouter([
   {
@@ -284,6 +285,9 @@ export const router = createBrowserRouter([
           { path: "roles", Component: AdminRolesPermissions },
           { path: "roles-permissions", Component: AdminRolesPermissions },
           { path: "roles-and-permissions", Component: AdminRolesPermissions },
+          { path: "sidebar-config", Component: AdminSidebarConfig },
+          { path: "sidebar", Component: AdminSidebarConfig },
+          { path: "sidebar-templates", Component: AdminSidebarConfig },
           { path: "plans", Component: AdminPlans },
           { path: "plans-credits", Component: AdminPlans },
           { path: "billing", Component: AdminBilling },

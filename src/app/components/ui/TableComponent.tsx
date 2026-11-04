@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   Settings as SettingsIcon,
   MoreVertical,
@@ -115,6 +116,13 @@ export function TableComponent<T>({
 
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [openActionRowId, setOpenActionRowId] = useState<string | number | null>(null);
+  const [actionMenuState, setActionMenuState] = useState<{
+    rowId: string | number;
+    row: T;
+    actions: TableRowAction<T>[];
+    top: number;
+    left: number;
+  } | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,14 +140,24 @@ export function TableComponent<T>({
     }
   };
 
-  // Close menus on click outside
+  // Close menus on click outside & scroll
   useEffect(() => {
     const handleClickOutside = () => {
       setShowColumnMenu(false);
       setOpenActionRowId(null);
+      setActionMenuState(null);
+    };
+    const handleCloseOnScroll = () => {
+      setActionMenuState(null);
     };
     window.addEventListener("click", handleClickOutside);
-    return () => window.removeEventListener("click", handleClickOutside);
+    window.addEventListener("scroll", handleCloseOnScroll, true);
+    window.addEventListener("resize", handleCloseOnScroll);
+    return () => {
+      window.removeEventListener("click", handleClickOutside);
+      window.removeEventListener("scroll", handleCloseOnScroll, true);
+      window.removeEventListener("resize", handleCloseOnScroll);
+    };
   }, []);
 
   // Compute Pagination
@@ -262,8 +280,12 @@ export function TableComponent<T>({
                       : "bg-[#181e25] hover:bg-[#2c3e50] text-white"
                     }`}
                 >
-                  {action.icon}
-                  <span>{action.label}</span>
+                  {action.icon && (
+                                        <span className="shrink-0 flex items-center justify-center text-gray-500">
+                                          {action.icon}
+                                        </span>
+                                      )}
+                  <span className="text-left whitespace-nowrap truncate flex-1 block font-medium">{action.label}</span>
                 </button>
               ))}
             </div>
@@ -529,9 +551,29 @@ export function TableComponent<T>({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setOpenActionRowId(openActionRowId === rowId ? null : rowId);
+                                if (actionMenuState && actionMenuState.rowId === rowId) {
+                                  setActionMenuState(null);
+                                  setOpenActionRowId(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const estHeight = visibleActions.length * 36 + 16;
+                                  let top = rect.top;
+                                  if (top + estHeight > window.innerHeight - 10) {
+                                    top = Math.max(10, rect.bottom - estHeight);
+                                  }
+                                  setActionMenuState({
+                                    rowId,
+                                    row,
+                                    actions: visibleActions,
+                                    top: Math.max(10, top),
+                                    left: Math.min(rect.right + 6, window.innerWidth - 220),
+                                  });
+                                  setOpenActionRowId(rowId);
+                                }
                               }}
-                              className="p-1 hover:bg-gray-200/80 rounded-none transition-colors text-gray-400 hover:text-gray-700 cursor-pointer"
+                              className={`p-1 hover:bg-gray-200/80 rounded-none transition-colors cursor-pointer ${
+                                actionMenuState?.rowId === rowId ? "bg-gray-200/80 text-gray-700" : "text-gray-400 hover:text-gray-700"
+                              }`}
                               title="Actions"
                               aria-label="Actions"
                             >
@@ -541,40 +583,6 @@ export function TableComponent<T>({
                                 <MoreVertical className="w-3.5 h-3.5" />
                               )}
                             </button>
-
-                            {openActionRowId === rowId && (
-                              <div
-                                className="absolute left-7 top-1/2 -translate-y-1/2 bg-white rounded-none shadow-xl border border-gray-200 py-1 z-50 min-w-[150px] text-left"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {visibleActions.map((action, actIdx) => {
-                                  const isDisabled =
-                                    typeof action.disabled === "function"
-                                      ? action.disabled(row)
-                                      : action.disabled;
-                                  return (
-                                    <button
-                                      key={actIdx}
-                                      type="button"
-                                      disabled={isDisabled}
-                                      onClick={() => {
-                                        setOpenActionRowId(null);
-                                        action.onClick(row);
-                                      }}
-                                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors rounded-none ${isDisabled
-                                          ? "opacity-40 cursor-not-allowed text-gray-400"
-                                          : action.isDanger
-                                            ? "text-red-600 hover:bg-red-50 cursor-pointer"
-                                            : "text-gray-700 hover:bg-gray-50 cursor-pointer"
-                                        }`}
-                                    >
-                                      {action.icon}
-                                      <span>{action.label}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
                           </div>
                         ) : (
                           <span className="w-4 h-4 inline-block" />
@@ -714,7 +722,56 @@ export function TableComponent<T>({
           </div>
         </div>
       )}
-    </div>
+          {/* ── Page-Relative Action Popup (Portaled to document.body) ── */}
+      {actionMenuState && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed bg-white rounded-xl shadow-2xl border border-gray-200/90 py-1.5 z-[99999] min-w-[190px] w-max max-w-xs text-left animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            fontFamily: "Outfit, sans-serif",
+            top: `${actionMenuState.top}px`,
+            left: `${actionMenuState.left}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {actionMenuState.actions.map((action, actIdx) => {
+            const isDisabled =
+              typeof action.disabled === "function"
+                ? action.disabled(actionMenuState.row)
+                : action.disabled;
+            return (
+              <button
+                key={actIdx}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => {
+                  const r = actionMenuState.row;
+                  setActionMenuState(null);
+                  setOpenActionRowId(null);
+                  action.onClick(r);
+                }}
+                className={`w-full flex items-center justify-start text-left gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${
+                  isDisabled
+                    ? "opacity-40 cursor-not-allowed text-gray-400"
+                    : action.isDanger
+                    ? "text-red-600 hover:bg-red-50 font-medium"
+                    : "text-gray-700 hover:bg-gray-100 font-medium"
+                }`}
+              >
+                {action.icon && (
+                  <span className="shrink-0 flex items-center justify-center text-gray-500">
+                    {action.icon}
+                  </span>
+                )}
+                <span className="text-left whitespace-nowrap truncate flex-1 block font-medium">
+                  {action.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+</div>
   );
 }
 

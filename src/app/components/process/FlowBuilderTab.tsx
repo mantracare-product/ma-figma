@@ -398,16 +398,6 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
       iconKey: "phone",
     },
 
-    // AI Triggers
-    {
-      id: "trig-ai-prompt",
-      triggerType: "ai",
-      triggerEvent: "ai.prompt",
-      label: "AI Prompt Trigger",
-      desc: "Fires when prompt evaluation or natural language condition matches",
-      icon: <Sparkles className="w-4 h-4" />,
-      iconKey: "sparkles",
-    },
   ];
 };
 
@@ -594,6 +584,17 @@ function getNodeSubtitle(
     return "Update record attributes";
   }
   if (node.type === "assign-responsible") {
+    const filterMode = node.config?.assignmentFilter || node.config?.assignmentMode;
+    if (filterMode === "all_users") {
+      const priority = node.config?.distributionPriority === "random" ? "Random" : "Round Robin";
+      return `All Users (${priority})`;
+    }
+    if (filterMode === "role") {
+      return `Role: ${node.config?.assignedRole || "Target Role"}`;
+    }
+    if (filterMode === "entity") {
+      return `Entity: ${node.config?.entityAssigneeLabel || node.config?.entityAssignee || "Entity Responsible"}`;
+    }
     return node.config?.assigneeName ? `To: ${node.config.assigneeName}` : "Assign team member";
   }
   if (node.type === "book-appointment") {
@@ -757,7 +758,7 @@ export default function FlowBuilderTab({
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   // Drawer execution/timing controls (seeded on openConfig)
   const [drawerTrigger, setDrawerTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
-  const [drawerExecType, setDrawerExecType] = useState<"wait" | "parallel">("wait");
+  const [drawerExecType, setDrawerExecType] = useState<"instant" | "wait" | "parallel">("wait");
   const [drawerDelayValue, setDrawerDelayValue] = useState<number>(0);
   const [drawerDelayUnit, setDrawerDelayUnit] = useState<string>("Minute");
   const [drawerConnectAfterId, setDrawerConnectAfterId] = useState<string | undefined>(undefined);
@@ -1851,14 +1852,7 @@ export default function FlowBuilderTab({
         icon: <Phone className="w-4 h-4 text-blue-600" />,
         defaultTrigger: allTriggers.find((t) => t.triggerType === "call" && t.triggerEvent === "call.created") || allTriggers[0],
       },
-      {
-        id: "ai",
-        type: "ai",
-        label: "AI Triggers",
-        desc: "Prompt condition",
-        icon: <Sparkles className="w-4 h-4 text-purple-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "ai" && t.triggerEvent === "ai.prompt") || allTriggers[0],
-      },
+
     ];
   }, [allTriggers]);
 
@@ -1878,7 +1872,7 @@ export default function FlowBuilderTab({
       ) || allTriggers[0];
       const trigCategory = node.config?.category || node.config?.triggerType || activeItem?.triggerType || "process";
       const trigEvent = node.config?.selectedEvent || node.config?.triggerEvent || activeItem?.triggerEvent || (
-        trigCategory === "ai" ? "ai.prompt" : `${trigCategory}.created`
+        `${trigCategory}.created`
       );
       const trigItem = allTriggers.find(t => t.triggerEvent === trigEvent) || activeItem;
       const trigLabel = node.config?.triggerLabel || trigItem?.label || node.label || "Trigger";
@@ -1962,7 +1956,7 @@ export default function FlowBuilderTab({
       const waitUnit = realStep.params?.delayUnit ?? realStep.params?.unit ?? realStep.delayUnit ?? "minutes";
 
       setDrawerTrigger((realStep.trigger ?? (node.config?.lane ?? "stage")) as "stage" | "incall" | "postcall");
-      setDrawerExecType((realStep.executionType ?? "wait") as "wait" | "parallel");
+      setDrawerExecType((realStep.executionType ?? "wait") as "instant" | "wait" | "parallel");
       setDrawerDelayValue(isWait ? waitVal : (realStep.delayValue ?? 0));
       setDrawerDelayUnit(isWait ? waitUnit : (realStep.delayUnit ?? "Minute"));
       setDrawerConnectAfterId(realStep.connectAfterId);
@@ -3174,6 +3168,9 @@ export default function FlowBuilderTab({
         const isOverviewNode = configNode?.stepKey === "automation_overview" || configNode?.type === "overview" || configNode?.id === "automation_overview";
         const isTriggerNode = configNode?.type === "start";
         const targetStepId = configNode ? (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id) : null;
+        const startNode = nodes.find((n) => n.id === "start" || n.type === "start");
+        const resolvedTriggerType = configNode?.config?.triggerType || startNode?.config?.triggerType || activeTriggerItem?.triggerType || triggerType || "process";
+        const resolvedTriggerEvent = configNode?.config?.selectedEvent || configNode?.config?.triggerEvent || startNode?.config?.triggerEvent || activeTriggerItem?.triggerEvent || triggerEvent || "process.created";
         const targetStep = isOverviewNode
           ? {
               id: "automation_overview",
@@ -3278,7 +3275,13 @@ export default function FlowBuilderTab({
               connectAfterId={drawerConnectAfterId}
               onConnectAfterIdChange={setDrawerConnectAfterId}
               availablePredecessors={buildAvailablePredecessors(workflowSteps, drawerTrigger, targetStepId || undefined)}
-              params={configNode?.config ?? {}}
+              params={{
+                triggerType: resolvedTriggerType,
+                category: resolvedTriggerType,
+                triggerEvent: resolvedTriggerEvent,
+                selectedEvent: resolvedTriggerEvent,
+                ...(configNode?.config ?? {}),
+              }}
               onParamsChange={patchConfig}
               onBack={() => setConfigNode(null)}
               onClose={() => setConfigNode(null)}

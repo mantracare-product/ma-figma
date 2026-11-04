@@ -3,12 +3,16 @@
  * Path: src/app/components/settings/PermissionSelect.tsx
  *
  * Premium multi-select dropdown for module permissions (Read, Write, Delete, Import, Export).
- * Rendered with portaled popover so it is never clipped by table overflow or drawer boundaries.
+ * Implements strict access rules:
+ * - Read-only users cannot select Write and Delete, but CAN select Import and Export.
+ * - When Write is enabled, all core access (Read, Write, Delete) is automatically granted.
+ * - Rendered with portaled popover so it is never clipped by table overflow or drawer boundaries.
  */
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Lock, X } from "lucide-react";
+import { toast } from "sonner";
 
 export type PermissionAction = "read" | "write" | "delete" | "import" | "export";
 
@@ -21,10 +25,10 @@ export interface PermissionActionMeta {
 
 export const PERMISSION_ACTIONS: PermissionActionMeta[] = [
   { id: "read", label: "Read", badge: "View", hint: "View records & details" },
-  { id: "write", label: "Write", badge: "Add/Edit", hint: "Create and update records" },
-  { id: "delete", label: "Delete", badge: "Remove", hint: "Delete and purge records" },
-  { id: "import", label: "Import", badge: "Upload", hint: "Import data and documents" },
-  { id: "export", label: "Export", badge: "Download", hint: "Export data and reports" },
+  { id: "write", label: "Write", badge: "All Access", hint: "Full access (Read, Write & Delete)" },
+  { id: "delete", label: "Delete", badge: "Remove", hint: "Delete records (Requires Write)" },
+  { id: "import", label: "Import", badge: "Upload", hint: "Import data (Allowed in Read-only)" },
+  { id: "export", label: "Export", badge: "Download", hint: "Export data (Allowed in Read-only)" },
 ];
 
 export interface PermissionSelectProps {
@@ -57,6 +61,8 @@ export default function PermissionSelect({
     showAbove: boolean;
   } | null>(null);
 
+  const hasWrite = value.includes("write");
+
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
@@ -64,7 +70,7 @@ export default function PermissionSelect({
     const menuHeight = 250;
     const showAbove = spaceBelow < menuHeight && rect.top > menuHeight;
 
-    const width = Math.max(rect.width, 260);
+    const width = Math.max(rect.width, 270);
     let left = rect.left;
     if (left + width > window.innerWidth - 12) {
       left = Math.max(12, window.innerWidth - width - 12);
@@ -140,10 +146,49 @@ export default function PermissionSelect({
     }
     const isChecked = value.includes(actionId);
     let updated: PermissionAction[];
-    if (isChecked) {
-      updated = value.filter((a) => a !== actionId);
+
+    if (actionId === "write") {
+      if (isChecked) {
+        // Unchecking write removes write AND delete (switches to Read-only mode)
+        updated = value.filter((a) => a !== "write" && a !== "delete");
+        if (!updated.includes("read")) {
+          updated.push("read");
+        }
+      } else {
+        // "if write then all access is there":
+        // Selecting write automatically includes Read, Write, and Delete
+        const set = new Set<PermissionAction>([...value, "read", "write", "delete"]);
+        updated = Array.from(set);
+      }
+    } else if (actionId === "delete") {
+      // If user is read-only (write is off), cannot select delete
+      if (!hasWrite) {
+        toast.info("Write access is required to enable Delete.");
+        return;
+      }
+      if (isChecked) {
+        updated = value.filter((a) => a !== "delete");
+      } else {
+        updated = [...value, "delete"];
+      }
+    } else if (actionId === "read") {
+      if (isChecked) {
+        // Unchecking read clears core access (read, write, delete)
+        updated = value.filter((a) => a !== "read" && a !== "write" && a !== "delete");
+      } else {
+        updated = [...value, "read"];
+      }
     } else {
-      updated = [...value, actionId];
+      // "import" and "export" can be freely toggled in both read-only and write mode
+      if (isChecked) {
+        updated = value.filter((a) => a !== actionId);
+      } else {
+        const next = [...value, actionId];
+        if (!next.includes("read")) {
+          next.push("read");
+        }
+        updated = next;
+      }
     }
     onChange(updated);
   };
@@ -181,6 +226,30 @@ export default function PermissionSelect({
       return (
         <span className="text-xs font-semibold text-gray-800 truncate" title="All Permissions (Read, Write, Delete, Import, Export)">
           All (Read, Write, Delete, Import, Export)
+        </span>
+      );
+    }
+
+    if (hasWrite && value.includes("delete") && value.includes("read") && value.length === 3) {
+      return (
+        <span className="text-xs font-semibold text-blue-700 truncate" title="Full Access (Read, Write, Delete)">
+          All Access (Read, Write, Delete)
+        </span>
+      );
+    }
+
+    if (!hasWrite && value.includes("read")) {
+      const extra = value.filter((a) => a !== "read").map((a) => a.charAt(0).toUpperCase() + a.slice(1));
+      if (extra.length === 0) {
+        return (
+          <span className="text-xs font-medium text-emerald-700 truncate" title="Read Only">
+            Read Only
+          </span>
+        );
+      }
+      return (
+        <span className="text-xs font-medium text-gray-800 truncate" title={`Read Only (${extra.join(", ")})`}>
+          Read Only ({extra.join(", ")})
         </span>
       );
     }
@@ -299,35 +368,53 @@ export default function PermissionSelect({
 
               {PERMISSION_ACTIONS.map((action) => {
                 const isChecked = value.includes(action.id);
+                const isDeleteLocked = action.id === "delete" && !hasWrite;
+
                 return (
                   <div
                     key={action.id}
                     onClick={() => toggleAction(action.id)}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors text-xs ${
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-xs ${
+                      isDeleteLocked
+                        ? "opacity-45 cursor-not-allowed bg-slate-50/60"
+                        : "cursor-pointer"
+                    } ${
                       isChecked
                         ? "bg-blue-50/70 text-blue-950 font-semibold"
                         : "hover:bg-slate-50 text-gray-700 font-medium"
                     }`}
+                    title={
+                      isDeleteLocked
+                        ? "Write access is required to enable Delete"
+                        : action.hint
+                    }
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className={`w-4 h-4 rounded flex items-center justify-center border transition-all shrink-0 ${
                           isChecked
                             ? "bg-blue-600 border-blue-600 text-white shadow-xs"
+                            : isDeleteLocked
+                            ? "border-gray-200 bg-gray-100 text-gray-400"
                             : "border-gray-300 bg-white"
                         }`}
                       >
                         {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                        {isDeleteLocked && !isChecked && <Lock className="w-2.5 h-2.5 text-gray-400" />}
                       </div>
                       <span className="text-xs truncate">{action.label}</span>
                     </div>
 
                     <span
                       className={`text-[10px] shrink-0 ml-2 ${
-                        isChecked ? "text-blue-600 font-semibold" : "text-gray-400"
+                        isDeleteLocked
+                          ? "text-slate-400 italic"
+                          : isChecked
+                          ? "text-blue-600 font-semibold"
+                          : "text-gray-400"
                       }`}
                     >
-                      {action.hint}
+                      {isDeleteLocked ? "Requires Write" : action.hint}
                     </span>
                   </div>
                 );
@@ -339,4 +426,3 @@ export default function PermissionSelect({
     </div>
   );
 }
-

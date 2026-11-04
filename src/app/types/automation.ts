@@ -14,7 +14,6 @@ export type EventTriggerType =
   | "appointment"
   | "invoice"
   | "call"
-  | "ai"
   | "insurance"
   | "stage"
   | "field_update";
@@ -63,6 +62,7 @@ export interface Automation {
   steps: AutomationStep[];
   scopingRules?: any[];
   enabled?: boolean;
+  version?: number;
   createdAt?: string;
   updatedAt?: string;
   lastRunAt?: string;
@@ -138,15 +138,6 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     events: [
       { event: "call.created", label: "Call created", description: "A new inbound or outbound call session is initiated" },
       { event: "call.updated", label: "Call updated", description: "Call recording, transcript, analysis, or status is modified" },
-    ],
-  },
-  {
-    type: "ai",
-    label: "AI",
-    description: "Trigger when an AI prompt condition or natural language instruction is matched",
-    iconKey: "sparkles",
-    events: [
-      { event: "ai.prompt", label: "AI Prompt Trigger", description: "Fires when prompt condition or natural language instruction evaluates to true" },
     ],
   },
 ];

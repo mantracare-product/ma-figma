@@ -3,29 +3,28 @@ import { Drawer } from "../ui/drawer";
 import { Building2, Plus, Trash2, Pencil, Check, X, Shield } from "lucide-react";
 import { toast } from "sonner";
 import type { Department, Role } from "../../../types/permissions";
+import {
+  getStoredDepartments,
+  saveStoredDepartments,
+  DEPARTMENTS_KEY,
+} from "../../../lib/departmentStore";
 
-// ── Store helpers ─────────────────────────────────────────────────────────────
-const DEPARTMENTS_KEY = "ma_departments";
+export { getStoredDepartments, saveStoredDepartments, DEPARTMENTS_KEY };
 
-function getStoredDepartments(): Department[] {
-  try {
-    const raw = localStorage.getItem(DEPARTMENTS_KEY);
-    return raw ? (JSON.parse(raw) as Department[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDepartments(deps: Department[]): void {
-  localStorage.setItem(DEPARTMENTS_KEY, JSON.stringify(deps));
+export interface GenericRoleLike {
+  id?: string;
+  name?: string;
+  roleName?: string;
+  department?: string;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
-interface DepartmentDrawerProps {
+export interface DepartmentDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  roles?: Role[];
+  roles?: GenericRoleLike[];
   onDepartmentsChange?: (deps: Department[]) => void;
+  initialEditDepartment?: Department | null;
   zIndex?: number;
 }
 
@@ -35,6 +34,7 @@ export function DepartmentDrawer({
   onClose,
   roles = [],
   onDepartmentsChange,
+  initialEditDepartment = null,
   zIndex = 10100,
 }: DepartmentDrawerProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -46,26 +46,36 @@ export function DepartmentDrawer({
 
   useEffect(() => {
     if (isOpen) {
-      setDepartments(getStoredDepartments());
+      const stored = getStoredDepartments();
+      setDepartments(stored);
       setNewName("");
       setNewDesc("");
-      setEditingId(null);
-      setEditName("");
-      setEditDesc("");
+      if (initialEditDepartment) {
+        setEditingId(initialEditDepartment.id);
+        setEditName(initialEditDepartment.name);
+        setEditDesc(initialEditDepartment.description || "");
+      } else {
+        setEditingId(null);
+        setEditName("");
+        setEditDesc("");
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialEditDepartment]);
 
   const persist = (updated: Department[]) => {
     setDepartments(updated);
-    saveDepartments(updated);
+    saveStoredDepartments(updated);
     onDepartmentsChange?.(updated);
   };
 
   const handleCreate = () => {
     const trimmed = newName.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      toast.error("Department name is required.");
+      return;
+    }
     if (departments.some((d) => d.name.toLowerCase() === trimmed.toLowerCase())) {
-      toast.error("Department already exists.");
+      toast.error("A department with this name already exists.");
       return;
     }
     const newDept: Department = {
@@ -76,13 +86,13 @@ export function DepartmentDrawer({
     persist([...departments, newDept]);
     setNewName("");
     setNewDesc("");
-    toast.success(`Department "${trimmed}" created.`);
+    toast.success(`Department "${trimmed}" created successfully.`);
   };
 
   const handleDelete = (id: string) => {
     const dept = departments.find((d) => d.id === id);
     persist(departments.filter((d) => d.id !== id));
-    toast.success(`Department "${dept?.name}" removed.`);
+    toast.success(`Department "${dept?.name || ""}" removed.`);
   };
 
   const handleStartEdit = (dept: Department) => {
@@ -93,13 +103,16 @@ export function DepartmentDrawer({
 
   const handleSaveEdit = () => {
     const trimmed = editName.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      toast.error("Department name cannot be empty.");
+      return;
+    }
     if (
       departments.some(
         (d) => d.name.toLowerCase() === trimmed.toLowerCase() && d.id !== editingId
       )
     ) {
-      toast.error("Department name already exists.");
+      toast.error("A department with this name already exists.");
       return;
     }
     persist(
@@ -124,7 +137,7 @@ export function DepartmentDrawer({
           </div>
           <div>
             <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Departments Management
+              Departments
             </div>
             <div className="text-[11px] text-slate-400 font-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
               {departments.length} department{departments.length !== 1 ? "s" : ""} total
@@ -136,27 +149,37 @@ export function DepartmentDrawer({
       zIndex={zIndex}
     >
       <div className="space-y-5" style={{ fontFamily: "Outfit, sans-serif" }}>
-        {/* Create new department */}
+        {/* Create new department - Name and Description ONLY */}
         <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-2xs">
-          <p className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">New Department</p>
+          <p className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Add Department</p>
           <div className="space-y-2.5">
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Department name (e.g. Sales, Marketing, Support)..."
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
-            />
-            <input
-              value={newDesc}
-              onChange={(e) => setNewDesc(e.target.value)}
-              placeholder="Description (optional)..."
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
-            />
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Department Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Clinical Operations, Marketing, Finance..."
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors shadow-2xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Description <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="Brief description of department scope and responsibilities..."
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors shadow-2xs"
+              />
+            </div>
             <button
               type="button"
               onClick={handleCreate}
               disabled={!newName.trim()}
-              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-40"
+              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
             >
               <Plus className="w-3.5 h-3.5 text-white" />
               Add Department
@@ -177,31 +200,47 @@ export function DepartmentDrawer({
           ) : (
             <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
               {departments.map((dept) => {
-                const assignedRoles = roles.filter((r) => r.department === dept.name);
+                const assignedRoles = roles.filter(
+                  (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
+                );
                 const roleCount = assignedRoles.length;
 
                 return (
                   <div key={dept.id} className="flex flex-col px-4 py-3 group hover:bg-slate-50/80 transition-colors">
                     {editingId === dept.id ? (
                       <div className="space-y-2">
-                        <input
-                          autoFocus
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          placeholder="Name..."
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
-                        />
-                        <input
-                          value={editDesc}
-                          onChange={(e) => setEditDesc(e.target.value)}
-                          placeholder="Description..."
-                          className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
-                        />
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Name</label>
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder="Name..."
+                            className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Description</label>
+                          <input
+                            value={editDesc}
+                            onChange={(e) => setEditDesc(e.target.value)}
+                            placeholder="Description..."
+                            className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
+                          />
+                        </div>
                         <div className="flex items-center gap-2 pt-1">
-                          <button type="button" onClick={handleSaveEdit} className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+                          <button
+                            type="button"
+                            onClick={handleSaveEdit}
+                            className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
+                          >
                             Save
                           </button>
-                          <button type="button" onClick={() => setEditingId(null)} className="px-3.5 py-1.5 text-xs text-slate-500 hover:text-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="px-3.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                          >
                             Cancel
                           </button>
                         </div>
@@ -228,9 +267,12 @@ export function DepartmentDrawer({
                             {assignedRoles.length > 0 && (
                               <div className="flex items-center gap-1 flex-wrap pt-0.5">
                                 <span className="text-[10px] text-slate-400 font-medium">Roles:</span>
-                                {assignedRoles.map((r) => (
-                                  <span key={r.id} className="text-[10px] font-semibold text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                    {r.name}
+                                {assignedRoles.map((r, idx) => (
+                                  <span
+                                    key={r.id || idx}
+                                    className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
+                                  >
+                                    {r.name || r.roleName}
                                   </span>
                                 ))}
                               </div>
@@ -238,10 +280,20 @@ export function DepartmentDrawer({
                           </div>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button type="button" onClick={() => handleStartEdit(dept)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(dept)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+                            title="Edit Department"
+                          >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button type="button" onClick={() => handleDelete(dept.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(dept.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                            title="Delete Department"
+                          >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>

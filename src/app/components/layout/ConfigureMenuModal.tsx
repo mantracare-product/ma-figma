@@ -37,6 +37,34 @@ import {
   ScrollText,
   Lock,
   Zap,
+  Activity,
+  HeartPulse,
+  GitBranch,
+  Tag,
+  FolderTree,
+  CheckSquare,
+  Globe,
+  Bot,
+  Briefcase,
+  Mail,
+  Inbox,
+  Clock,
+  Award,
+  Shield,
+  Heart,
+  ShoppingCart,
+  Folder,
+  HelpCircle,
+  Send,
+  Bookmark,
+  PieChart,
+  TrendingUp,
+  ClipboardList,
+  CheckCircle,
+  Headphones,
+  Compass,
+  BookOpen,
+  BadgeCheck,
 } from "lucide-react";
 import { useSidebarMenu, NavSectionConfig, NavItemConfig } from "../../context/SidebarMenuContext";
 import { toast } from "sonner";
@@ -67,6 +95,36 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Link: LinkIcon,
   ScrollText,
   Lock,
+  Activity,
+  HeartPulse,
+  GitBranch,
+  Tag,
+  FolderTree,
+  CheckSquare,
+  Globe,
+  Bot,
+  Briefcase,
+  Mail,
+  Inbox,
+  Clock,
+  Sparkles,
+  Star,
+  Award,
+  Shield,
+  Heart,
+  ShoppingCart,
+  Folder,
+  HelpCircle,
+  Send,
+  Bookmark,
+  PieChart,
+  TrendingUp,
+  ClipboardList,
+  CheckCircle,
+  Headphones,
+  Compass,
+  BookOpen,
+  BadgeCheck,
 };
 
 export function getSidebarIcon(iconName: string): React.ComponentType<{ className?: string }> {
@@ -76,9 +134,11 @@ export function getSidebarIcon(iconName: string): React.ComponentType<{ classNam
 export default function ConfigureMenuModal() {
   const {
     config,
+    activeAdminTemplate,
     isConfiguring,
     setIsConfiguring,
     resetToDefault,
+    resetToAdminTemplate,
     toggleItemVisibility,
     toggleItemFeatured,
     reorderSectionItems,
@@ -166,6 +226,33 @@ export default function ConfigureMenuModal() {
             </button>
           </div>
         </div>
+
+        {/* Admin Scoped Baseline Banner */}
+        {activeAdminTemplate && (
+          <div className="px-6 py-2 bg-blue-50/70 border-b border-blue-100/80 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-blue-900">Admin Template:</span>
+              <span className="font-medium text-blue-700">{activeAdminTemplate.name}</span>
+              {config.isCustomizedByUser && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                  Customized
+                </span>
+              )}
+            </div>
+            {config.isCustomizedByUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetToAdminTemplate();
+                  toast.success(`Reset to Admin Template (${activeAdminTemplate.name})`);
+                }}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+              >
+                Restore Admin Scoped Template
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Toolbar & Filter Bar */}
         <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 bg-white">

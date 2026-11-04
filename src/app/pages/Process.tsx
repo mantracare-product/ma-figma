@@ -1641,7 +1641,7 @@ export default function Process() {
   }, [stepDetailDrawerOpen, currentEditingStep]);
   const [isCreatingNewStep, setIsCreatingNewStep] = useState(false);
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
-  const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
+  const [executionType, setExecutionType] = useState<"instant" | "wait" | "parallel">("wait");
   const [delayValue, setDelayValue] = useState(5);
   const [delayUnit, setDelayUnit] = useState("Minute");
   const [conditions, setConditions] = useState<Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>>([
@@ -1883,7 +1883,7 @@ export default function Process() {
 
   const STEP_PARAM_FIELDS: Record<string, string[]> = {
     fieldupdate: ["fieldUpdateBlocks", ...CONDITION_FIELDS],
-    assignhuman: ["assignedUser", ...CONDITION_FIELDS],
+    assignhuman: ["assignedUser", "assignmentFilter", "assignedRole", "entityAssignee", "distributionPriority", ...CONDITION_FIELDS],
     callaction: [
       "callActionTransferType", "callActionCountryCode", "callActionPhoneNumber",
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
@@ -5517,7 +5517,7 @@ export default function Process() {
                                 stageName: stageObj.name,
                               },
                               actions: updated,
-                              enabled: savedAuto.status === "active",
+                              enabled: savedAuto.status !== undefined ? savedAuto.status === "active" : Boolean(savedAuto.enabled),
                               health: "ok" as const,
                             };
 

@@ -23,8 +23,8 @@ export interface StepDetailDrawerProps {
   entityType?: EntityType;
   customTriggers?: Array<{ key: string; label: string; desc?: string }>;
 
-  executionType: "wait" | "parallel";
-  onExecutionTypeChange: (t: "wait" | "parallel") => void;
+  executionType: "instant" | "wait" | "parallel";
+  onExecutionTypeChange: (t: "instant" | "wait" | "parallel") => void;
 
   delayValue: number;
   onDelayValueChange: (v: number) => void;
@@ -260,7 +260,7 @@ export default function StepDetailDrawer({
                         className="text-sm truncate"
                         style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
                       >
-                        {executionType === "wait" ? "Wait" : "In Parallel"}
+                        {executionType === "wait" ? "Wait" : executionType === "instant" ? "Instant" : "In Parallel"}
                       </span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
                     </button>
@@ -284,7 +284,7 @@ export default function StepDetailDrawer({
                         className="text-sm truncate"
                         style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
                       >
-                        {executionType === "wait" ? "Wait" : "In Parallel"}
+                        {executionType === "wait" ? "Wait" : executionType === "instant" ? "Instant" : "In Parallel"}
                       </span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
                     </button>
@@ -478,6 +478,29 @@ export default function StepDetailDrawer({
             </div>
             {/* Body */}
             <div className="px-6 py-4 space-y-3">
+              <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
+                <input
+                  type="radio"
+                  name="executionType"
+                  checked={executionType === "instant"}
+                  onChange={() => onExecutionTypeChange("instant")}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Instant
+                  </p>
+                  <p
+                    className="text-xs mt-0.5"
+                    style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    This automation step starts immediately without delay.
+                  </p>
+                </div>
+              </label>
               <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
                 <input
                   type="radio"

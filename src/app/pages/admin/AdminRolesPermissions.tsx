@@ -11,6 +11,8 @@ import React, { useState, useMemo } from "react";
 import {
   Shield,
   Plus,
+  Pencil,
+  Building2,
   Edit2,
   Trash2,
   Copy,
@@ -36,6 +38,9 @@ import TableComponent, { TableColumn, TableRowAction } from "../../components/ui
 import DrawerShell from "../../components/ui/DrawerShell";
 import { AdminControlAccordion } from "./components/AdminControlAccordion";
 import PermissionSelect, { PermissionAction, PERMISSION_ACTIONS } from "../../components/settings/PermissionSelect";
+import { DepartmentDrawer } from "../../components/settings/DepartmentDrawer";
+import { getStoredDepartments, saveStoredDepartments } from "../../../lib/departmentStore";
+import type { Department } from "../../../types/permissions";
 import { getStoredProcesses, Process } from "../../../lib/useProcessStore";
 import { getModuleWorkflows, WorkflowPermissionState } from "../../components/settings/RolesPermissionsDrawer";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
@@ -83,7 +88,7 @@ export function createDefaultModulePermissions(preset?: "full" | "standard" | "v
   ROLE_PERMISSION_MODULES.forEach((mod) => {
     let actions: PermissionAction[] = [];
     if (preset === "full") actions = ["read", "write", "delete", "import", "export"];
-    else if (preset === "standard") actions = ["read", "write"];
+    else if (preset === "standard") actions = ["read", "write", "delete"];
     else if (preset === "viewOnly") actions = ["read"];
     else actions = [];
 
@@ -139,6 +144,7 @@ export interface RoleItem {
   category: string;
   industry: string;
   description: string;
+  department?: string;
   createdAt: string;
   isSystem?: boolean;
   scopingRules?: ScopingRule[];
@@ -432,6 +438,11 @@ export default function AdminRolesPermissions() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"add" | "edit">("add");
   const [editingRole, setEditingRole] = useState<RoleItem | null>(null);
+  const [adminSubTab, setAdminSubTab] = useState<"roles" | "departments">("roles");
+  const [departments, setDepartments] = useState<Department[]>(() => getStoredDepartments());
+  const [isDepartmentDrawerOpen, setIsDepartmentDrawerOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [formDepartment, setFormDepartment] = useState("");
 
   const allProcesses = useMemo(() => {
     try {
@@ -514,6 +525,7 @@ export default function AdminRolesPermissions() {
       setEditingRole(item);
       setFormRoleName(item.roleName);
       setFormDescription(item.description || "");
+      setFormDepartment(item.department || "");
       setFormModulePermissions(
         normalizeModulePermissions(item.modulePermissions, item.isSystem ? "full" : "standard")
       );
@@ -654,6 +666,7 @@ export default function AdminRolesPermissions() {
       const updated: RoleItem = {
         ...editingRole,
         roleName: trimmedName,
+        department: formDepartment.trim() || undefined,
         description: formDescription.trim(),
         category: derivedCategory,
         industry: derivedIndustry,
@@ -668,6 +681,7 @@ export default function AdminRolesPermissions() {
       const newRole: RoleItem = {
         id: `role-${Date.now()}`,
         roleName: trimmedName,
+        department: formDepartment.trim() || undefined,
         description: formDescription.trim(),
         category: derivedCategory,
         industry: derivedIndustry,
@@ -768,6 +782,97 @@ export default function AdminRolesPermissions() {
     },
   ];
 
+  const departmentColumns: TableColumn<Department>[] = [
+    {
+      id: "name",
+      header: "DEPARTMENT NAME",
+      align: "left",
+      render: (dept) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+            <Building2 className="w-3.5 h-3.5 text-slate-700" />
+          </div>
+          <span
+            onClick={() => {
+              setEditingDepartment(dept);
+              setIsDepartmentDrawerOpen(true);
+            }}
+            className="text-xs font-bold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {dept.name}
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "description",
+      header: "DESCRIPTION",
+      align: "left",
+      render: (dept) => (
+        <span className="text-xs text-gray-600 font-normal line-clamp-1 max-w-sm block" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {dept.description || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "roles",
+      header: "ASSIGNED ROLES",
+      align: "left",
+      render: (dept) => {
+        const assigned = roles.filter((r) => (r.department || "").toLowerCase() === dept.name.toLowerCase());
+        if (assigned.length === 0) {
+          return <span className="text-xs text-slate-400 italic">No roles assigned</span>;
+        }
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {assigned.map((r) => (
+              <span
+                key={r.id}
+                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+              >
+                {r.roleName}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "ACTIONS",
+      align: "center",
+      render: (dept) => (
+        <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingDepartment(dept);
+              setIsDepartmentDrawerOpen(true);
+            }}
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+            title="Edit Department"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const updated = departments.filter((d) => d.id !== dept.id);
+              setDepartments(updated);
+              saveStoredDepartments(updated);
+              toast.success(`Department "${dept.name}" deleted.`);
+            }}
+            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            title="Delete Department"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   const rowActions: TableRowAction<RoleItem>[] = [
     {
       label: "Configure Permissions",
@@ -820,70 +925,134 @@ export default function AdminRolesPermissions() {
           subtitle="Configure multi-tenant security roles, permission matrices, and scope access across platform modules."
         />
 
-        {/* Action Bar powered by PageTopBar with Industry Category & Industry Dropdowns */}
-        <PageTopBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Search roles by title or industry..."
-          leftElement={
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Industry Category Dropdown */}
-              <select
-                value={selectedCategoryFilter}
-                onChange={(e) => {
-                  setSelectedCategoryFilter(e.target.value);
-                  setSelectedIndustryFilter("All");
-                }}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 transition-colors"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Categories</option>
-                {INITIAL_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+        {/* Subtabs for Roles & Departments */}
+        <div className="flex items-center gap-2 border-b border-gray-200 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <button
+            type="button"
+            onClick={() => { setAdminSubTab("roles"); setSearchQuery(""); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              adminSubTab === "roles"
+                ? "bg-slate-900 text-white shadow-2xs"
+                : "bg-white text-slate-600 hover:text-slate-900 border border-gray-200"
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            Roles ({filteredRoles.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAdminSubTab("departments"); setSearchQuery(""); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              adminSubTab === "departments"
+                ? "bg-slate-900 text-white shadow-2xs"
+                : "bg-white text-slate-600 hover:text-slate-900 border border-gray-200"
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Departments ({departments.length})
+          </button>
+        </div>
 
-              {/* Industry Dropdown */}
-              <select
-                value={selectedIndustryFilter}
-                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 transition-colors"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Industries</option>
-                {availableIndustriesForFilter.map((ind) => (
-                  <option key={ind} value={ind}>
-                    {ind}
-                  </option>
-                ))}
-              </select>
-            </div>
-          }
-          onClearAllFilters={() => {
-            setSelectedCategoryFilter("All");
-            setSelectedIndustryFilter("All");
-            setSearchQuery("");
-          }}
-          primaryAction={{
-            label: "Create Role",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: () => handleOpenDrawer("add"),
-          }}
-        />
+        {adminSubTab === "roles" ? (
+          <>
+            {/* Action Bar powered by PageTopBar with Industry Category & Industry Dropdowns */}
+            <PageTopBar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search roles by title or industry..."
+              leftElement={
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Industry Category Dropdown */}
+                  <select
+                    value={selectedCategoryFilter}
+                    onChange={(e) => {
+                      setSelectedCategoryFilter(e.target.value);
+                      setSelectedIndustryFilter("All");
+                    }}
+                    className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="All">All Categories</option>
+                    {INITIAL_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
 
-        {/* Roles Table View using TableComponent */}
-        <TableComponent
-          data={filteredRoles}
-          columns={columns}
-          getRowId={(role) => role.id}
-          rowActions={rowActions}
-          onRowClick={(role) => handleOpenDrawer("edit", role)}
-          defaultRowsPerPage={10}
-          emptyMessage="No roles found matching active filters. Click 'Create Role' to create one."
-          tableId="admin-roles-table"
-        />
+                  {/* Industry Dropdown */}
+                  <select
+                    value={selectedIndustryFilter}
+                    onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                    className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="All">All Industries</option>
+                    {availableIndustriesForFilter.map((ind) => (
+                      <option key={ind} value={ind}>
+                        {ind}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              }
+              onClearAllFilters={() => {
+                setSelectedCategoryFilter("All");
+                setSelectedIndustryFilter("All");
+                setSearchQuery("");
+              }}
+              primaryAction={{
+                label: "Create Role",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => handleOpenDrawer("add"),
+              }}
+            />
+
+            {/* Roles Table View using TableComponent */}
+            <TableComponent
+              data={filteredRoles}
+              columns={columns}
+              getRowId={(role) => role.id}
+              rowActions={rowActions}
+              onRowClick={(role) => handleOpenDrawer("edit", role)}
+              defaultRowsPerPage={10}
+              emptyMessage="No roles found matching active filters. Click 'Create Role' to create one."
+              tableId="admin-roles-table"
+            />
+          </>
+        ) : (
+          <>
+            {/* Departments Top Bar */}
+            <PageTopBar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search departments by name or description..."
+              primaryAction={{
+                label: "Add Department",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  setEditingDepartment(null);
+                  setIsDepartmentDrawerOpen(true);
+                },
+              }}
+            />
+
+            {/* Departments Table View */}
+            <TableComponent
+              data={departments.filter(
+                (d) =>
+                  !searchQuery.trim() ||
+                  d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (d.description && d.description.toLowerCase().includes(searchQuery.toLowerCase()))
+              )}
+              columns={departmentColumns}
+              getRowId={(dept) => dept.id}
+              defaultRowsPerPage={10}
+              emptyMessage="No departments found. Click 'Add Department' to create one."
+              tableId="admin-departments-table"
+            />
+          </>
+        )}
       </div>
 
       {/* Side Drawer for Role Creation / Editing matching exact user screenshot */}
@@ -907,8 +1076,8 @@ export default function AdminRolesPermissions() {
         footer={drawerFooter}
       >
         <div className="space-y-6" style={{ fontFamily: "Outfit, sans-serif" }}>
-          {/* Top 2-Column Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Top 3-Column Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
                 Role Name <span className="text-rose-500">*</span>
@@ -920,6 +1089,24 @@ export default function AdminRolesPermissions() {
                 placeholder="e.g. Executive"
                 className="w-full h-10 px-3.5 bg-white border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 rounded-xl text-xs font-medium text-gray-800 transition-colors outline-none shadow-2xs"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
+                Department
+              </label>
+              <select
+                value={formDepartment}
+                onChange={(e) => setFormDepartment(e.target.value)}
+                className="w-full h-10 px-3.5 bg-white border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 rounded-xl text-xs font-medium text-gray-800 transition-colors outline-none shadow-2xs cursor-pointer"
+              >
+                <option value="">Unassigned</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-1.5">
@@ -1004,7 +1191,7 @@ export default function AdminRolesPermissions() {
                               className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                             >
                               <option value="all">All Records</option>
-                              <option value="department">Department / Branch</option>
+                              <option value="department">Role</option>
                               <option value="own">Own Records</option>
                               <option value="deny">Deny</option>
                             </select>
@@ -1066,7 +1253,7 @@ export default function AdminRolesPermissions() {
                                       className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                                     >
                                       <option value="all">All Records</option>
-                                      <option value="department">Department / Branch</option>
+                                      <option value="department">Role</option>
                                       <option value="own">Own Records</option>
                                       <option value="deny">Deny</option>
                                     </select>
@@ -1086,6 +1273,19 @@ export default function AdminRolesPermissions() {
           </div>
         </div>
       </DrawerShell>
+
+      {/* Department Drawer for Admin (Name and Description ONLY) */}
+      <DepartmentDrawer
+        isOpen={isDepartmentDrawerOpen}
+        onClose={() => {
+          setIsDepartmentDrawerOpen(false);
+          setEditingDepartment(null);
+        }}
+        roles={roles}
+        initialEditDepartment={editingDepartment}
+        onDepartmentsChange={(updated) => setDepartments(updated)}
+        zIndex={10100}
+      />
     </div>
   );
 }

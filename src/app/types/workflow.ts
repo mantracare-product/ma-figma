@@ -8,12 +8,14 @@ export interface AutomationBranch {
 
 export interface ConditionCaseRule {
   id: string;
+  kind?: "field" | "intent";
   field: string;
   fieldLabel?: string;
   fieldSource?: string;
   operator: string;
   valueType?: "static" | "dynamic";
   value?: any;
+  intentPrompt?: string;
   dynamicField?: string;
   dynamicFieldLabel?: string;
   dynamicFieldSource?: string;
@@ -32,23 +34,19 @@ export type WorkflowStep = {
   name: string;
   description: string;
   iconKey: string;
-  kind?: "step" | "parallel";
-  stepKey?: string;
-  branches?: AutomationBranch[]; // Present when kind === "parallel" or stepKey === "parallel"
-  trigger?: "stage" | "enter_stage" | "exit_stage" | "incall" | "inchat" | "postcall" | string;
-  enabled?: boolean;
-  executionType?: "wait" | "parallel";
+  stepKey: string;
+  trigger?: string;
+  executionType?: "instant" | "wait" | "parallel";
   delayValue?: number;
-  delayUnit?: string;
+  delayUnit?: "Minute" | "Hour" | "Day" | "Second" | "Week" | "Month" | string;
+  connectAfterId?: string;
+  params?: Record<string, any>;
+  targetEntity?: EntityType;
+  cases?: ConditionCase[];
+  branches?: AutomationBranch[];
+  order?: number;
+  kind?: "action" | "wait" | "condition" | "parallel";
+  enabled?: boolean;
   isFixed?: boolean;
   isFixedAction?: boolean;
-  connectAfterId?: string;
-  conditions?: {
-    field?: Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>;
-    fieldOperators?: Array<"AND" | "OR">;
-    intent?: Array<{ id: string; value: string }>;
-    intentOperators?: Array<"AND" | "OR">;
-    enabled?: boolean;
-  };
-  params?: Record<string, any>;
 };

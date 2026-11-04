@@ -24,6 +24,7 @@ import type {
 } from "../../../types/permissions";
 import { ACTIONS } from "../../../types/permissions";
 import { createDefaultPermissions, DEFAULT_MODULE_PERMISSIONS } from "../../pages/settings-constants";
+import { getStoredDepartments } from "../../../lib/departmentStore";
 
 export type { ActionScope, Action, ModulePermissions, ItemPermissions, Role, Department, PermissionAction };
 export { ACTIONS, PERMISSION_ACTIONS };
@@ -365,6 +366,8 @@ export function RolesPermissionsDrawer({
 
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
+  const [department, setDepartment] = useState("");
+  const [departmentsList, setDepartmentsList] = useState<any[]>([]);
   const [modulePerms, setModulePerms] = useState<Record<string, SimpleModulePermission>>({});
   const [workflowPerms, setWorkflowPerms] = useState<Record<string, Record<string, WorkflowPermissionState>>>({});
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
@@ -624,7 +627,7 @@ export function RolesPermissionsDrawer({
                               className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                             >
                               <option value="all">All Records</option>
-                              <option value="department">Department / Branch</option>
+                              <option value="department">Role</option>
                               <option value="own">Own Records</option>
                               <option value="deny">Deny</option>
                             </select>
@@ -686,7 +689,7 @@ export function RolesPermissionsDrawer({
                                       className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                                     >
                                       <option value="all">All Records</option>
-                                      <option value="department">Department / Branch</option>
+                                      <option value="department">Role</option>
                                       <option value="own">Own Records</option>
                                       <option value="deny">Deny</option>
                                     </select>

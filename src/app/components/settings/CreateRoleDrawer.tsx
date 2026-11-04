@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import type { Role, ItemPermissions } from "../../../types/permissions";
 import { createDefaultPermissions } from "../../pages/settings-constants";
+import { getStoredDepartments } from "../../../lib/departmentStore";
 
 // ── Team Member Type & Default Seed Store ─────────────────────────────────────
 export interface TeamMember {
@@ -60,6 +61,7 @@ export function CreateRoleDrawer({
   // Form State
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [department, setDepartment] = useState("");
   const [nameError, setNameError] = useState("");
   const [currentEditingRole, setCurrentEditingRole] = useState<Role | null>(null);
 
@@ -82,10 +84,12 @@ export function CreateRoleDrawer({
         setCurrentEditingRole(editingRole);
         setName(editingRole.name);
         setDescription(editingRole.description || "");
+        setDepartment(editingRole.department || "");
       } else {
         setCurrentEditingRole(null);
         setName("");
         setDescription("");
+    setDepartment("");
       }
     }
   }, [isOpen, editingRole]);
@@ -149,7 +153,7 @@ export function CreateRoleDrawer({
       const oldRoleName = currentEditingRole.name;
       updatedRoles = roles.map((r) =>
         r.id === currentEditingRole.id
-          ? { ...r, name: trimmed, description: description.trim() }
+          ? { ...r, name: trimmed, description: description.trim(), department: department.trim() || undefined }
           : r
       );
 
@@ -168,6 +172,7 @@ export function CreateRoleDrawer({
         id: "custom_" + Date.now(),
         name: trimmed,
         description: description.trim(),
+        department: department.trim() || undefined,
         isDefault: false,
         permissions: createDefaultPermissions() as unknown as ItemPermissions,
       };
@@ -183,6 +188,7 @@ export function CreateRoleDrawer({
     setCurrentEditingRole(null);
     setName("");
     setDescription("");
+    setDepartment("");
     setNameError("");
     setAssignDropdownOpen(false);
     setMemberSearch("");
@@ -255,6 +261,25 @@ export function CreateRoleDrawer({
                 rows={2}
                 className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-500 bg-white resize-none"
               />
+            </div>
+
+            {/* Role Department */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Department <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
+              >
+                <option value="">No Department Assigned</option>
+                {getStoredDepartments().map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* ── ASSIGNED TEAM MEMBERS SECTION (only when editing role) ── */}
