@@ -28,6 +28,8 @@ import WorkspaceBillingCreditUsageTab from "../components/billing/WorkspaceBilli
 import Transactions from "./Transactions";
 import { getWorkspaceSubscription } from "../../lib/plansBillingStore";
 import MailboxAccountsSection from "../components/settings/MailboxAccountsSection";
+import { INTEGRATIONS_REGISTRY, IntegrationDefinition } from "../../lib/integrationsRegistry";
+import IntegrationConfigDrawer from "../components/settings/IntegrationConfigDrawer";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
 import { getStoredVoices, saveStoredVoices, toggleClientVoiceStatus, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
@@ -3054,6 +3056,34 @@ export default function Settings() {
   // Integrations State
   const [integrations, setIntegrations] = useState<Integration[]>([
     // EHR
+    {
+      id: "cliniko",
+      name: "Cliniko",
+      description: "Allied health practice management for patients, appointments & billing",
+      category: "ehr",
+      connected: (() => {
+        try {
+          const cfg = localStorage.getItem("mantra_integration_config_cliniko");
+          return cfg ? JSON.parse(cfg).connected : false;
+        } catch {
+          return false;
+        }
+      })(),
+    },
+    {
+      id: "healthie",
+      name: "Healthie",
+      description: "Comprehensive EHR, telehealth, and coaching platform for dietetics & wellness",
+      category: "ehr",
+      connected: (() => {
+        try {
+          const cfg = localStorage.getItem("mantra_integration_config_healthie");
+          return cfg ? JSON.parse(cfg).connected : false;
+        } catch {
+          return false;
+        }
+      })(),
+    },
     { id: "mantracare", name: "MantraCare", description: "Electronic health records system", category: "ehr", connected: false },
     { id: "epic", name: "Epic", description: "Enterprise healthcare software", category: "ehr", connected: false },
     { id: "athena", name: "Athena Health", description: "Cloud-based EHR and practice management", category: "ehr", connected: false },
@@ -3106,7 +3136,10 @@ export default function Settings() {
     { id: "meta-leads", name: "Meta Lead Ads", description: "Pull leads from your Meta Ad campaigns automatically", category: "marketing", connected: false },
     { id: "whatsapp-business", name: "WhatsApp Business", description: "Send and receive WhatsApp messages, manage templates, and automate conversations", category: "marketing", connected: false },
   ]);
-  const [integrationTab, setIntegrationTab] = useState<"ehr" | "crm" | "telephony" | "mailbox" | "sms" | "marketing">("ehr");
+  const [integrationTab, setIntegrationTab] = useState<"all" | "ehr" | "crm" | "telephony" | "mailbox" | "sms" | "marketing">("all");
+  const [integrationSearchQuery, setIntegrationSearchQuery] = useState("");
+  const [selectedRegistryDef, setSelectedRegistryDef] = useState<IntegrationDefinition | null>(null);
+  const [isRegistryDrawerOpen, setIsRegistryDrawerOpen] = useState(false);
   const [metaLeadFormsConnectionTested, setMetaLeadFormsConnectionTested] = useState(false);
   const [metaSelectedForms, setMetaSelectedForms] = useState<string[]>([]);
   const [metaMockForms] = useState([
@@ -7866,6 +7899,15 @@ export default function Settings() {
                 <div className="border-b border-border">
                   <div className="flex gap-6">
                     <button
+                      onClick={() => setIntegrationTab("all")}
+                      className={`pb-3 px-1 border-b-2 transition-colors ${integrationTab === "all"
+                        ? "border-primary text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                      All Integrations
+                    </button>
+                    <button
                       onClick={() => setIntegrationTab("ehr")}
                       className={`pb-3 px-1 border-b-2 transition-colors ${integrationTab === "ehr"
                         ? "border-primary text-primary font-medium"
@@ -7929,9 +7971,33 @@ export default function Settings() {
                     {renderPhoneNumbersSection()}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    {/* Live Search & Counter Bar */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-1">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={integrationSearchQuery}
+                          onChange={(e) => setIntegrationSearchQuery(e.target.value)}
+                          placeholder="Search integrations (e.g. Cliniko, Healthie, Phorest, Epic)..."
+                          className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                        />
+                      </div>
+                      <span className="text-xs text-slate-500 font-medium self-end sm:self-center">
+                        {integrations.filter((int) => (integrationTab === "all" || int.category === integrationTab) && (int.name.toLowerCase().includes(integrationSearchQuery.toLowerCase()) || int.description.toLowerCase().includes(integrationSearchQuery.toLowerCase()))).length} integrations available
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {integrations
-                      .filter((integration) => integration.category === integrationTab)
+                      .filter((integration) => {
+                        const matchesCategory = integrationTab === "all" || integration.category === integrationTab;
+                        const matchesSearch = !integrationSearchQuery.trim() ||
+                          integration.name.toLowerCase().includes(integrationSearchQuery.toLowerCase()) ||
+                          integration.description.toLowerCase().includes(integrationSearchQuery.toLowerCase());
+                        return matchesCategory && matchesSearch;
+                      })
                       .map((integration) => (
                         <div
                           key={integration.id}
@@ -7984,6 +8050,26 @@ export default function Settings() {
                                   <circle cx="17" cy="31" r="3" fill="white" />
                                   <circle cx="31" cy="31" r="3" fill="white" />
                                 </svg>
+                              </div>
+                            )}
+                            {integration.id === "cliniko" && (
+                              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#2B4B80] flex items-center justify-center shadow-xs">
+                                <span className="text-white font-extrabold text-lg tracking-tight font-display">C</span>
+                              </div>
+                            )}
+                            {integration.id === "healthie" && (
+                              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#764ABC] flex items-center justify-center shadow-xs">
+                                <span className="text-white font-extrabold text-lg tracking-tight font-display">H</span>
+                              </div>
+                            )}
+                            {integration.id === "epic" && (
+                              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#990000] flex items-center justify-center shadow-xs">
+                                <span className="text-white font-extrabold text-lg tracking-tight font-display">E</span>
+                              </div>
+                            )}
+                            {integration.id === "athena" && (
+                              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#582C83] flex items-center justify-center shadow-xs">
+                                <span className="text-white font-extrabold text-lg tracking-tight font-display">A</span>
                               </div>
                             )}
                             {integration.id === "phorest" && (
@@ -8070,11 +8156,35 @@ export default function Settings() {
                                 </Button>
                               )
                             ) : integration.connected ? (
-                              <Button variant="outline" size="sm" onClick={() => handleManageIntegration(integration)}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const def = INTEGRATIONS_REGISTRY.find((d) => d.id === integration.id);
+                                  if (def) {
+                                    setSelectedRegistryDef(def);
+                                    setIsRegistryDrawerOpen(true);
+                                  } else {
+                                    handleManageIntegration(integration);
+                                  }
+                                }}
+                              >
                                 Manage
                               </Button>
                             ) : (
-                              <Button variant="primary" size="sm" onClick={() => handleConnectIntegration(integration)}>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  const def = INTEGRATIONS_REGISTRY.find((d) => d.id === integration.id);
+                                  if (def) {
+                                    setSelectedRegistryDef(def);
+                                    setIsRegistryDrawerOpen(true);
+                                  } else {
+                                    handleConnectIntegration(integration);
+                                  }
+                                }}
+                              >
                                 <LinkIcon className="w-4 h-4" />
                                 Connect
                               </Button>
@@ -8083,12 +8193,28 @@ export default function Settings() {
                         </div>
                       ))}
                   </div>
+                </div>
                 )}
               </div>
             )}
 
             {/* Reception Tab */}
             {activeTab === "reception" && <ReceptionSettingsTab />}
+        {/* Unified Integration Capability & Sync Config Drawer */}
+        <IntegrationConfigDrawer
+          isOpen={isRegistryDrawerOpen}
+          integration={selectedRegistryDef}
+          onClose={() => {
+            setIsRegistryDrawerOpen(false);
+            setSelectedRegistryDef(null);
+          }}
+          onSaved={(integrationId, isConnected) => {
+            setIntegrations((prev) =>
+              prev.map((i) => (i.id === integrationId ? { ...i, connected: isConnected } : i))
+            );
+          }}
+        />
+
         {/* Organization Detail Drawer */}
         <OrganizationDetailDrawer
           isOpen={showOrgDrawer}
