@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import {
   CheckSquare,
   Star,
@@ -16,11 +16,11 @@ import {
   Edit2,
   Check,
   Building2,
-  Sparkles,
   Shield,
+  Globe,
+  Calendar,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
-import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
 import {
   TaskEntity,
@@ -37,8 +37,6 @@ import {
 import { Stage } from "../../../lib/useProcessStore";
 import { useTeamMembers } from "../../../lib/teamStore";
 import { initialClients } from "../../../data/canonicalClients";
-import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
-import type { ScopingRule } from "../../context/FieldRegistryContext";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
 import { sendTaskToPortalChat } from "./ShareTaskDrawer";
@@ -63,6 +61,13 @@ const ADMIN_ORGANIZATIONS = [
   { id: "org-3", name: "Metro General Hospital", industry: "Healthcare", country: "US" },
   { id: "org-4", name: "California Wellness Practice", industry: "Wellness", country: "US" },
   { id: "org-5", name: "London Central Clinic", industry: "Healthcare", country: "UK" },
+];
+
+export const ADMIN_SCOPE_OPTIONS = [
+  { id: "all", name: "All Scopes (Global)" },
+  { id: "healthcare-us", name: "Healthcare (US)", industry: "Healthcare", country: "US" },
+  { id: "wellness-us", name: "Wellness (US)", industry: "Wellness", country: "US" },
+  { id: "healthcare-uk", name: "Healthcare (UK)", industry: "Healthcare", country: "UK" },
 ];
 
 const ADMIN_ORG_ROLES: Record<string, string[]> = {
@@ -101,13 +106,49 @@ export default function TaskQuickCreateDrawer({
   const defaultStage = taskStages[0]?.name || "Task Created";
   const [selectedStageName, setSelectedStageName] = useState(defaultStage);
 
-  // Admin Scope Rules (Configured at top for Admin)
-  const [adminScopingRules, setAdminScopingRules] = useState<ScopingRule[]>([]);
+  // Admin Scope: Single plain dropdown selector
+  const [selectedAdminScopeId, setSelectedAdminScopeId] = useState("all");
+
+  // Admin Scope filters Target Organizations
+  const filteredAdminOrganizations = useMemo(() => {
+    if (selectedAdminScopeId === "all") return ADMIN_ORGANIZATIONS;
+    const scopeObj = ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId);
+    if (!scopeObj) return ADMIN_ORGANIZATIONS;
+    return ADMIN_ORGANIZATIONS.filter(
+      (org) =>
+        (!scopeObj.industry || org.industry === scopeObj.industry) &&
+        (!scopeObj.country || org.country === scopeObj.country)
+    );
+  }, [selectedAdminScopeId]);
 
   // Admin Mode: Organization & Role selection
   const [selectedAdminOrgId, setSelectedAdminOrgId] = useState("org-1");
-  const availableAdminRoles = ADMIN_ORG_ROLES[selectedAdminOrgId] || ADMIN_ORG_ROLES["org-1"];
-  const [selectedAdminRole, setSelectedAdminRole] = useState(availableAdminRoles[0]);
+
+  const availableAdminRoles = useMemo(() => {
+    return ADMIN_ORG_ROLES[selectedAdminOrgId] || ADMIN_ORG_ROLES["org-1"] || [];
+  }, [selectedAdminOrgId]);
+
+  const [selectedAdminRole, setSelectedAdminRole] = useState(availableAdminRoles[0] || "Lead Physician");
+
+  // Synchronize target organization when admin scope changes
+  useEffect(() => {
+    if (filteredAdminOrganizations.length > 0) {
+      const isCurrentValid = filteredAdminOrganizations.some((o) => o.id === selectedAdminOrgId);
+      if (!isCurrentValid) {
+        const nextOrgId = filteredAdminOrganizations[0].id;
+        setSelectedAdminOrgId(nextOrgId);
+        const nextRoles = ADMIN_ORG_ROLES[nextOrgId] || [];
+        if (nextRoles.length > 0) setSelectedAdminRole(nextRoles[0]);
+      }
+    }
+  }, [filteredAdminOrganizations, selectedAdminOrgId]);
+
+  // Synchronize role when organization changes
+  useEffect(() => {
+    if (availableAdminRoles.length > 0 && !availableAdminRoles.includes(selectedAdminRole)) {
+      setSelectedAdminRole(availableAdminRoles[0]);
+    }
+  }, [availableAdminRoles, selectedAdminRole]);
 
   // Non-Admin: Assignment mode (Team Member vs Contact)
   const [assignmentType, setAssignmentType] = useState<"team" | "contact">("team");
@@ -344,10 +385,9 @@ export default function TaskQuickCreateDrawer({
     let assigneesList: TaskAssigneeScope[] = [];
 
     if (isAdmin) {
-      const org = ADMIN_ORGANIZATIONS.find((o) => o.id === selectedAdminOrgId) || ADMIN_ORGANIZATIONS[0];
-      const adminScopeName = adminScopingRules.length > 0
-        ? adminScopingRules.map((r) => r.industryCategory).join(", ")
-        : "Healthcare (5 industries, US)";
+      const org = filteredAdminOrganizations.find((o) => o.id === selectedAdminOrgId) || filteredAdminOrganizations[0] || ADMIN_ORGANIZATIONS[0];
+      const selectedScopeObj = ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId);
+      const adminScopeName = selectedScopeObj && selectedScopeObj.id !== "all" ? selectedScopeObj.name : `${org.industry} (${org.country})`;
 
       primaryAssignee = {
         scopeLevel: "org_role",
@@ -410,7 +450,9 @@ export default function TaskQuickCreateDrawer({
       deadline: formattedDeadline,
       deadlineDate,
       deadlineTime,
-      scopingRules: isAdmin ? adminScopingRules : undefined,
+      scopingRules: isAdmin
+        ? [{ industryCategory: ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId)?.name || "Healthcare (US)" }]
+        : undefined,
       checklists,
       observers,
       subtasks: [],
@@ -485,36 +527,16 @@ export default function TaskQuickCreateDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── 1. Admin Mode: Admin Scope Rules Positioned at the VERY TOP ── */}
-        {isAdmin && (
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                <Building2 className="w-3.5 h-3.5 text-slate-700" />
-                <span>Admin Scope Rules (Multi-Tenant)</span>
-                <InfoTooltip content="Industry category and geographical boundaries defining which tenant organizations and roles are filtered" />
-              </h3>
-            </div>
-            <AdminControlAccordion
-              scopingRules={adminScopingRules}
-              onScopingRulesChange={setAdminScopingRules}
-              allowEntities={false}
-              defaultAdminControlOpen={true}
-              defaultScopeOpen={true}
-            />
-          </div>
-        )}
-
-        {/* ── 2. Title & Basic Details Card ── */}
+        {/* ── 1. Task Details Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
               <span>Task Details</span>
-              <InfoTooltip content="Primary identifiers, title, priority, and guidelines for this assignment" />
+              <InfoTooltip content="Primary identifiers, title, description, and admin scoping rules" />
             </h3>
           </div>
 
-          {/* Title Input */}
+          {/* Task Name (required) */}
           <div className="space-y-1.5">
             <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
               <span>Task Name</span>
@@ -545,101 +567,42 @@ export default function TaskQuickCreateDrawer({
             />
           </div>
 
-          {/* Mark as Important: Setting Toggle Switch */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
-            <div className="flex items-center gap-2.5">
-              <Star className={`w-4 h-4 ${isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
-              <div>
-                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
-                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
-              </div>
+          {/* Admin Scope: Plain dropdown field (Replaces the multi-tenant accordion card, no outer card or boundary) */}
+          {isAdmin && (
+            <div className="space-y-1.5 pt-1">
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <Globe className="w-3.5 h-3.5 text-slate-500" />
+                <span>Admin Scope</span>
+                <InfoTooltip content="Filter tenant organizations and roles by designated multi-tenant administrative scope" />
+              </label>
+              <select
+                value={selectedAdminScopeId}
+                onChange={(e) => setSelectedAdminScopeId(e.target.value)}
+                className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer font-semibold"
+              >
+                {ADMIN_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isImportant}
-              onClick={() => setIsImportant((prev) => !prev)}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                isImportant ? "bg-[#1E293B]" : "bg-gray-200"
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                  isImportant ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Deadline: Date & Time Picker */}
-          <div className="space-y-1.5 pt-1">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Deadline (Date & Time)</span>
-              <InfoTooltip content="Target calendar date and clock time for task completion" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="relative">
-                <input
-                  type="date"
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
-                />
-              </div>
-              <div className="relative">
-                <input
-                  type="time"
-                  value={deadlineTime}
-                  onChange={(e) => setDeadlineTime(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
-                />
-              </div>
-            </div>
-            {deadlineDate && (
-              <p className="text-[11px] text-slate-500 font-mono">
-                Formatted: {formatDeadlineDisplay(deadlineDate, deadlineTime)}
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* ── 3. Assignment & Stage Card ── */}
+        {/* ── 2. Assignment & Stage Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Assignment & Stage</span>
-              <InfoTooltip content="Set starting workflow stage and target organization, roles, or contacts" />
+              <span>Assignment &amp; Stage</span>
+              <InfoTooltip content="Set target organization/roles or team members/clients, followed by initial workflow stage" />
             </h3>
           </div>
 
-          {/* Initial Stage */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <span>Initial Stage</span>
-              <InfoTooltip content="Select the starting workflow stage for this task" />
-            </label>
-            <select
-              value={selectedStageName}
-              onChange={(e) => setSelectedStageName(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-            >
-              {(taskStages.length > 0 ? taskStages : [
-                { id: "task-stg-created", name: "Task Created" },
-                { id: "task-stg-completed", name: "Task Completed" },
-                { id: "task-stg-overdue", name: "Task Overdue" },
-              ]).map((stg) => (
-                <option key={stg.id} value={stg.name}>
-                  {stg.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* ADMIN ASSIGNMENT: Organizations -> Roles -> Assignee */}
+          {/* ADMIN ASSIGNMENT: Target Organization -> Organization Role */}
           {isAdmin ? (
-            <div className="space-y-3 pt-2 border-t border-gray-100 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
-              {/* Organization Selector */}
+            <div className="space-y-3">
+              {/* Target Organization (Filtered by selected Admin Scope) */}
               <div className="space-y-1.5">
                 <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                   <Building2 className="w-3.5 h-3.5 text-slate-500" />
@@ -654,9 +617,9 @@ export default function TaskQuickCreateDrawer({
                     const newRoles = ADMIN_ORG_ROLES[newOrgId] || [];
                     if (newRoles.length > 0) setSelectedAdminRole(newRoles[0]);
                   }}
-                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
                 >
-                  {ADMIN_ORGANIZATIONS.map((org) => (
+                  {filteredAdminOrganizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name} ({org.industry} · {org.country})
                     </option>
@@ -664,7 +627,7 @@ export default function TaskQuickCreateDrawer({
                 </select>
               </div>
 
-              {/* Org Role Selector */}
+              {/* Organization Role (Filtered by selected Organization) */}
               <div className="space-y-1.5">
                 <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                   <Shield className="w-3.5 h-3.5 text-slate-500" />
@@ -674,7 +637,7 @@ export default function TaskQuickCreateDrawer({
                 <select
                   value={selectedAdminRole}
                   onChange={(e) => setSelectedAdminRole(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
                 >
                   {availableAdminRoles.map((role) => (
                     <option key={role} value={role}>
@@ -685,13 +648,13 @@ export default function TaskQuickCreateDrawer({
               </div>
 
               {/* Admin Delegation Note */}
-              <p className="text-[11px] text-slate-500 bg-white p-2.5 rounded-lg border border-gray-200 leading-relaxed">
-                Corporate tasks are delegated directly to the <strong>{selectedAdminRole}</strong> role at <strong>{ADMIN_ORGANIZATIONS.find((o) => o.id === selectedAdminOrgId)?.name}</strong> across all active tenant members with that role.
+              <p className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-gray-200 leading-relaxed">
+                Corporate tasks are delegated directly to the <strong>{selectedAdminRole}</strong> role at <strong>{filteredAdminOrganizations.find((o) => o.id === selectedAdminOrgId)?.name || "the selected organization"}</strong> across all active tenant members with that role.
               </p>
             </div>
           ) : (
-            /* NON-ADMIN ASSIGNMENT: Team Member vs Contact */
-            <div className="space-y-3 pt-2 border-t border-gray-100">
+            /* CLIENT WORKSPACE ASSIGNMENT: Team Members vs Contact / Client */
+            <div className="space-y-3">
               <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <span>Assign To</span>
                 <InfoTooltip content="Choose whether to delegate this task to Team Members or an External Contact / Client" />
@@ -873,6 +836,129 @@ export default function TaskQuickCreateDrawer({
               )}
             </div>
           )}
+
+          {/* Initial Stage: Positioned at the end of Assignment & Stage in both drawers */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <span>Initial Stage</span>
+              <InfoTooltip content="Select the starting workflow stage for this task" />
+            </label>
+            <select
+              value={selectedStageName}
+              onChange={(e) => setSelectedStageName(e.target.value)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+            >
+              {(taskStages.length > 0 ? taskStages : [
+                { id: "task-stg-created", name: "Task Created" },
+                { id: "task-stg-completed", name: "Task Completed" },
+                { id: "task-stg-overdue", name: "Task Overdue" },
+              ]).map((stg) => (
+                <option key={stg.id} value={stg.name}>
+                  {stg.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* ── 3. Schedule & Priority Card ── */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <Calendar className="w-3.5 h-3.5 text-slate-700" />
+              <span>Schedule &amp; Priority</span>
+              <InfoTooltip content="Set completion deadline, priority importance, recurrence triggers, and duration planning" />
+            </h3>
+          </div>
+
+          {/* Deadline: Date & Time Picker */}
+          <div className="space-y-1.5">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Deadline (Date &amp; Time)</span>
+              <InfoTooltip content="Target calendar date and clock time for task completion" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <input
+                  type="date"
+                  value={deadlineDate}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type="time"
+                  value={deadlineTime}
+                  onChange={(e) => setDeadlineTime(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
+                />
+              </div>
+            </div>
+            {deadlineDate && (
+              <p className="text-[11px] text-slate-500 font-mono">
+                Formatted: {formatDeadlineDisplay(deadlineDate, deadlineTime)}
+              </p>
+            )}
+          </div>
+
+          {/* Mark as Important: Setting Toggle Switch */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
+            <div className="flex items-center gap-2.5">
+              <Star className={`w-4 h-4 ${isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+              <div>
+                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
+                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isImportant}
+              onClick={() => setIsImportant((prev) => !prev)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                isImportant ? "bg-[#1E293B]" : "bg-gray-200"
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                  isImportant ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Repeat Task & Time Planning (Moved up from bottom into Schedule & Priority) */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowRecurrenceDrawer(true)}
+              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-slate-600" />
+                <span>Repeat Task</span>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                {recurrenceConfig?.enabled ? "Configured" : "None"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowTimePlanningDrawer(true)}
+              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-600" />
+                <span>Time Planning</span>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                {timePlanningConfig?.durationDays ? `${timePlanningConfig.durationDays}d` : "None"}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* ── 4. Observers Section ── */}
@@ -1153,46 +1239,6 @@ export default function TaskQuickCreateDrawer({
               ))}
             </div>
           )}
-        </div>
-
-        {/* ── 7. Advanced Planning Triggers ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Planning & Recurrence</span>
-              <InfoTooltip content="Open sub-drawers for recurring triggers and schedule timeframes" />
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setShowRecurrenceDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Repeat className="w-4 h-4 text-slate-600" />
-                <span>Repeat Task</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {recurrenceConfig?.enabled ? "Configured" : "None"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowTimePlanningDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-600" />
-                <span>Time Planning</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {timePlanningConfig?.durationDays ? `${timePlanningConfig.durationDays}d` : "None"}
-              </span>
-            </button>
-          </div>
         </div>
       </DrawerShell>
 
