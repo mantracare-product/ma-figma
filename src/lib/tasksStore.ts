@@ -349,6 +349,8 @@ export function getStoredTasks(): TaskEntity[] {
 
         const assignee = {
           ...t.assignee,
+          clientId: t.assignee?.clientId || initialMatching?.assignee?.clientId,
+          clientName: t.assignee?.clientName || initialMatching?.assignee?.clientName,
           orgName: t.assignee?.orgName || initialMatching?.assignee?.orgName || (t.scopeLevel === "admin" ? "Demo Mantra Care" : undefined),
           adminScopeName: t.assignee?.adminScopeName || initialMatching?.assignee?.adminScopeName || (t.scopeLevel === "admin" ? "Healthcare Scope" : undefined),
         };

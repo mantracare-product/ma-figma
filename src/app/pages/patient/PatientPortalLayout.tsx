@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Bot,
   MessageSquare,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
@@ -33,6 +34,7 @@ import {
 } from "../../../lib/useProcessStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import DevPatientSwitcherModal from "./components/DevPatientSwitcherModal";
+import TopBarNotificationBell from "../../components/layout/TopBarNotificationBell";
 
 export const STAGE_ROUTES: Record<string, string> = {
   "Client Checked In": "/patient/book",
@@ -105,7 +107,7 @@ export default function PatientPortalLayout() {
     if (routeClientId) return routeClientId;
     const pathParts = window.location.pathname.split("/patient/");
     const firstSegment = pathParts[1]?.split("/")[0]?.toLowerCase();
-    const reservedRoutes = ["login", "book", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin"];
+    const reservedRoutes = ["login", "book", "tasks", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin", "messages", "care-bot", "bot"];
     if (firstSegment && !reservedRoutes.includes(firstSegment)) {
       return pathParts[1];
     }
@@ -124,7 +126,7 @@ export default function PatientPortalLayout() {
     } else {
       const pathParts = location.pathname.split("/patient/");
       const firstSegment = pathParts[1]?.split("/")[0]?.toLowerCase();
-      const reservedRoutes = ["login", "book", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin"];
+      const reservedRoutes = ["login", "book", "tasks", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin", "messages", "care-bot", "bot"];
       if (firstSegment && !reservedRoutes.includes(firstSegment)) {
         if (pathParts[1] !== selectedClientId) {
           setSelectedClientId(pathParts[1]);
@@ -241,6 +243,7 @@ export default function PatientPortalLayout() {
   const navItems = [
     { to: overviewPath, label: "Today", icon: LayoutDashboard, exact: true },
     { to: "/patient/book", label: "Visits", icon: Calendar },
+    { to: "/patient/tasks", label: "Tasks", icon: CheckSquare },
     { to: "/patient/documents", label: "Documents", icon: FileText },
     { to: "/patient/forms", label: "Forms", icon: ClipboardList },
     { to: "/patient/bill", label: "Billing", icon: Receipt },
@@ -494,7 +497,9 @@ export default function PatientPortalLayout() {
               <span className="font-bold text-slate-900">
                 {location.pathname.includes("profile")
                   ? "Profile"
-                  : location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("bot")
+                  : location.pathname.includes("tasks")
+                    ? "Tasks"
+                    : location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("bot")
                     ? "Messages"
                     : location.pathname.includes("book")
                       ? "Visits"
@@ -513,6 +518,9 @@ export default function PatientPortalLayout() {
 
           {/* Right Header items */}
           <div className="flex items-center gap-2.5">
+            {/* In-App Notifications Bell */}
+            <TopBarNotificationBell />
+
             {/* Patient Avatar Trigger -> Directly navigates to Profile */}
             <NavLink
               to="/patient/profile"

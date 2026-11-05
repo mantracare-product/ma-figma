@@ -40,6 +40,16 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
     markAsRead(item.id);
     if (item.link) {
       onClose();
+      if (window.location.pathname.startsWith("/patient")) {
+        if (item.link.startsWith("/tasks")) {
+          navigate("/patient/tasks");
+          return;
+        }
+        if (item.link.startsWith("/chats")) {
+          navigate("/patient/messages");
+          return;
+        }
+      }
       navigate(item.link);
     }
   };

@@ -41,6 +41,7 @@ import { AdminControlAccordion } from "../../pages/admin/components/AdminControl
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
+import { sendTaskToPortalChat } from "./ShareTaskDrawer";
 import { addNotification } from "../../../lib/notificationsStore";
 import { toast } from "sonner";
 
@@ -137,7 +138,7 @@ export default function TaskQuickCreateDrawer({
     );
   }, [selectedContactCategory]);
 
-  const [visibleInPortal, setVisibleInPortal] = useState(false);
+  const [visibleInPortal, setVisibleInPortal] = useState(true);
 
   // Checklists
   const [checklists, setChecklists] = useState<TaskChecklist[]>([
@@ -361,33 +362,33 @@ export default function TaskQuickCreateDrawer({
     } else if (assignmentType === "team") {
       const selectedMembers = teamMembers.filter((m) => selectedTeamMemberIds.includes(String(m.id)));
       if (selectedMembers.length === 0) {
-        primaryAssignee = {
-          scopeLevel: "client",
-          assigneeName: teamMembers[0]?.name || "Dr. Alistair Mehta",
-          roleName: teamMembers[0]?.role,
-        };
-        assigneesList = [primaryAssignee];
-      } else {
-        assigneesList = selectedMembers.map((m) => ({
-          scopeLevel: "client" as const,
-          userId: String(m.id),
-          assigneeName: m.name,
-          roleName: m.role,
-        }));
-        primaryAssignee = assigneesList[0];
+        toast.error("Please select at least one team member");
+        return;
       }
+      assigneesList = selectedMembers.map((m) => ({
+        scopeLevel: "client" as const,
+        userId: String(m.id),
+        assigneeName: m.name,
+        roleName: m.role,
+      }));
+      primaryAssignee = assigneesList[0];
     } else {
       const contact = initialClients.find((c) => c.id === selectedContactId) || initialClients[0];
       primaryAssignee = {
         scopeLevel: "contact",
         clientId: contact?.id,
+        clientName: contact?.name || "Sarah Johnson",
         assigneeName: contact?.name || "Sarah Johnson",
         roleName: contact?.contactType || contact?.contact_type || "Client",
       };
       assigneesList = [primaryAssignee];
     }
 
-    const resolvedScopeLevel: TaskScopeLevel = isAdmin ? "admin" : (visibleInPortal ? "portal" : "client");
+    const resolvedScopeLevel: TaskScopeLevel = isAdmin
+      ? "admin"
+      : assignmentType === "contact" || visibleInPortal
+      ? "portal"
+      : "client";
 
     onCreateTask({
       title: title.trim(),
@@ -425,6 +426,27 @@ export default function TaskQuickCreateDrawer({
       message: `${title.trim()} assigned to ${primaryAssignee.assigneeName}${isAdmin ? ` (${primaryAssignee.orgName})` : ""}`,
       link: `/tasks`,
     });
+
+    // If assigned to a client contact or marked visible in portal, sync to client portal chat & notify
+    if (assignmentType === "contact" || visibleInPortal) {
+      const targetClientId = primaryAssignee.clientId || selectedContactId || "CL-001";
+      const targetClientName = primaryAssignee.clientName || primaryAssignee.assigneeName || "Client";
+      sendTaskToPortalChat(targetClientId, targetClientName, {
+        id: `tsk-${Date.now()}`,
+        code: `TSK-${Date.now()}`,
+        title: title.trim(),
+        stageName: selectedStageName,
+        deadline: formattedDeadline,
+      } as any);
+
+      addNotification({
+        type: "task",
+        title: "New Action Item for You",
+        message: `Task '${title.trim()}' has been added to your portal tasks. Due: ${formattedDeadline || "Soon"}`,
+        link: `/patient/tasks`,
+        meta: { clientId: targetClientId },
+      });
+    }
 
     toast.success("Task created and notification sent");
     onClose();
@@ -691,7 +713,10 @@ export default function TaskQuickCreateDrawer({
 
                 <button
                   type="button"
-                  onClick={() => setAssignmentType("contact")}
+                  onClick={() => {
+                    setAssignmentType("contact");
+                    setVisibleInPortal(true);
+                  }}
                   className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     assignmentType === "contact"
                       ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
@@ -754,35 +779,40 @@ export default function TaskQuickCreateDrawer({
                     </select>
 
                     <div className="flex flex-wrap gap-1.5 pt-2">
-                      {selectedTeamMemberIds.map((id) => {
-                        const member = teamMembers.find((m) => String(m.id) === String(id));
-                        if (!member) return null;
-                        return (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
-                          >
-                            <Users className="w-3 h-3 text-slate-500" />
-                            <span>{member.name}</span>
-                            {member.role && (
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                ({member.role})
-                              </span>
-                            )}
-                            {selectedTeamMemberIds.length > 1 && (
+                      {selectedTeamMemberIds.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-1">
+                          No team member selected. Please choose from the dropdown above.
+                        </p>
+                      ) : (
+                        selectedTeamMemberIds.map((id) => {
+                          const member = teamMembers.find((m) => String(m.id) === String(id));
+                          if (!member) return null;
+                          return (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
+                            >
+                              <Users className="w-3 h-3 text-slate-500" />
+                              <span>{member.name}</span>
+                              {member.role && (
+                                <span className="text-[10px] text-slate-500 font-normal">
+                                  ({member.role})
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() =>
                                   setSelectedTeamMemberIds((prev) => prev.filter((x) => x !== id))
                                 }
-                                className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
+                                className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer rounded hover:bg-slate-100"
+                                title="Remove team member"
                               >
                                 <X className="w-3 h-3" />
                               </button>
-                            )}
-                          </span>
-                        );
-                      })}
+                            </span>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 </div>

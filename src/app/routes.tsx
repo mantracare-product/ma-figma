@@ -82,6 +82,7 @@ const PatientFormFillScreen = withLazy(() => import("./pages/patient/PatientForm
 const PatientProfileScreen = withLazy(() => import("./pages/patient/PatientProfileScreen"));
 const PatientCareBotScreen = withLazy(() => import("./pages/patient/PatientCareBotScreen"));
 const PatientMessagesScreen = withLazy(() => import("./pages/patient/PatientMessagesScreen"));
+const PatientTasksScreen = withLazy(() => import("./pages/patient/PatientTasksScreen"));
 const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
 const AdminPlans = withLazy(() => import("./pages/admin/AdminPlans"));
 const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
@@ -144,6 +145,7 @@ export const router = createBrowserRouter([
       { path: "status", Component: PatientStatusScreen },
       { path: "checkin", Component: PatientStatusScreen },
       { path: "book", Component: PatientBookingScreen },
+      { path: "tasks", Component: PatientTasksScreen },
       { path: "documents", Component: PatientDocumentsScreen },
       { path: "forms", Component: PatientFormsScreen },
       { path: "forms/:formId", Component: PatientFormFillScreen },
