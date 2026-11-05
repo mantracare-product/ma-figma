@@ -83,6 +83,8 @@ export interface TaskEntity {
   status: TaskStatus;
   stageId?: string;
   stageName?: string;
+  workflowId?: string;
+  workflowName?: string;
   isImportant: boolean;
   scopeLevel: TaskScopeLevel;
   assignee: TaskAssigneeScope;

@@ -41,6 +41,8 @@ export interface TaskQuickCreateDrawerProps {
   onCreateTask: (taskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => void;
   isAdmin?: boolean;
   taskStages?: Stage[];
+  defaultWorkflowName?: string;
+  defaultWorkflowId?: string;
 }
 
 const ADMIN_SCOPES = [
@@ -77,11 +79,13 @@ export default function TaskQuickCreateDrawer({
   onCreateTask,
   isAdmin = false,
   taskStages = [],
+  defaultWorkflowName,
+  defaultWorkflowId,
 }: TaskQuickCreateDrawerProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isImportant, setIsImportant] = useState(false);
-  const [project, setProject] = useState("Clinical Operations");
+  const [project, setProject] = useState(defaultWorkflowName || "Clinical & Operational Tasks");
   const [deadline, setDeadline] = useState("Tomorrow, 5:00 PM");
 
   // Workflow Stage
@@ -254,6 +258,8 @@ export default function TaskQuickCreateDrawer({
         role: isAdmin ? "Super Admin" : "Practice Admin",
       },
       project,
+      workflowId: defaultWorkflowId || "process-task-default",
+      workflowName: defaultWorkflowName || project,
       deadline,
       checklists,
       observers,

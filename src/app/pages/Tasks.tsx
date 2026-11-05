@@ -26,19 +26,11 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useTasks } from "../../lib/tasksStore";
 import { TaskEntity, TaskStatus } from "../../types/task";
-import { useProcessStore, DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
+import { useProcessStore, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES } from "../../lib/useProcessStore";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import { toast } from "sonner";
-
-const ENTITY_TABS = [
-  { id: "process", label: "Processes", path: "/process", icon: GitBranch },
-  { id: "appointment", label: "Appointments", path: "/appointments", icon: Calendar },
-  { id: "invoice", label: "Invoices", path: "/invoices", icon: FileText },
-  { id: "insurance", label: "Insurance & Claims", path: "/claims", icon: Shield },
-  { id: "task", label: "Tasks", path: "/tasks", icon: CheckSquare },
-];
 
 export default function Tasks() {
   const navigate = useNavigate();
@@ -65,17 +57,28 @@ export default function Tasks() {
   } = useTasks();
 
   const { processes } = useProcessStore();
-  const taskProcess = useMemo(() => {
-    return processes.find((p) => p.entityType === "task") || DEFAULT_ENTITY_PROCESSES.task;
+  const taskWorkflows = useMemo(() => {
+    const list = processes.filter((p) => p.entityType === "task");
+    if (list.length > 0) return list;
+    return DEFAULT_TASK_PROCESSES;
   }, [processes]);
-  const taskStages = useMemo(() => taskProcess.stages || [], [taskProcess]);
+
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(() => {
+    return taskWorkflows[0]?.id || "process-task-default";
+  });
+  const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
+
+  const activeTaskWorkflow = useMemo(() => {
+    return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
+  }, [taskWorkflows, selectedWorkflowId]);
+
+  const taskStages = useMemo(() => activeTaskWorkflow.stages || [], [activeTaskWorkflow]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("id"));
-  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
@@ -95,9 +98,16 @@ export default function Tasks() {
 
       const matchesStage = stageFilter === "all" || (t.stageName || "Task Created") === stageFilter;
 
-      return matchesSearch && matchesStage;
+      const matchesWorkflow =
+        selectedWorkflowId === "all" ||
+        t.workflowId === selectedWorkflowId ||
+        t.workflowName === activeTaskWorkflow.name ||
+        t.project === activeTaskWorkflow.name ||
+        (!t.workflowId && !t.workflowName && selectedWorkflowId === taskWorkflows[0]?.id);
+
+      return matchesSearch && matchesStage && matchesWorkflow;
     });
-  }, [tasks, searchQuery, stageFilter]);
+  }, [tasks, searchQuery, stageFilter, selectedWorkflowId, activeTaskWorkflow, taskWorkflows]);
 
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = [
@@ -238,46 +248,54 @@ export default function Tasks() {
           }
         />
 
-        {/* ── PageTopBar with Entity Switcher, Search, View Mode, and New Task Action ── */}
+        {/* ── PageTopBar with Workflow Switcher, Search, View Mode, and New Task Action ── */}
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-2">
-              {/* Entity Dropdown Switcher */}
-              <div className="relative">
+              {/* Task Workflow Switcher Dropdown (Modeled on Process Workflow Switcher) */}
+              <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowEntityDropdown((prev) => !prev)}
-                  className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-bold text-[#1E293B] flex items-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                  onClick={() => setShowWorkflowDropdown((prev) => !prev)}
+                  className="h-[36px] px-3.5 flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 transition-colors shadow-2xs cursor-pointer shrink-0"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title="Switch Task Workflow"
                 >
-                  <CheckSquare className="w-4 h-4 text-[#1456f0]" />
-                  <span>Tasks</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="truncate max-w-[200px] font-semibold text-gray-800">
+                    {activeTaskWorkflow.name}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showWorkflowDropdown ? "rotate-180" : ""}`} />
                 </button>
 
-                {showEntityDropdown && (
-                  <div className="absolute left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100">
-                    {ENTITY_TABS.map((tab) => {
-                      const Icon = tab.icon;
-                      const isCurrent = tab.id === "task";
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => {
-                            setShowEntityDropdown(false);
-                            navigate(tab.path);
-                          }}
-                          className={`w-full text-left px-3.5 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors cursor-pointer ${
-                            isCurrent ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-slate-800"
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>{tab.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {showWorkflowDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowWorkflowDropdown(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                      {taskWorkflows.map((wf) => {
+                        const isSelected = selectedWorkflowId === wf.id;
+                        return (
+                          <button
+                            key={wf.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedWorkflowId(wf.id);
+                              setShowWorkflowDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                              isSelected ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <span className="truncate">{wf.name}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -417,6 +435,8 @@ export default function Tasks() {
         onCreateTask={createTask}
         isAdmin={isAdmin}
         taskStages={taskStages}
+        defaultWorkflowName={activeTaskWorkflow.name}
+        defaultWorkflowId={activeTaskWorkflow.id}
       />
 
       <TaskDetailDrawer

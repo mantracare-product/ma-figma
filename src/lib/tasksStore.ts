@@ -24,6 +24,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     status: "in_progress",
     stageName: "Task Created",
     stageId: "task-stg-created",
+    workflowId: "process-task-default",
+    workflowName: "Clinical & Operational Tasks",
     isImportant: true,
     scopeLevel: "client",
     assignee: {
@@ -89,6 +91,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     status: "in_progress",
     stageName: "Task Created",
     stageId: "task-stg-created",
+    workflowId: "process-task-compliance",
+    workflowName: "Compliance & Credentialing",
     isImportant: false,
     scopeLevel: "admin",
     assignee: {
@@ -148,6 +152,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     status: "in_progress",
     stageName: "Task Created",
     stageId: "task-stg-created",
+    workflowId: "process-task-followup",
+    workflowName: "Patient Care Follow-up",
     isImportant: true,
     scopeLevel: "client",
     assignee: {
@@ -212,6 +218,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     status: "deferred",
     stageName: "Task Overdue",
     stageId: "task-stg-overdue",
+    workflowId: "process-task-compliance",
+    workflowName: "Compliance & Credentialing",
     isImportant: false,
     scopeLevel: "portal",
     assignee: {
@@ -262,6 +270,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     status: "completed",
     stageName: "Task Completed",
     stageId: "task-stg-completed",
+    workflowId: "process-task-default",
+    workflowName: "Clinical & Operational Tasks",
     isImportant: false,
     scopeLevel: "admin",
     assignee: {
@@ -331,9 +341,13 @@ export function getStoredTasks(): TaskEntity[] {
         }
         const initialMatching = INITIAL_TASKS.find((init) => init.id === t.id);
         const observers = t.observers && t.observers.length > 0 ? t.observers : (initialMatching?.observers || []);
+        const workflowId = t.workflowId || initialMatching?.workflowId || "process-task-default";
+        const workflowName = t.workflowName || initialMatching?.workflowName || "Clinical & Operational Tasks";
 
         return {
           ...t,
+          workflowId,
+          workflowName,
           observers,
           stageName,
           stageId: stageId || (stageName === "Task Completed" ? "task-stg-completed" : stageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created"),

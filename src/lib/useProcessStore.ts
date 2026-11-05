@@ -798,8 +798,8 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
   },
   task: {
     id: "process-task-default",
-    name: "Task Workflow",
-    description: "Task assignment, execution, and review lifecycle",
+    name: "Clinical & Operational Tasks",
+    description: "Daily clinical tasks, lab orders, and provider coordination",
     assignedToUserId: 1,
     entityType: "task",
     aiSettings: {
@@ -816,6 +816,48 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
     ],
   },
 };
+
+export const DEFAULT_TASK_PROCESSES: Process[] = [
+  DEFAULT_ENTITY_PROCESSES.task,
+  {
+    id: "process-task-compliance",
+    name: "Compliance & Credentialing",
+    description: "Provider licensing, audits, and HIPAA regulatory compliance checks",
+    assignedToUserId: 1,
+    entityType: "task",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "task-stg-created", name: "Task Created", description: "Task initialized and scheduled", status: "active", color: "#3B82F6", systemCategory: "created", stageCategory: "in_progress", isSystemCategoryRequired: true, isPredefined: true, isInitial: true, stagePosition: "initial" },
+      { id: "task-stg-completed", name: "Task Completed", description: "All requirements met and verified (Won)", status: "active", color: "#10B981", systemCategory: "completed", stageCategory: "success", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "task-stg-overdue", name: "Task Overdue", description: "Deadline passed without completion (Lost)", status: "active", color: "#EF4444", systemCategory: "overdue", stageCategory: "lost", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+  {
+    id: "process-task-followup",
+    name: "Patient Care Follow-up",
+    description: "Post-consultation follow-up, physical therapy tracking, and intake forms",
+    assignedToUserId: 1,
+    entityType: "task",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "task-stg-created", name: "Task Created", description: "Task initialized and scheduled", status: "active", color: "#3B82F6", systemCategory: "created", stageCategory: "in_progress", isSystemCategoryRequired: true, isPredefined: true, isInitial: true, stagePosition: "initial" },
+      { id: "task-stg-completed", name: "Task Completed", description: "All requirements met and verified (Won)", status: "active", color: "#10B981", systemCategory: "completed", stageCategory: "success", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "task-stg-overdue", name: "Task Overdue", description: "Deadline passed without completion (Lost)", status: "active", color: "#EF4444", systemCategory: "overdue", stageCategory: "lost", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+];
 
 export function isRequiredSystemCategory(entityType: EntityType | undefined, category: string | undefined): boolean {
   if (!category) return false;
@@ -1248,7 +1290,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   DEFAULT_ENTITY_PROCESSES.appointment,
   DEFAULT_ENTITY_PROCESSES.invoice,
   DEFAULT_ENTITY_PROCESSES.insurance,
-  DEFAULT_ENTITY_PROCESSES.task,
+  ...DEFAULT_TASK_PROCESSES,
 ];
 
 export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
@@ -1447,6 +1489,13 @@ export function getStoredProcesses(): Process[] {
         changed = true;
       }
     }
+    // Ensure all standard task workflows are available
+    DEFAULT_TASK_PROCESSES.forEach((defWf) => {
+      if (!list.some((p) => p.id === defWf.id || p.name === defWf.name)) {
+        list.push(defWf);
+        changed = true;
+      }
+    });
   }
 
   // Ensure systemCategory and isSystemCategoryRequired flags are set properly
