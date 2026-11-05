@@ -120,7 +120,8 @@ export default function PatientMessagesScreen() {
     );
 
     // 3. Care Bot Chat
-    const careBotChat: Conversation = {
+    const storedBot = conversations.find((c) => c.id === "care-bot-system" || c.isBot);
+    const careBotChat: Conversation = storedBot || {
       id: "care-bot-system",
       contactName: "Care Bot",
       phoneNumber: "AI Health Companion",
@@ -207,45 +208,63 @@ export default function PatientMessagesScreen() {
     return `I have noted your inquiry regarding "${text}".\n\nOur care team and ${clinicianName} have received this update. If this is an urgent matter, please reach out directly to the clinical front desk.`;
   };
 
-  const handleSend = (overrideText?: string) => {
-    const textToSend = overrideText || inputText;
+  const handleSend = (overrideText?: string, targetChatId?: string) => {
+    const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim() && !attachedFile) return;
+
+    const destId = targetChatId || activeChat.id;
+    const destChat = clientConversations.find((c) => c.id === destId) || activeChat;
 
     const replyRef: MessageReplyReference | undefined = replyingTo
       ? {
           id: replyingTo.id,
           text: replyingTo.text,
-          senderName: replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : activeChat.contactName),
+          senderName: replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : destChat.contactName),
         }
       : undefined;
 
-    // Dispatch message
-    sendMessage(activeChat.id, textToSend.trim(), {
+    const currentAttachedFile = attachedFile;
+    const isBot = destId === "care-bot-system" || Boolean((destChat as any).isBot);
+
+    // Clear input state immediately
+    setInputText("");
+    setAttachedFile(null);
+    setReplyingTo(null);
+    setIsPlusMenuOpen(false);
+
+    // Dispatch message as patient
+    sendMessage(destId, textToSend.trim(), {
       replyTo: replyRef,
-      attachment: attachedFile || undefined,
+      attachment: currentAttachedFile || undefined,
       sender: "me",
       senderName: activeClient.name,
     });
 
-    if (!overrideText) {
-      setInputText("");
-      setAttachedFile(null);
-      setReplyingTo(null);
-    }
-    setIsPlusMenuOpen(false);
-
     // If Care Bot, trigger automated response
-    if (activeChat.isBot) {
+    if (isBot) {
       setIsBotTyping(true);
       setTimeout(() => {
         setIsBotTyping(false);
         const botReply = getBotKnowledgeResponse(textToSend);
-        sendMessage(activeChat.id, botReply, {
+        sendMessage(destId, botReply, {
           sender: "contact",
           senderName: "Care Bot",
         });
-      }, 700);
+      }, 650);
     }
+  };
+
+  const handleOptionClick = (inquiry: string) => {
+    // 1. Ensure Care Bot conversation is active
+    if (selectedChatId !== "care-bot-system") {
+      setSelectedChatId("care-bot-system");
+    }
+    // 2. Draft the inquiry text visually in the message input
+    setInputText(inquiry);
+    // 3. Immediately dispatch message and trigger intelligent Care Bot response
+    setTimeout(() => {
+      handleSend(inquiry, "care-bot-system");
+    }, 120);
   };
 
   const handleFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -467,7 +486,7 @@ export default function PatientMessagesScreen() {
                               <button
                                 key={sc.id}
                                 type="button"
-                                onClick={() => handleSend(sc.inquiry)}
+                                onClick={() => handleOptionClick(sc.inquiry)}
                                 className="w-full px-3 py-2 rounded-sm border border-gray-200 bg-white hover:bg-blue-50/70 hover:border-blue-300 text-slate-800 hover:text-blue-700 text-xs font-semibold transition-all flex items-center justify-between cursor-pointer shadow-2xs group text-left"
                               >
                                 <div className="flex items-center gap-2">
@@ -594,7 +613,7 @@ export default function PatientMessagesScreen() {
                         <button
                           key={sc.id}
                           type="button"
-                          onClick={() => handleSend(sc.inquiry)}
+                          onClick={() => handleOptionClick(sc.inquiry)}
                           className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 text-slate-800 transition-colors cursor-pointer"
                         >
                           <Icon className="w-3.5 h-3.5 text-slate-500" />

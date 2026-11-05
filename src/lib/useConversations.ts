@@ -207,6 +207,32 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     botStatus: "off",
     assignedPersonId: "",
   },
+  // ── Care Bot Companion Conversation ──
+  {
+    id: "care-bot-system",
+    contactName: "Care Bot",
+    phoneNumber: "AI Health Companion",
+    inboxNumber: "+1 (555) 123-4567",
+    channel: "companion",
+    lastMessage: "I'm available 24/7 to answer clinic questions, log vitals, or help book appointments.",
+    timestamp: "Always Active",
+    unreadCount: 0,
+    status: "open",
+    isBot: true,
+    isGroup: false,
+    messages: [
+      {
+        id: "bot-msg-1",
+        text: "Hello Sarah! I am your MantraCare AI Health Assistant.\n\nHow can I help you today? Feel free to choose from the quick actions below, or ask any clinical or scheduling inquiry.",
+        timestamp: "Today",
+        sender: "contact",
+        senderName: "Care Bot",
+        status: "read",
+      },
+    ],
+    botStatus: "active",
+    assignedPersonId: "",
+  },
   // ── WhatsApp Contacts (20 Sample Contacts) ──
   {
     id: "conv-wa-1",
@@ -1301,18 +1327,37 @@ export function useConversations() {
 
     const displayText = text.trim() || (options?.attachment ? `[Attachment: ${options.attachment.name}]` : "");
 
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === targetId
-          ? {
-              ...c,
-              lastMessage: displayText,
-              timestamp: "Just now",
-              messages: [...c.messages, newMessage],
-            }
-          : c
-      )
-    );
+    setConversations((prev) => {
+      const exists = prev.some((c) => c.id === targetId);
+      if (exists) {
+        return prev.map((c) =>
+          c.id === targetId
+            ? {
+                ...c,
+                lastMessage: displayText,
+                timestamp: "Just now",
+                messages: [...c.messages, newMessage],
+              }
+            : c
+        );
+      }
+      const newConv: Conversation = {
+        id: targetId,
+        contactName: options?.senderName || (targetId.includes("bot") ? "Care Bot" : "Conversation"),
+        phoneNumber: targetId.includes("bot") ? "AI Health Companion" : "Portal Message",
+        inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber,
+        channel: targetId.includes("bot") ? "companion" : "whatsapp",
+        lastMessage: displayText,
+        timestamp: "Just now",
+        unreadCount: 0,
+        status: "open",
+        isBot: targetId.includes("bot"),
+        messages: [newMessage],
+        botStatus: targetId.includes("bot") ? "active" : "off",
+        assignedPersonId: "",
+      };
+      return [newConv, ...prev];
+    });
 
     // Dual-write to activityEngine so Activity Tab timeline updates immediately
     if (conv) {
