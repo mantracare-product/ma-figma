@@ -178,8 +178,8 @@ export default function CreateGroupChatDrawer({
     >
       {/* ── Basic Info Card ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
+          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Group Information
           </h3>
           <InfoTooltip content="Basic identity and guidelines for this group conversation" />
@@ -187,7 +187,7 @@ export default function CreateGroupChatDrawer({
 
         {/* Chat Name */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
             <label className="text-xs font-semibold text-slate-700">
               Group Name <span className="text-red-500">*</span>
             </label>
@@ -204,7 +204,7 @@ export default function CreateGroupChatDrawer({
 
         {/* Description */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
             <label className="text-xs font-semibold text-slate-700">
               Description
             </label>
@@ -222,8 +222,8 @@ export default function CreateGroupChatDrawer({
 
       {/* ── Access Permissions Card ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
+          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Access Permissions
           </h3>
           <InfoTooltip content="Role-based permissions governing member addition and message posting rights" />
@@ -231,9 +231,12 @@ export default function CreateGroupChatDrawer({
 
         {/* Who Can Add Members */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 block">
-            Who Can Add Members
-          </label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Who Can Add Members
+            </label>
+            <InfoTooltip content="Define whether any member can invite colleagues or only designated administrators" />
+          </div>
           <div className="relative">
             <select
               value={whoCanAddMembers}
@@ -249,9 +252,12 @@ export default function CreateGroupChatDrawer({
 
         {/* Who Can Send Messages */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 block">
-            Who Can Send Messages
-          </label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Who Can Send Messages
+            </label>
+            <InfoTooltip content="Define who has permission to post messages in this channel" />
+          </div>
           <div className="relative">
             <select
               value={whoCanPost}
@@ -268,12 +274,10 @@ export default function CreateGroupChatDrawer({
 
       {/* ── Add Members Selection Card with Two Toggles: Contacts & Team Member ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Add Members ({selectedMembers.length})
-            </h3>
-          </div>
+        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
+          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            Add Members ({selectedMembers.length})
+          </h3>
           <InfoTooltip content="Select contacts and team members. Toggle moderator status for team members." />
         </div>
 

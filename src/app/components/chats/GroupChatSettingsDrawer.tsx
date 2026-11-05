@@ -147,7 +147,7 @@ export default function GroupChatSettingsDrawer({
     >
       {/* ── Group Details ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Group Information
           </h3>
@@ -162,7 +162,7 @@ export default function GroupChatSettingsDrawer({
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
             <label className="text-xs font-semibold text-slate-700">
               Description
             </label>
@@ -179,7 +179,7 @@ export default function GroupChatSettingsDrawer({
 
       {/* ── Permissions Card ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Access Permissions
           </h3>
@@ -188,9 +188,12 @@ export default function GroupChatSettingsDrawer({
 
         {/* Who Can Add Members */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 block">
-            Who Can Add Members
-          </label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Who Can Add Members
+            </label>
+            <InfoTooltip content="Only moderators or any member can invite colleagues" />
+          </div>
           <div className="relative">
             <select
               value={whoCanAddMembers}
@@ -206,9 +209,12 @@ export default function GroupChatSettingsDrawer({
 
         {/* Who Can Send Messages */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 block">
-            Who Can Send Messages
-          </label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Who Can Send Messages
+            </label>
+            <InfoTooltip content="Restrict to moderators for broadcast channel mode" />
+          </div>
           <div className="relative">
             <select
               value={whoCanPost}
