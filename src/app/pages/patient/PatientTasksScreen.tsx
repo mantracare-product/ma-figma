@@ -45,7 +45,19 @@ export default function PatientTasksScreen() {
     const clientId = (activeClient.id || "").toLowerCase().trim();
 
     return tasks.filter((t) => {
-      // 1. Direct assignee matches active patient
+      // 0. Admin tasks must NEVER appear in the Patient Portal
+      if (t.scopeLevel === "admin") return false;
+
+      // 1. Must be a task targeted to a patient/client or portal
+      const isClientTargeted =
+        t.scopeLevel === "portal" ||
+        t.assignee?.scopeLevel === "contact" ||
+        Boolean(t.assignee?.clientId) ||
+        Boolean(t.assignee?.clientName);
+
+      if (!isClientTargeted) return false;
+
+      // 2. Direct assignee matches active patient
       const assigneeName = (t.assignee?.assigneeName || "").toLowerCase().trim();
       const assigneeClientName = (t.assignee?.clientName || "").toLowerCase().trim();
       const assigneeClientId = (t.assignee?.clientId || "").toLowerCase().trim();
@@ -55,7 +67,7 @@ export default function PatientTasksScreen() {
         (assigneeClientName && assigneeClientName.includes(clientNameLower)) ||
         (assigneeName && (assigneeName === clientNameLower || assigneeName.includes(clientNameLower)));
 
-      // 2. Matches anywhere in assignees list
+      // 3. Matches anywhere in assignees list
       const matchesInList =
         t.assignees &&
         t.assignees.some((a) => {
@@ -64,10 +76,10 @@ export default function PatientTasksScreen() {
           return (aId && aId === clientId) || (aName && aName.includes(clientNameLower));
         });
 
-      // 3. Portal scope tasks
-      const isPortalScoped = t.scopeLevel === "portal";
+      // 4. Portal-scoped task without specific patient assignee is visible to all portal clients
+      const isGenericPortal = t.scopeLevel === "portal" && !assigneeClientId && !assigneeClientName;
 
-      return matchesAssignee || matchesInList || isPortalScoped;
+      return matchesAssignee || matchesInList || isGenericPortal;
     });
   }, [tasks, activeClient]);
 

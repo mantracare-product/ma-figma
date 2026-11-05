@@ -91,6 +91,13 @@ export default function Tasks() {
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
+      // 1. Role / Scope Isolation:
+      // In the Admin workspace (/admin/tasks), ONLY admin-level tasks appear.
+      // Tasks created on client (clinic workspace) must NOT appear in Admin.
+      if (isAdmin && t.scopeLevel !== "admin") {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -125,7 +132,7 @@ export default function Tasks() {
 
       return matchesSearch && matchesWorkflow && matchesAssignment;
     });
-  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName]);
+  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName, isAdmin]);
 
   // Columns for 32px TableComponent (Admin includes SCOPE & ORGANIZATION)
   const columns: TableColumn<TaskEntity>[] = useMemo(() => {

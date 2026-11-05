@@ -355,8 +355,11 @@ export function getStoredTasks(): TaskEntity[] {
           adminScopeName: t.assignee?.adminScopeName || initialMatching?.assignee?.adminScopeName || (t.scopeLevel === "admin" ? "Healthcare Scope" : undefined),
         };
 
+        const scopeLevel = t.scopeLevel || initialMatching?.scopeLevel || "client";
+
         return {
           ...t,
+          scopeLevel,
           assignee,
           workflowId,
           workflowName,
