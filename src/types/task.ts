@@ -81,6 +81,8 @@ export interface TaskEntity {
   title: string;
   description: string;
   status: TaskStatus;
+  stageId?: string;
+  stageName?: string;
   isImportant: boolean;
   scopeLevel: TaskScopeLevel;
   assignee: TaskAssigneeScope;

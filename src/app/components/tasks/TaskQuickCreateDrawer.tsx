@@ -22,6 +22,7 @@ import { InfoTooltip } from "../help/InfoTooltip";
 import {
   TaskEntity,
   TaskScopeLevel,
+  TaskStatus,
   TaskChecklist,
   TaskChecklistItem,
   TaskObserver,
@@ -29,6 +30,7 @@ import {
   TaskTimePlanningConfig,
   TaskFileAttachment,
 } from "../../../types/task";
+import { Stage } from "../../../lib/useProcessStore";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
 import { toast } from "sonner";
@@ -37,6 +39,8 @@ export interface TaskQuickCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateTask: (taskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => void;
+  isAdmin?: boolean;
+  taskStages?: Stage[];
 }
 
 const ADMIN_SCOPES = [
@@ -71,6 +75,8 @@ export default function TaskQuickCreateDrawer({
   isOpen,
   onClose,
   onCreateTask,
+  isAdmin = false,
+  taskStages = [],
 }: TaskQuickCreateDrawerProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -78,12 +84,17 @@ export default function TaskQuickCreateDrawer({
   const [project, setProject] = useState("Clinical Operations");
   const [deadline, setDeadline] = useState("Tomorrow, 5:00 PM");
 
-  // Three-level scoping
-  const [scopeLevel, setScopeLevel] = useState<TaskScopeLevel>("admin");
+  // Workflow Stage
+  const defaultStage = taskStages[0]?.name || "Task Created";
+  const [selectedStageName, setSelectedStageName] = useState(defaultStage);
+
+  // Scoping: client app vs admin corporate
+  const [scopeLevel, setScopeLevel] = useState<TaskScopeLevel>(isAdmin ? "admin" : "client");
   const [adminScope, setAdminScope] = useState(ADMIN_SCOPES[1].name);
   const [selectedOrg, setSelectedOrg] = useState(ORGS[0].name);
   const [selectedRole, setSelectedRole] = useState(ORG_ROLES[0].name);
   const [assigneeName, setAssigneeName] = useState("Dr. Alistair Mehta");
+  const [visibleInPortal, setVisibleInPortal] = useState(false);
 
   // Checklists
   const [checklists, setChecklists] = useState<TaskChecklist[]>([
@@ -209,23 +220,38 @@ export default function TaskQuickCreateDrawer({
       return;
     }
 
+    const targetStage = taskStages.find((s) => s.name === selectedStageName) || taskStages[0];
+    const stageId = targetStage?.id || (selectedStageName === "Task Completed" ? "task-stg-completed" : selectedStageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created");
+    const normalizedStage = selectedStageName.toLowerCase();
+    const status: TaskStatus = normalizedStage.includes("completed") || normalizedStage.includes("won")
+      ? "completed"
+      : normalizedStage.includes("overdue") || normalizedStage.includes("lost")
+      ? "deferred"
+      : "in_progress";
+
+    const resolvedScopeLevel: TaskScopeLevel = isAdmin ? scopeLevel : (visibleInPortal ? "portal" : "client");
+
     onCreateTask({
       title: title.trim(),
       description: description.trim(),
-      status: "pending",
+      status,
+      stageName: selectedStageName,
+      stageId,
       isImportant,
-      scopeLevel,
+      scopeLevel: resolvedScopeLevel,
       assignee: {
-        scopeLevel: scopeLevel === "admin" ? "admin" : scopeLevel === "client" ? "client" : "contact",
-        adminScopeName: scopeLevel === "admin" ? adminScope : undefined,
-        orgName: selectedOrg,
-        roleName: selectedRole,
+        scopeLevel: isAdmin
+          ? (scopeLevel === "admin" ? "admin" : scopeLevel === "client" ? "client" : "contact")
+          : (visibleInPortal ? "contact" : "client"),
+        adminScopeName: isAdmin && scopeLevel === "admin" ? adminScope : undefined,
+        orgName: isAdmin ? selectedOrg : undefined,
+        roleName: isAdmin ? selectedRole : undefined,
         assigneeName,
       },
       creator: {
-        id: "usr-admin-1",
-        name: "Clinic Administrator",
-        role: "Practice Admin",
+        id: isAdmin ? "usr-admin-1" : "usr-clinic-1",
+        name: isAdmin ? "Platform Administrator" : "Clinic Administrator",
+        role: isAdmin ? "Super Admin" : "Practice Admin",
       },
       project,
       deadline,
@@ -360,106 +386,198 @@ export default function TaskQuickCreateDrawer({
           </div>
         </div>
 
-        {/* ── Assignee & 3-Level Scope Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Assignee & Scope Level
-            </h3>
-            <InfoTooltip content="Configure administrative, client, or portal scope targeting" />
-          </div>
+        {/* ── Assignee & Stage Card (Client Workspace: Clean UI, NO Admin Scope) ── */}
+        {!isAdmin ? (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Assignment & Stage
+              </h3>
+              <InfoTooltip content="Set the initial workflow stage and team member assignment" />
+            </div>
 
-          {/* Scope Level Toggle */}
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                { id: "admin", label: "Admin Level" },
-                { id: "client", label: "Client Level" },
-                { id: "portal", label: "Portal Level" },
-              ] as const
-            ).map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setScopeLevel(s.id)}
-                className={`p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-center ${
-                  scopeLevel === s.id
-                    ? "bg-[#1E293B] text-white border-slate-900"
-                    : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Conditional Scope Pickers */}
-          {scopeLevel === "admin" && (
-            <div className="space-y-3 pt-2">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-700">Admin Scope</label>
-                  <InfoTooltip content="Industry and geographical boundaries" />
+                  <label className="text-xs font-semibold text-slate-700">Initial Stage</label>
+                  <InfoTooltip content="Select the starting stage for this task" />
                 </div>
                 <select
-                  value={adminScope}
-                  onChange={(e) => setAdminScope(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                  value={selectedStageName}
+                  onChange={(e) => setSelectedStageName(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
                 >
-                  {ADMIN_SCOPES.map((sc) => (
-                    <option key={sc.id} value={sc.name}>{sc.name}</option>
+                  {(taskStages.length > 0 ? taskStages : [
+                    { id: "task-stg-created", name: "Task Created" },
+                    { id: "task-stg-completed", name: "Task Completed" },
+                    { id: "task-stg-overdue", name: "Task Overdue" },
+                  ]).map((stg) => (
+                    <option key={stg.id} value={stg.name}>
+                      {stg.name}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Organization</label>
-                  <select
-                    value={selectedOrg}
-                    onChange={(e) => setSelectedOrg(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                  >
-                    {ORGS.map((org) => (
-                      <option key={org.id} value={org.name}>{org.name}</option>
-                    ))}
-                  </select>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">Assignee Person</label>
+                  <InfoTooltip content="Individual team member or contact responsible for this task" />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Org Role</label>
-                  <select
-                    value={selectedRole}
-                    onChange={(e) => setSelectedRole(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                  >
-                    {ORG_ROLES.map((r) => (
-                      <option key={r.id} value={r.name}>{r.name}</option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={assigneeName}
+                  onChange={(e) => setAssigneeName(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                >
+                  {CLIENT_CANDIDATES.map((cand) => (
+                    <option key={cand.id} value={cand.name}>
+                      {cand.name} ({cand.type})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
 
-          {/* Assignee Person Name */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-700">Assignee Person</label>
-              <InfoTooltip content="Individual responsible for executing the task" />
+            {/* Portal Visibility Checkbox */}
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleInPortal}
+                  onChange={(e) => setVisibleInPortal(e.target.checked)}
+                  className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                />
+                <span className="text-xs font-semibold text-slate-700">Visible in Client Portal</span>
+              </label>
+              <InfoTooltip content="Allow clients to view this task and checklist items in their portal" />
             </div>
-            <select
-              value={assigneeName}
-              onChange={(e) => setAssigneeName(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-            >
-              {CLIENT_CANDIDATES.map((cand) => (
-                <option key={cand.id} value={cand.name}>
-                  {cand.name} ({cand.type})
-                </option>
-              ))}
-            </select>
           </div>
-        </div>
+        ) : (
+          /* ── Admin Corporate View: 3-Level Scoping ── */
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Assignee & Scope Level
+              </h3>
+              <InfoTooltip content="Configure administrative, client, or portal scope targeting" />
+            </div>
+
+            {/* Scope Level Toggle */}
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  { id: "admin", label: "Admin Level" },
+                  { id: "client", label: "Client Level" },
+                  { id: "portal", label: "Portal Level" },
+                ] as const
+              ).map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setScopeLevel(s.id)}
+                  className={`p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-center ${
+                    scopeLevel === s.id
+                      ? "bg-[#1E293B] text-white border-slate-900"
+                      : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Conditional Scope Pickers */}
+            {scopeLevel === "admin" && (
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">Admin Scope</label>
+                    <InfoTooltip content="Industry and geographical boundaries" />
+                  </div>
+                  <select
+                    value={adminScope}
+                    onChange={(e) => setAdminScope(e.target.value)}
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                  >
+                    {ADMIN_SCOPES.map((sc) => (
+                      <option key={sc.id} value={sc.name}>{sc.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Organization</label>
+                    <select
+                      value={selectedOrg}
+                      onChange={(e) => setSelectedOrg(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                    >
+                      {ORGS.map((org) => (
+                        <option key={org.id} value={org.name}>{org.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Org Role</label>
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                    >
+                      {ORG_ROLES.map((r) => (
+                        <option key={r.id} value={r.name}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">Initial Stage</label>
+                  <InfoTooltip content="Select starting workflow stage" />
+                </div>
+                <select
+                  value={selectedStageName}
+                  onChange={(e) => setSelectedStageName(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                >
+                  {(taskStages.length > 0 ? taskStages : [
+                    { id: "task-stg-created", name: "Task Created" },
+                    { id: "task-stg-completed", name: "Task Completed" },
+                    { id: "task-stg-overdue", name: "Task Overdue" },
+                  ]).map((stg) => (
+                    <option key={stg.id} value={stg.name}>
+                      {stg.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Assignee Person Name */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">Assignee Person</label>
+                  <InfoTooltip content="Individual responsible for executing the task" />
+                </div>
+                <select
+                  value={assigneeName}
+                  onChange={(e) => setAssigneeName(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                >
+                  {CLIENT_CANDIDATES.map((cand) => (
+                    <option key={cand.id} value={cand.name}>
+                      {cand.name} ({cand.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Checklists Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">

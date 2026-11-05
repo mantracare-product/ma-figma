@@ -22,11 +22,12 @@ export const INITIAL_TASKS: TaskEntity[] = [
     title: "Verify Patient Insurance Eligibility for Fasting Labs",
     description: "Coordinate with payer clearinghouse to verify coverage for upcoming fast-panel labs across oncology outpatient clients.",
     status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
     isImportant: true,
-    scopeLevel: "admin",
+    scopeLevel: "client",
     assignee: {
-      scopeLevel: "admin",
-      adminScopeName: "Healthcare - All Countries",
+      scopeLevel: "client",
       assigneeName: "Dr. Alistair Mehta",
     },
     creator: {
@@ -85,7 +86,9 @@ export const INITIAL_TASKS: TaskEntity[] = [
     code: "TSK-102",
     title: "Quarterly Provider Credentialing & CAQH Audit",
     description: "Review provider credentials, state medical license expirations, and DEA renewal documents for all active clinic practitioners.",
-    status: "pending",
+    status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
     isImportant: false,
     scopeLevel: "admin",
     assignee: {
@@ -143,6 +146,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     title: "Post-Consultation Physical Therapy Regimen Review",
     description: "Follow up with patient regarding lumbar flexion routine, verify pain score trajectory and update therapy plan notes.",
     status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
     isImportant: true,
     scopeLevel: "client",
     assignee: {
@@ -204,7 +209,9 @@ export const INITIAL_TASKS: TaskEntity[] = [
     code: "TSK-104",
     title: "Complete Intake Medical History & HIPAA Consent",
     description: "Patient to review medication disclosures and electronically sign HIPAA privacy authorization form prior to intake session.",
-    status: "review",
+    status: "deferred",
+    stageName: "Task Overdue",
+    stageId: "task-stg-overdue",
     isImportant: false,
     scopeLevel: "portal",
     assignee: {
@@ -251,6 +258,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
     title: "Automated Monthly Billing Reconciliation",
     description: "Reconcile Stripe payouts against internal ledger balances and flagged chargeback disputes.",
     status: "completed",
+    stageName: "Task Completed",
+    stageId: "task-stg-completed",
     isImportant: false,
     scopeLevel: "admin",
     assignee: {
@@ -301,7 +310,27 @@ export function getStoredTasks(): TaskEntity[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      return parsed.map((t: any) => {
+        let stageName = t.stageName;
+        let stageId = t.stageId;
+        if (!stageName) {
+          if (t.status === "completed") {
+            stageName = "Task Completed";
+            stageId = "task-stg-completed";
+          } else if (t.status === "deferred") {
+            stageName = "Task Overdue";
+            stageId = "task-stg-overdue";
+          } else {
+            stageName = "Task Created";
+            stageId = "task-stg-created";
+          }
+        }
+        return {
+          ...t,
+          stageName,
+          stageId: stageId || (stageName === "Task Completed" ? "task-stg-completed" : stageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created"),
+        };
+      });
     }
     return INITIAL_TASKS;
   } catch {
@@ -384,9 +413,47 @@ export function useTasks() {
     const current = getStoredTasks();
     const updated = current.map((t) => {
       if (t.id === id) {
+        let stageName = t.stageName;
+        let stageId = t.stageId;
+        if (newStatus === "completed") {
+          stageName = "Task Completed";
+          stageId = "task-stg-completed";
+        } else if (newStatus === "deferred") {
+          stageName = "Task Overdue";
+          stageId = "task-stg-overdue";
+        }
         return {
           ...t,
           status: newStatus,
+          stageName,
+          stageId,
+          updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
+        };
+      }
+      return t;
+    });
+    saveStoredTasks(updated);
+  }, []);
+
+  const updateTaskStage = useCallback((id: string, stageName: string, stageId?: string) => {
+    const current = getStoredTasks();
+    const normalized = stageName.toLowerCase();
+    let nextStatus: TaskStatus = "in_progress";
+    if (normalized.includes("completed") || normalized.includes("won")) {
+      nextStatus = "completed";
+    } else if (normalized.includes("overdue") || normalized.includes("lost")) {
+      nextStatus = "deferred";
+    } else if (normalized.includes("created")) {
+      nextStatus = "pending";
+    }
+
+    const updated = current.map((t) => {
+      if (t.id === id) {
+        return {
+          ...t,
+          stageName,
+          stageId: stageId || t.stageId,
+          status: nextStatus,
           updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
         };
       }
@@ -602,6 +669,7 @@ export function useTasks() {
     updateTask,
     deleteTask,
     toggleTaskStatus,
+    updateTaskStage,
     toggleChecklistItem,
     toggleItemImportance,
     addChecklistItem,

@@ -26,6 +26,8 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useTasks } from "../../lib/tasksStore";
 import { TaskEntity, TaskStatus } from "../../types/task";
+import { useProcessStore, DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
+import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import { toast } from "sonner";
@@ -38,16 +40,6 @@ const ENTITY_TABS = [
   { id: "task", label: "Tasks", path: "/tasks", icon: CheckSquare },
 ];
 
-const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "review", "completed", "deferred"];
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: "Pending",
-  in_progress: "In Progress",
-  review: "Review",
-  completed: "Completed",
-  deferred: "Deferred",
-};
-
 export default function Tasks() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,6 +51,7 @@ export default function Tasks() {
     updateTask,
     deleteTask,
     toggleTaskStatus,
+    updateTaskStage,
     toggleChecklistItem,
     toggleItemImportance,
     addChecklistItem,
@@ -71,8 +64,14 @@ export default function Tasks() {
     toggleSubtask,
   } = useTasks();
 
+  const { processes } = useProcessStore();
+  const taskProcess = useMemo(() => {
+    return processes.find((p) => p.entityType === "task") || DEFAULT_ENTITY_PROCESSES.task;
+  }, [processes]);
+  const taskStages = useMemo(() => taskProcess.stages || [], [taskProcess]);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [stageFilter, setStageFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("id"));
@@ -93,11 +92,11 @@ export default function Tasks() {
         t.assignee.assigneeName.toLowerCase().includes(q) ||
         (t.project && t.project.toLowerCase().includes(q));
 
-      const matchesStatus = statusFilter === "all" || t.status === statusFilter;
+      const matchesStage = stageFilter === "all" || (t.stageName || "Task Created") === stageFilter;
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStage;
     });
-  }, [tasks, searchQuery, statusFilter]);
+  }, [tasks, searchQuery, stageFilter]);
 
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = [
@@ -173,24 +172,19 @@ export default function Tasks() {
       ),
     },
     {
-      key: "status",
-      header: "STATUS",
-      width: "130px",
+      key: "stage",
+      header: "STAGE",
+      width: "200px",
       render: (task) => (
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              task.status === "completed"
-                ? "bg-slate-400"
-                : task.status === "in_progress"
-                ? "bg-slate-800"
-                : "bg-slate-300"
-            }`}
-          />
-          <span className="text-xs font-semibold text-slate-800">
-            {STATUS_LABELS[task.status]}
-          </span>
-        </div>
+        <SegmentedStageBar
+          stages={taskStages}
+          currentStageName={task.stageName || "Task Created"}
+          currentStageId={task.stageId}
+          onStageSelect={(stg) => {
+            updateTaskStage(task.id, stg.name, stg.id);
+            toast.success(`Task moved to ${stg.name}`);
+          }}
+        />
       ),
     },
     {
@@ -221,7 +215,7 @@ export default function Tasks() {
     {
       label: "Mark Completed",
       onClick: (task) => {
-        toggleTaskStatus(task.id, "completed");
+        updateTaskStage(task.id, "Task Completed", "task-stg-completed");
         toast.success(`Task ${task.code} marked completed`);
       },
     },
@@ -292,18 +286,18 @@ export default function Tasks() {
                 )}
               </div>
 
-              {/* Status Filter */}
+              {/* Stage Filter */}
               <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs"
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs focus:outline-none"
               >
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
-                <option value="review">Review</option>
-                <option value="completed">Completed</option>
-                <option value="deferred">Deferred</option>
+                <option value="all">All Stages</option>
+                {taskStages.map((stg) => (
+                  <option key={stg.id} value={stg.name}>
+                    {stg.name}
+                  </option>
+                ))}
               </select>
             </div>
           }
@@ -345,18 +339,31 @@ export default function Tasks() {
           />
         ) : (
           /* Kanban Board */
-          <div className="grid grid-cols-5 gap-4 min-h-[580px] overflow-x-auto pb-4">
-            {STATUS_ORDER.map((status) => {
-              const colTasks = filteredTasks.filter((t) => t.status === status);
+          <div className="flex gap-4 min-h-[580px] overflow-x-auto pb-4">
+            {taskStages.map((stage) => {
+              const colTasks = filteredTasks.filter(
+                (t) => (t.stageName || "Task Created") === stage.name
+              );
+              const isWon = stage.stageCategory === "success" || stage.systemCategory === "completed";
+              const isLost = stage.stageCategory === "lost" || stage.systemCategory === "overdue";
+              const stageColor =
+                stage.color || (isWon ? "#10B981" : isLost ? "#EF4444" : "#3B82F6");
+
               return (
                 <div
-                  key={status}
-                  className="bg-slate-100/70 border border-gray-200/80 rounded-2xl p-3 flex flex-col min-w-[220px]"
+                  key={stage.id}
+                  className="bg-slate-100/70 border border-gray-200/80 rounded-2xl p-3 flex flex-col flex-1 min-w-[260px] max-w-[340px]"
                 >
                   <div className="flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-3">
-                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      {STATUS_LABELS[status]}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: stageColor }}
+                      />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider truncate">
+                        {stage.name}
+                      </span>
+                    </div>
                     <span className="text-xs font-mono font-bold text-slate-500 tabular-nums">
                       {colTasks.length}
                     </span>
@@ -413,6 +420,8 @@ export default function Tasks() {
         isOpen={showQuickCreate}
         onClose={() => setShowQuickCreate(false)}
         onCreateTask={createTask}
+        isAdmin={isAdmin}
+        taskStages={taskStages}
       />
 
       <TaskDetailDrawer
@@ -422,7 +431,10 @@ export default function Tasks() {
           setSearchParams({});
         }}
         task={selectedTask}
+        isAdmin={isAdmin}
+        taskStages={taskStages}
         onUpdateTask={updateTask}
+        onUpdateStage={updateTaskStage}
         onDeleteTask={deleteTask}
         onToggleStatus={toggleTaskStatus}
         onToggleChecklistItem={toggleChecklistItem}

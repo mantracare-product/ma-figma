@@ -31,6 +31,7 @@ import {
   TaskRecurrenceConfig,
   TaskTimePlanningConfig,
 } from "../../../types/task";
+import { Stage } from "../../../lib/useProcessStore";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
 import { toast } from "sonner";
@@ -39,7 +40,10 @@ export interface TaskDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   task?: TaskEntity | null;
+  isAdmin?: boolean;
+  taskStages?: Stage[];
   onUpdateTask: (id: string, patch: Partial<TaskEntity>) => void;
+  onUpdateStage?: (id: string, stageName: string, stageId?: string) => void;
   onDeleteTask?: (id: string) => void;
   onToggleStatus: (id: string, newStatus: TaskStatus) => void;
   onToggleChecklistItem: (taskId: string, checklistId: string, itemId: string) => void;
@@ -66,7 +70,10 @@ export default function TaskDetailDrawer({
   isOpen,
   onClose,
   task,
+  isAdmin = false,
+  taskStages = [],
   onUpdateTask,
+  onUpdateStage,
   onDeleteTask,
   onToggleStatus,
   onToggleChecklistItem,
@@ -199,20 +206,39 @@ export default function TaskDetailDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Status & Metadata Strip (Strictly Plain Text / Neutral Icons, NO Capsules) ── */}
+        {/* ── Stage & Metadata Strip (Workflow Stages, Strictly Plain Text / Neutral Icons, NO Capsules) ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-slate-500">Status:</span>
+            <span className="text-xs font-semibold text-slate-500">Stage:</span>
             <select
-              value={task.status}
-              onChange={(e) => onToggleStatus(task.id, e.target.value as TaskStatus)}
-              className="text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-lg p-1.5 px-2 cursor-pointer focus:outline-none"
+              value={task.stageName || "Task Created"}
+              onChange={(e) => {
+                const newStageName = e.target.value;
+                const found = taskStages?.find((s) => s.name === newStageName);
+                if (onUpdateStage) {
+                  onUpdateStage(task.id, newStageName, found?.id);
+                } else {
+                  const normalized = newStageName.toLowerCase();
+                  const newStatus: TaskStatus = normalized.includes("completed") || normalized.includes("won")
+                    ? "completed"
+                    : normalized.includes("overdue") || normalized.includes("lost")
+                    ? "deferred"
+                    : "in_progress";
+                  onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
+                }
+                toast.success(`Stage updated to ${newStageName}`);
+              }}
+              className="text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-lg p-1.5 px-2.5 cursor-pointer focus:outline-none"
             >
-              <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
-              <option value="review">Review</option>
-              <option value="completed">Completed</option>
-              <option value="deferred">Deferred</option>
+              {(taskStages && taskStages.length > 0 ? taskStages : [
+                { id: "task-stg-created", name: "Task Created" },
+                { id: "task-stg-completed", name: "Task Completed" },
+                { id: "task-stg-overdue", name: "Task Overdue" },
+              ]).map((stg) => (
+                <option key={stg.id} value={stg.name}>
+                  {stg.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -257,8 +283,13 @@ export default function TaskDetailDrawer({
                 Assignee
               </span>
               <p className="text-xs font-bold text-slate-900">{task.assignee.assigneeName}</p>
-              {task.assignee.adminScopeName && (
+              {isAdmin && task.assignee.adminScopeName && (
                 <p className="text-[11px] text-slate-500">{task.assignee.adminScopeName}</p>
+              )}
+              {isAdmin && (task.assignee.orgName || task.assignee.roleName) && (
+                <p className="text-[11px] text-slate-500">
+                  {[task.assignee.orgName, task.assignee.roleName].filter(Boolean).join(" • ")}
+                </p>
               )}
             </div>
             <div>
