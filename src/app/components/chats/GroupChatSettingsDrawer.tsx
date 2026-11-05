@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Users, Shield, Trash2, UserPlus, Search } from "lucide-react";
+import { Users, Shield, Trash2, UserPlus, Search, ChevronDown } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
@@ -191,31 +191,16 @@ export default function GroupChatSettingsDrawer({
           <label className="text-xs font-semibold text-slate-700 block">
             Who Can Add Members
           </label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setWhoCanAddMembers("moderators")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                whoCanAddMembers === "moderators"
-                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
+          <div className="relative">
+            <select
+              value={whoCanAddMembers}
+              onChange={(e) => setWhoCanAddMembers(e.target.value as any)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer appearance-none pr-8 font-medium"
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Group Admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setWhoCanAddMembers("all")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                whoCanAddMembers === "all"
-                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Anyone in the group</span>
-            </button>
+              <option value="moderators">Group Admin</option>
+              <option value="all">Anyone in the group</option>
+            </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
@@ -224,31 +209,16 @@ export default function GroupChatSettingsDrawer({
           <label className="text-xs font-semibold text-slate-700 block">
             Who Can Send Messages
           </label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setWhoCanPost("moderators")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                whoCanPost === "moderators"
-                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
+          <div className="relative">
+            <select
+              value={whoCanPost}
+              onChange={(e) => setWhoCanPost(e.target.value as any)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer appearance-none pr-8 font-medium"
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Group Admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setWhoCanPost("all")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                whoCanPost === "all"
-                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Anyone in the group</span>
-            </button>
+              <option value="moderators">Group Admin</option>
+              <option value="all">Anyone in the group</option>
+            </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
       </div>
