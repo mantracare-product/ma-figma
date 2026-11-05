@@ -57,10 +57,7 @@ export const INITIAL_TASKS: TaskEntity[] = [
       { id: "obs-1", name: "Elena Rostova", role: "Care Coordinator" },
       { id: "obs-2", name: "David Miller", role: "Billing Specialist" },
     ],
-    subtasks: [
-      { id: "sub-1", title: "Download clearinghouse PDF summary", isCompleted: true, assigneeName: "Elena Rostova", deadline: "Today" },
-      { id: "sub-2", title: "Notify patient of $15 copay via portal message", isCompleted: false, assigneeName: "Dr. Alistair Mehta", deadline: "Tomorrow" },
-    ],
+    subtasks: [],
     recurrence: {
       enabled: false,
       interval: 1,
@@ -186,9 +183,7 @@ export const INITIAL_TASKS: TaskEntity[] = [
     observers: [
       { id: "obs-pt-1", name: "Marcus Vance", role: "Therapy Tech" },
     ],
-    subtasks: [
-      { id: "sub-pt-1", title: "Review pain questionnaire submissions", isCompleted: true, assigneeName: "Dr. Alistair Mehta", deadline: "Wednesday" },
-    ],
+    subtasks: [],
     recurrence: {
       enabled: false,
       interval: 1,
@@ -359,10 +354,7 @@ export const INITIAL_TASKS: TaskEntity[] = [
     observers: [
       { id: "obs-6", name: "Elena Rostova", role: "Care Coordinator" },
     ],
-    subtasks: [
-      { id: "sub-9-1", title: "Verify electrolyte panel for bed #4", isCompleted: true, assigneeName: "Dr. Alistair Mehta", deadline: "Today" },
-      { id: "sub-9-2", title: "Attach infusion authorization to chart", isCompleted: false, assigneeName: "Elena Rostova", deadline: "Today" },
-    ],
+    subtasks: [],
     attachments: [
       { id: "att-9-1", name: "Cohort_3_Lab_Panels_Merged.pdf", size: "480 KB", type: "application/pdf", uploadedAt: "Today 08:15 AM" },
     ],
@@ -552,6 +544,7 @@ export function getStoredTasks(): TaskEntity[] {
 
         return {
           ...t,
+          subtasks: [],
           scopeLevel,
           assignee,
           workflowId,

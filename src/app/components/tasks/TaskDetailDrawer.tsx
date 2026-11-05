@@ -95,7 +95,6 @@ export default function TaskDetailDrawer({
   const [deadlineDate, setDeadlineDate] = useState(task.deadlineDate || "");
   const [deadlineTime, setDeadlineTime] = useState(task.deadlineTime || "17:00");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newItemTexts, setNewItemTexts] = useState<{ [chkId: string]: string }>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemText, setEditingItemText] = useState("");
@@ -168,13 +167,6 @@ export default function TaskDetailDrawer({
     });
   };
 
-  const handleCreateSubtask = () => {
-    if (!newSubtaskTitle.trim()) return;
-    onAddSubtask(task.id, newSubtaskTitle.trim(), task.assignee.assigneeName, "Next 3 days");
-    setNewSubtaskTitle("");
-    toast.success("Subtask added");
-  };
-
   return (
     <>
       <DrawerShell
@@ -217,9 +209,9 @@ export default function TaskDetailDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Stage & Metadata Strip (In Tasks by me: prominent Workflow & Stage card; in My Tasks: compact status) ── */}
+        {/* ── Stage & Metadata Strip (In Tasks by me: prominent Workflow & Stage card; hidden in My Tasks) ── */}
         {!isAdmin ? (
-          !isMyTasksView ? (
+          !isMyTasksView && (
             <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-3">
               <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -277,16 +269,6 @@ export default function TaskDetailDrawer({
                   </select>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 px-4 shadow-xs flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500">Stage:</span>
-                <span className="text-xs font-bold text-slate-800">{task.stageName || "Task Created"}</span>
-              </div>
-              <span className="text-[10px] text-slate-400 font-mono tabular-nums">
-                Created: {task.createdAt}
-              </span>
             </div>
           )
         ) : (
@@ -666,71 +648,6 @@ export default function TaskDetailDrawer({
               </div>
             );
           })}
-        </div>
-
-        {/* ── Subtasks Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Subtasks ({task.subtasks.length})</span>
-              <InfoTooltip content="Parent and child task hierarchy" />
-            </h3>
-          </div>
-
-          {task.subtasks.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No subtasks created for this parent task.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {task.subtasks.map((sub) => (
-                <div
-                  key={sub.id}
-                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs ${
-                    sub.isCompleted ? "bg-slate-100/60 border-slate-200/50 opacity-70" : "bg-slate-50 border-gray-200/70"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={sub.isCompleted}
-                      onChange={() => onToggleSubtask(task.id, sub.id)}
-                      className="w-4 h-4 rounded text-slate-900 cursor-pointer"
-                    />
-                    <span className={`font-semibold text-slate-800 ${sub.isCompleted ? "line-through text-slate-400" : ""}`}>
-                      {sub.title}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                    {sub.assigneeName && <span>👤 {sub.assigneeName}</span>}
-                    {sub.deadline && <span className="font-mono">{sub.deadline}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Quick Add Subtask */}
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="text"
-              value={newSubtaskTitle}
-              onChange={(e) => setNewSubtaskTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleCreateSubtask();
-                }
-              }}
-              placeholder="Create subtask under this task..."
-              className="flex-1 text-xs p-2 bg-slate-50 border border-gray-200 rounded-lg text-slate-900"
-            />
-            <button
-              type="button"
-              onClick={handleCreateSubtask}
-              className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer font-medium px-2 py-1"
-            >
-              + Add Subtask
-            </button>
-          </div>
         </div>
 
         {/* ── Observers Card (Client tasks only; removed in admin and in my_tasks view) ── */}

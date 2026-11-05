@@ -369,26 +369,8 @@ export default function Tasks() {
           }
         );
       } else {
-        // "My Tasks": STAGE, TASK NAME, ASSIGNED BY
+        // "My Tasks": TASK NAME, ASSIGNED BY (STAGE removed from My Tasks)
         baseCols.push(
-          {
-            key: "stage",
-            header: "STAGE",
-            width: "210px",
-            minWidth: "210px",
-            align: "left",
-            render: (task) => (
-              <SegmentedStageBar
-                stages={getTaskStages(task)}
-                currentStageName={task.stageName || "Task Created"}
-                currentStageId={task.stageId}
-                onStageSelect={(stg) => {
-                  updateTaskStage(task.id, stg.name, stg.id);
-                  toast.success(`Task moved to ${stg.name}`);
-                }}
-              />
-            ),
-          },
           {
             key: "title",
             header: "TASK NAME",
