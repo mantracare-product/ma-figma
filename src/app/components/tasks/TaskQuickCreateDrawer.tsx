@@ -17,6 +17,7 @@ import {
   Check,
   Building2,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
@@ -40,6 +41,7 @@ import { AdminControlAccordion } from "../../pages/admin/components/AdminControl
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
+import { addNotification } from "../../../lib/notificationsStore";
 import { toast } from "sonner";
 
 export interface TaskQuickCreateDrawerProps {
@@ -53,6 +55,22 @@ export interface TaskQuickCreateDrawerProps {
 }
 
 const CONTACT_CATEGORIES = ["All Categories", "Client", "Lead", "Supplier", "Vendor"];
+
+const ADMIN_ORGANIZATIONS = [
+  { id: "org-1", name: "Demo Mantra Care", industry: "Healthcare", country: "US" },
+  { id: "org-2", name: "Apex Cardiology Center", industry: "Healthcare", country: "US" },
+  { id: "org-3", name: "Metro General Hospital", industry: "Healthcare", country: "US" },
+  { id: "org-4", name: "California Wellness Practice", industry: "Wellness", country: "US" },
+  { id: "org-5", name: "London Central Clinic", industry: "Healthcare", country: "UK" },
+];
+
+const ADMIN_ORG_ROLES: Record<string, string[]> = {
+  "org-1": ["Lead Physician", "Clinical Director", "Care Coordinator", "Billing Specialist", "Practice Admin"],
+  "org-2": ["Cardiologist", "Catheterization Specialist", "ICU Nurse", "Practice Manager"],
+  "org-3": ["Chief Medical Officer", "Department Head", "Resident Doctor", "Staff Nurse"],
+  "org-4": ["Wellness Director", "Physical Therapist", "Nutritionist", "Clinic Coordinator"],
+  "org-5": ["General Practitioner", "Consultant Surgeon", "Reception Lead"],
+};
 
 export default function TaskQuickCreateDrawer({
   isOpen,
@@ -68,7 +86,6 @@ export default function TaskQuickCreateDrawer({
   // Basic task attributes
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [storytelling, setStorytelling] = useState("");
   const [isImportant, setIsImportant] = useState(false);
 
   // Deadline: Date & Time
@@ -83,7 +100,16 @@ export default function TaskQuickCreateDrawer({
   const defaultStage = taskStages[0]?.name || "Task Created";
   const [selectedStageName, setSelectedStageName] = useState(defaultStage);
 
-  // Assignment: Team Member vs Contact
+  // Admin Scope Rules (Configured at top for Admin)
+  const [adminScopingRules, setAdminScopingRules] = useState<ScopingRule[]>([]);
+
+  // Admin Mode: Organization & Role selection
+  const [selectedAdminOrgId, setSelectedAdminOrgId] = useState("org-1");
+  const availableAdminRoles = ADMIN_ORG_ROLES[selectedAdminOrgId] || ADMIN_ORG_ROLES["org-1"];
+  const [selectedAdminRole, setSelectedAdminRole] = useState(availableAdminRoles[0]);
+  const [selectedAdminAssigneeIds, setSelectedAdminAssigneeIds] = useState<string[]>(["1"]);
+
+  // Non-Admin: Assignment mode (Team Member vs Contact)
   const [assignmentType, setAssignmentType] = useState<"team" | "contact">("team");
 
   // Team Member Assignment (Role -> Multi-select members)
@@ -113,9 +139,6 @@ export default function TaskQuickCreateDrawer({
   }, [selectedContactCategory]);
 
   const [visibleInPortal, setVisibleInPortal] = useState(false);
-
-  // Admin Scoping Rules
-  const [adminScopingRules, setAdminScopingRules] = useState<ScopingRule[]>([]);
 
   // Checklists
   const [checklists, setChecklists] = useState<TaskChecklist[]>([
@@ -320,7 +343,30 @@ export default function TaskQuickCreateDrawer({
     let primaryAssignee: TaskAssigneeScope;
     let assigneesList: TaskAssigneeScope[] = [];
 
-    if (assignmentType === "team") {
+    if (isAdmin) {
+      const org = ADMIN_ORGANIZATIONS.find((o) => o.id === selectedAdminOrgId) || ADMIN_ORGANIZATIONS[0];
+      const selectedMembers = teamMembers.filter((m) => selectedAdminAssigneeIds.includes(String(m.id)));
+      const assigneeName = selectedMembers[0]?.name || "Corporate Lead Physician";
+
+      primaryAssignee = {
+        scopeLevel: "org_role",
+        orgId: org.id,
+        orgName: org.name,
+        roleName: selectedAdminRole,
+        assigneeName,
+      };
+
+      assigneesList = selectedMembers.length > 0
+        ? selectedMembers.map((m) => ({
+            scopeLevel: "org_role" as const,
+            orgId: org.id,
+            orgName: org.name,
+            roleName: selectedAdminRole,
+            userId: String(m.id),
+            assigneeName: m.name,
+          }))
+        : [primaryAssignee];
+    } else if (assignmentType === "team") {
       const selectedMembers = teamMembers.filter((m) => selectedTeamMemberIds.includes(String(m.id)));
       if (selectedMembers.length === 0) {
         primaryAssignee = {
@@ -354,7 +400,6 @@ export default function TaskQuickCreateDrawer({
     onCreateTask({
       title: title.trim(),
       description: description.trim(),
-      storytelling: storytelling.trim(),
       status,
       stageName: selectedStageName,
       stageId,
@@ -381,7 +426,15 @@ export default function TaskQuickCreateDrawer({
       attachments,
     });
 
-    toast.success("Task created successfully");
+    // Explicit In-App Notification Triggered on Task Creation
+    addNotification({
+      type: "task",
+      title: "New Task Assigned",
+      message: `${title.trim()} assigned to ${primaryAssignee.assigneeName}${isAdmin ? ` (${primaryAssignee.orgName})` : ""}`,
+      link: `/tasks`,
+    });
+
+    toast.success("Task created and notification sent");
     onClose();
   };
 
@@ -418,28 +471,33 @@ export default function TaskQuickCreateDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Title & Basic Details Card ── */}
+        {/* ── 1. Admin Mode: Admin Scope Rules Positioned at the VERY TOP ── */}
+        {isAdmin && (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <Building2 className="w-3.5 h-3.5 text-slate-700" />
+                <span>Admin Scope Rules (Multi-Tenant)</span>
+                <InfoTooltip content="Industry category and geographical boundaries defining which tenant organizations and roles are filtered" />
+              </h3>
+            </div>
+            <AdminControlAccordion
+              scopingRules={adminScopingRules}
+              onScopingRulesChange={setAdminScopingRules}
+              allowEntities={false}
+              defaultAdminControlOpen={true}
+              defaultScopeOpen={true}
+            />
+          </div>
+        )}
+
+        {/* ── 2. Title & Basic Details Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
               <span>Task Details</span>
               <InfoTooltip content="Primary identifiers, title, priority, and guidelines for this assignment" />
             </h3>
-            {/* Important Star Toggle */}
-            <Tooltip content={isImportant ? "Marked as high priority" : "Mark as high priority"}>
-              <button
-                type="button"
-                onClick={() => setIsImportant((prev) => !prev)}
-                className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
-                  isImportant
-                    ? "bg-amber-50 border-amber-300 text-amber-700"
-                    : "border-gray-200 text-slate-400 hover:text-slate-700"
-                }`}
-              >
-                <Star className={`w-3.5 h-3.5 ${isImportant ? "fill-amber-500 text-amber-500" : ""}`} />
-                <span>Important</span>
-              </button>
-            </Tooltip>
           </div>
 
           {/* Title Input */}
@@ -473,20 +531,30 @@ export default function TaskQuickCreateDrawer({
             />
           </div>
 
-          {/* Storytelling / Context Setting */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Storytelling & Operational Narrative</span>
-              <InfoTooltip content="Backstory, operational reasoning, customer impact, or context narrative explaining why this task is being carried out" />
-            </label>
-            <textarea
-              rows={2}
-              value={storytelling}
-              onChange={(e) => setStorytelling(e.target.value)}
-              placeholder="Explain the background story, client situation, or why this task matters..."
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 resize-none leading-relaxed"
-            />
+          {/* Mark as Important: Setting Toggle Switch */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
+            <div className="flex items-center gap-2.5">
+              <Star className={`w-4 h-4 ${isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+              <div>
+                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
+                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isImportant}
+              onClick={() => setIsImportant((prev) => !prev)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                isImportant ? "bg-[#1E293B]" : "bg-gray-200"
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                  isImportant ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
 
           {/* Deadline: Date & Time Picker */}
@@ -494,7 +562,7 @@ export default function TaskQuickCreateDrawer({
             <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
               <span>Deadline (Date & Time)</span>
-              <InfoTooltip content="Target calendar date and time for task completion" />
+              <InfoTooltip content="Target calendar date and clock time for task completion" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <div className="relative">
@@ -522,12 +590,12 @@ export default function TaskQuickCreateDrawer({
           </div>
         </div>
 
-        {/* ── Workflow Stage & Assignment ── */}
+        {/* ── 3. Assignment & Stage Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
               <span>Assignment & Stage</span>
-              <InfoTooltip content="Assign task to internal team members (with role filtering) or external contacts, and set initial stage" />
+              <InfoTooltip content="Set starting workflow stage and target organization, roles, or contacts" />
             </h3>
           </div>
 
@@ -554,209 +622,296 @@ export default function TaskQuickCreateDrawer({
             </select>
           </div>
 
-          {/* Assigning: Team Member vs Contact Selector */}
-          <div className="space-y-3 pt-2 border-t border-gray-100">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <span>Assign To</span>
-              <InfoTooltip content="Choose whether to delegate this task to Team Members or an External Contact / Client" />
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAssignmentType("team")}
-                className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  assignmentType === "team"
-                    ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
-                    : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Team Members</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAssignmentType("contact")}
-                className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  assignmentType === "contact"
-                    ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
-                    : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Contact / Client</span>
-              </button>
-            </div>
-
-            {/* TEAM MEMBER ASSIGNMENT */}
-            {assignmentType === "team" && (
-              <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
-                {/* Step 1: Select Role */}
-                <div className="space-y-1.5">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span>Select Role</span>
-                    <InfoTooltip content="Filter available team members by their designated organizational role" />
-                  </label>
-                  <select
-                    value={selectedRoleFilter}
-                    onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                  >
-                    {availableRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Step 2: Multi-select Team Members */}
-                <div className="space-y-1.5">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span>Select Team Member(s)</span>
-                    <InfoTooltip content="Add one or more team members who are responsible for this task" />
-                  </label>
-                  <select
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (id && !selectedTeamMemberIds.includes(id)) {
-                        setSelectedTeamMemberIds((prev) => [...prev, id]);
-                      }
-                      e.target.value = "";
-                    }}
-                    defaultValue=""
-                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                  >
-                    <option value="" disabled>
-                      + Click to add a team member...
+          {/* ADMIN ASSIGNMENT: Organizations -> Roles -> Assignee */}
+          {isAdmin ? (
+            <div className="space-y-3 pt-2 border-t border-gray-100 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
+              {/* Organization Selector */}
+              <div className="space-y-1.5">
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Target Organization</span>
+                  <InfoTooltip content="Select the corporate tenant organization within the designated admin scope" />
+                </label>
+                <select
+                  value={selectedAdminOrgId}
+                  onChange={(e) => {
+                    const newOrgId = e.target.value;
+                    setSelectedAdminOrgId(newOrgId);
+                    const newRoles = ADMIN_ORG_ROLES[newOrgId] || [];
+                    if (newRoles.length > 0) setSelectedAdminRole(newRoles[0]);
+                  }}
+                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                >
+                  {ADMIN_ORGANIZATIONS.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.industry} · {org.country})
                     </option>
-                    {filteredTeamMembers.map((m) => {
-                      const isAdded = selectedTeamMemberIds.includes(String(m.id));
-                      return (
-                        <option key={m.id} value={String(m.id)} disabled={isAdded}>
-                          {m.name} {m.role ? `(${m.role})` : ""} {isAdded ? "✓ Added" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  ))}
+                </select>
+              </div>
 
-                  {/* Selected Team Members Badges */}
-                  <div className="flex flex-wrap gap-1.5 pt-2">
-                    {selectedTeamMemberIds.map((id) => {
-                      const member = teamMembers.find((m) => String(m.id) === String(id));
-                      if (!member) return null;
-                      return (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
-                        >
-                          <Users className="w-3 h-3 text-slate-500" />
-                          <span>{member.name}</span>
-                          {member.role && (
-                            <span className="text-[10px] text-slate-500 font-normal">
-                              ({member.role})
-                            </span>
-                          )}
-                          {selectedTeamMemberIds.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedTeamMemberIds((prev) => prev.filter((x) => x !== id))
-                              }
-                              className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          )}
+              {/* Org Role Selector */}
+              <div className="space-y-1.5">
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Shield className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Organization Role</span>
+                  <InfoTooltip content="Target role within the selected tenant organization" />
+                </label>
+                <select
+                  value={selectedAdminRole}
+                  onChange={(e) => setSelectedAdminRole(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                >
+                  {availableAdminRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Assignee Person / Multi-select Team Members in this Role */}
+              <div className="space-y-1.5">
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Users className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Assignee Member(s)</span>
+                  <InfoTooltip content="Designate one or multiple users matching this corporate role" />
+                </label>
+                <select
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id && !selectedAdminAssigneeIds.includes(id)) {
+                      setSelectedAdminAssigneeIds((prev) => [...prev, id]);
+                    }
+                    e.target.value = "";
+                  }}
+                  defaultValue=""
+                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                >
+                  <option value="" disabled>
+                    + Add team member for {selectedAdminRole}...
+                  </option>
+                  {teamMembers.map((m) => {
+                    const isAdded = selectedAdminAssigneeIds.includes(String(m.id));
+                    return (
+                      <option key={m.id} value={String(m.id)} disabled={isAdded}>
+                        {m.name} ({m.role || selectedAdminRole}) {isAdded ? "✓ Added" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Selected Members Badges */}
+                <div className="flex flex-wrap gap-1.5 pt-1.5">
+                  {selectedAdminAssigneeIds.map((id) => {
+                    const member = teamMembers.find((m) => String(m.id) === String(id));
+                    if (!member) return null;
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
+                      >
+                        <Users className="w-3 h-3 text-slate-500" />
+                        <span>{member.name}</span>
+                        <span className="text-[10px] text-slate-500 font-normal">
+                          ({selectedAdminRole})
                         </span>
-                      );
-                    })}
+                        {selectedAdminAssigneeIds.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedAdminAssigneeIds((prev) => prev.filter((x) => x !== id))
+                            }
+                            className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* NON-ADMIN ASSIGNMENT: Team Member vs Contact */
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <span>Assign To</span>
+                <InfoTooltip content="Choose whether to delegate this task to Team Members or an External Contact / Client" />
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignmentType("team")}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    assignmentType === "team"
+                      ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
+                      : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Team Members</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAssignmentType("contact")}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    assignmentType === "contact"
+                      ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
+                      : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Contact / Client</span>
+                </button>
+              </div>
+
+              {/* TEAM MEMBER ASSIGNMENT */}
+              {assignmentType === "team" && (
+                <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
+                  <div className="space-y-1.5">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <span>Select Role</span>
+                      <InfoTooltip content="Filter available team members by their designated organizational role" />
+                    </label>
+                    <select
+                      value={selectedRoleFilter}
+                      onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                    >
+                      {availableRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <span>Select Team Member(s)</span>
+                      <InfoTooltip content="Add one or more team members who are responsible for this task" />
+                    </label>
+                    <select
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (id && !selectedTeamMemberIds.includes(id)) {
+                          setSelectedTeamMemberIds((prev) => [...prev, id]);
+                        }
+                        e.target.value = "";
+                      }}
+                      defaultValue=""
+                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                    >
+                      <option value="" disabled>
+                        + Click to add a team member...
+                      </option>
+                      {filteredTeamMembers.map((m) => {
+                        const isAdded = selectedTeamMemberIds.includes(String(m.id));
+                        return (
+                          <option key={m.id} value={String(m.id)} disabled={isAdded}>
+                            {m.name} {m.role ? `(${m.role})` : ""} {isAdded ? "✓ Added" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {selectedTeamMemberIds.map((id) => {
+                        const member = teamMembers.find((m) => String(m.id) === String(id));
+                        if (!member) return null;
+                        return (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
+                          >
+                            <Users className="w-3 h-3 text-slate-500" />
+                            <span>{member.name}</span>
+                            {member.role && (
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                ({member.role})
+                              </span>
+                            )}
+                            {selectedTeamMemberIds.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedTeamMemberIds((prev) => prev.filter((x) => x !== id))
+                                }
+                                className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* CONTACT ASSIGNMENT */}
-            {assignmentType === "contact" && (
-              <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
-                {/* Step 1: Contact Category */}
-                <div className="space-y-1.5">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span>Contact Category</span>
-                    <InfoTooltip content="Filter contacts by type: Lead, Client, Supplier, or Vendor" />
-                  </label>
-                  <select
-                    value={selectedContactCategory}
-                    onChange={(e) => setSelectedContactCategory(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                  >
-                    {CONTACT_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* CONTACT ASSIGNMENT */}
+              {assignmentType === "contact" && (
+                <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
+                  <div className="space-y-1.5">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <span>Contact Category</span>
+                      <InfoTooltip content="Filter contacts by type: Lead, Client, Supplier, or Vendor" />
+                    </label>
+                    <select
+                      value={selectedContactCategory}
+                      onChange={(e) => setSelectedContactCategory(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                    >
+                      {CONTACT_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Step 2: Choose Contact */}
-                <div className="space-y-1.5">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span>Select Contact</span>
-                    <InfoTooltip content="External contact or patient responsible for this task" />
-                  </label>
-                  <select
-                    value={selectedContactId}
-                    onChange={(e) => setSelectedContactId(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-                  >
-                    {filteredContacts.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.contactType || c.contact_type || "Client"}) - {c.location || c.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <div className="space-y-1.5">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <span>Select Contact</span>
+                      <InfoTooltip content="External contact or patient responsible for this task" />
+                    </label>
+                    <select
+                      value={selectedContactId}
+                      onChange={(e) => setSelectedContactId(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                    >
+                      {filteredContacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.contactType || c.contact_type || "Client"}) - {c.location || c.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Portal Visibility Checkbox */}
-                <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
-                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={visibleInPortal}
-                      onChange={(e) => setVisibleInPortal(e.target.checked)}
-                      className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                    />
-                    <span className="text-xs font-semibold text-slate-700">Visible in Client Portal</span>
-                  </label>
-                  <InfoTooltip content="Allow this client to view this task and checklist items in their portal" />
+                  <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={visibleInPortal}
+                        onChange={(e) => setVisibleInPortal(e.target.checked)}
+                        className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                      />
+                      <span className="text-xs font-semibold text-slate-700">Visible in Client Portal</span>
+                    </label>
+                    <InfoTooltip content="Allow this client to view this task and checklist items in their portal" />
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ── Admin Mode: Admin Scope Component Only ── */}
-        {isAdmin && (
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                <Building2 className="w-3.5 h-3.5 text-slate-700" />
-                <span>Admin Scope Rules</span>
-                <InfoTooltip content="Configure administrative multi-tenant scope rules for corporate delegation" />
-              </h3>
-            </div>
-            <AdminControlAccordion
-              scopingRules={adminScopingRules}
-              onScopingRulesChange={setAdminScopingRules}
-              allowEntities={false}
-              defaultAdminControlOpen={true}
-              defaultScopeOpen={true}
-            />
-          </div>
-        )}
-
-        {/* ── Observers Section ── */}
+        {/* ── 4. Observers Section ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -826,7 +981,7 @@ export default function TaskQuickCreateDrawer({
           </div>
         </div>
 
-        {/* ── Checklists Card with Item Hamburger Menu ── */}
+        {/* ── 5. Checklists Card with Item Hamburger Menu ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -990,7 +1145,7 @@ export default function TaskQuickCreateDrawer({
           ))}
         </div>
 
-        {/* ── Files & Attachments Card ── */}
+        {/* ── 6. Files & Attachments Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -1036,7 +1191,7 @@ export default function TaskQuickCreateDrawer({
           )}
         </div>
 
-        {/* ── Advanced Planning Triggers ── */}
+        {/* ── 7. Advanced Planning Triggers ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">

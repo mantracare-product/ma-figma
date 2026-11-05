@@ -63,6 +63,7 @@ export default function Tasks() {
 
   // Assignment filter preset: All Tasks vs Assigned to me vs Assigned by me
   const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("all");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   const activeTaskWorkflow = useMemo(() => {
     return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
@@ -332,41 +333,64 @@ export default function Tasks() {
                 )}
               </div>
 
-              {/* Filter Presets: All Tasks | Assigned to me | Assigned by me */}
-              <div className="flex items-center bg-gray-100/80 p-0.5 rounded-lg border border-gray-200 shrink-0">
+              {/* Filter Presets Dropdown */}
+              <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setAssignmentFilter("all")}
-                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                    assignmentFilter === "all"
-                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  onClick={() => setShowFilterDropdown((prev) => !prev)}
+                  className="h-[36px] px-3.5 flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 transition-colors shadow-2xs cursor-pointer shrink-0"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  title="Filter by assignment"
                 >
-                  All Tasks
+                  <ListFilter className="w-3.5 h-3.5 text-gray-500" />
+                  <span>
+                    {assignmentFilter === "all"
+                      ? "All Tasks"
+                      : assignmentFilter === "assigned_to_me"
+                      ? "Assigned to me"
+                      : "Assigned by me"}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${
+                      showFilterDropdown ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignmentFilter("assigned_to_me")}
-                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                    assignmentFilter === "assigned_to_me"
-                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Assigned to me
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignmentFilter("assigned_by_me")}
-                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                    assignmentFilter === "assigned_by_me"
-                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Assigned by me
-                </button>
+
+                {showFilterDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowFilterDropdown(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                      {[
+                        { id: "all", label: "All Tasks" },
+                        { id: "assigned_to_me", label: "Assigned to me" },
+                        { id: "assigned_by_me", label: "Assigned by me" },
+                      ].map((f) => {
+                        const isSelected = assignmentFilter === f.id;
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => {
+                              setAssignmentFilter(f.id as AssignmentFilter);
+                              setShowFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                              isSelected ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <span>{f.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           }

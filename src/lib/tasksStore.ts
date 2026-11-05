@@ -401,7 +401,7 @@ export function useTasks() {
     // Trigger in-app notification
     addNotification({
       type: "task",
-      title: "New Task Created",
+      title: "New Task Assigned",
       message: `${task.code}: ${task.title} assigned to ${task.assignee.assigneeName}`,
       link: `/tasks?id=${task.id}`,
       meta: { taskId: task.id },
@@ -414,6 +414,15 @@ export function useTasks() {
     const current = getStoredTasks();
     const updated = current.map((t) => {
       if (t.id === id) {
+        if (patch.assignee && patch.assignee.assigneeName !== t.assignee.assigneeName) {
+          addNotification({
+            type: "task",
+            title: "Task Reassigned",
+            message: `${t.code}: '${t.title}' reassigned to ${patch.assignee.assigneeName}`,
+            link: `/tasks?id=${t.id}`,
+            meta: { taskId: t.id },
+          });
+        }
         return {
           ...t,
           ...patch,

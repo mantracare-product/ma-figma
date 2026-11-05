@@ -92,7 +92,6 @@ export default function TaskDetailDrawer({
 
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
-  const [storytelling, setStorytelling] = useState(task.storytelling || "");
   const [deadlineDate, setDeadlineDate] = useState(task.deadlineDate || "");
   const [deadlineTime, setDeadlineTime] = useState(task.deadlineTime || "17:00");
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -137,7 +136,6 @@ export default function TaskDetailDrawer({
     onUpdateTask(task.id, {
       title: title.trim() || task.title,
       description: description.trim(),
-      storytelling: storytelling.trim(),
       deadline: formattedDeadline,
       deadlineDate,
       deadlineTime,
@@ -199,21 +197,6 @@ export default function TaskDetailDrawer({
               >
                 <Share2 className="w-3.5 h-3.5 text-slate-500" />
                 <span>Share</span>
-              </button>
-            </Tooltip>
-
-            {/* Important Star Toggle */}
-            <Tooltip content={task.isImportant ? "Marked as Important" : "Mark as Important"}>
-              <button
-                type="button"
-                onClick={() => onUpdateTask(task.id, { isImportant: !task.isImportant })}
-                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
-                  task.isImportant
-                    ? "bg-amber-50 border-amber-300 text-amber-700"
-                    : "border-gray-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <Star className={`w-4 h-4 ${task.isImportant ? "fill-amber-500 text-amber-500" : ""}`} />
               </button>
             </Tooltip>
 
@@ -319,20 +302,33 @@ export default function TaskDetailDrawer({
             />
           </div>
 
-          {/* Storytelling / Context Setting */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Storytelling & Operational Narrative</span>
-              <InfoTooltip content="Backstory, operational reasoning, customer impact, or context narrative explaining why this task is being carried out" />
-            </label>
-            <textarea
-              rows={2}
-              value={storytelling}
-              onChange={(e) => setStorytelling(e.target.value)}
-              placeholder="Explain the background story, client situation, or why this task matters..."
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 resize-none leading-relaxed"
-            />
+          {/* Mark as Important Setting Toggle */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
+            <div className="flex items-center gap-2.5">
+              <Star className={`w-4 h-4 ${task.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+              <div>
+                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
+                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={task.isImportant}
+              onClick={() => {
+                onUpdateTask(task.id, { isImportant: !task.isImportant });
+                toast.success(task.isImportant ? "Unmarked as important" : "Marked as important");
+              }}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                task.isImportant ? "bg-[#1E293B]" : "bg-gray-200"
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                  task.isImportant ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
 
           {/* Assignees & Creator Details */}
