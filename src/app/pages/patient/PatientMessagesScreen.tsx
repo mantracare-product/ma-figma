@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useOutletContext } from "react-router";
+import { useOutletContext, useSearchParams } from "react-router";
 import {
   MessageSquare,
   Users,
@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Plus,
   ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
 import {
   useConversations,
@@ -65,6 +66,7 @@ const CARE_BOT_SHORTCUTS = [
 export default function PatientMessagesScreen() {
   const { activeClient } = useOutletContext<OutletContextType>();
   const { conversations, sendMessage } = useConversations();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Find all relevant channels for this client
   const clientConversations = useMemo(() => {
@@ -147,7 +149,23 @@ export default function PatientMessagesScreen() {
     return [doctorChat, ...groupChats, careBotChat];
   }, [conversations, activeClient]);
 
-  const [selectedChatId, setSelectedChatId] = useState<string>(() => clientConversations[0]?.id || "care-bot-system");
+  // URL search param synchronization for mobile back-button navigation
+  const activeChatIdParam = searchParams.get("chat");
+
+  const [selectedChatId, setSelectedChatId] = useState<string>(() => {
+    if (activeChatIdParam && clientConversations.some((c) => c.id === activeChatIdParam)) {
+      return activeChatIdParam;
+    }
+    return clientConversations[0]?.id || "care-bot-system";
+  });
+
+  // Keep state in sync with URL
+  useEffect(() => {
+    if (activeChatIdParam && clientConversations.some((c) => c.id === activeChatIdParam)) {
+      setSelectedChatId(activeChatIdParam);
+    }
+  }, [activeChatIdParam, clientConversations]);
+
   const [inputText, setInputText] = useState("");
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [attachedFile, setAttachedFile] = useState<MessageAttachment | null>(null);
@@ -157,15 +175,18 @@ export default function PatientMessagesScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef<HTMLDivElement>(null);
 
   const activeChat = clientConversations.find((c) => c.id === selectedChatId) || clientConversations[0];
 
+  // Auto-scroll message stream
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [activeChat?.messages.length, isBotTyping]);
+  }, [activeChat?.messages.length, isBotTyping, selectedChatId]);
 
+  // Close plus menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
@@ -175,6 +196,15 @@ export default function PatientMessagesScreen() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleSelectChat = (chatId: string) => {
+    setSelectedChatId(chatId);
+    setSearchParams({ chat: chatId }, { replace: false });
+  };
+
+  const handleBackToList = () => {
+    setSearchParams({}, { replace: false });
+  };
 
   const getBotKnowledgeResponse = (text: string): string => {
     const lower = text.toLowerCase().trim();
@@ -255,13 +285,10 @@ export default function PatientMessagesScreen() {
   };
 
   const handleOptionClick = (inquiry: string) => {
-    // 1. Ensure Care Bot conversation is active
     if (selectedChatId !== "care-bot-system") {
-      setSelectedChatId("care-bot-system");
+      handleSelectChat("care-bot-system");
     }
-    // 2. Draft the inquiry text visually in the message input
     setInputText(inquiry);
-    // 3. Immediately dispatch message and trigger intelligent Care Bot response
     setTimeout(() => {
       handleSend(inquiry, "care-bot-system");
     }, 120);
@@ -283,23 +310,34 @@ export default function PatientMessagesScreen() {
     }
   };
 
+  // Whether mobile view should currently display the full-screen chat rather than the list
+  const showMobileChat = Boolean(activeChatIdParam);
+
   return (
-    <div className="h-full flex overflow-hidden bg-white border border-gray-200 rounded-none shadow-2xs">
+    <div className="h-full w-full flex overflow-hidden bg-transparent select-none">
       {/* Hidden File Input */}
       <input type="file" ref={fileInputRef} onChange={handleFilePicked} className="hidden" />
 
-      {/* ── Left Sidebar: Kept exactly as is with sharp edges ── */}
-      <div className="w-80 shrink-0 border-r border-gray-200 flex flex-col bg-slate-50/50">
-        <div className="p-4 border-b border-gray-200 bg-white">
-          <h2 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+      {/* ── Left Panel: Chat List (Desktop: generous padding, borderless rows; Mobile: full-screen list when no active chat param) ── */}
+      <div
+        ref={listScrollRef}
+        className={`${
+          showMobileChat ? "hidden md:flex" : "flex"
+        } w-full md:w-72 lg:w-80 shrink-0 flex-col overflow-y-auto p-4 sm:p-6 lg:p-7 space-y-5 bg-transparent`}
+      >
+        <div className="px-2">
+          <h2
+            className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
             Messages
           </h2>
-          <p className="text-[11px] text-slate-500">
-            Direct doctor chats, clinical groups & AI assistant
+          <p className="text-xs text-slate-500 mt-0.5">
+            Direct doctor chats, clinical groups &amp; AI assistant
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+        <div className="space-y-1.5 flex-1">
           {clientConversations.map((chat: any) => {
             const isSelected = chat.id === selectedChatId;
             const isGroup = Boolean(chat.isGroup);
@@ -308,23 +346,27 @@ export default function PatientMessagesScreen() {
             return (
               <div
                 key={chat.id}
-                onClick={() => setSelectedChatId(chat.id)}
-                className={`p-3.5 flex items-start gap-3 cursor-pointer transition-colors border-l-2 ${
-                  isSelected ? "bg-blue-50/70 border-l-[#1456f0]" : "border-l-transparent bg-white hover:bg-slate-50"
+                onClick={() => handleSelectChat(chat.id)}
+                className={`p-3.5 rounded-2xl flex items-start gap-3 cursor-pointer transition-all ${
+                  isSelected
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+                    : "text-slate-700 hover:bg-slate-200/50 hover:text-slate-900"
                 }`}
               >
-                {/* Avatar with sharp edges */}
+                {/* Soft Rounded Avatar */}
                 <div
-                  className={`w-9 h-9 rounded-sm flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
-                    isSelected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                    isSelected
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-200/80 text-slate-700"
                   }`}
                 >
                   {isBot ? (
-                    <Bot className="w-4 h-4 text-blue-600" />
+                    <Bot className="w-4 h-4 text-blue-500" />
                   ) : isGroup ? (
-                    <Users className="w-4 h-4" />
+                    <Users className="w-4 h-4 text-slate-600" />
                   ) : (
-                    <Stethoscope className="w-4 h-4" />
+                    <Stethoscope className="w-4 h-4 text-emerald-600" />
                   )}
                 </div>
 
@@ -338,7 +380,7 @@ export default function PatientMessagesScreen() {
                       {formatTimestamp(chat.timestamp)}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate leading-snug">
+                  <p className="text-xs text-slate-500 truncate leading-snug">
                     {chat.lastMessage}
                   </p>
                 </div>
@@ -348,56 +390,62 @@ export default function PatientMessagesScreen() {
         </div>
       </div>
 
-      {/* ── Central UI: Revived centered conversational stream with sharp edges ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#fafafa]">
-        {/* Chat Header with Sharp Edges */}
-        <div className="px-6 py-3.5 border-b border-gray-200 bg-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-sm bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              {(activeChat as any)?.isBot ? (
-                <Bot className="w-4 h-4 text-blue-400" />
-              ) : activeChat.isGroup ? (
-                <Users className="w-4 h-4 text-slate-200" />
-              ) : (
-                <Stethoscope className="w-4 h-4 text-emerald-400" />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {activeChat.contactName}
-                </h3>
-                {activeChat.isBot ? (
-                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-sm">
-                    AI Assistant
-                  </span>
+      {/* ── Central Conversation Stream & Floating Composer (Centered Column, Borderless) ── */}
+      <div
+        className={`${
+          showMobileChat ? "flex" : "hidden md:flex"
+        } flex-1 flex-col min-w-0 h-full overflow-hidden bg-transparent`}
+      >
+        {/* Chat Header: Plain text, no horizontal divider line */}
+        <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-2 shrink-0">
+          <div className="max-w-[760px] mx-auto w-full flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {/* Mobile Back Button to return to list */}
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="md:hidden -ml-1 p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 transition-colors cursor-pointer shrink-0"
+                aria-label="Back to messages list"
+                title="Back to messages list"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+
+              <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                {(activeChat as any)?.isBot ? (
+                  <Bot className="w-5 h-5 text-blue-400" />
                 ) : activeChat.isGroup ? (
-                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-sm">
-                    Group Chat
-                  </span>
+                  <Users className="w-5 h-5 text-slate-200" />
                 ) : (
-                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-sm">
-                    Primary Doctor
-                  </span>
+                  <Stethoscope className="w-5 h-5 text-emerald-400" />
                 )}
               </div>
-              <p className="text-xs text-slate-500 font-mono tabular-nums">
-                {activeChat.phoneNumber}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Encrypted Channel
-            </span>
+              <div className="min-w-0">
+                <h3
+                  className="text-sm sm:text-base font-bold text-slate-900 truncate"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {activeChat.contactName}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono tabular-nums truncate">
+                  {activeChat.phoneNumber}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="hidden sm:inline">Encrypted Channel</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Message Thread (Centered Layout with Sharp Edges) */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="max-w-3xl mx-auto w-full space-y-4">
+        {/* Message Thread: Clean, centered column with comfortable 760px width */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+          <div className="max-w-[760px] mx-auto w-full space-y-4">
             {activeChat.messages.map((msg: Message, idx: number) => {
               const isMe = msg.sender === "me";
               const isFirstWelcome = !isMe && activeChat.isBot && idx === 0;
@@ -410,31 +458,31 @@ export default function PatientMessagesScreen() {
                     </span>
                   )}
 
-                  <div className="flex items-center gap-2 max-w-[85%]">
+                  <div className="flex items-center gap-2 max-w-[88%] sm:max-w-[80%]">
                     {isMe && (
                       <Tooltip content="Reply to message">
                         <button
                           type="button"
                           onClick={() => setReplyingTo(msg)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 rounded-sm transition-opacity cursor-pointer shrink-0"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-opacity cursor-pointer shrink-0"
                         >
                           <Reply className="w-3.5 h-3.5" />
                         </button>
                       </Tooltip>
                     )}
 
-                    {/* Sharp Message Bubble */}
+                    {/* Message Bubble: Soft rounded corners and clean typography */}
                     <div
-                      className={`rounded-sm px-4 py-2.5 text-sm leading-relaxed ${
+                      className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-xs ${
                         isMe
-                          ? "bg-[#1456f0] text-white border border-blue-600 shadow-2xs"
-                          : "bg-white text-slate-900 border border-gray-200 shadow-2xs"
+                          ? "bg-[#1456f0] text-white border border-blue-600"
+                          : "bg-white text-slate-900 border border-slate-200/80"
                       }`}
                     >
-                      {/* Reply quote banner with sharp edges */}
+                      {/* Reply quote banner */}
                       {msg.replyTo && (
                         <div
-                          className={`mb-2 p-2 rounded-sm text-xs border-l-2 ${
+                          className={`mb-2 p-2 rounded-xl text-xs border-l-2 ${
                             isMe
                               ? "bg-white/15 border-white/80 text-white"
                               : "bg-slate-50 border-[#1456f0] text-slate-700"
@@ -445,10 +493,10 @@ export default function PatientMessagesScreen() {
                         </div>
                       )}
 
-                      {/* Attachment preview chip with sharp edges */}
+                      {/* Attachment preview chip */}
                       {msg.attachment && (
                         <div
-                          className={`mb-2 p-2 rounded-sm flex items-center justify-between gap-3 border ${
+                          className={`mb-2 p-2 rounded-xl flex items-center justify-between gap-3 border ${
                             isMe ? "bg-white/15 border-white/30 text-white" : "bg-slate-50 border-gray-200 text-slate-900"
                           }`}
                         >
@@ -465,7 +513,7 @@ export default function PatientMessagesScreen() {
                             <button
                               type="button"
                               onClick={() => alert(`Downloading ${msg.attachment?.name}`)}
-                              className={`p-1.5 rounded-sm transition-colors cursor-pointer shrink-0 ${
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
                                 isMe ? "hover:bg-white/20 text-white" : "hover:bg-slate-200 text-slate-600"
                               }`}
                             >
@@ -477,9 +525,9 @@ export default function PatientMessagesScreen() {
 
                       <p className="whitespace-pre-wrap">{msg.text}</p>
 
-                      {/* Care Bot Initial Quick Action Shortcuts with Sharp Edges */}
+                      {/* Care Bot Initial Quick Action Shortcuts */}
                       {isFirstWelcome && (
-                        <div className="pt-3 pb-1 flex flex-col gap-2 w-full max-w-sm">
+                        <div className="pt-3 pb-1 flex flex-col gap-1.5 w-full max-w-sm">
                           {CARE_BOT_SHORTCUTS.map((sc) => {
                             const Icon = sc.icon;
                             return (
@@ -487,7 +535,7 @@ export default function PatientMessagesScreen() {
                                 key={sc.id}
                                 type="button"
                                 onClick={() => handleOptionClick(sc.inquiry)}
-                                className="w-full px-3 py-2 rounded-sm border border-gray-200 bg-white hover:bg-blue-50/70 hover:border-blue-300 text-slate-800 hover:text-blue-700 text-xs font-semibold transition-all flex items-center justify-between cursor-pointer shadow-2xs group text-left"
+                                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-blue-50/70 hover:border-blue-300 text-slate-800 hover:text-blue-700 text-xs font-semibold transition-all flex items-center justify-between cursor-pointer shadow-2xs group text-left"
                               >
                                 <div className="flex items-center gap-2">
                                   <Icon className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
@@ -516,7 +564,7 @@ export default function PatientMessagesScreen() {
                         <button
                           type="button"
                           onClick={() => setReplyingTo(msg)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 rounded-sm transition-opacity cursor-pointer shrink-0"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-opacity cursor-pointer shrink-0"
                         >
                           <Reply className="w-3.5 h-3.5" />
                         </button>
@@ -527,13 +575,13 @@ export default function PatientMessagesScreen() {
               );
             })}
 
-            {/* Care Bot Typing Animation with Sharp Edges */}
+            {/* Care Bot Typing Animation */}
             {isBotTyping && (
               <div className="flex items-start gap-3 justify-start animate-in fade-in duration-150">
-                <div className="w-8 h-8 rounded-sm bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5 shadow-2xs">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5 shadow-2xs">
                   <Bot className="w-4 h-4 text-blue-600" />
                 </div>
-                <div className="bg-white border border-gray-200 rounded-sm px-4 py-3 shadow-2xs flex items-center gap-1.5">
+                <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-2xs flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0ms" }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "150ms" }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "300ms" }} />
@@ -543,12 +591,12 @@ export default function PatientMessagesScreen() {
           </div>
         </div>
 
-        {/* ── Central Docked Composer with Sharp Edges ── */}
-        <div className="p-4 border-t border-gray-200 bg-white shrink-0 relative">
-          <div className="max-w-3xl mx-auto w-full space-y-2">
-            {/* Reply Quote Strip with Sharp Edges */}
+        {/* ── Floating Rounded Composer: Centered column, no top border ── */}
+        <div className="px-4 sm:px-6 lg:px-8 pb-4 sm:pb-6 shrink-0 relative">
+          <div className="max-w-[760px] mx-auto w-full space-y-2">
+            {/* Floating Reply Quote Strip */}
             {replyingTo && (
-              <div className="flex items-center justify-between p-2 px-3 bg-slate-50 border border-slate-200 rounded-sm text-xs">
+              <div className="flex items-center justify-between p-2 px-3 bg-white/95 backdrop-blur-xs border border-slate-200/90 rounded-xl text-xs shadow-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
                 <div className="flex items-center gap-2 min-w-0">
                   <Reply className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
                   <div className="min-w-0">
@@ -561,16 +609,16 @@ export default function PatientMessagesScreen() {
                 <button
                   type="button"
                   onClick={() => setReplyingTo(null)}
-                  className="p-1 text-slate-400 hover:text-slate-700 rounded-sm transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Attached File Strip with Sharp Edges */}
+            {/* Floating Attached File Strip */}
             {attachedFile && (
-              <div className="flex items-center justify-between p-2 px-3 bg-blue-50/60 border border-blue-200 rounded-sm text-xs">
+              <div className="flex items-center justify-between p-2 px-3 bg-blue-50/90 border border-blue-200/90 rounded-xl text-xs shadow-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
                   <div className="min-w-0">
@@ -581,30 +629,30 @@ export default function PatientMessagesScreen() {
                 <button
                   type="button"
                   onClick={() => setAttachedFile(null)}
-                  className="p-1 text-slate-400 hover:text-slate-700 rounded-sm transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Input Bar Row */}
-            <div className="flex items-center gap-2">
+            {/* Rounded Floating Input Bar with Shadow */}
+            <div className="flex items-center gap-2 bg-white border border-slate-200/90 rounded-2xl p-1.5 pl-2.5 shadow-sm hover:shadow-md transition-shadow">
               {/* Plus Menu Trigger */}
               <div className="relative" ref={plusMenuRef}>
                 <Tooltip content="Quick Care Actions">
                   <button
                     type="button"
                     onClick={() => setIsPlusMenuOpen((prev) => !prev)}
-                    className="w-9 h-9 border border-gray-200 bg-white hover:bg-slate-50 text-slate-600 rounded-sm flex items-center justify-center transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
                 </Tooltip>
 
                 {isPlusMenuOpen && (
-                  <div className="absolute bottom-11 left-0 w-64 bg-white border border-gray-200 rounded-sm shadow-lg z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100">
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-gray-100">
+                  <div className="absolute bottom-full mb-2 left-0 w-64 bg-white border border-slate-200/90 rounded-2xl shadow-xl z-50 py-1.5 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-gray-100">
                       Quick Patient Inquiries
                     </div>
                     {CARE_BOT_SHORTCUTS.map((sc) => {
@@ -614,7 +662,7 @@ export default function PatientMessagesScreen() {
                           key={sc.id}
                           type="button"
                           onClick={() => handleOptionClick(sc.inquiry)}
-                          className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 text-slate-800 transition-colors cursor-pointer"
+                          className="w-full text-left px-3.5 py-2 flex items-center gap-2.5 hover:bg-slate-50 text-slate-800 transition-colors cursor-pointer"
                         >
                           <Icon className="w-3.5 h-3.5 text-slate-500" />
                           <span>{sc.label}</span>
@@ -630,13 +678,13 @@ export default function PatientMessagesScreen() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-9 h-9 border border-gray-200 bg-white hover:bg-slate-50 text-slate-600 rounded-sm flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
               </Tooltip>
 
-              {/* Text Input with Sharp Edges */}
+              {/* Text Input */}
               <textarea
                 rows={1}
                 value={inputText}
@@ -648,16 +696,17 @@ export default function PatientMessagesScreen() {
                   }
                 }}
                 placeholder={`Message ${activeChat.contactName}...`}
-                className="flex-1 text-xs p-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-gray-200 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#1456f0] focus:border-[#1456f0] resize-none text-slate-900 leading-normal"
+                className="flex-1 text-xs sm:text-sm p-1.5 px-2 bg-transparent focus:outline-none resize-none text-slate-900 leading-normal placeholder:text-slate-400"
                 style={{ fontFamily: "DM Sans, sans-serif" }}
               />
 
-              {/* Sharp Send Button */}
+              {/* Rounded Send Button */}
               <button
                 type="button"
                 onClick={() => handleSend()}
                 disabled={!inputText.trim() && !attachedFile}
-                className="w-9 h-9 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-sm shadow-2xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                className="w-9 h-9 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-30 text-white rounded-xl shadow-xs transition-all flex items-center justify-center cursor-pointer shrink-0"
+                aria-label="Send message"
               >
                 <Send className="w-4 h-4" />
               </button>
