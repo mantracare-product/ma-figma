@@ -89,7 +89,7 @@ export interface ProcessTransitionTarget {
   endCurrentProcess?: boolean;
 }
 
-export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim";
+export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim" | "task";
 
 export interface StagePortalReceptionSettings {
   enabled?: boolean;
@@ -384,6 +384,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   invoice: ["draft", "paid", "void"],
   insurance: ["draft", "submitted", "paid", "failed"],
   claim: ["draft", "submitted", "paid", "denied"],
+  task: ["pending", "in_progress", "completed"],
 };
 
 export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
@@ -675,7 +676,7 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
   ];
 }
 
-export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Process> = {
+export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client" | "task">, Process> = {
   appointment: {
     id: "process-appointment-default",
     name: "Appointment Flow",

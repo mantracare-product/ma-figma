@@ -36,7 +36,7 @@ export interface SidebarMenuConfig {
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
-  version: 7,
+  version: 8,
   defaultStartPage: "/",
   sections: [
     {
@@ -49,6 +49,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "call-logs", label: "Call Logs", iconName: "Phone", path: "/call-logs", visible: true, isFeatured: true },
         { id: "chats", label: "Chats", iconName: "MessageCircle", path: "/chats", visible: true, isFeatured: true },
         { id: "processes", label: "Process", iconName: "RefreshCw", path: "/deals", visible: true, isFeatured: true },
+        { id: "tasks", label: "Tasks", iconName: "CheckSquare", path: "/tasks", visible: true, isFeatured: true },
         { id: "appointments", label: "Appointments", iconName: "Calendar", path: "/appointments", visible: true, isFeatured: true },
         { id: "scribe", label: "AI Scribe", iconName: "Stethoscope", path: "/scribe", visible: true, isFeatured: true },
       ],
@@ -192,6 +193,23 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
                 const [apptItem] = items.splice(apptIdx, 1);
                 const newScribeIdx = items.findIndex((it) => it.id === "scribe");
                 items.splice(newScribeIdx, 0, apptItem);
+              }
+              const hasTasks = items.some((it) => it.id === "tasks");
+              if (!hasTasks) {
+                const procIdx = items.findIndex((it) => it.id === "processes");
+                const taskItem: NavItemConfig = {
+                  id: "tasks",
+                  label: "Tasks",
+                  iconName: "CheckSquare",
+                  path: "/tasks",
+                  visible: true,
+                  isFeatured: true,
+                };
+                if (procIdx !== -1) {
+                  items.splice(procIdx + 1, 0, taskItem);
+                } else {
+                  items.push(taskItem);
+                }
               }
               items = items.map((it) => {
                 if (it.id === "clients") return { ...it, label: "Contact" };

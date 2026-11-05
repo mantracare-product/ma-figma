@@ -1,18 +1,27 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Paperclip, Settings, Send, Clock, AlertTriangle, FileText, UserCheck, ChevronRight } from "lucide-react";
-import { Conversation, SessionWindowStatus } from "../../../lib/useConversations";
+import { Paperclip, Settings, Send, Clock, AlertTriangle, FileText, UserCheck, ChevronRight, X, Reply, File } from "lucide-react";
+import { Conversation, SessionWindowStatus, Message, MessageReplyReference, MessageAttachment } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
 import { WhatsappTemplate, Campaign } from "../../pages/Chats";
+import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import AssignResponsibleModal from "./AssignResponsibleModal";
 
 export interface MessageComposerBarProps {
   conversation?: Conversation;
   session: SessionWindowStatus;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (
+    text: string,
+    options?: {
+      replyTo?: MessageReplyReference;
+      attachment?: MessageAttachment;
+    }
+  ) => void;
   onSendTemplate: (template: WhatsappTemplate) => void;
   onEnrollCampaign?: (campaign: Campaign) => void;
   onAssignResponsible?: (personId: string, personName: string) => void;
+  replyingTo?: Message | null;
+  onCancelReply?: () => void;
 }
 
 export default function MessageComposerBar({
@@ -21,14 +30,23 @@ export default function MessageComposerBar({
   onSendMessage,
   onSendTemplate,
   onAssignResponsible,
+  replyingTo,
+  onCancelReply,
 }: MessageComposerBarProps) {
   const [inputText, setInputText] = useState("");
+  const [attachedFile, setAttachedFile] = useState<MessageAttachment | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [globalTemplates] = useWhatsappTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [showGearMenu, setShowGearMenu] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+
+  const isGroup = Boolean(conversation?.isGroup);
+  const isOnlyModeratorsCanPost = isGroup && conversation?.groupConfig?.permissions.whoCanPost === "moderators";
+  // Demo assumption: current user is admin/practitioner who is owner/moderator
+  const canPost = true;
 
   const approvedTemplates = globalTemplates.filter((t) => t.approvalStatus === "approved" || !t.approvalStatus);
 
@@ -49,9 +67,39 @@ export default function MessageComposerBar({
   }, []);
 
   const handleSendText = () => {
-    if (!inputText.trim()) return;
-    onSendMessage(inputText.trim());
+    if (!inputText.trim() && !attachedFile) return;
+
+    const replyRef: MessageReplyReference | undefined = replyingTo
+      ? {
+          id: replyingTo.id,
+          text: replyingTo.text,
+          senderName: replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : conversation?.contactName || "Contact"),
+        }
+      : undefined;
+
+    onSendMessage(inputText.trim(), {
+      replyTo: replyRef,
+      attachment: attachedFile || undefined,
+    });
+
     setInputText("");
+    setAttachedFile(null);
+    if (onCancelReply) onCancelReply();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const sizeStr = file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+      setAttachedFile({
+        name: file.name,
+        size: sizeStr,
+        type: file.type || "application/octet-stream",
+      });
+      toast.success(`Attached "${file.name}"`);
+    }
   };
 
   const handleSendTemplateFromModal = (tpl: WhatsappTemplate) => {
@@ -87,101 +135,158 @@ export default function MessageComposerBar({
     setShowAssignModal(false);
   };
 
-  const remainingHours = session.hoursRemaining ?? 24;
-  const h = Math.floor(remainingHours);
-  const m = Math.round((remainingHours - h) * 60);
-
   return (
     <div className="p-4 border-t border-gray-200 bg-white shrink-0 relative">
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        className="hidden"
+      />
+
       {/* Active Composer */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-            {/* Attachment Button */}
+        {/* Reply Quote Strip */}
+        {replyingTo && (
+          <div className="flex items-center justify-between p-2 px-3 bg-slate-50 border border-slate-200/90 rounded-xl text-xs animate-in fade-in duration-100">
+            <div className="flex items-center gap-2 min-w-0">
+              <Reply className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+              <div className="min-w-0">
+                <span className="font-bold text-slate-800">
+                  Replying to {replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : conversation?.contactName || "Contact")}:
+                </span>{" "}
+                <span className="text-slate-500 truncate italic">"{replyingTo.text}"</span>
+              </div>
+            </div>
+            {onCancelReply && (
+              <button
+                type="button"
+                onClick={onCancelReply}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition-colors cursor-pointer shrink-0"
+                title="Cancel reply"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Attached File Preview Chip */}
+        {attachedFile && (
+          <div className="flex items-center justify-between p-2 px-3 bg-blue-50/60 border border-blue-200/80 rounded-xl text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <File className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+              <div className="min-w-0">
+                <span className="font-bold text-slate-900 truncate block">{attachedFile.name}</span>
+                <span className="text-[10px] text-slate-500 font-mono tabular-nums">{attachedFile.size}</span>
+              </div>
+            </div>
             <button
               type="button"
-              onClick={() => toast.info("Attachment picker opened")}
+              onClick={() => setAttachedFile(null)}
+              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-blue-100/60 rounded-md transition-colors cursor-pointer shrink-0"
+              title="Remove attachment"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          {/* Attachment Button */}
+          <Tooltip content="Attach File or Document">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
               className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              title="Attach File"
             >
               <Paperclip className="w-4 h-4" />
             </button>
+          </Tooltip>
 
-            {/* Gear Settings Button + Popover */}
-            <div className="relative" ref={gearMenuRef}>
+          {/* Gear Settings Button + Popover */}
+          <div className="relative" ref={gearMenuRef}>
+            <Tooltip content="Message Actions & Settings">
               <button
                 type="button"
                 onClick={() => setShowGearMenu((prev) => !prev)}
                 className={`p-2 rounded-xl transition-colors cursor-pointer ${
                   showGearMenu ? "bg-blue-50 text-[#1456f0]" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                 }`}
-                title="Message Actions & Settings"
               >
                 <Settings className="w-4 h-4" />
               </button>
+            </Tooltip>
 
-              {/* Settings Dropdown Popover */}
-              {showGearMenu && (
-                <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-border rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTemplateModal(true);
-                      setShowGearMenu(false);
-                    }}
-                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <FileText className="w-4 h-4 text-[#1456f0]" />
-                      Share Template Message
-                    </span>
-                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                  </button>
+            {/* Settings Dropdown Popover */}
+            {showGearMenu && (
+              <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-border rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTemplateModal(true);
+                    setShowGearMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 font-medium">
+                    <FileText className="w-4 h-4 text-[#1456f0]" />
+                    Share Template Message
+                  </span>
+                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAssignModal(true);
-                      setShowGearMenu(false);
-                    }}
-                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <UserCheck className="w-4 h-4 text-[#1456f0]" />
-                      Assign Responsible
-                    </span>
-                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Text input */}
-            <textarea
-              rows={2}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendText();
-                }
-              }}
-              placeholder={`Type a message... (Press Enter to send)`}
-              className="flex-1 text-xs p-2.5 bg-slate-50/60 hover:bg-white focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] resize-none text-[#1E293B]"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            />
-
-            {/* Send button */}
-            <button
-              type="button"
-              onClick={handleSendText}
-              disabled={!inputText.trim()}
-              className="w-10 h-10 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAssignModal(true);
+                    setShowGearMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 font-medium">
+                    <UserCheck className="w-4 h-4 text-[#1456f0]" />
+                    Assign Responsible
+                  </span>
+                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Text input */}
+          <textarea
+            rows={2}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            disabled={!canPost}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendText();
+              }
+            }}
+            placeholder={
+              !canPost
+                ? "Only moderators can post in this group"
+                : "Type a message... (Press Enter to send)"
+            }
+            className="flex-1 text-xs p-2.5 bg-slate-50/60 hover:bg-white focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] resize-none text-[#1E293B]"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          />
+
+          {/* Send button */}
+          <button
+            type="button"
+            onClick={handleSendText}
+            disabled={(!inputText.trim() && !attachedFile) || !canPost}
+            className="w-10 h-10 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
         </div>
+      </div>
 
       {/* Share Template Modal */}
       {showTemplateModal && (

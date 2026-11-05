@@ -19,6 +19,7 @@ import {
   X,
   ClipboardList,
   Bot,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
@@ -243,7 +244,7 @@ export default function PatientPortalLayout() {
     { to: "/patient/documents", label: "Documents", icon: FileText },
     { to: "/patient/forms", label: "Forms", icon: ClipboardList },
     { to: "/patient/bill", label: "Billing", icon: Receipt },
-    { to: "/patient/care-bot", label: "Care Bot", icon: Bot },
+    { to: "/patient/messages", label: "Messages", icon: MessageSquare },
   ];
 
   const clientInitials = (activeClient.name || "Patient")
@@ -495,8 +496,8 @@ export default function PatientPortalLayout() {
               <span className="font-bold text-slate-900">
                 {location.pathname.includes("profile")
                   ? "Profile"
-                  : location.pathname.includes("care-bot") || location.pathname.includes("bot")
-                  ? "Care Bot"
+                  : location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("bot")
+                  ? "Messages"
                   : location.pathname.includes("book")
                   ? "Visits"
                   : location.pathname.includes("bill") || location.pathname.includes("pay")
@@ -540,14 +541,14 @@ export default function PatientPortalLayout() {
         {/* ── Main Scrollable Viewport ── */}
         <main
           className={`flex-1 ${
-            location.pathname.includes("care-bot") || location.pathname.includes("/bot")
+            location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("/bot")
               ? "overflow-hidden bg-[#F8FAFC] flex flex-col"
               : "overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-10 sm:pb-12"
           }`}
         >
           <div
             className={
-              location.pathname.includes("care-bot") || location.pathname.includes("/bot")
+              location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("/bot")
                 ? "w-full h-full flex flex-col min-h-0"
                 : "max-w-4xl mx-auto w-full"
             }
@@ -557,19 +558,18 @@ export default function PatientPortalLayout() {
         </main>
       </div>
 
-      {/* Floating Care Bot Launcher Button (navigates to page, hides when on care-bot) */}
-      {!location.pathname.includes("care-bot") && !location.pathname.includes("bot") && (
+      {/* Floating Messages Launcher Button (navigates to page, hides when on messages) */}
+      {!location.pathname.includes("messages") && !location.pathname.includes("care-bot") && !location.pathname.includes("bot") && (
         <button
           type="button"
-          onClick={() => navigate("/patient/care-bot")}
+          onClick={() => navigate("/patient/messages")}
           className="fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2.5 shadow-lg shadow-blue-600/30 flex items-center gap-2 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer"
           style={{ fontFamily: "Outfit, sans-serif" }}
-          title="Open Care Bot"
-          aria-label="Open Care Bot"
+          title="Open Messages"
+          aria-label="Open Messages"
         >
-          <Bot className="w-4 h-4" />
-          <span>Care Bot</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <MessageSquare className="w-4 h-4" />
+          <span>Messages</span>
         </button>
       )}
 

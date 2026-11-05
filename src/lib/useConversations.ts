@@ -6,13 +6,29 @@ import { resolveTestVariables } from "./chatbotTestReply";
 import { buildTemplateMessage } from "./conversationBotRuntime";
 import { appendActivity, getActivity } from "./activityEngine";
 
+export interface MessageAttachment {
+  name: string;
+  size: string;
+  type: string;
+  url?: string;
+}
+
+export interface MessageReplyReference {
+  id: string;
+  text: string;
+  senderName: string;
+}
+
 export interface Message {
   id: string;
   text: string;
   timestamp: string;
   sender: "contact" | "me";
+  senderName?: string;
   status?: "sent" | "delivered" | "read";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
+  replyTo?: MessageReplyReference;
+  attachment?: MessageAttachment;
   buttons?: Array<{ label: string; nextNodeId?: string | null; actionType?: string; actionValue?: string }>;
   header?: {
     type?: "none" | "text" | "image" | "video" | "document";
@@ -21,6 +37,22 @@ export interface Message {
     fileName?: string;
   };
   footerText?: string;
+}
+
+export interface GroupChatPermissions {
+  whoCanAddMembers: "all" | "moderators";
+  whoCanPost: "all" | "moderators";
+}
+
+export interface GroupChatConfig {
+  chatType: "private" | "public";
+  autoDelete: "never" | "24h" | "7d" | "30d";
+  description?: string;
+  ownerId: string;
+  ownerName: string;
+  moderatorIds: string[];
+  memberIds: string[];
+  permissions: GroupChatPermissions;
 }
 
 export interface Conversation {
@@ -35,6 +67,8 @@ export interface Conversation {
   unreadCount: number;
   status: "open" | "resolved";
   messages: Message[];
+  isGroup?: boolean;
+  groupConfig?: GroupChatConfig;
   botStatus?: "active" | "paused" | "off";
   assignedPersonId?: string;
   assignedBotId?: string;
@@ -63,6 +97,115 @@ export interface SessionWindowStatus {
 const STORAGE_KEY = "whatsappMockConversations";
 
 export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
+  // ── Group Chats (Bitrix Style Collaboration) ──
+  {
+    id: "grp-clinical-care",
+    contactName: "Clinical Care Team",
+    phoneNumber: "Group · 4 members",
+    inboxNumber: "+1 (555) 123-4567",
+    channel: "whatsapp",
+    lastMessage: "Dr. Alistair Mehta: Attached the updated lab protocol for review.",
+    timestamp: "10:40 AM",
+    unreadCount: 1,
+    status: "open",
+    isGroup: true,
+    groupConfig: {
+      chatType: "private",
+      autoDelete: "never",
+      description: "Interdisciplinary care coordination for oncology and lab follow-ups.",
+      ownerId: "usr-doc-1",
+      ownerName: "Dr. Alistair Mehta",
+      moderatorIds: ["usr-doc-1", "usr-doc-2"],
+      memberIds: ["usr-doc-1", "usr-doc-2", "CL-001", "CL-004"],
+      permissions: {
+        whoCanAddMembers: "moderators",
+        whoCanPost: "all",
+      },
+    },
+    messages: [
+      {
+        id: "msg-grp-1",
+        text: "Welcome team to the Clinical Care coordination channel.",
+        timestamp: "Yesterday, 04:30 PM",
+        sender: "contact",
+        senderName: "Dr. Rachel Reynolds",
+        status: "read",
+      },
+      {
+        id: "msg-grp-2",
+        text: "Please make sure fasting lab instructions are sent to all Tuesday appointments.",
+        timestamp: "09:15 AM",
+        sender: "me",
+        senderName: "Care Coordinator",
+        status: "read",
+      },
+      {
+        id: "msg-grp-3",
+        text: "Attached the updated lab protocol for review.",
+        timestamp: "10:40 AM",
+        sender: "contact",
+        senderName: "Dr. Alistair Mehta",
+        status: "delivered",
+        attachment: {
+          name: "Oncology_Lab_Panel_Guide_2026.pdf",
+          size: "620 KB",
+          type: "application/pdf",
+        },
+      },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "grp-patient-support",
+    contactName: "Patient Support & Wellness",
+    phoneNumber: "Group · 5 members",
+    inboxNumber: "+1 (555) 123-4567",
+    channel: "companion",
+    lastMessage: "Sarah Johnson: Thank you for confirming the therapy dates!",
+    timestamp: "09:30 AM",
+    unreadCount: 0,
+    status: "open",
+    isGroup: true,
+    groupConfig: {
+      chatType: "public",
+      autoDelete: "30d",
+      description: "Direct wellness questions and follow-up guidance for enrolled clients.",
+      ownerId: "usr-admin-1",
+      ownerName: "Clinic Admin",
+      moderatorIds: ["usr-admin-1"],
+      memberIds: ["usr-admin-1", "CL-001", "CL-002", "CL-003", "CL-005"],
+      permissions: {
+        whoCanAddMembers: "all",
+        whoCanPost: "all",
+      },
+    },
+    messages: [
+      {
+        id: "msg-grp-w1",
+        text: "Hello everyone, reminder that nutrition clinic drop-in sessions take place this Friday.",
+        timestamp: "Yesterday, 11:00 AM",
+        sender: "me",
+        senderName: "Clinic Admin",
+        status: "read",
+      },
+      {
+        id: "msg-grp-w2",
+        text: "Thank you for confirming the therapy dates!",
+        timestamp: "09:30 AM",
+        sender: "contact",
+        senderName: "Sarah Johnson",
+        status: "read",
+        replyTo: {
+          id: "msg-grp-w1",
+          text: "Hello everyone, reminder that nutrition clinic drop-in sessions take place this Friday.",
+          senderName: "Clinic Admin",
+        },
+      },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
   // ── WhatsApp Contacts (20 Sample Contacts) ──
   {
     id: "conv-wa-1",
@@ -1129,8 +1272,17 @@ export function useConversations() {
     return newConv;
   };
 
-  const sendMessage = (conversationId: string, text: string) => {
-    if (!text.trim()) return;
+  const sendMessage = (
+    conversationId: string,
+    text: string,
+    options?: {
+      replyTo?: MessageReplyReference;
+      attachment?: MessageAttachment;
+      sender?: "contact" | "me";
+      senderName?: string;
+    }
+  ) => {
+    if (!text.trim() && !options?.attachment) return;
     const conv = conversations.find((c) => c.id === conversationId);
     const targetId = conv ? conv.id : conversationId;
 
@@ -1138,17 +1290,22 @@ export function useConversations() {
       id: `msg-${Date.now()}`,
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      sender: "me",
+      sender: options?.sender || "me",
+      senderName: options?.senderName,
       status: "read",
       origin: "human",
+      replyTo: options?.replyTo,
+      attachment: options?.attachment,
     };
+
+    const displayText = text.trim() || (options?.attachment ? `[Attachment: ${options.attachment.name}]` : "");
 
     setConversations((prev) =>
       prev.map((c) =>
         c.id === targetId
           ? {
               ...c,
-              lastMessage: text.trim(),
+              lastMessage: displayText,
               timestamp: "Just now",
               messages: [...c.messages, newMessage],
             }
@@ -1166,15 +1323,85 @@ export function useConversations() {
         timestamp: new Date().toISOString(),
         direction: "sent" as any,
         status: "delivered" as any,
-        messageText: text.trim(),
+        messageText: displayText,
         phoneNumber: conv.phoneNumber,
         refId: conv.id,
         details: {
-          primary: text.trim(),
+          primary: displayText,
           secondary: `To: ${conv.contactName} (${conv.phoneNumber})`,
         },
       } as any);
     }
+  };
+
+  const createGroupConversation = (params: {
+    name: string;
+    chatType: "private" | "public";
+    autoDelete: "never" | "24h" | "7d" | "30d";
+    description?: string;
+    memberIds: string[];
+    moderatorIds: string[];
+    ownerId: string;
+    ownerName: string;
+    permissions: GroupChatPermissions;
+  }): Conversation => {
+    const newGroupConv: Conversation = {
+      id: `grp-${Date.now()}`,
+      contactName: params.name.trim(),
+      phoneNumber: `Group · ${params.memberIds.length} members`,
+      inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber,
+      channel: "whatsapp",
+      lastMessage: `Group "${params.name.trim()}" created`,
+      timestamp: "Just now",
+      unreadCount: 0,
+      status: "open",
+      isGroup: true,
+      groupConfig: {
+        chatType: params.chatType,
+        autoDelete: params.autoDelete,
+        description: params.description,
+        ownerId: params.ownerId,
+        ownerName: params.ownerName,
+        moderatorIds: params.moderatorIds,
+        memberIds: params.memberIds,
+        permissions: params.permissions,
+      },
+      messages: [
+        {
+          id: `msg-${Date.now()}`,
+          text: `Group "${params.name.trim()}" created by ${params.ownerName}.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          sender: "me",
+          senderName: params.ownerName,
+          status: "read",
+          origin: "system",
+        },
+      ],
+      botStatus: "off",
+      assignedPersonId: "",
+    };
+
+    setConversations((prev) => [newGroupConv, ...prev]);
+    return newGroupConv;
+  };
+
+  const updateGroupConfig = (conversationId: string, patch: Partial<GroupChatConfig>) => {
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === conversationId && c.isGroup && c.groupConfig) {
+          const updatedConfig: GroupChatConfig = {
+            ...c.groupConfig,
+            ...patch,
+          };
+          return {
+            ...c,
+            groupConfig: updatedConfig,
+            phoneNumber: `Group · ${updatedConfig.memberIds.length} members`,
+          };
+        }
+        return c;
+      })
+    );
   };
 
   const sendTemplate = (conversationId: string, template: WhatsappTemplate) => {
@@ -1239,6 +1466,8 @@ export function useConversations() {
     findOrCreateConversationForClient,
     sendMessage,
     sendTemplate,
+    createGroupConversation,
+    updateGroupConfig,
     getSessionWindow,
   };
 }

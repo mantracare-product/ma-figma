@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Bot, UserCheck, ChevronDown } from "lucide-react";
+import { X, Bot, UserCheck, ChevronDown, Users, Settings } from "lucide-react";
 import { Conversation } from "../../../lib/useConversations";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../../constants/channels";
 
@@ -10,6 +10,7 @@ export interface ConversationHeaderProps {
   onToggleBotStatus?: () => void;
   onOpenAssignBotModal?: () => void;
   onOpenAssignPersonModal?: () => void;
+  onOpenGroupSettings?: () => void;
   availableEmployees?: Array<{ id: string; name: string }>;
 }
 
@@ -20,6 +21,7 @@ export default function ConversationHeader({
   onToggleBotStatus,
   onOpenAssignBotModal,
   onOpenAssignPersonModal,
+  onOpenGroupSettings,
   availableEmployees = [
     { id: "1", name: "Sarah Johnson" },
     { id: "2", name: "Michael Chen" },
@@ -28,7 +30,6 @@ export default function ConversationHeader({
 }: ConversationHeaderProps) {
   const channelKey = conversation.channel || "whatsapp";
   const channelLabel = CHANNEL_LABELS[channelKey] || "WhatsApp";
-  const channelClass = CHANNEL_CLASSES[channelKey] || "bg-emerald-100 text-emerald-800 border-emerald-200";
 
   const initials = conversation.contactName
     ? conversation.contactName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -40,7 +41,7 @@ export default function ConversationHeader({
     <div className="px-5 py-3 border-b border-gray-200/90 flex items-center justify-between bg-white shrink-0">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-          {initials}
+          {conversation.isGroup ? <Users className="w-4 h-4" /> : initials}
         </div>
         <div>
           <h3 className="text-sm font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -52,44 +53,58 @@ export default function ConversationHeader({
         </div>
       </div>
 
-      {/* Right side: Status pills & optional Close X */}
+      {/* Right side: Actions & Group Settings */}
       <div className="flex items-center gap-2">
-        {/* Status Pill */}
-        {conversation.botStatus === "active" ? (
-          <button
-            type="button"
-            onClick={onToggleBotStatus}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#ecfdf5] text-[#047857] border border-emerald-200/60 rounded-full text-xs font-semibold hover:bg-emerald-100/70 transition-colors cursor-pointer"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse" />
-            <Bot className="w-3.5 h-3.5 text-[#047857]" />
-            <span>Bot Active</span>
-          </button>
-        ) : conversation.assignedPersonId ? (
-          <button
-            type="button"
-            onClick={onOpenAssignPersonModal}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-[#1456f0] border border-blue-200/60 rounded-full text-xs font-semibold hover:bg-blue-100 transition-colors cursor-pointer"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-[#1456f0]" />
-            <span>Assigned to {assignedEmployee?.name || "Team Member"}</span>
-          </button>
+        {conversation.isGroup ? (
+          onOpenGroupSettings && (
+            <button
+              type="button"
+              onClick={onOpenGroupSettings}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>Group Settings</span>
+            </button>
+          )
         ) : (
-          <button
-            type="button"
-            onClick={onOpenAssignBotModal}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-600 border border-slate-200/80 rounded-full text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <Bot className="w-3.5 h-3.5 text-slate-500" />
-            <span>Unassigned (Bot Off)</span>
-          </button>
+          <>
+            {conversation.botStatus === "active" ? (
+              <button
+                type="button"
+                onClick={onToggleBotStatus}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+                <Bot className="w-3.5 h-3.5 text-slate-600" />
+                <span>Bot Active</span>
+              </button>
+            ) : conversation.assignedPersonId ? (
+              <button
+                type="button"
+                onClick={onOpenAssignPersonModal}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-slate-600" />
+                <span>Assigned: {assignedEmployee?.name || "Team Member"}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenAssignBotModal}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-500 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <Bot className="w-3.5 h-3.5 text-slate-400" />
+                <span>Unassigned</span>
+              </button>
+            )}
+          </>
         )}
 
         {isDrawer && onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors ml-1"
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors ml-1 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

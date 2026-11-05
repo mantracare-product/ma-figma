@@ -33,6 +33,7 @@ const CallLogs = withLazy(() => import("./pages/CallLogs"));
 const CallDetails = withLazy(() => import("./pages/CallDetails"));
 const Deals = withLazy(() => import("./pages/Deals"));
 const Process = withLazy(() => import("./pages/Process"));
+const Tasks = withLazy(() => import("./pages/Tasks"));
 const Automation = withLazy(() => import("./pages/Automation"));
 const KnowledgeBase = withLazy(() => import("./pages/KnowledgeBase"));
 const WebForms = withLazy(() => import("./pages/WebForms"));
@@ -80,6 +81,7 @@ const PatientFormsScreen = withLazy(() => import("./pages/patient/PatientFormsSc
 const PatientFormFillScreen = withLazy(() => import("./pages/patient/PatientFormFillScreen"));
 const PatientProfileScreen = withLazy(() => import("./pages/patient/PatientProfileScreen"));
 const PatientCareBotScreen = withLazy(() => import("./pages/patient/PatientCareBotScreen"));
+const PatientMessagesScreen = withLazy(() => import("./pages/patient/PatientMessagesScreen"));
 const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
 const AdminPlans = withLazy(() => import("./pages/admin/AdminPlans"));
 const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
@@ -149,6 +151,7 @@ export const router = createBrowserRouter([
       { path: "pharmacy", Component: PatientPharmacyScreen },
       { path: "bill", Component: PatientBillScreen },
       { path: "pay", Component: PatientPaymentScreen },
+      { path: "messages", Component: PatientMessagesScreen },
       { path: "care-bot", Component: PatientCareBotScreen },
       { path: "bot", Component: PatientCareBotScreen },
       { path: ":clientId", Component: PatientStatusScreen },
@@ -210,6 +213,7 @@ export const router = createBrowserRouter([
           { path: "call-logs/:id", Component: CallDetails },
           { path: "deals", Component: Deals },
           { path: "process", Component: Process },
+          { path: "tasks", Component: Tasks },
           { path: "automation", Component: Automation },
           { path: "knowledge-base", Component: KnowledgeBase },
           { path: "forms", element: <Navigate to="/web-forms" replace /> },
@@ -294,6 +298,7 @@ export const router = createBrowserRouter([
           { path: "subscriptions", Component: AdminBilling },
           { path: "credits", Component: AdminPlans },
           { path: "settings", Component: Settings },
+          { path: "tasks", Component: Tasks },
           { path: "reports", Component: Reports },
         ],
       },

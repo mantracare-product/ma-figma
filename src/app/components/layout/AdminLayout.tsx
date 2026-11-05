@@ -13,6 +13,7 @@ import React, { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router";
 import AdminSidebar from "./AdminSidebar";
 import logo from "../../../imports/ma_logo.png";
+import TopBarNotificationBell from "./TopBarNotificationBell";
 import { Menu, X } from "lucide-react";
 
 export default function AdminLayout() {
@@ -71,6 +72,7 @@ export default function AdminLayout() {
         {/* Top Bar Page Header Slot */}
         <div className="flex-1 h-full px-6 sm:px-10 flex items-center justify-between gap-3 min-w-0">
           <div id="topbar-page-header" className="flex-1 flex items-center justify-between gap-3 min-w-0" />
+          <TopBarNotificationBell />
         </div>
       </header>
 

@@ -75,6 +75,8 @@ import { useConversations, Message as ConvMessage, Conversation as ConvConversat
 import ConversationHeader from "../components/chats/ConversationHeader";
 import MessageThreadList from "../components/chats/MessageThreadList";
 import MessageComposerBar from "../components/chats/MessageComposerBar";
+import CreateGroupChatDrawer from "../components/chats/CreateGroupChatDrawer";
+import GroupChatSettingsDrawer from "../components/chats/GroupChatSettingsDrawer";
 import WebmailView, { EmailFolder } from "../components/chats/WebmailView";
 import EmailTemplateDrawer, { EmailTemplate } from "../components/chats/EmailTemplateDrawer";
 import EmailBlacklistDrawer from "../components/chats/EmailBlacklistDrawer";
@@ -853,8 +855,18 @@ export default function Chats() {
   };
 
   // ── Chats State ──
-  const { conversations, setConversations, sendMessage: storeSendMessage, sendTemplate: storeSendTemplate } = useConversations();
+  const {
+    conversations,
+    setConversations,
+    sendMessage: storeSendMessage,
+    sendTemplate: storeSendTemplate,
+    createGroupConversation,
+    updateGroupConfig,
+  } = useConversations();
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
+  const [showCreateGroupDrawer, setShowCreateGroupDrawer] = useState(false);
+  const [showGroupSettingsDrawer, setShowGroupSettingsDrawer] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
   const [chatSearch, setChatSearch] = useState("");
   const [emailSearch, setEmailSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | "email" | "companion" | null>("whatsapp");
@@ -1497,11 +1509,24 @@ export default function Chats() {
     toast.success(`Template "${template.name}" sent`);
   };
 
-  const handleSendMessage = () => {
-    if (!composerText.trim() || !activeConversation) return;
-    storeSendMessage(selectedConversationId, composerText);
+  const handleSendMessage = (text?: string, options?: any) => {
+    const textToSend = typeof text === "string" ? text : composerText;
+    if ((!textToSend.trim() && !options?.attachment) || !activeConversation) return;
+    storeSendMessage(selectedConversationId, textToSend, options);
     setComposerText("");
+    setReplyingToMessage(null);
     toast.success("Message sent");
+  };
+
+  const handleCreateGroup = (params: any) => {
+    const newGroup = createGroupConversation(params);
+    if (newGroup) {
+      setSelectedConversationId(newGroup.id);
+    }
+  };
+
+  const handleUpdateGroup = (id: string, patch: any) => {
+    updateGroupConfig(id, patch);
   };
 
   const availableNumbersForChannel = useMemo(() => {
@@ -1535,7 +1560,12 @@ export default function Chats() {
 
   const filteredConversations = conversations.filter(c => {
     const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
-    const matchesChannel = channelFilter === null ? false : channelFilter === "all" ? true : c.channel === channelFilter;
+    const matchesChannel =
+      channelFilter === null
+        ? false
+        : channelFilter === "all"
+        ? true
+        : c.channel === channelFilter || (c.isGroup && (channelFilter === "whatsapp" || channelFilter === "companion"));
     const matchesView =
       viewFilter === "all" ? true :
         viewFilter === "unread" ? c.unreadCount > 0 :
@@ -2735,19 +2765,32 @@ export default function Chats() {
                   </div>
                 )}
               </div>
-            ) : (channelFilter === "website" || channelFilter === "companion") ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
-                  else setShowCompanionSettingsDrawer(true);
-                }}
-                className="w-[36px] h-[36px] rounded-xl border border-border bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
-                title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            ) : undefined
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupDrawer(true)}
+                  className="h-[36px] px-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>+ New Group</span>
+                </button>
+                {(channelFilter === "website" || channelFilter === "companion") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
+                      else setShowCompanionSettingsDrawer(true);
+                    }}
+                    className="w-[36px] h-[36px] rounded-xl border border-border bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
+                    title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )
           }
         />
 
@@ -2809,7 +2852,7 @@ export default function Chats() {
                             isSelected ? "bg-[#1E293B] text-white" : "bg-slate-100 text-slate-700"
                           }`}
                         >
-                          {getInitials(conv.contactName)}
+                          {conv.isGroup ? <Users className="w-4 h-4" /> : getInitials(conv.contactName)}
                         </div>
 
                         {/* Middle: Contact Name and Last Message */}
@@ -2868,19 +2911,23 @@ export default function Chats() {
                     onToggleBotStatus={handleToggleBotStatus}
                     onOpenAssignBotModal={() => setShowAssignBotModal(true)}
                     onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
+                    onOpenGroupSettings={() => setShowGroupSettingsDrawer(true)}
                     availableEmployees={AVAILABLE_EMPLOYEES}
                   />
                   <MessageThreadList
                     messages={activeConversation.messages}
                     emptyMessage="No messages in this conversation yet."
+                    onReply={(msg) => setReplyingToMessage(msg)}
                   />
                   <MessageComposerBar
                     conversation={activeConversation}
                     session={computeSessionWindow(activeConversation)}
-                    onSendMessage={handleSendMessage}
+                    onSendMessage={(text, opts) => handleSendMessage(text, opts)}
                     onSendTemplate={handleSendTemplateDirectly}
                     onEnrollCampaign={handleEnrollCampaign}
                     onAssignResponsible={handleAssignPerson}
+                    replyingTo={replyingToMessage}
+                    onCancelReply={() => setReplyingToMessage(null)}
                   />
                 </>
               ) : (
@@ -3785,6 +3832,20 @@ export default function Chats() {
           handleSubModeChange("inbox");
           window.dispatchEvent(new CustomEvent("open-webmail-compose"));
         }}
+      />
+
+      {/* ── Group Chat Drawers ── */}
+      <CreateGroupChatDrawer
+        isOpen={showCreateGroupDrawer}
+        onClose={() => setShowCreateGroupDrawer(false)}
+        onCreateGroup={handleCreateGroup}
+      />
+
+      <GroupChatSettingsDrawer
+        isOpen={showGroupSettingsDrawer}
+        onClose={() => setShowGroupSettingsDrawer(false)}
+        conversation={activeConversation}
+        onUpdateGroup={handleUpdateGroup}
       />
 
       <HowItWorksModal

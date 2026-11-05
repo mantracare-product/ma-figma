@@ -224,6 +224,13 @@ export const EVENT_CATALOG: Record<
     { event: "claim.denied", label: "Claim denied", description: "Payer denied coverage or requested pre-authorization" },
     { event: "claim.paid", label: "Claim paid", description: "Insurance remittance payment received" },
   ],
+  task: [
+    { event: "task.created", label: "Task created", description: "Fires when a new task is created" },
+    { event: "task.assigned", label: "Task assigned", description: "Task is assigned to team member or contact" },
+    { event: "task.status_changed", label: "Task status changed", description: "Task status transitions between lifecycle states" },
+    { event: "task.completed", label: "Task completed", description: "Task checklist and deliverables finished" },
+    { event: "task.overdue", label: "Task overdue", description: "Task exceeds planned deadline" },
+  ],
 };
 
 export const DEFAULT_CHECKIN_CARE_JOURNEY_RULE: AutomationRule = {

@@ -5,6 +5,7 @@ import logo from "../../../imports/ma_logo.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
+import TopBarNotificationBell from "./TopBarNotificationBell";
 
 export default function MainLayout() {
   const { collapsed, setCollapsed } = useSidebar();
@@ -53,6 +54,7 @@ export default function MainLayout() {
         {/* Top Bar Page Header Slot */}
         <div className="flex-1 h-full px-10 sm:px-12 flex items-center justify-between gap-3 min-w-0">
           <div id="topbar-page-header" className="flex-1 flex items-center justify-between gap-3 min-w-0" />
+          <TopBarNotificationBell />
         </div>
       </header>
 

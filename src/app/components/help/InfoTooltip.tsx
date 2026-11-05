@@ -3,12 +3,14 @@ import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 
 interface InfoTooltipProps {
-  text: string;           // plain-language explanation of the setting
+  text?: string;           // plain-language explanation of the setting
+  content?: string;        // alias for text
   placement?: "top" | "bottom" | "left" | "right"; // default "top"
   size?: "sm" | "md";     // icon size, default "sm"
 }
 
-export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoTooltipProps) {
+export function InfoTooltip({ text, content, placement = "top", size = "sm" }: InfoTooltipProps) {
+  const tooltipText = text || content || "";
   const [isVisible, setIsVisible] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -205,7 +207,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
               whiteSpace: "normal",
             }}
           >
-            {text}
+            {tooltipText}
             <div
               className={`absolute w-0 h-0 border-[6px] ${arrowStyles[actualPlacement]}`}
             />

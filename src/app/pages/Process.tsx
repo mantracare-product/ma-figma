@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useLocation } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight, BookOpen, Radio } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight, BookOpen, Radio, CheckSquare } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -1115,6 +1115,7 @@ export default function Process() {
     { id: "appointment", label: "Appointments", icon: Calendar },
     { id: "invoice", label: "Invoices", icon: FileText },
     { id: "insurance", label: "Insurance & Claims", icon: Shield },
+    { id: "task", label: "Tasks", icon: CheckSquare },
   ];
 
   const entityModes = useMemo(() => {
@@ -1131,6 +1132,10 @@ export default function Process() {
   }, [processes]);
 
   const handleEntityModeChange = (modeId: string) => {
+    if (modeId === "task") {
+      navigate("/tasks");
+      return;
+    }
     const nextEntity = modeId as EntityType;
     setSelectedEntity(nextEntity);
     const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
