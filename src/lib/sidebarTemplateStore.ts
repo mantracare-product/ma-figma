@@ -1,4 +1,4 @@
-import { ScopingRule } from "./useProcessStore";
+import type { ScopingRule } from "./useProcessStore";
 
 export interface NavItemConfig {
   id: string;

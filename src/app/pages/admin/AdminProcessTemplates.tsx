@@ -3258,16 +3258,20 @@ export default function AdminProcessTemplates() {
               </select>
             </div>
           }
-          primaryAction={{
-            label: "Add Workflow",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: () => {
-              setModalScopingRules([]);
-              setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
-              setNewProcessEntityType((selectedEntityFilter === "process" ? "client" : selectedEntityFilter) as EntityType);
-              setShowAddProcessModal(true);
-            },
-          }}
+          primaryAction={
+            selectedEntityFilter === "task"
+              ? undefined
+              : {
+                  label: "Add Workflow",
+                  icon: <Plus className="w-3.5 h-3.5" />,
+                  onClick: () => {
+                    setModalScopingRules([]);
+                    setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
+                    setNewProcessEntityType((selectedEntityFilter === "process" ? "client" : selectedEntityFilter) as EntityType);
+                    setShowAddProcessModal(true);
+                  },
+                }
+          }
         />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
@@ -5410,7 +5414,6 @@ export default function AdminProcessTemplates() {
                 <option value="invoice">Invoices</option>
                 <option value="insurance">Insurance</option>
                 <option value="claim">Claims</option>
-                <option value="task">Tasks</option>
               </select>
               <p className="text-xs text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
                 Specify which entity this workflow process belongs to.

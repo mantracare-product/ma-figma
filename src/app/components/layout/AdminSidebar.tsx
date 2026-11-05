@@ -106,6 +106,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "CORPORATE",
       items: [
         { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
+        { id: "tasks", label: "Tasks", icon: CheckSquare, path: "/admin/tasks" },
         { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
         { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
       ],

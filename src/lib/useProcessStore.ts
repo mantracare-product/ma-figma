@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { WorkflowStep } from "../app/types/workflow";
+import type { WorkflowStep } from "../app/types/workflow";
 import { runEntityStageMigration } from "./entityMigration";
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
@@ -384,7 +384,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   invoice: ["draft", "paid", "void"],
   insurance: ["draft", "submitted", "paid", "failed"],
   claim: ["draft", "submitted", "paid", "denied"],
-  task: ["pending", "in_progress", "completed", "cancelled"],
+  task: ["created", "completed", "overdue"],
 };
 
 export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
@@ -636,12 +636,12 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
   if (entityType === "task") {
     return [
       {
-        id: `${processIdPrefix}-task-pending`,
-        name: "Pending",
-        description: "Task queued and pending start",
+        id: `${processIdPrefix}-task-created`,
+        name: "Task Created",
+        description: "Task initialized and scheduled",
         status: "active",
-        color: "#64748B",
-        systemCategory: "pending",
+        color: "#3B82F6",
+        systemCategory: "created",
         isSystemCategoryRequired: true,
         isPredefined: true,
         stageCategory: "in_progress",
@@ -649,21 +649,9 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         isInitial: true,
       },
       {
-        id: `${processIdPrefix}-task-inprogress`,
-        name: "In Progress",
-        description: "Work actively underway",
-        status: "active",
-        color: "#3B82F6",
-        systemCategory: "in_progress",
-        isSystemCategoryRequired: true,
-        isPredefined: true,
-        stageCategory: "in_progress",
-        stagePosition: "intermediate",
-      },
-      {
         id: `${processIdPrefix}-task-completed`,
-        name: "Completed",
-        description: "All requirements met and signed off",
+        name: "Task Completed",
+        description: "All requirements met and verified (Won)",
         status: "active",
         color: "#10B981",
         systemCategory: "completed",
@@ -675,12 +663,12 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         isFinalStage: true,
       },
       {
-        id: `${processIdPrefix}-task-cancelled`,
-        name: "Cancelled",
-        description: "Task abandoned or voided",
+        id: `${processIdPrefix}-task-overdue`,
+        name: "Task Overdue",
+        description: "Deadline passed without completion (Lost)",
         status: "active",
         color: "#EF4444",
-        systemCategory: "cancelled",
+        systemCategory: "overdue",
         isSystemCategoryRequired: true,
         isPredefined: true,
         stageCategory: "lost",
@@ -822,10 +810,9 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       style: "Balanced",
     },
     stages: [
-      { id: "task-stg-1", name: "Pending", description: "Task queued and pending start", status: "active", color: "#64748B", systemCategory: "pending", stageCategory: "in_progress", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "task-stg-2", name: "In Progress", description: "Work actively underway", status: "active", color: "#3B82F6", systemCategory: "in_progress", stageCategory: "in_progress", isSystemCategoryRequired: true, stagePosition: "intermediate" },
-      { id: "task-stg-3", name: "Completed", description: "All requirements met and signed off", status: "active", color: "#10B981", systemCategory: "completed", stageCategory: "success", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "task-stg-4", name: "Cancelled", description: "Task abandoned or voided", status: "active", color: "#EF4444", systemCategory: "cancelled", stageCategory: "lost", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "task-stg-created", name: "Task Created", description: "Task initialized and scheduled", status: "active", color: "#3B82F6", systemCategory: "created", stageCategory: "in_progress", isSystemCategoryRequired: true, isPredefined: true, isInitial: true, stagePosition: "initial" },
+      { id: "task-stg-completed", name: "Task Completed", description: "All requirements met and verified (Won)", status: "active", color: "#10B981", systemCategory: "completed", stageCategory: "success", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "task-stg-overdue", name: "Task Overdue", description: "Deadline passed without completion (Lost)", status: "active", color: "#EF4444", systemCategory: "overdue", stageCategory: "lost", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
     ],
   },
 };
@@ -856,7 +843,7 @@ export function isPredefinedStage(stage: Stage | null | undefined, entityType?: 
     }
   }
   if (ent === "task") {
-    if (["pending", "in progress", "completed", "cancelled"].includes(nameLower)) {
+    if (["task created", "task completed", "task overdue", "created", "completed", "overdue"].includes(nameLower)) {
       return true;
     }
   }
@@ -1329,6 +1316,22 @@ export function getStoredProcesses(): Process[] {
       } else if (p.name === "Insurance Verification" || p.name === "Insurance") {
         changed = true;
         return { ...p, name: "Insurance and Claims" };
+      }
+    }
+    return p;
+  });
+
+  // Ensure task entity processes use fixed stages: Task Created, Task Completed, Task Overdue
+  list = list.map((p) => {
+    if (p.entityType === "task") {
+      const hasTaskCreated = p.stages.some((s) => (s.name || "").toLowerCase() === "task created");
+      if (!hasTaskCreated || p.stages.some((s) => s.name === "Pending")) {
+        changed = true;
+        return {
+          ...p,
+          name: "Task Workflow",
+          stages: DEFAULT_ENTITY_PROCESSES.task.stages,
+        };
       }
     }
     return p;

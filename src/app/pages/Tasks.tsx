@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams, useLocation } from "react-router";
 import {
   CheckSquare,
   GitBranch,
@@ -50,6 +50,8 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith("/admin");
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     tasks,
@@ -240,7 +242,11 @@ export default function Tasks() {
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Tasks"
-          subtitle="Clinical tasks, operational assignments, checklists, and deadline tracking"
+          subtitle={
+            isAdmin
+              ? "Corporate operational assignments, cross-organization delegation, checklists, and deadline tracking"
+              : "Clinical tasks, operational assignments, checklists, and deadline tracking"
+          }
         />
 
         {/* ── PageTopBar with Entity Switcher, Search, View Mode, and New Task Action ── */}
