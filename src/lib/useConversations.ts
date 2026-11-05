@@ -1079,6 +1079,43 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
   },
 ];
 
+export function isTaskAssignmentText(text?: string): boolean {
+  if (!text) return false;
+  return (
+    text.includes("Task Assigned:") ||
+    text.includes("Stage: Task Created") ||
+    text.includes("Stage:") ||
+    text.includes("Deadline:") ||
+    text.includes("/patient/tasks") ||
+    text.includes("/tasks?id=") ||
+    text.includes("/tasks")
+  );
+}
+
+export function sanitizeChannelConversations(convs: Conversation[]): { cleaned: Conversation[]; modified: boolean } {
+  let modified = false;
+  const cleaned = convs.map((c) => {
+    // Only companion channels should ever carry task assignment messages
+    if (c.channel === "whatsapp" || c.channel === "sms") {
+      const msgs = c.messages || [];
+      const hasDirtyMsg = msgs.some((m) => isTaskAssignmentText(m.text));
+      const hasDirtyLastMsg = isTaskAssignmentText(c.lastMessage);
+      if (hasDirtyMsg || hasDirtyLastMsg) {
+        modified = true;
+        const cleanedMsgs = msgs.filter((m) => !isTaskAssignmentText(m.text));
+        const lastMsg = cleanedMsgs[cleanedMsgs.length - 1]?.text || "";
+        return {
+          ...c,
+          messages: cleanedMsgs,
+          lastMessage: hasDirtyLastMsg ? lastMsg : c.lastMessage,
+        };
+      }
+    }
+    return c;
+  });
+  return { cleaned, modified };
+}
+
 export function getStoredConversations(): Conversation[] {
   const validNumbers = new Set(DEFAULT_MOCK_NUMBERS.map((n) => n.displayPhoneNumber));
   try {
@@ -1094,17 +1131,11 @@ export function getStoredConversations(): Conversation[] {
       const parsedIds = new Set(parsed.map((c) => c.id));
       const missingInitial = INITIAL_MOCK_CONVERSATIONS.filter((c) => !parsedIds.has(c.id));
       const merged = [...parsed, ...missingInitial];
-      const updated = merged.map((c) => {
-        // Purge any accidental task assignment messages from WhatsApp conversations
+      const { cleaned, modified } = sanitizeChannelConversations(merged);
+      const updated = cleaned.map((c) => {
         if (c.channel === "whatsapp") {
-          const cleanedMsgs = (c.messages || []).filter(
-            (m: any) => !m.text?.includes("Task Assigned:") && !m.text?.includes("Stage: Task Created")
-          );
-          const lastMsg = cleanedMsgs[cleanedMsgs.length - 1]?.text || "";
           return {
             ...c,
-            messages: cleanedMsgs,
-            lastMessage: c.lastMessage?.includes("Task Assigned:") ? lastMsg : c.lastMessage,
             inboxNumber: (!c.inboxNumber || !validNumbers.has(c.inboxNumber))
               ? DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber
               : c.inboxNumber,
@@ -1112,6 +1143,11 @@ export function getStoredConversations(): Conversation[] {
         }
         return c;
       });
+      if (modified) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        } catch {}
+      }
       return updated;
     }
   } catch {}
@@ -1123,7 +1159,8 @@ export function saveStoredConversations(convs: Conversation[]): void {
   if (isSyncingStoredConvs) return;
   try {
     isSyncingStoredConvs = true;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
+    const { cleaned } = sanitizeChannelConversations(convs);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
     window.dispatchEvent(new Event(TEST_CHAT_SYNC_EVENT));
     window.dispatchEvent(new Event("storage"));
   } catch {} finally {
