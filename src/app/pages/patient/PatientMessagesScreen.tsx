@@ -15,7 +15,7 @@ import {
   CheckCheck,
   Stethoscope,
 } from "lucide-react";
-import { useConversations, Message, MessageAttachment, MessageReplyReference } from "../../../lib/useConversations";
+import { useConversations, Conversation, Message, MessageAttachment, MessageReplyReference } from "../../../lib/useConversations";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { toast } from "sonner";
 
@@ -36,7 +36,7 @@ export default function PatientMessagesScreen() {
   // Find all relevant channels for this client
   const clientConversations = useMemo(() => {
     // 1. Doctor Chat (Direct conversation for this client)
-    const doctorChat = conversations.find(
+    const doctorChat: Conversation = conversations.find(
       (c) => c.clientId === activeClient.id || (!c.isGroup && c.contactName === activeClient.name)
     ) || {
       id: `doc-${activeClient.id}`,
@@ -48,6 +48,7 @@ export default function PatientMessagesScreen() {
       timestamp: "10:15 AM",
       unreadCount: 0,
       status: "open" as const,
+      isGroup: false,
       messages: [
         {
           id: "doc-msg-1",
@@ -76,7 +77,7 @@ export default function PatientMessagesScreen() {
     };
 
     // 2. Group Chats this client is part of
-    const groupChats = conversations.filter(
+    const groupChats: Conversation[] = conversations.filter(
       (c) =>
         c.isGroup &&
         c.groupConfig &&
@@ -86,7 +87,7 @@ export default function PatientMessagesScreen() {
     );
 
     // 3. Care Bot Chat
-    const careBotChat = {
+    const careBotChat: Conversation = {
       id: "care-bot-system",
       contactName: "Care Bot",
       phoneNumber: "AI Health Companion",
@@ -96,6 +97,7 @@ export default function PatientMessagesScreen() {
       unreadCount: 0,
       status: "open" as const,
       isBot: true,
+      isGroup: false,
       messages: [
         {
           id: "bot-msg-1",
@@ -131,10 +133,10 @@ export default function PatientMessagesScreen() {
 
     const replyRef: MessageReplyReference | undefined = replyingTo
       ? {
-          id: replyingTo.id,
-          text: replyingTo.text,
-          senderName: replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : activeChat.contactName),
-        }
+        id: replyingTo.id,
+        text: replyingTo.text,
+        senderName: replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : activeChat.contactName),
+      }
       : undefined;
 
     // Dispatch message
@@ -191,15 +193,13 @@ export default function PatientMessagesScreen() {
               <div
                 key={chat.id}
                 onClick={() => setSelectedChatId(chat.id)}
-                className={`p-3.5 flex items-start gap-3 cursor-pointer transition-colors border-l-2 ${
-                  isSelected ? "bg-blue-50/70 border-l-[#1456f0]" : "border-l-transparent bg-white hover:bg-slate-50"
-                }`}
+                className={`p-3.5 flex items-start gap-3 cursor-pointer transition-colors border-l-2 ${isSelected ? "bg-blue-50/70 border-l-[#1456f0]" : "border-l-transparent bg-white hover:bg-slate-50"
+                  }`}
               >
                 {/* Avatar */}
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
-                    isSelected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
-                  }`}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${isSelected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+                    }`}
                 >
                   {isBot ? (
                     <Bot className="w-4 h-4 text-blue-600" />
@@ -238,7 +238,7 @@ export default function PatientMessagesScreen() {
             <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
               {(activeChat as any)?.isBot ? (
                 <Bot className="w-4 h-4 text-blue-400" />
-              ) : (activeChat as any)?.isGroup ? (
+              ) : activeChat.isGroup ? (
                 <Users className="w-4 h-4" />
               ) : (
                 <Stethoscope className="w-4 h-4" />
@@ -281,20 +281,18 @@ export default function PatientMessagesScreen() {
                   )}
 
                   <div
-                    className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                      isMe
+                    className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isMe
                         ? "bg-[#1456f0] text-white rounded-br-xs shadow-xs"
                         : "bg-white text-slate-900 border border-gray-200/90 rounded-bl-xs shadow-2xs"
-                    }`}
+                      }`}
                   >
                     {/* Reply quote */}
                     {msg.replyTo && (
                       <div
-                        className={`mb-2 p-2 rounded-lg text-xs border-l-2 ${
-                          isMe
+                        className={`mb-2 p-2 rounded-lg text-xs border-l-2 ${isMe
                             ? "bg-white/15 border-white/80 text-white"
                             : "bg-slate-50 border-[#1456f0] text-slate-700"
-                        }`}
+                          }`}
                       >
                         <p className="font-bold text-[11px] mb-0.5">{msg.replyTo.senderName}</p>
                         <p className="line-clamp-2 opacity-90 text-[11px] italic">"{msg.replyTo.text}"</p>
@@ -304,9 +302,8 @@ export default function PatientMessagesScreen() {
                     {/* Attachment preview */}
                     {msg.attachment && (
                       <div
-                        className={`mb-2 p-2 rounded-xl flex items-center justify-between gap-3 border ${
-                          isMe ? "bg-white/15 border-white/30 text-white" : "bg-slate-50 border-gray-200 text-slate-900"
-                        }`}
+                        className={`mb-2 p-2 rounded-xl flex items-center justify-between gap-3 border ${isMe ? "bg-white/15 border-white/30 text-white" : "bg-slate-50 border-gray-200 text-slate-900"
+                          }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <FileText className={`w-4 h-4 shrink-0 ${isMe ? "text-white" : "text-[#1456f0]"}`} />
@@ -321,9 +318,8 @@ export default function PatientMessagesScreen() {
                           <button
                             type="button"
                             onClick={() => alert(`Downloading ${msg.attachment?.name}`)}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
-                              isMe ? "hover:bg-white/20 text-white" : "hover:bg-slate-200 text-slate-600"
-                            }`}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${isMe ? "hover:bg-white/20 text-white" : "hover:bg-slate-200 text-slate-600"
+                              }`}
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -334,9 +330,8 @@ export default function PatientMessagesScreen() {
                     <p className="whitespace-pre-wrap">{msg.text}</p>
 
                     <div
-                      className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono tabular-nums ${
-                        isMe ? "text-blue-100/90" : "text-slate-400"
-                      }`}
+                      className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono tabular-nums ${isMe ? "text-blue-100/90" : "text-slate-400"
+                        }`}
                     >
                       <span>{msg.timestamp}</span>
                       {isMe && <CheckCheck className="w-3.5 h-3.5 text-blue-200" />}

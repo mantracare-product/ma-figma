@@ -367,7 +367,7 @@ export function getDefaultCallTriggerSettings(): CallTriggerSettings {
     if (raw) {
       return JSON.parse(raw);
     }
-  } catch {}
+  } catch { }
   return DEFAULT_CALL_TRIGGER_SETTINGS;
 }
 
@@ -375,7 +375,7 @@ export function saveDefaultCallTriggerSettings(settings: CallTriggerSettings) {
   try {
     localStorage.setItem(DEFAULT_CALL_TRIGGER_STORAGE_KEY, JSON.stringify(settings));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-  } catch {}
+  } catch { }
 }
 
 export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
@@ -384,7 +384,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   invoice: ["draft", "paid", "void"],
   insurance: ["draft", "submitted", "paid", "failed"],
   claim: ["draft", "submitted", "paid", "denied"],
-  task: ["pending", "in_progress", "completed"],
+  task: ["pending", "in_progress", "completed", "cancelled"],
 };
 
 export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
@@ -676,7 +676,7 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
   ];
 }
 
-export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client" | "task">, Process> = {
+export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Process> = {
   appointment: {
     id: "process-appointment-default",
     name: "Appointment Flow",
@@ -748,6 +748,26 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client" | "ta
       { id: "clm-3", name: "In Review", description: "Under adjudication by payer", status: "active", color: "#8B5CF6", systemCategory: "in_review", isSystemCategoryRequired: false, stagePosition: "intermediate" },
       { id: "clm-4", name: "Paid", description: "Claim paid and reconciled", status: "active", color: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
       { id: "clm-5", name: "Denied", description: "Claim denied or rejected by payer", status: "active", color: "#EF4444", systemCategory: "denied", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+  task: {
+    id: "process-task-default",
+    name: "Task Workflow",
+    description: "Task assignment, execution, and review lifecycle",
+    assignedToUserId: 1,
+    entityType: "task",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "task-stg-1", name: "Pending", description: "Task queued and pending start", status: "active", color: "#64748B", systemCategory: "pending", stageCategory: "in_progress", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "task-stg-2", name: "In Progress", description: "Work actively underway", status: "active", color: "#3B82F6", systemCategory: "in_progress", stageCategory: "in_progress", isSystemCategoryRequired: true, stagePosition: "intermediate" },
+      { id: "task-stg-3", name: "Completed", description: "All requirements met and signed off", status: "active", color: "#10B981", systemCategory: "completed", stageCategory: "success", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "task-stg-4", name: "Cancelled", description: "Task abandoned or voided", status: "active", color: "#EF4444", systemCategory: "cancelled", stageCategory: "lost", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
     ],
   },
 };
@@ -1385,7 +1405,7 @@ export function getStoredProcesses(): Process[] {
   if (changed) {
     try {
       localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(list));
-    } catch {}
+    } catch { }
   }
 
   // Trigger one-time entity migration if needed
@@ -1417,7 +1437,7 @@ export function getActiveOrganizationSync(): {
     if (rawActive) {
       return { ...rawActive, ...(sessionOverride || {}) };
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -1445,7 +1465,7 @@ export function saveStoredProcesses(processes: Process[]) {
 
     localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(sanitized));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-  } catch {}
+  } catch { }
 }
 
 export function getStoredWorkflowSteps(): Record<string, WorkflowStep[]> {

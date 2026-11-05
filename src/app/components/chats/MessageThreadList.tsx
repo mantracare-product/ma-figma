@@ -17,7 +17,7 @@ function formatChatTimestamp(ts?: string) {
       if (!isNaN(d.getTime())) {
         return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       }
-    } catch {}
+    } catch { }
   }
   return ts;
 }
@@ -73,20 +73,18 @@ export default function MessageThreadList({
                 )}
 
                 <div
-                  className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                    isMe
+                  className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isMe
                       ? "bg-[#1456f0] text-white rounded-br-xs shadow-xs"
                       : "bg-white text-[#1E293B] border border-gray-200/90 rounded-bl-xs shadow-2xs"
-                  }`}
+                    }`}
                 >
                   {/* Replied-To Quote Banner */}
                   {msg.replyTo && (
                     <div
-                      className={`mb-2 p-2 rounded-lg text-xs border-l-2 ${
-                        isMe
+                      className={`mb-2 p-2 rounded-lg text-xs border-l-2 ${isMe
                           ? "bg-white/15 border-white/80 text-white"
                           : "bg-slate-50 border-[#1456f0] text-slate-700"
-                      }`}
+                        }`}
                     >
                       <p className="font-bold text-[11px] mb-0.5">{msg.replyTo.senderName}</p>
                       <p className="line-clamp-2 opacity-90 text-[11px] italic">"{msg.replyTo.text}"</p>
@@ -109,11 +107,10 @@ export default function MessageThreadList({
                   {/* Attachment Card */}
                   {msg.attachment && (
                     <div
-                      className={`mb-2.5 p-2.5 rounded-xl flex items-center justify-between gap-3 border ${
-                        isMe
+                      className={`mb-2.5 p-2.5 rounded-xl flex items-center justify-between gap-3 border ${isMe
                           ? "bg-white/15 border-white/30 text-white"
                           : "bg-slate-50 border-gray-200 text-slate-900"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText className={`w-4 h-4 shrink-0 ${isMe ? "text-white" : "text-[#1456f0]"}`} />
@@ -135,9 +132,8 @@ export default function MessageThreadList({
                               alert(`Downloading ${msg.attachment?.name}`);
                             }
                           }}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
-                            isMe ? "hover:bg-white/20 text-white" : "hover:bg-slate-200 text-slate-600"
-                          }`}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${isMe ? "hover:bg-white/20 text-white" : "hover:bg-slate-200 text-slate-600"
+                            }`}
                         >
                           <Download className="w-3.5 h-3.5" />
                         </a>
@@ -168,9 +164,8 @@ export default function MessageThreadList({
 
                   {/* Timestamp & Receipt Status */}
                   <div
-                    className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono tabular-nums ${
-                      isMe ? "text-blue-100/90" : "text-slate-400"
-                    }`}
+                    className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono tabular-nums ${isMe ? "text-blue-100/90" : "text-slate-400"
+                      }`}
                   >
                     <span>{formatChatTimestamp(msg.timestamp)}</span>
                     {isMe && (

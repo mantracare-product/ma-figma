@@ -196,10 +196,10 @@ export default function PatientPortalLayout() {
   const currentStageName = activeClient?.stage;
   const currentStageIndex = currentStageName
     ? stages.findIndex(
-        (s) =>
-          s.name.toLowerCase() === currentStageName.toLowerCase() ||
-          s.id.toLowerCase() === currentStageName.toLowerCase()
-      )
+      (s) =>
+        s.name.toLowerCase() === currentStageName.toLowerCase() ||
+        s.id.toLowerCase() === currentStageName.toLowerCase()
+    )
     : -1;
   const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
@@ -217,12 +217,12 @@ export default function PatientPortalLayout() {
       const updated = all.map((c) =>
         c.id === activeClient.id
           ? {
-              ...c,
-              stage: newStageName,
-              lastUpdatedProcess: procName,
-              processStagesMap: { ...(c.processStagesMap || {}), [procName]: newStageName },
-              processes: Array.from(new Set([procName, ...(c.processes || [])])),
-            }
+            ...c,
+            stage: newStageName,
+            lastUpdatedProcess: procName,
+            processStagesMap: { ...(c.processStagesMap || {}), [procName]: newStageName },
+            processes: Array.from(new Set([procName, ...(c.processes || [])])),
+          }
           : c
       );
       saveStoredClients(updated);
@@ -331,9 +331,8 @@ export default function PatientPortalLayout() {
                             setActiveOrganization(org);
                             setShowOrgDropdown(false);
                           }}
-                          className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                            isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                          }`}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                            }`}
                         >
                           <div className="flex items-center gap-2 truncate">
                             <div className="w-5 h-5 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
@@ -364,10 +363,9 @@ export default function PatientPortalLayout() {
                     end={item.exact}
                     onClick={() => setIsNavDrawerOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${
-                        isActive
-                          ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
-                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+                      `flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${isActive
+                        ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
                       }`
                     }
                   >
@@ -497,18 +495,18 @@ export default function PatientPortalLayout() {
                 {location.pathname.includes("profile")
                   ? "Profile"
                   : location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("bot")
-                  ? "Messages"
-                  : location.pathname.includes("book")
-                  ? "Visits"
-                  : location.pathname.includes("bill") || location.pathname.includes("pay")
-                  ? "Billing"
-                  : location.pathname.includes("documents")
-                  ? "Documents"
-                  : location.pathname.includes("forms")
-                  ? "Forms"
-                  : location.pathname.includes("pharmacy")
-                  ? "Dispensary & Pharmacy"
-                  : "Today"}
+                    ? "Messages"
+                    : location.pathname.includes("book")
+                      ? "Visits"
+                      : location.pathname.includes("bill") || location.pathname.includes("pay")
+                        ? "Billing"
+                        : location.pathname.includes("documents")
+                          ? "Documents"
+                          : location.pathname.includes("forms")
+                            ? "Forms"
+                            : location.pathname.includes("pharmacy")
+                              ? "Dispensary & Pharmacy"
+                              : "Today"}
               </span>
             </div>
           </div>
@@ -519,10 +517,9 @@ export default function PatientPortalLayout() {
             <NavLink
               to="/patient/profile"
               className={({ isActive }) =>
-                `flex items-center gap-2 p-1 pl-2.5 rounded-full transition-all cursor-pointer ${
-                  isActive
-                    ? "bg-blue-100 text-blue-900 ring-2 ring-blue-500/20"
-                    : "bg-slate-100 hover:bg-slate-200/80 text-slate-700"
+                `flex items-center gap-2 p-1 pl-2.5 rounded-full transition-all cursor-pointer ${isActive
+                  ? "bg-blue-100 text-blue-900 ring-2 ring-blue-500/20"
+                  : "bg-slate-100 hover:bg-slate-200/80 text-slate-700"
                 }`
               }
               title={`${activeClient.name} - View Profile`}
@@ -540,11 +537,10 @@ export default function PatientPortalLayout() {
 
         {/* ── Main Scrollable Viewport ── */}
         <main
-          className={`flex-1 ${
-            location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("/bot")
+          className={`flex-1 ${location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("/bot")
               ? "overflow-hidden bg-[#F8FAFC] flex flex-col"
               : "overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-10 sm:pb-12"
-          }`}
+            }`}
         >
           <div
             className={

@@ -68,6 +68,7 @@ export interface Conversation {
   status: "open" | "resolved";
   messages: Message[];
   isGroup?: boolean;
+  isBot?: boolean;
   groupConfig?: GroupChatConfig;
   botStatus?: "active" | "paused" | "off";
   assignedPersonId?: string;
