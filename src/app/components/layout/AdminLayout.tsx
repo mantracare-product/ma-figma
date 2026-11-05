@@ -72,7 +72,6 @@ export default function AdminLayout() {
         {/* Top Bar Page Header Slot */}
         <div className="flex-1 h-full px-6 sm:px-10 flex items-center justify-between gap-3 min-w-0">
           <div id="topbar-page-header" className="flex-1 flex items-center justify-between gap-3 min-w-0" />
-          <TopBarNotificationBell />
         </div>
       </header>
 

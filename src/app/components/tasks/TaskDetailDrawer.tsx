@@ -230,49 +230,60 @@ export default function TaskDetailDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Stage & Metadata Strip ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Stage:</span>
-            <select
-              value={task.stageName || "Task Created"}
-              onChange={(e) => {
-                const newStageName = e.target.value;
-                const found = taskStages?.find((s) => s.name === newStageName);
-                if (onUpdateStage) {
-                  onUpdateStage(task.id, newStageName, found?.id);
-                } else {
-                  const normalized = newStageName.toLowerCase();
-                  const newStatus: TaskStatus =
-                    normalized.includes("completed") || normalized.includes("won")
-                      ? "completed"
-                      : normalized.includes("overdue") || normalized.includes("lost")
-                      ? "deferred"
-                      : "in_progress";
-                  onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
-                }
-                toast.success(`Stage updated to ${newStageName}`);
-              }}
-              className="text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-lg p-1.5 px-2.5 cursor-pointer focus:outline-none"
-            >
-              {(taskStages && taskStages.length > 0 ? taskStages : [
-                { id: "task-stg-created", name: "Task Created" },
-                { id: "task-stg-completed", name: "Task Completed" },
-                { id: "task-stg-overdue", name: "Task Overdue" },
-              ]).map((stg) => (
-                <option key={stg.id} value={stg.name}>
-                  {stg.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* ── Stage & Metadata Strip (Stage selector in client; omitted in admin) ── */}
+        {!isAdmin ? (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Stage:</span>
+              <select
+                value={task.stageName || "Task Created"}
+                onChange={(e) => {
+                  const newStageName = e.target.value;
+                  const found = taskStages?.find((s) => s.name === newStageName);
+                  if (onUpdateStage) {
+                    onUpdateStage(task.id, newStageName, found?.id);
+                  } else {
+                    const normalized = newStageName.toLowerCase();
+                    const newStatus: TaskStatus =
+                      normalized.includes("completed") || normalized.includes("won")
+                        ? "completed"
+                        : normalized.includes("overdue") || normalized.includes("lost")
+                        ? "deferred"
+                        : "in_progress";
+                    onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
+                  }
+                  toast.success(`Stage updated to ${newStageName}`);
+                }}
+                className="text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-lg p-1.5 px-2.5 cursor-pointer focus:outline-none"
+              >
+                {(taskStages && taskStages.length > 0 ? taskStages : [
+                  { id: "task-stg-created", name: "Task Created" },
+                  { id: "task-stg-completed", name: "Task Completed" },
+                  { id: "task-stg-overdue", name: "Task Overdue" },
+                ]).map((stg) => (
+                  <option key={stg.id} value={stg.name}>
+                    {stg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="text-right">
-            <span className="text-[10px] text-slate-400 font-mono tabular-nums block">
+            <div className="text-right">
+              <span className="text-[10px] text-slate-400 font-mono tabular-nums block">
+                Created: {task.createdAt}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-3 px-4 shadow-xs flex items-center justify-between text-xs">
+            <span className="text-xs font-semibold text-slate-600">
+              Corporate Administrative Task
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono tabular-nums">
               Created: {task.createdAt}
             </span>
           </div>
-        </div>
+        )}
 
         {/* ── Basic Info Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
@@ -705,76 +716,78 @@ export default function TaskDetailDrawer({
           </div>
         </div>
 
-        {/* ── Observers Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Observers ({task.observers.length})</span>
-              <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowObserverPicker((prev) => !prev)}
-              className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Add Observer</span>
-            </button>
-          </div>
+        {/* ── Observers Card (Client tasks only; removed in admin) ── */}
+        {!isAdmin && (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <span>Observers ({task.observers.length})</span>
+                <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowObserverPicker((prev) => !prev)}
+                className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ Add Observer</span>
+              </button>
+            </div>
 
-          {showObserverPicker && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-1.5">
-              <span className="text-[11px] font-semibold text-slate-700 block">Select Team Member to Observe:</span>
-              <div className="divide-y divide-gray-100 max-h-36 overflow-y-auto">
-                {teamMembers
-                  .filter((m) => !task.observers.some((o) => o.name === m.name))
-                  .map((m) => (
-                    <div key={m.id} className="p-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-800">{m.name}</p>
-                        <p className="text-[10px] text-slate-500">{m.role}</p>
+            {showObserverPicker && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-700 block">Select Team Member to Observe:</span>
+                <div className="divide-y divide-gray-100 max-h-36 overflow-y-auto">
+                  {teamMembers
+                    .filter((m) => !task.observers.some((o) => o.name === m.name))
+                    .map((m) => (
+                      <div key={m.id} className="p-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-800">{m.name}</p>
+                          <p className="text-[10px] text-slate-500">{m.role}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onAddObserver(task.id, { id: String(m.id), name: m.name, role: m.role });
+                            setShowObserverPicker(false);
+                            toast.success(`Added ${m.name} as observer`);
+                          }}
+                          className="text-xs font-bold text-slate-700 px-2 py-1 rounded bg-white border border-gray-200 cursor-pointer hover:bg-slate-100"
+                        >
+                          Add
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onAddObserver(task.id, { id: String(m.id), name: m.name, role: m.role });
-                          setShowObserverPicker(false);
-                          toast.success(`Added ${m.name} as observer`);
-                        }}
-                        className="text-xs font-bold text-slate-700 px-2 py-1 rounded bg-white border border-gray-200 cursor-pointer hover:bg-slate-100"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {task.observers.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No observers added.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {task.observers.map((obs) => (
-                <div
-                  key={obs.id}
-                  className="flex items-center gap-2 p-1.5 px-2.5 bg-slate-50 border border-gray-200 rounded-lg text-xs"
-                >
-                  <Eye className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="font-semibold text-slate-800">{obs.name}</span>
-                  {obs.role && <span className="text-[10px] text-slate-400">({obs.role})</span>}
-                  <button
-                    type="button"
-                    onClick={() => onRemoveObserver(task.id, obs.id)}
-                    className="p-0.5 text-slate-400 hover:text-red-600 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                    ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+
+            {task.observers.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No observers added.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {task.observers.map((obs) => (
+                  <div
+                    key={obs.id}
+                    className="flex items-center gap-2 p-1.5 px-2.5 bg-slate-50 border border-gray-200 rounded-lg text-xs"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="font-semibold text-slate-800">{obs.name}</span>
+                    {obs.role && <span className="text-[10px] text-slate-400">({obs.role})</span>}
+                    <button
+                      type="button"
+                      onClick={() => onRemoveObserver(task.id, obs.id)}
+                      className="p-0.5 text-slate-400 hover:text-red-600 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Files Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">

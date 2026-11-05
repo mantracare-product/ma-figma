@@ -837,28 +837,30 @@ export default function TaskQuickCreateDrawer({
             </div>
           )}
 
-          {/* Initial Stage: Positioned at the end of Assignment & Stage in both drawers */}
-          <div className="space-y-1.5 pt-2 border-t border-gray-100">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <span>Initial Stage</span>
-              <InfoTooltip content="Select the starting workflow stage for this task" />
-            </label>
-            <select
-              value={selectedStageName}
-              onChange={(e) => setSelectedStageName(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-            >
-              {(taskStages.length > 0 ? taskStages : [
-                { id: "task-stg-created", name: "Task Created" },
-                { id: "task-stg-completed", name: "Task Completed" },
-                { id: "task-stg-overdue", name: "Task Overdue" },
-              ]).map((stg) => (
-                <option key={stg.id} value={stg.name}>
-                  {stg.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Initial Stage: Positioned at the end of Assignment & Stage in client drawer (removed in admin) */}
+          {!isAdmin && (
+            <div className="space-y-1.5 pt-2 border-t border-gray-100">
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <span>Initial Stage</span>
+                <InfoTooltip content="Select the starting workflow stage for this task" />
+              </label>
+              <select
+                value={selectedStageName}
+                onChange={(e) => setSelectedStageName(e.target.value)}
+                className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+              >
+                {(taskStages.length > 0 ? taskStages : [
+                  { id: "task-stg-created", name: "Task Created" },
+                  { id: "task-stg-completed", name: "Task Completed" },
+                  { id: "task-stg-overdue", name: "Task Overdue" },
+                ]).map((stg) => (
+                  <option key={stg.id} value={stg.name}>
+                    {stg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* ── 3. Schedule & Priority Card ── */}
@@ -961,75 +963,77 @@ export default function TaskQuickCreateDrawer({
           </div>
         </div>
 
-        {/* ── 4. Observers Section ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <Eye className="w-3.5 h-3.5 text-slate-700" />
-              <span>Observers ({observers.length})</span>
-              <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowAddObserver((prev) => !prev)}
-              className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Observer</span>
-            </button>
-          </div>
-
-          {showAddObserver && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
-              <span className="text-[11px] font-semibold text-slate-700 block">
-                Select Team Member to Observe:
-              </span>
-              <select
-                onChange={(e) => {
-                  const m = teamMembers.find((tm) => String(tm.id) === e.target.value);
-                  if (m) handleAddObserver(m);
-                }}
-                defaultValue=""
-                className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg cursor-pointer text-slate-900"
+        {/* ── 4. Observers Section (Client workspace only, removed in admin) ── */}
+        {!isAdmin && (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <Eye className="w-3.5 h-3.5 text-slate-700" />
+                <span>Observers ({observers.length})</span>
+                <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddObserver((prev) => !prev)}
+                className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
               >
-                <option value="" disabled>
-                  Choose observer...
-                </option>
-                {teamMembers.map((tm) => (
-                  <option key={tm.id} value={String(tm.id)}>
-                    {tm.name} {tm.role ? `(${tm.role})` : ""}
-                  </option>
-                ))}
-              </select>
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add Observer</span>
+              </button>
             </div>
-          )}
 
-          <div className="flex flex-wrap gap-2">
-            {observers.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No observers assigned yet.</p>
-            ) : (
-              observers.map((obs) => (
-                <span
-                  key={obs.id}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-gray-200 rounded-lg text-xs font-semibold text-slate-800"
-                >
-                  <Eye className="w-3 h-3 text-slate-400" />
-                  <span>{obs.name}</span>
-                  {obs.role && (
-                    <span className="text-[10px] text-slate-400 font-normal">({obs.role})</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveObserver(obs.id)}
-                    className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+            {showAddObserver && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
+                <span className="text-[11px] font-semibold text-slate-700 block">
+                  Select Team Member to Observe:
                 </span>
-              ))
+                <select
+                  onChange={(e) => {
+                    const m = teamMembers.find((tm) => String(tm.id) === e.target.value);
+                    if (m) handleAddObserver(m);
+                  }}
+                  defaultValue=""
+                  className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg cursor-pointer text-slate-900"
+                >
+                  <option value="" disabled>
+                    Choose observer...
+                  </option>
+                  {teamMembers.map((tm) => (
+                    <option key={tm.id} value={String(tm.id)}>
+                      {tm.name} {tm.role ? `(${tm.role})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+
+            <div className="flex flex-wrap gap-2">
+              {observers.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No observers assigned yet.</p>
+              ) : (
+                observers.map((obs) => (
+                  <span
+                    key={obs.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-gray-200 rounded-lg text-xs font-semibold text-slate-800"
+                  >
+                    <Eye className="w-3 h-3 text-slate-400" />
+                    <span>{obs.name}</span>
+                    {obs.role && (
+                      <span className="text-[10px] text-slate-400 font-normal">({obs.role})</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveObserver(obs.id)}
+                      className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── 5. Checklists Card with Item Hamburger Menu ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">

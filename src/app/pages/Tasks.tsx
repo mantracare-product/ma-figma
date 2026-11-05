@@ -134,7 +134,7 @@ export default function Tasks() {
     });
   }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName, isAdmin]);
 
-  // Columns for 32px TableComponent (Admin includes SCOPE & ORGANIZATION)
+  // Columns for 32px TableComponent (Admin includes SCOPE & ORGANIZATION, excludes STAGE and OBSERVERS)
   const columns: TableColumn<TaskEntity>[] = useMemo(() => {
     const baseCols: TableColumn<TaskEntity>[] = [
       {
@@ -147,7 +147,11 @@ export default function Tasks() {
           </span>
         ),
       },
-      {
+    ];
+
+    // In admin workspace, STAGE column is removed; in client workspace, STAGE appears after TASK ID
+    if (!isAdmin) {
+      baseCols.push({
         key: "stage",
         header: "STAGE",
         width: "180px",
@@ -162,23 +166,24 @@ export default function Tasks() {
             }}
           />
         ),
-      },
-      {
-        key: "title",
-        header: "TASK NAME",
-        render: (task) => (
-          <div className="min-w-0 pr-2">
-            <span
-              onClick={() => setSelectedTaskId(task.id)}
-              className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
-            >
-              {task.title}
-            </span>
-          </div>
-        ),
-      },
-    ];
+      });
+    }
+
+    baseCols.push({
+      key: "title",
+      header: "TASK NAME",
+      render: (task) => (
+        <div className="min-w-0 pr-2">
+          <span
+            onClick={() => setSelectedTaskId(task.id)}
+            className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            {task.title}
+          </span>
+        </div>
+      ),
+    });
 
     if (isAdmin) {
       baseCols.push(
@@ -256,8 +261,9 @@ export default function Tasks() {
       });
     }
 
-    baseCols.push(
-      {
+    // OBSERVERS column only appears in client tasks; removed in admin workspace
+    if (!isAdmin) {
+      baseCols.push({
         key: "observers",
         header: "OBSERVERS",
         width: "150px",
@@ -274,7 +280,10 @@ export default function Tasks() {
             </Tooltip>
           );
         },
-      },
+      });
+    }
+
+    baseCols.push(
       {
         key: "deadline",
         header: "DEADLINE",
