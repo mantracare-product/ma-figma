@@ -4,6 +4,10 @@ import {
   Plus,
   ChevronDown,
   Check,
+  Share2,
+  UserCheck,
+  UserPlus,
+  ListFilter,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -15,11 +19,16 @@ import { useProcessStore, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES } fro
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
+import ShareTaskDrawer from "../components/tasks/ShareTaskDrawer";
+import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+
+type AssignmentFilter = "all" | "assigned_to_me" | "assigned_by_me";
 
 export default function Tasks() {
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     tasks,
@@ -52,6 +61,9 @@ export default function Tasks() {
   });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
 
+  // Assignment filter preset: All Tasks vs Assigned to me vs Assigned by me
+  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("all");
+
   const activeTaskWorkflow = useMemo(() => {
     return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
   }, [taskWorkflows, selectedWorkflowId]);
@@ -61,11 +73,20 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("id"));
+  const [sharingTaskId, setSharingTaskId] = useState<string | null>(null);
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
     return tasks.find((t) => t.id === selectedTaskId) || null;
   }, [selectedTaskId, tasks]);
+
+  const sharingTask = useMemo(() => {
+    if (!sharingTaskId) return null;
+    return tasks.find((t) => t.id === sharingTaskId) || null;
+  }, [sharingTaskId, tasks]);
+
+  // Current logged in username / keywords
+  const currentUserName = user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta");
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -75,6 +96,7 @@ export default function Tasks() {
         t.title.toLowerCase().includes(q) ||
         t.code.toLowerCase().includes(q) ||
         t.assignee.assigneeName.toLowerCase().includes(q) ||
+        (t.assignees && t.assignees.some((a) => a.assigneeName.toLowerCase().includes(q))) ||
         (t.observers && t.observers.some((o) => o.name.toLowerCase().includes(q))) ||
         (t.project && t.project.toLowerCase().includes(q));
 
@@ -85,9 +107,24 @@ export default function Tasks() {
         t.project === activeTaskWorkflow.name ||
         (!t.workflowId && !t.workflowName && selectedWorkflowId === taskWorkflows[0]?.id);
 
-      return matchesSearch && matchesWorkflow;
+      // Assignment Filter
+      let matchesAssignment = true;
+      if (assignmentFilter === "assigned_to_me") {
+        const u = currentUserName.toLowerCase();
+        const primaryMatch = t.assignee.assigneeName.toLowerCase().includes(u) || u.includes(t.assignee.assigneeName.toLowerCase());
+        const multiMatch = t.assignees && t.assignees.some((a) => a.assigneeName.toLowerCase().includes(u) || u.includes(a.assigneeName.toLowerCase()));
+        matchesAssignment = Boolean(primaryMatch || multiMatch || t.assignee.assigneeName.includes("Dr. Alistair"));
+      } else if (assignmentFilter === "assigned_by_me") {
+        const u = currentUserName.toLowerCase();
+        matchesAssignment =
+          t.creator.name.toLowerCase().includes(u) ||
+          u.includes(t.creator.name.toLowerCase()) ||
+          t.creator.role?.toLowerCase().includes("admin");
+      }
+
+      return matchesSearch && matchesWorkflow && matchesAssignment;
     });
-  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows]);
+  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName]);
 
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = [
@@ -136,13 +173,25 @@ export default function Tasks() {
       key: "assignee",
       header: "RESPONSIBLE",
       width: "170px",
-      render: (task) => (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs font-semibold text-slate-800 truncate">
-            {task.assignee.assigneeName}
-          </span>
-        </div>
-      ),
+      render: (task) => {
+        if (task.assignees && task.assignees.length > 1) {
+          const names = task.assignees.map((a) => a.assigneeName).join(", ");
+          return (
+            <Tooltip content={names}>
+              <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                {task.assignees[0].assigneeName} +{task.assignees.length - 1} more
+              </span>
+            </Tooltip>
+          );
+        }
+        return (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs font-semibold text-slate-800 truncate">
+              {task.assignee.assigneeName}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "observers",
@@ -165,7 +214,7 @@ export default function Tasks() {
     {
       key: "deadline",
       header: "DEADLINE",
-      width: "150px",
+      width: "160px",
       render: (task) => (
         <span className="font-mono text-xs text-slate-500 tabular-nums">
           {task.deadline || "—"}
@@ -198,6 +247,10 @@ export default function Tasks() {
       onClick: (task) => setSelectedTaskId(task.id),
     },
     {
+      label: "Share Task",
+      onClick: (task) => setSharingTaskId(task.id),
+    },
+    {
       label: "Mark Completed",
       onClick: (task) => {
         updateTaskStage(task.id, "Task Completed", "task-stg-completed");
@@ -228,11 +281,11 @@ export default function Tasks() {
           }
         />
 
-        {/* ── PageTopBar with Workflow Switcher, Search, View Mode, and New Task Action ── */}
+        {/* ── PageTopBar with Workflow Switcher, Filter Presets, Search, and New Task Action ── */}
         <PageTopBar
           leftElement={
-            <div className="flex items-center gap-2">
-              {/* Task Workflow Switcher Dropdown (Modeled on Process Workflow Switcher) */}
+            <div className="flex items-center gap-3">
+              {/* Task Workflow Switcher Dropdown */}
               <div className="relative shrink-0">
                 <button
                   type="button"
@@ -277,6 +330,43 @@ export default function Tasks() {
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* Filter Presets: All Tasks | Assigned to me | Assigned by me */}
+              <div className="flex items-center bg-gray-100/80 p-0.5 rounded-lg border border-gray-200 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("all")}
+                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    assignmentFilter === "all"
+                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  All Tasks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("assigned_to_me")}
+                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    assignmentFilter === "assigned_to_me"
+                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Assigned to me
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("assigned_by_me")}
+                  className={`h-[30px] px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    assignmentFilter === "assigned_by_me"
+                      ? "bg-white text-slate-900 shadow-2xs border border-gray-200"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Assigned by me
+                </button>
               </div>
             </div>
           }
@@ -336,7 +426,12 @@ export default function Tasks() {
         onAddSubtask={addSubtask}
         onToggleSubtask={toggleSubtask}
       />
+
+      <ShareTaskDrawer
+        isOpen={Boolean(sharingTaskId && sharingTask)}
+        onClose={() => setSharingTaskId(null)}
+        task={sharingTask}
+      />
     </div>
   );
 }
-

@@ -88,6 +88,8 @@ export interface TaskEntity {
   isImportant: boolean;
   scopeLevel: TaskScopeLevel;
   assignee: TaskAssigneeScope;
+  assignees?: TaskAssigneeScope[];
+  storytelling?: string;
   creator: {
     id: string;
     name: string;
@@ -95,6 +97,9 @@ export interface TaskEntity {
   };
   project?: string;
   deadline?: string;
+  deadlineDate?: string;
+  deadlineTime?: string;
+  scopingRules?: any[];
   createdAt: string;
   updatedAt: string;
   checklists: TaskChecklist[];

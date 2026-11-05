@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import {
   CheckSquare,
   Star,
@@ -16,6 +16,11 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  Share2,
+  MoreVertical,
+  Edit2,
+  Users,
+  Sparkles,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
@@ -32,8 +37,10 @@ import {
   TaskTimePlanningConfig,
 } from "../../../types/task";
 import { Stage } from "../../../lib/useProcessStore";
+import { useTeamMembers } from "../../../lib/teamStore";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
+import ShareTaskDrawer from "./ShareTaskDrawer";
 import { toast } from "sonner";
 
 export interface TaskDetailDrawerProps {
@@ -58,14 +65,6 @@ export interface TaskDetailDrawerProps {
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
 }
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: "Pending",
-  in_progress: "In Progress",
-  review: "Review",
-  completed: "Completed",
-  deferred: "Deferred",
-};
-
 export default function TaskDetailDrawer({
   isOpen,
   onClose,
@@ -89,22 +88,59 @@ export default function TaskDetailDrawer({
 }: TaskDetailDrawerProps) {
   if (!task) return null;
 
+  const { teamMembers } = useTeamMembers();
+
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
-  const [deadline, setDeadline] = useState(task.deadline || "");
+  const [storytelling, setStorytelling] = useState(task.storytelling || "");
+  const [deadlineDate, setDeadlineDate] = useState(task.deadlineDate || "");
+  const [deadlineTime, setDeadlineTime] = useState(task.deadlineTime || "17:00");
   const [hideCompleted, setHideCompleted] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newItemTexts, setNewItemTexts] = useState<{ [chkId: string]: string }>({});
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemText, setEditingItemText] = useState("");
+  const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
+
   const [showObserverPicker, setShowObserverPicker] = useState(false);
+  const [showShareDrawer, setShowShareDrawer] = useState(false);
   const [showRecurrenceDrawer, setShowRecurrenceDrawer] = useState(false);
   const [showTimePlanningDrawer, setShowTimePlanningDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const formatDeadlineDisplay = (dateStr: string, timeStr: string) => {
+    if (!dateStr) return "";
+    try {
+      const [year, month, day] = dateStr.split("-");
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthName = months[parseInt(month, 10) - 1] || month;
+
+      let formattedTime = "";
+      if (timeStr) {
+        const [h, m] = timeStr.split(":");
+        let hours = parseInt(h, 10);
+        const ampm = hours >= 12 ? "PM" : "AM";
+        hours = hours % 12 || 12;
+        formattedTime = `, ${hours}:${m} ${ampm}`;
+      }
+      return `${monthName} ${day}, ${year}${formattedTime}`;
+    } catch {
+      return `${dateStr} ${timeStr}`.trim();
+    }
+  };
+
   const handleSaveBasic = () => {
+    const formattedDeadline = deadlineDate
+      ? formatDeadlineDisplay(deadlineDate, deadlineTime)
+      : task.deadline;
+
     onUpdateTask(task.id, {
       title: title.trim() || task.title,
       description: description.trim(),
-      deadline: deadline.trim() || undefined,
+      storytelling: storytelling.trim(),
+      deadline: formattedDeadline,
+      deadlineDate,
+      deadlineTime,
     });
     toast.success("Task updated");
   };
@@ -142,13 +178,6 @@ export default function TaskDetailDrawer({
     toast.success("Subtask added");
   };
 
-  const CANDIDATE_OBSERVERS: TaskObserver[] = [
-    { id: "usr-doc-2", name: "Dr. Rachel Reynolds", role: "Clinical Director" },
-    { id: "usr-coord-1", name: "Elena Rostova", role: "Care Coordinator" },
-    { id: "usr-bill-1", name: "David Miller", role: "Billing Specialist" },
-    { id: "usr-pt-1", name: "Marcus Vance", role: "Therapy Tech" },
-  ];
-
   return (
     <>
       <DrawerShell
@@ -161,12 +190,24 @@ export default function TaskDetailDrawer({
         zIndex={650}
         headerRight={
           <div className="flex items-center gap-2">
+            {/* Share Task Button */}
+            <Tooltip content="Share task via SMS, WhatsApp, Email, or Link">
+              <button
+                type="button"
+                onClick={() => setShowShareDrawer(true)}
+                className="p-1.5 rounded-xl border border-gray-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-1.5 px-2.5 text-xs font-semibold"
+              >
+                <Share2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Share</span>
+              </button>
+            </Tooltip>
+
             {/* Important Star Toggle */}
             <Tooltip content={task.isImportant ? "Marked as Important" : "Mark as Important"}>
               <button
                 type="button"
                 onClick={() => onUpdateTask(task.id, { isImportant: !task.isImportant })}
-                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
                   task.isImportant
                     ? "bg-amber-50 border-amber-300 text-amber-700"
                     : "border-gray-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50"
@@ -186,7 +227,7 @@ export default function TaskDetailDrawer({
                       onClose();
                     }
                   }}
-                  className="p-1.5 rounded-lg border border-gray-200 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-xl border border-gray-200 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -206,9 +247,9 @@ export default function TaskDetailDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Stage & Metadata Strip (Workflow Stages, Strictly Plain Text / Neutral Icons, NO Capsules) ── */}
+        {/* ── Stage & Metadata Strip ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500">Stage:</span>
             <select
               value={task.stageName || "Task Created"}
@@ -219,11 +260,12 @@ export default function TaskDetailDrawer({
                   onUpdateStage(task.id, newStageName, found?.id);
                 } else {
                   const normalized = newStageName.toLowerCase();
-                  const newStatus: TaskStatus = normalized.includes("completed") || normalized.includes("won")
-                    ? "completed"
-                    : normalized.includes("overdue") || normalized.includes("lost")
-                    ? "deferred"
-                    : "in_progress";
+                  const newStatus: TaskStatus =
+                    normalized.includes("completed") || normalized.includes("won")
+                      ? "completed"
+                      : normalized.includes("overdue") || normalized.includes("lost")
+                      ? "deferred"
+                      : "in_progress";
                   onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
                 }
                 toast.success(`Stage updated to ${newStageName}`);
@@ -252,10 +294,10 @@ export default function TaskDetailDrawer({
         {/* ── Basic Info Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-700">Task Title</label>
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <span>Task Title</span>
               <InfoTooltip content="Display name of the task" />
-            </div>
+            </label>
             <input
               type="text"
               value={title}
@@ -265,10 +307,10 @@ export default function TaskDetailDrawer({
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-700">Description</label>
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <span>Description</span>
               <InfoTooltip content="Task instructions and contextual guidelines" />
-            </div>
+            </label>
             <textarea
               rows={3}
               value={description}
@@ -277,57 +319,99 @@ export default function TaskDetailDrawer({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-1">
+          {/* Storytelling / Context Setting */}
+          <div className="space-y-1.5">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Storytelling & Operational Narrative</span>
+              <InfoTooltip content="Backstory, operational reasoning, customer impact, or context narrative explaining why this task is being carried out" />
+            </label>
+            <textarea
+              rows={2}
+              value={storytelling}
+              onChange={(e) => setStorytelling(e.target.value)}
+              placeholder="Explain the background story, client situation, or why this task matters..."
+              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 resize-none leading-relaxed"
+            />
+          </div>
+
+          {/* Assignees & Creator Details */}
+          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">
-                Assignee
-              </span>
-              <p className="text-xs font-bold text-slate-900">{task.assignee.assigneeName}</p>
-              {isAdmin && task.assignee.adminScopeName && (
-                <p className="text-[11px] text-slate-500">{task.assignee.adminScopeName}</p>
-              )}
-              {isAdmin && (task.assignee.orgName || task.assignee.roleName) && (
-                <p className="text-[11px] text-slate-500">
-                  {[task.assignee.orgName, task.assignee.roleName].filter(Boolean).join(" • ")}
-                </p>
+              <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                <span>Responsible Assignee(s)</span>
+                <InfoTooltip content="Team members or contact responsible for completing this task" />
+              </label>
+
+              {task.assignees && task.assignees.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {task.assignees.map((a, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 border border-gray-200 rounded text-xs font-semibold text-slate-800"
+                    >
+                      <Users className="w-3 h-3 text-slate-500" />
+                      <span>{a.assigneeName}</span>
+                      {a.roleName && <span className="text-[10px] text-slate-400 font-normal">({a.roleName})</span>}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-bold text-slate-900">{task.assignee.assigneeName}</p>
+                  {task.assignee.roleName && (
+                    <p className="text-[11px] text-slate-500">{task.assignee.roleName}</p>
+                  )}
+                </div>
               )}
             </div>
+
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">
-                Owner / Creator
-              </span>
+              <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                <span>Owner / Creator</span>
+                <InfoTooltip content="Account that initiated and authored this task" />
+              </label>
               <p className="text-xs font-bold text-slate-900">{task.creator.name}</p>
               <p className="text-[11px] text-slate-500">{task.creator.role || "Administrator"}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">
-                Project
-              </span>
-              <p className="text-xs font-semibold text-slate-800">{task.project || "General Operations"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                Deadline
-              </span>
+          {/* Deadline Date & Time */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Deadline (Date & Time)</span>
+              <InfoTooltip content="Target calendar date and clock time for task completion" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               <input
-                type="text"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="w-full text-xs p-1.5 bg-slate-50 border border-gray-200 rounded-lg text-slate-900"
+                type="date"
+                value={deadlineDate}
+                onChange={(e) => setDeadlineDate(e.target.value)}
+                className="w-full text-xs p-2 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+              />
+              <input
+                type="time"
+                value={deadlineTime}
+                onChange={(e) => setDeadlineTime(e.target.value)}
+                className="w-full text-xs p-2 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
               />
             </div>
+            {task.deadline && (
+              <p className="text-[11px] text-slate-500 font-mono">
+                Current: {task.deadline}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* ── Checklists Card ── */}
+        {/* ── Checklists Card with Hamburger Menu ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div className="flex items-center gap-3">
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Checklists ({task.checklists.length})
+              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <span>Checklists ({task.checklists.length})</span>
+                <InfoTooltip content="Actionable checklist items with options to mark important, edit, or delete" />
               </h3>
               {/* Hide completed items toggle */}
               <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
@@ -380,38 +464,130 @@ export default function TaskDetailDrawer({
                   {visibleItems.map((it) => (
                     <div
                       key={it.id}
-                      className={`flex items-center justify-between gap-2 p-2 rounded-lg border text-xs transition-colors ${
+                      className={`relative flex items-center justify-between gap-2 p-2 rounded-lg border text-xs transition-colors ${
                         it.isCompleted ? "bg-slate-100/70 border-slate-200/50 opacity-70" : "bg-white border-gray-200/70"
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <input
                           type="checkbox"
                           checked={it.isCompleted}
                           onChange={() => onToggleChecklistItem(task.id, chk.id, it.id)}
                           className="w-4 h-4 rounded text-slate-900 cursor-pointer"
                         />
-                        <Tooltip content={it.isImportant ? "Important checklist item" : "Mark as important"}>
-                          <button
-                            type="button"
-                            onClick={() => onToggleItemImportance(task.id, chk.id, it.id)}
-                            className="p-0.5 text-slate-400 hover:text-amber-500 cursor-pointer"
-                          >
-                            <Star className={`w-3.5 h-3.5 ${it.isImportant ? "fill-amber-500 text-amber-500" : ""}`} />
-                          </button>
-                        </Tooltip>
-                        <span className={`text-slate-800 font-medium ${it.isCompleted ? "line-through text-slate-400" : ""}`}>
-                          {it.text}
-                        </span>
+                        {it.isImportant && (
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
+                        )}
+
+                        {editingItemId === it.id ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <input
+                              type="text"
+                              value={editingItemText}
+                              onChange={(e) => setEditingItemText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  if (editingItemText.trim()) {
+                                    onDeleteChecklistItem(task.id, chk.id, it.id);
+                                    onAddChecklistItem(task.id, chk.id, editingItemText.trim());
+                                    setEditingItemId(null);
+                                  }
+                                }
+                                if (e.key === "Escape") setEditingItemId(null);
+                              }}
+                              className="flex-1 text-xs p-1 bg-slate-50 border border-gray-200 rounded text-slate-900"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editingItemText.trim()) {
+                                  onDeleteChecklistItem(task.id, chk.id, it.id);
+                                  onAddChecklistItem(task.id, chk.id, editingItemText.trim());
+                                  setEditingItemId(null);
+                                }
+                              }}
+                              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingItemId(null)}
+                              className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className={`text-slate-800 font-medium truncate ${it.isCompleted ? "line-through text-slate-400" : ""}`}>
+                            {it.text}
+                          </span>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => onDeleteChecklistItem(task.id, chk.id, it.id)}
-                        className="p-0.5 text-slate-400 hover:text-slate-700 cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      {/* Hamburger Menu on Item */}
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveItemMenuId(activeItemMenuId === it.id ? null : it.id)
+                          }
+                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded cursor-pointer transition-colors"
+                          title="Item Options"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+
+                        {activeItemMenuId === it.id && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-30"
+                              onClick={() => setActiveItemMenuId(null)}
+                            />
+                            <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-40 py-1 text-xs animate-in fade-in duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onToggleItemImportance(task.id, chk.id, it.id);
+                                  setActiveItemMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer"
+                              >
+                                <Star className={`w-3.5 h-3.5 ${it.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+                                <span>{it.isImportant ? "Unmark Important" : "Mark as Important"}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingItemId(it.id);
+                                  setEditingItemText(it.text);
+                                  setActiveItemMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Edit Item Text</span>
+                              </button>
+
+                              <div className="my-1 border-t border-gray-100" />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onDeleteChecklistItem(task.id, chk.id, it.id);
+                                  setActiveItemMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                <span>Delete Item</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -457,10 +633,10 @@ export default function TaskDetailDrawer({
         {/* ── Subtasks Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Subtasks ({task.subtasks.length})
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <span>Subtasks ({task.subtasks.length})</span>
+              <InfoTooltip content="Parent and child task hierarchy" />
             </h3>
-            <InfoTooltip content="Parent and child task hierarchy" />
           </div>
 
           {task.subtasks.length === 0 ? (
@@ -522,8 +698,9 @@ export default function TaskDetailDrawer({
         {/* ── Observers Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Observers ({task.observers.length})
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <span>Observers ({task.observers.length})</span>
+              <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
             </h3>
             <button
               type="button"
@@ -537,26 +714,29 @@ export default function TaskDetailDrawer({
 
           {showObserverPicker && (
             <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-1.5">
-              <span className="text-[11px] font-semibold text-slate-700 block">Select Observer:</span>
+              <span className="text-[11px] font-semibold text-slate-700 block">Select Team Member to Observe:</span>
               <div className="divide-y divide-gray-100 max-h-36 overflow-y-auto">
-                {CANDIDATE_OBSERVERS.filter((cand) => !task.observers.some((o) => o.name === cand.name)).map((cand) => (
-                  <div key={cand.id} className="p-2 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">{cand.name}</p>
-                      <p className="text-[10px] text-slate-500">{cand.role}</p>
+                {teamMembers
+                  .filter((m) => !task.observers.some((o) => o.name === m.name))
+                  .map((m) => (
+                    <div key={m.id} className="p-2 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800">{m.name}</p>
+                        <p className="text-[10px] text-slate-500">{m.role}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onAddObserver(task.id, { id: String(m.id), name: m.name, role: m.role });
+                          setShowObserverPicker(false);
+                          toast.success(`Added ${m.name} as observer`);
+                        }}
+                        className="text-xs font-bold text-slate-700 px-2 py-1 rounded bg-white border border-gray-200 cursor-pointer hover:bg-slate-100"
+                      >
+                        Add
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onAddObserver(task.id, cand);
-                        setShowObserverPicker(false);
-                      }}
-                      className="text-xs font-bold text-slate-700 px-2 py-1 rounded bg-white border border-gray-200 cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
@@ -589,8 +769,9 @@ export default function TaskDetailDrawer({
         {/* ── Files Card ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Files ({task.attachments.length})
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <span>Files ({task.attachments.length})</span>
+              <InfoTooltip content="Attached assets, protocols, and documentation" />
             </h3>
             <button
               type="button"
@@ -621,7 +802,7 @@ export default function TaskDetailDrawer({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => alert(`Downloading ${att.name}`)}
+                      onClick={() => toast.info(`Downloading ${att.name}`)}
                       className="p-1 text-slate-500 hover:text-slate-800 cursor-pointer"
                       title="Download file"
                     >
@@ -645,10 +826,10 @@ export default function TaskDetailDrawer({
         {/* ── Recurrence & Time Planning Links ── */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Planning & Automation
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <span>Planning & Automation</span>
+              <InfoTooltip content="Configure recurring cadence and duration rules" />
             </h3>
-            <InfoTooltip content="Configure recurring cadence and duration rules" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -704,7 +885,13 @@ export default function TaskDetailDrawer({
           toast.success("Time planning applied");
         }}
       />
+
+      {/* Share Task Drawer */}
+      <ShareTaskDrawer
+        isOpen={showShareDrawer}
+        onClose={() => setShowShareDrawer(false)}
+        task={task}
+      />
     </>
   );
 }
-
