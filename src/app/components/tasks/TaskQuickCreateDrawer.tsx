@@ -461,15 +461,7 @@ export default function TaskQuickCreateDrawer({
       attachments,
     });
 
-    // Explicit In-App Notification Triggered on Task Creation
-    addNotification({
-      type: "task",
-      title: "New Task Assigned",
-      message: `${title.trim()} assigned to ${primaryAssignee.assigneeName}${isAdmin ? ` (${primaryAssignee.orgName})` : ""}`,
-      link: `/tasks`,
-    });
-
-    // If assigned to a client contact or marked visible in portal, sync to client portal chat & notify
+    // If assigned to a client contact or marked visible in portal, sync to client portal companion chat & notify
     if (assignmentType === "contact" || visibleInPortal) {
       const targetClientId = primaryAssignee.clientId || selectedContactId || "CL-001";
       const targetClientName = primaryAssignee.clientName || primaryAssignee.assigneeName || "Client";
@@ -490,7 +482,6 @@ export default function TaskQuickCreateDrawer({
       });
     }
 
-    toast.success("Task created and notification sent");
     onClose();
   };
 
