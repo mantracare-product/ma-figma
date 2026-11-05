@@ -48,6 +48,7 @@ export interface TaskDetailDrawerProps {
   onClose: () => void;
   task?: TaskEntity | null;
   isAdmin?: boolean;
+  isMyTasksView?: boolean;
   taskStages?: Stage[];
   onUpdateTask: (id: string, patch: Partial<TaskEntity>) => void;
   onUpdateStage?: (id: string, stageName: string, stageId?: string) => void;
@@ -70,6 +71,7 @@ export default function TaskDetailDrawer({
   onClose,
   task,
   isAdmin = false,
+  isMyTasksView = false,
   taskStages = [],
   onUpdateTask,
   onUpdateStage,
@@ -230,50 +232,78 @@ export default function TaskDetailDrawer({
       >
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-        {/* ── Stage & Metadata Strip (Stage selector in client; omitted in admin) ── */}
+        {/* ── Stage & Metadata Strip (In Tasks by me: prominent Workflow & Stage card; in My Tasks: compact status) ── */}
         {!isAdmin ? (
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Stage:</span>
-              <select
-                value={task.stageName || "Task Created"}
-                onChange={(e) => {
-                  const newStageName = e.target.value;
-                  const found = taskStages?.find((s) => s.name === newStageName);
-                  if (onUpdateStage) {
-                    onUpdateStage(task.id, newStageName, found?.id);
-                  } else {
-                    const normalized = newStageName.toLowerCase();
-                    const newStatus: TaskStatus =
-                      normalized.includes("completed") || normalized.includes("won")
-                        ? "completed"
-                        : normalized.includes("overdue") || normalized.includes("lost")
-                        ? "deferred"
-                        : "in_progress";
-                    onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
-                  }
-                  toast.success(`Stage updated to ${newStageName}`);
-                }}
-                className="text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-lg p-1.5 px-2.5 cursor-pointer focus:outline-none"
-              >
-                {(taskStages && taskStages.length > 0 ? taskStages : [
-                  { id: "task-stg-created", name: "Task Created" },
-                  { id: "task-stg-completed", name: "Task Completed" },
-                  { id: "task-stg-overdue", name: "Task Overdue" },
-                ]).map((stg) => (
-                  <option key={stg.id} value={stg.name}>
-                    {stg.name}
-                  </option>
-                ))}
-              </select>
+          !isMyTasksView ? (
+            <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Workflow &amp; Stage</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono tabular-nums">
+                  Created: {task.createdAt}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                    Workflow
+                  </label>
+                  <div className="flex items-center gap-2 p-2 bg-slate-50 border border-gray-200 rounded-xl font-bold text-slate-800">
+                    <Layers className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <span className="truncate">{task.workflowName || task.project || "Task Workflow"}</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                    Stage
+                  </label>
+                  <select
+                    value={task.stageName || "Task Created"}
+                    onChange={(e) => {
+                      const newStageName = e.target.value;
+                      const found = taskStages?.find((s) => s.name === newStageName);
+                      if (onUpdateStage) {
+                        onUpdateStage(task.id, newStageName, found?.id);
+                      } else {
+                        const normalized = newStageName.toLowerCase();
+                        const newStatus: TaskStatus =
+                          normalized.includes("completed") || normalized.includes("won")
+                            ? "completed"
+                            : normalized.includes("overdue") || normalized.includes("lost")
+                            ? "deferred"
+                            : "in_progress";
+                        onUpdateTask(task.id, { stageName: newStageName, stageId: found?.id, status: newStatus });
+                      }
+                      toast.success(`Stage updated to ${newStageName}`);
+                    }}
+                    className="w-full text-xs font-bold text-slate-900 bg-slate-50 border border-gray-200 rounded-xl p-2 cursor-pointer focus:outline-none"
+                  >
+                    {(taskStages && taskStages.length > 0 ? taskStages : [
+                      { id: "task-stg-created", name: "Task Created" },
+                      { id: "task-stg-completed", name: "Task Completed" },
+                      { id: "task-stg-overdue", name: "Task Overdue" },
+                    ]).map((stg) => (
+                      <option key={stg.id} value={stg.name}>
+                        {stg.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
-
-            <div className="text-right">
-              <span className="text-[10px] text-slate-400 font-mono tabular-nums block">
+          ) : (
+            <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 px-4 shadow-xs flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Stage:</span>
+                <span className="text-xs font-bold text-slate-800">{task.stageName || "Task Created"}</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono tabular-nums">
                 Created: {task.createdAt}
               </span>
             </div>
-          </div>
+          )
         ) : (
           <div className="bg-white border border-gray-200/90 rounded-2xl p-3 px-4 shadow-xs flex items-center justify-between text-xs">
             <span className="text-xs font-semibold text-slate-600">
@@ -313,34 +343,36 @@ export default function TaskDetailDrawer({
             />
           </div>
 
-          {/* Mark as Important Setting Toggle */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
-            <div className="flex items-center gap-2.5">
-              <Star className={`w-4 h-4 ${task.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
-              <div>
-                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
-                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
+          {/* Mark as Important Setting Toggle (Hidden in My Tasks view) */}
+          {!isMyTasksView && (
+            <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
+              <div className="flex items-center gap-2.5">
+                <Star className={`w-4 h-4 ${task.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
+                  <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
+                </div>
               </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={task.isImportant}
-              onClick={() => {
-                onUpdateTask(task.id, { isImportant: !task.isImportant });
-                toast.success(task.isImportant ? "Unmarked as important" : "Marked as important");
-              }}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                task.isImportant ? "bg-[#1E293B]" : "bg-gray-200"
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                  task.isImportant ? "translate-x-4" : "translate-x-0"
+              <button
+                type="button"
+                role="switch"
+                aria-checked={task.isImportant}
+                onClick={() => {
+                  onUpdateTask(task.id, { isImportant: !task.isImportant });
+                  toast.success(task.isImportant ? "Unmarked as important" : "Marked as important");
+                }}
+                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                  task.isImportant ? "bg-[#1E293B]" : "bg-gray-200"
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                    task.isImportant ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {/* Assignees & Creator Details */}
           <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
@@ -716,8 +748,8 @@ export default function TaskDetailDrawer({
           </div>
         </div>
 
-        {/* ── Observers Card (Client tasks only; removed in admin) ── */}
-        {!isAdmin && (
+        {/* ── Observers Card (Client tasks only; removed in admin and in my_tasks view) ── */}
+        {!isAdmin && !isMyTasksView && (
           <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -846,45 +878,47 @@ export default function TaskDetailDrawer({
           )}
         </div>
 
-        {/* ── Recurrence & Time Planning Links ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Planning & Automation</span>
-              <InfoTooltip content="Configure recurring cadence and duration rules" />
-            </h3>
-          </div>
+        {/* ── Recurrence & Time Planning Links (hidden in my_tasks view) ── */}
+        {!isMyTasksView && (
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <span>Planning & Automation</span>
+                <InfoTooltip content="Configure recurring cadence and duration rules" />
+              </h3>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setShowRecurrenceDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Repeat className="w-4 h-4 text-slate-600" />
-                <span>Repeat Task</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {task.recurrence?.enabled ? "Configured" : "None"}
-              </span>
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRecurrenceDrawer(true)}
+                className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Repeat className="w-4 h-4 text-slate-600" />
+                  <span>Repeat Task</span>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  {task.recurrence?.enabled ? "Configured" : "None"}
+                </span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setShowTimePlanningDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-600" />
-                <span>Time Planning</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {task.timePlanning?.durationDays ? `${task.timePlanning.durationDays}d` : "None"}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowTimePlanningDrawer(true)}
+                className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-600" />
+                  <span>Time Planning</span>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  {task.timePlanning?.durationDays ? `${task.timePlanning.durationDays}d` : "None"}
+                </span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </DrawerShell>
 
       {/* Recurrence Sub-Drawer */}

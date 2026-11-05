@@ -5,9 +5,6 @@ import {
   ChevronDown,
   Check,
   Share2,
-  UserCheck,
-  UserPlus,
-  ListFilter,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -22,8 +19,6 @@ import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import ShareTaskDrawer from "../components/tasks/ShareTaskDrawer";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
-
-type AssignmentFilter = "all" | "assigned_to_me" | "assigned_by_me";
 
 export default function Tasks() {
   const location = useLocation();
@@ -56,20 +51,27 @@ export default function Tasks() {
     return DEFAULT_TASK_PROCESSES;
   }, [processes]);
 
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(() => {
-    return taskWorkflows[0]?.id || "process-task-default";
-  });
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("all");
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
 
-  // Assignment filter preset: All Tasks vs Assigned to me vs Assigned by me
-  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("all");
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
+  const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
 
   const activeTaskWorkflow = useMemo(() => {
+    if (selectedWorkflowId === "all") return taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
     return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
   }, [taskWorkflows, selectedWorkflowId]);
 
   const taskStages = useMemo(() => activeTaskWorkflow.stages || [], [activeTaskWorkflow]);
+
+  // Helper to retrieve stages tailored to a specific task's workflow
+  const getTaskStages = (t: TaskEntity) => {
+    if (t.workflowId) {
+      const match = taskWorkflows.find((w) => w.id === t.workflowId);
+      if (match?.stages && match.stages.length > 0) return match.stages;
+    }
+    return taskStages;
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
@@ -86,18 +88,85 @@ export default function Tasks() {
     return tasks.find((t) => t.id === sharingTaskId) || null;
   }, [sharingTaskId, tasks]);
 
-  // Current logged in username / keywords
+  // Current logged in username / persona
   const currentUserName = user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta");
+
+  // Determine if a task is directly assigned to the current user
+  const isAssignedToMe = (t: TaskEntity) => {
+    const u = currentUserName.toLowerCase();
+    const aName = (t.assignee?.assigneeName || "").toLowerCase();
+    const aRole = (t.assignee?.roleName || "").toLowerCase();
+    if (
+      aName &&
+      (aName.includes(u) ||
+        u.includes(aName) ||
+        aName.includes("alistair") ||
+        aName.includes("lead physician"))
+    ) {
+      return true;
+    }
+    if (
+      aRole &&
+      (aRole.includes("lead physician") ||
+        aRole.includes("physician") ||
+        aRole.includes("clinician"))
+    ) {
+      return true;
+    }
+    if (
+      t.assignees &&
+      t.assignees.some((a) => {
+        const name = (a.assigneeName || "").toLowerCase();
+        return (
+          name.includes(u) ||
+          u.includes(name) ||
+          name.includes("alistair") ||
+          name.includes("lead physician")
+        );
+      })
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // Badge counts for client tabs
+  const { myTasksCount, tasksByMeCount } = useMemo(() => {
+    let myCount = 0;
+    let byMeCount = 0;
+    tasks.forEach((t) => {
+      if (t.scopeLevel === "admin") return;
+      if (isAssignedToMe(t)) {
+        myCount++;
+      } else {
+        byMeCount++;
+      }
+    });
+    return { myTasksCount: myCount, tasksByMeCount: byMeCount };
+  }, [tasks, currentUserName]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       // 1. Role / Scope Isolation:
-      // In the Admin workspace (/admin/tasks), ONLY admin-level tasks appear.
-      // Tasks created on client (clinic workspace) must NOT appear in Admin.
+      // In Admin workspace (/admin/tasks), ONLY admin-level tasks appear.
       if (isAdmin && t.scopeLevel !== "admin") {
         return false;
       }
+      // In Client workspace (/tasks), corporate administrative tasks are omitted
+      if (!isAdmin && t.scopeLevel === "admin") {
+        return false;
+      }
 
+      // 2. Client Tab Separation: "My Tasks" vs "Tasks by me"
+      if (!isAdmin) {
+        if (clientTab === "my_tasks") {
+          if (!isAssignedToMe(t)) return false;
+        } else if (clientTab === "tasks_by_me") {
+          if (isAssignedToMe(t)) return false;
+        }
+      }
+
+      // 3. Search query matching
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -106,8 +175,10 @@ export default function Tasks() {
         t.assignee.assigneeName.toLowerCase().includes(q) ||
         (t.assignees && t.assignees.some((a) => a.assigneeName.toLowerCase().includes(q))) ||
         (t.observers && t.observers.some((o) => o.name.toLowerCase().includes(q))) ||
+        (t.workflowName && t.workflowName.toLowerCase().includes(q)) ||
         (t.project && t.project.toLowerCase().includes(q));
 
+      // 4. Workflow filter
       const matchesWorkflow =
         selectedWorkflowId === "all" ||
         t.workflowId === selectedWorkflowId ||
@@ -115,88 +186,61 @@ export default function Tasks() {
         t.project === activeTaskWorkflow.name ||
         (!t.workflowId && !t.workflowName && selectedWorkflowId === taskWorkflows[0]?.id);
 
-      // Assignment Filter
-      let matchesAssignment = true;
-      if (assignmentFilter === "assigned_to_me") {
-        const u = currentUserName.toLowerCase();
-        const primaryMatch = t.assignee.assigneeName.toLowerCase().includes(u) || u.includes(t.assignee.assigneeName.toLowerCase());
-        const multiMatch = t.assignees && t.assignees.some((a) => a.assigneeName.toLowerCase().includes(u) || u.includes(a.assigneeName.toLowerCase()));
-        matchesAssignment = Boolean(primaryMatch || multiMatch || t.assignee.assigneeName.includes("Dr. Alistair"));
-      } else if (assignmentFilter === "assigned_by_me") {
-        const u = currentUserName.toLowerCase();
-        matchesAssignment =
-          t.creator.name.toLowerCase().includes(u) ||
-          u.includes(t.creator.name.toLowerCase()) ||
-          t.creator.role?.toLowerCase().includes("admin");
-      }
-
-      return matchesSearch && matchesWorkflow && matchesAssignment;
+      return matchesSearch && matchesWorkflow;
     });
-  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName, isAdmin]);
+  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, clientTab, currentUserName, isAdmin]);
 
-  // Columns for 32px TableComponent (Admin includes SCOPE & ORGANIZATION, excludes STAGE and OBSERVERS)
+  // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = useMemo(() => {
     const baseCols: TableColumn<TaskEntity>[] = [
       {
         key: "code",
         header: "TASK ID",
-        width: "90px",
+        width: "110px",
+        minWidth: "110px",
+        align: "left",
         render: (task) => (
           <span className="font-mono text-xs font-semibold tabular-nums text-slate-700">
-            {task.code}
+            {task.code || "NA"}
           </span>
         ),
       },
     ];
 
-    // In admin workspace, STAGE column is removed; in client workspace, STAGE appears after TASK ID
-    if (!isAdmin) {
-      baseCols.push({
-        key: "stage",
-        header: "STAGE",
-        width: "180px",
-        render: (task) => (
-          <SegmentedStageBar
-            stages={taskStages}
-            currentStageName={task.stageName || "Task Created"}
-            currentStageId={task.stageId}
-            onStageSelect={(stg) => {
-              updateTaskStage(task.id, stg.name, stg.id);
-              toast.success(`Task moved to ${stg.name}`);
-            }}
-          />
-        ),
-      });
-    }
-
-    baseCols.push({
-      key: "title",
-      header: "TASK NAME",
-      render: (task) => (
-        <div className="min-w-0 pr-2">
-          <span
-            onClick={() => setSelectedTaskId(task.id)}
-            className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            {task.title}
-          </span>
-        </div>
-      ),
-    });
-
     if (isAdmin) {
+      // ADMIN WORKSPACE COLUMNS
       baseCols.push(
+        {
+          key: "title",
+          header: "TASK NAME",
+          minWidth: "240px",
+          align: "left",
+          render: (task) => (
+            <Tooltip content={task.title || "NA"}>
+              <div className="min-w-0 pr-2">
+                <span
+                  onClick={() => setSelectedTaskId(task.id)}
+                  className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {task.title || "NA"}
+                </span>
+              </div>
+            </Tooltip>
+          ),
+        },
         {
           key: "scope",
           header: "SCOPE",
-          width: "170px",
+          width: "200px",
+          minWidth: "200px",
+          align: "left",
           render: (task) => {
             const scopeDisplay =
               task.assignee?.adminScopeName ||
               (task.scopingRules && task.scopingRules.length > 0
                 ? task.scopingRules.map((r) => r.industryCategory || "Healthcare").join(", ")
-                : "Healthcare (US)");
+                : "NA");
             return (
               <Tooltip content={scopeDisplay}>
                 <span className="text-xs text-slate-700 font-medium truncate block cursor-default">
@@ -209,9 +253,11 @@ export default function Tasks() {
         {
           key: "organization",
           header: "ORGANIZATION",
-          width: "170px",
+          width: "200px",
+          minWidth: "200px",
+          align: "left",
           render: (task) => {
-            const orgDisplay = task.assignee?.orgName || "Demo Mantra Care";
+            const orgDisplay = task.assignee?.orgName || "NA";
             return (
               <Tooltip content={orgDisplay}>
                 <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
@@ -224,57 +270,187 @@ export default function Tasks() {
         {
           key: "assignee",
           header: "ROLE / RESPONSIBLE",
-          width: "160px",
-          render: (task) => (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-xs font-semibold text-slate-800 truncate">
-                {task.assignee.roleName || task.assignee.assigneeName}
-              </span>
-            </div>
-          ),
+          width: "180px",
+          minWidth: "180px",
+          align: "left",
+          render: (task) => {
+            const roleOrAssignee = task.assignee?.roleName || task.assignee?.assigneeName || "NA";
+            return (
+              <Tooltip content={roleOrAssignee}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                    {roleOrAssignee}
+                  </span>
+                </div>
+              </Tooltip>
+            );
+          },
         }
       );
     } else {
-      baseCols.push({
-        key: "assignee",
-        header: "RESPONSIBLE",
-        width: "170px",
-        render: (task) => {
-          if (task.assignees && task.assignees.length > 1) {
-            const names = task.assignees.map((a) => a.assigneeName).join(", ");
-            return (
-              <Tooltip content={names}>
-                <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
-                  {task.assignees[0].assigneeName} +{task.assignees.length - 1} more
-                </span>
+      // CLIENT WORKSPACE COLUMNS
+      if (clientTab === "tasks_by_me") {
+        // "Tasks by me": prominent WORKFLOW and interactive STAGE
+        baseCols.push(
+          {
+            key: "workflow",
+            header: "WORKFLOW",
+            width: "170px",
+            minWidth: "170px",
+            align: "left",
+            render: (task) => {
+              const wfName = task.workflowName || task.project || "Clinical & Operational Tasks";
+              return (
+                <Tooltip content={wfName}>
+                  <span className="text-xs font-medium text-slate-700 truncate block cursor-default">
+                    {wfName}
+                  </span>
+                </Tooltip>
+              );
+            },
+          },
+          {
+            key: "stage",
+            header: "STAGE",
+            width: "210px",
+            minWidth: "210px",
+            align: "left",
+            render: (task) => (
+              <SegmentedStageBar
+                stages={getTaskStages(task)}
+                currentStageName={task.stageName || "Task Created"}
+                currentStageId={task.stageId}
+                onStageSelect={(stg) => {
+                  updateTaskStage(task.id, stg.name, stg.id);
+                  toast.success(`Task moved to ${stg.name}`);
+                }}
+              />
+            ),
+          },
+          {
+            key: "title",
+            header: "TASK NAME",
+            minWidth: "240px",
+            align: "left",
+            render: (task) => (
+              <Tooltip content={task.title || "NA"}>
+                <div className="min-w-0 pr-2">
+                  <span
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    {task.title || "NA"}
+                  </span>
+                </div>
               </Tooltip>
-            );
+            ),
+          },
+          {
+            key: "assignee",
+            header: "RESPONSIBLE",
+            width: "180px",
+            minWidth: "180px",
+            align: "left",
+            render: (task) => {
+              if (task.assignees && task.assignees.length > 1) {
+                const names = task.assignees.map((a) => a.assigneeName).join(", ");
+                return (
+                  <Tooltip content={names}>
+                    <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                      {task.assignees[0].assigneeName} +{task.assignees.length - 1} more
+                    </span>
+                  </Tooltip>
+                );
+              }
+              const responsibleName = task.assignee?.assigneeName || "NA";
+              return (
+                <Tooltip content={responsibleName}>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                      {responsibleName}
+                    </span>
+                  </div>
+                </Tooltip>
+              );
+            },
           }
-          return (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-xs font-semibold text-slate-800 truncate">
-                {task.assignee.assigneeName}
-              </span>
-            </div>
-          );
-        },
-      });
-    }
+        );
+      } else {
+        // "My Tasks": STAGE, TASK NAME, ASSIGNED BY
+        baseCols.push(
+          {
+            key: "stage",
+            header: "STAGE",
+            width: "210px",
+            minWidth: "210px",
+            align: "left",
+            render: (task) => (
+              <SegmentedStageBar
+                stages={getTaskStages(task)}
+                currentStageName={task.stageName || "Task Created"}
+                currentStageId={task.stageId}
+                onStageSelect={(stg) => {
+                  updateTaskStage(task.id, stg.name, stg.id);
+                  toast.success(`Task moved to ${stg.name}`);
+                }}
+              />
+            ),
+          },
+          {
+            key: "title",
+            header: "TASK NAME",
+            minWidth: "240px",
+            align: "left",
+            render: (task) => (
+              <Tooltip content={task.title || "NA"}>
+                <div className="min-w-0 pr-2">
+                  <span
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    {task.title || "NA"}
+                  </span>
+                </div>
+              </Tooltip>
+            ),
+          },
+          {
+            key: "creator",
+            header: "ASSIGNED BY",
+            width: "180px",
+            minWidth: "180px",
+            align: "left",
+            render: (task) => {
+              const creatorName = task.creator?.name || "Admin";
+              return (
+                <Tooltip content={`Assigned by ${creatorName}${task.creator?.role ? ` (${task.creator.role})` : ""}`}>
+                  <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                    {creatorName}
+                  </span>
+                </Tooltip>
+              );
+            },
+          }
+        );
+      }
 
-    // OBSERVERS column only appears in client tasks; removed in admin workspace
-    if (!isAdmin) {
+      // OBSERVERS (client tables)
       baseCols.push({
         key: "observers",
         header: "OBSERVERS",
-        width: "150px",
+        width: "180px",
+        minWidth: "180px",
+        align: "left",
         render: (task) => {
           if (!task.observers || task.observers.length === 0) {
-            return <span className="text-xs text-slate-400">—</span>;
+            return <span className="text-xs text-slate-700">NA</span>;
           }
           const displayNames = task.observers.map((o) => o.name).join(", ");
           return (
             <Tooltip content={task.observers.map((o) => `${o.name}${o.role ? ` (${o.role})` : ""}`).join(", ")}>
-              <span className="text-xs text-slate-600 truncate block cursor-default">
+              <span className="text-xs text-slate-700 truncate block cursor-default">
                 {displayNames}
               </span>
             </Tooltip>
@@ -283,30 +459,35 @@ export default function Tasks() {
       });
     }
 
+    // Common ending columns for both Admin and Client
     baseCols.push(
       {
         key: "deadline",
         header: "DEADLINE",
-        width: "150px",
+        width: "160px",
+        minWidth: "160px",
+        align: "left",
         render: (task) => (
-          <span className="font-mono text-xs text-slate-500 tabular-nums">
-            {task.deadline || "—"}
+          <span className="font-mono text-xs text-slate-700 tabular-nums truncate block">
+            {task.deadline || "NA"}
           </span>
         ),
       },
       {
         key: "checklists",
         header: "CHECKLIST",
-        width: "90px",
+        width: "110px",
+        minWidth: "110px",
+        align: "left",
         render: (task) => {
-          const totalItems = task.checklists.reduce((acc, c) => acc + c.items.length, 0);
-          const completedItems = task.checklists.reduce(
+          const totalItems = task.checklists ? task.checklists.reduce((acc, c) => acc + c.items.length, 0) : 0;
+          const completedItems = task.checklists ? task.checklists.reduce(
             (acc, c) => acc + c.items.filter((it) => it.isCompleted).length,
             0
-          );
-          if (totalItems === 0) return <span className="text-xs text-slate-300">—</span>;
+          ) : 0;
+          if (totalItems === 0) return <span className="font-mono text-xs text-slate-700 tabular-nums">NA</span>;
           return (
-            <span className="font-mono text-xs text-slate-600 tabular-nums">
+            <span className="font-mono text-xs text-slate-700 tabular-nums">
               {completedItems}/{totalItems}
             </span>
           );
@@ -315,7 +496,7 @@ export default function Tasks() {
     );
 
     return baseCols;
-  }, [isAdmin, taskStages, updateTaskStage]);
+  }, [isAdmin, clientTab, taskStages, updateTaskStage]);
 
   const rowActions: TableRowAction<TaskEntity>[] = [
     {
@@ -357,8 +538,18 @@ export default function Tasks() {
           }
         />
 
-        {/* ── PageTopBar with Workflow Switcher, Filter Presets, Search, and New Task Action ── */}
+        {/* ── PageTopBar with Tabs (My Tasks vs Tasks by me), Workflow Switcher, Search, and New Task ── */}
         <PageTopBar
+          modes={
+            !isAdmin
+              ? [
+                  { id: "my_tasks", label: "My Tasks", badge: myTasksCount },
+                  { id: "tasks_by_me", label: "Tasks by me", badge: tasksByMeCount },
+                ]
+              : undefined
+          }
+          activeMode={clientTab}
+          onModeChange={(id) => setClientTab(id as "my_tasks" | "tasks_by_me")}
           leftElement={
             <div className="flex items-center gap-3">
               {/* Task Workflow Switcher Dropdown */}
@@ -371,7 +562,7 @@ export default function Tasks() {
                   title="Switch Task Workflow"
                 >
                   <span className="truncate max-w-[200px] font-semibold text-gray-800">
-                    {activeTaskWorkflow.name}
+                    {selectedWorkflowId === "all" ? "All Workflows" : activeTaskWorkflow.name}
                   </span>
                   <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showWorkflowDropdown ? "rotate-180" : ""}`} />
                 </button>
@@ -383,6 +574,20 @@ export default function Tasks() {
                       onClick={() => setShowWorkflowDropdown(false)}
                     />
                     <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedWorkflowId("all");
+                          setShowWorkflowDropdown(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                          selectedWorkflowId === "all" ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <span className="truncate">All Workflows</span>
+                        {selectedWorkflowId === "all" && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                      </button>
                       {taskWorkflows.map((wf) => {
                         const isSelected = selectedWorkflowId === wf.id;
                         return (
@@ -399,66 +604,6 @@ export default function Tasks() {
                             style={{ fontFamily: "Outfit, sans-serif" }}
                           >
                             <span className="truncate">{wf.name}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Filter Presets Dropdown */}
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowFilterDropdown((prev) => !prev)}
-                  className="h-[36px] px-3.5 flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 transition-colors shadow-2xs cursor-pointer shrink-0"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title="Filter by assignment"
-                >
-                  <ListFilter className="w-3.5 h-3.5 text-gray-500" />
-                  <span>
-                    {assignmentFilter === "all"
-                      ? "All Tasks"
-                      : assignmentFilter === "assigned_to_me"
-                      ? "Assigned to me"
-                      : "Assigned by me"}
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${
-                      showFilterDropdown ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {showFilterDropdown && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowFilterDropdown(false)}
-                    />
-                    <div className="absolute top-full left-0 mt-1.5 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                      {[
-                        { id: "all", label: "All Tasks" },
-                        { id: "assigned_to_me", label: "Assigned to me" },
-                        { id: "assigned_by_me", label: "Assigned by me" },
-                      ].map((f) => {
-                        const isSelected = assignmentFilter === f.id;
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => {
-                              setAssignmentFilter(f.id as AssignmentFilter);
-                              setShowFilterDropdown(false);
-                            }}
-                            className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                              isSelected ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
-                            }`}
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <span>{f.label}</span>
                             {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
                           </button>
                         );
@@ -509,7 +654,8 @@ export default function Tasks() {
         }}
         task={selectedTask}
         isAdmin={isAdmin}
-        taskStages={taskStages}
+        isMyTasksView={!isAdmin && clientTab === "my_tasks"}
+        taskStages={selectedTask ? getTaskStages(selectedTask) : taskStages}
         onUpdateTask={updateTask}
         onUpdateStage={updateTaskStage}
         onDeleteTask={deleteTask}

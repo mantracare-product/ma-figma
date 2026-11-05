@@ -81,17 +81,16 @@ export default function PatientTasksScreen() {
       if (activeTab === "pending" && t.status === "completed") return false;
       if (activeTab === "completed" && t.status !== "completed") return false;
 
-      // Search query
+      // Search query (patients cannot see task ID, so search does not match on task code)
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       const matchTitle = t.title.toLowerCase().includes(q);
-      const matchCode = t.code.toLowerCase().includes(q);
       const matchDesc = (t.description || "").toLowerCase().includes(q);
       const matchChecklist = t.checklists?.some((c) =>
         c.items.some((it) => it.text.toLowerCase().includes(q))
       );
 
-      return matchTitle || matchCode || matchDesc || matchChecklist;
+      return matchTitle || matchDesc || matchChecklist;
     });
   }, [clientTasks, activeTab, searchQuery]);
 
@@ -117,12 +116,22 @@ export default function PatientTasksScreen() {
   };
 
   const handleMarkTaskComplete = (task: TaskEntity) => {
+    // 4. Mark Complete is blocked until every checklist item is checked
+    if (task.status !== "completed") {
+      const allItems = task.checklists?.flatMap((c) => c.items) || [];
+      const hasUnchecked = allItems.some((it) => !it.isCompleted);
+      if (allItems.length > 0 && hasUnchecked) {
+        toast.error("Complete all checklist items to mark this task complete");
+        return;
+      }
+    }
+
     if (task.status === "completed") {
       toggleTaskStatus(task.id, "in_progress");
-      toast.info(`Task [${task.code}] reopened`);
+      toast.info("Task reopened");
     } else {
       toggleTaskStatus(task.id, "completed");
-      toast.success(`Great job! Task [${task.code}] marked as completed.`);
+      toast.success("Great job! Task marked as completed.");
     }
   };
 
@@ -135,11 +144,8 @@ export default function PatientTasksScreen() {
             className="text-2xl font-bold tracking-tight text-slate-900"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            My Tasks &amp; Action Items
+            My Tasks
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Action items, onboarding deliverables, and care protocol checklists assigned to you.
-          </p>
         </div>
 
         {/* Quick summary badges */}
@@ -276,12 +282,8 @@ export default function PatientTasksScreen() {
                       )}
                     </div>
 
-                    {/* One meta line in plain text (no capsules) */}
+                    {/* One meta line in plain text (no capsules): stage • due date • assigned by */}
                     <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono tabular-nums text-slate-600 font-semibold">
-                        {task.code}
-                      </span>
-                      <span>•</span>
                       <span>{task.stageName || (isCompleted ? "Completed" : "Task Created")}</span>
                       {task.deadline && (
                         <>
@@ -319,19 +321,44 @@ export default function PatientTasksScreen() {
                     View details
                   </button>
 
-                  {/* Mark Complete action (primary #1E293B style) */}
-                  <button
-                    type="button"
-                    onClick={() => handleMarkTaskComplete(task)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                      isCompleted
-                        ? "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
-                        : "bg-[#1E293B] text-white border-slate-900 hover:bg-slate-800 shadow-2xs"
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{isCompleted ? "Reopen" : "Mark Complete"}</span>
-                  </button>
+                  {/* Mark Complete action (primary #1E293B style, blocked until all checklist items completed) */}
+                  {(() => {
+                    const hasChecklists = allItems.length > 0;
+                    const hasUncompleted = allItems.some((it) => !it.isCompleted);
+                    const isBlocked = !isCompleted && hasChecklists && hasUncompleted;
+
+                    if (isBlocked) {
+                      return (
+                        <Tooltip content="Complete all checklist items to mark this task complete">
+                          <span className="inline-block cursor-not-allowed">
+                            <button
+                              type="button"
+                              disabled
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 bg-[#1E293B] text-white border-slate-900 opacity-50 cursor-not-allowed pointer-events-none"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Mark Complete</span>
+                            </button>
+                          </span>
+                        </Tooltip>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkTaskComplete(task)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isCompleted
+                            ? "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                            : "bg-[#1E293B] text-white border-slate-900 hover:bg-slate-800 shadow-2xs"
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isCompleted ? "Reopen" : "Mark Complete"}</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -346,10 +373,6 @@ export default function PatientTasksScreen() {
         onClose={() => setSelectedTaskId(null)}
         onToggleChecklistItem={handleToggleItem}
         onToggleComplete={handleMarkTaskComplete}
-        onMessageCareTeam={() => {
-          setSelectedTaskId(null);
-          navigate("/patient/messages");
-        }}
       />
     </div>
   );

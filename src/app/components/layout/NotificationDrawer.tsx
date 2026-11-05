@@ -62,7 +62,7 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
       subtitle={`${unreadCount} unread update${unreadCount === 1 ? "" : "s"}`}
       icon={<Bell className="w-5 h-5 text-slate-700" />}
       width="max-w-[480px]"
-      zIndex={700}
+      zIndex={1000}
       headerRight={
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
@@ -122,38 +122,44 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
           No notifications to display.
         </div>
       ) : (
-        filtered.map((item) => (
-          <div
-            key={item.id}
-            onClick={() => handleNotificationClick(item)}
-            className={`p-4 flex items-start gap-3.5 transition-colors cursor-pointer ${
-              item.read ? "bg-white hover:bg-slate-50" : "bg-blue-50/30 hover:bg-blue-50/60"
-            }`}
-          >
-            <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 mt-0.5">
-              {getIcon(item.type)}
-            </div>
+        filtered.map((item) => {
+          const isPatientPortal = typeof window !== "undefined" && window.location.pathname.startsWith("/patient");
+          const displayTitle = isPatientPortal ? item.title.replace(/\bTSK-\d+\b[:\s-]*/gi, "").trim() : item.title;
+          const displayMessage = isPatientPortal ? item.message.replace(/\bTSK-\d+\b[:\s-]*/gi, "").trim() : item.message;
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <h4 className="text-xs font-bold text-slate-900 truncate">
-                  {item.title}
-                </h4>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] font-mono tabular-nums text-slate-400">
-                    {item.timestamp}
-                  </span>
-                  {!item.read && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
-                  )}
-                </div>
+          return (
+            <div
+              key={item.id}
+              onClick={() => handleNotificationClick(item)}
+              className={`p-4 flex items-start gap-3.5 transition-colors cursor-pointer ${
+                item.read ? "bg-white hover:bg-slate-50" : "bg-blue-50/30 hover:bg-blue-50/60"
+              }`}
+            >
+              <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 mt-0.5">
+                {getIcon(item.type)}
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
-                {item.message}
-              </p>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-xs font-bold text-slate-900 truncate">
+                    {displayTitle}
+                  </h4>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-mono tabular-nums text-slate-400">
+                      {item.timestamp}
+                    </span>
+                    {!item.read && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                  {displayMessage}
+                </p>
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </DrawerShell>
   );

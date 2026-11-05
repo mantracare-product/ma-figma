@@ -39,7 +39,7 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     id: "notif-4",
     type: "system",
     title: "Monthly Billing Reconciled",
-    message: "Task TSK-105 'Automated Monthly Billing Reconciliation' marked completed.",
+    message: "Task 'Automated Monthly Billing Reconciliation' marked completed.",
     timestamp: "Yesterday",
     read: true,
     link: "/tasks?id=tsk-005",

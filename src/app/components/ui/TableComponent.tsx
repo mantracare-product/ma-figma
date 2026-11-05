@@ -301,7 +301,7 @@ export function TableComponent<T>({
             <tr>
               {/* Column 1: Checkbox (Select All) */}
               {enableSelection && (
-                <th className="px-3 py-1.5 w-10 text-center rounded-none align-middle">
+                <th className="pl-5 sm:pl-6 pr-3.5 py-1.5 w-10 text-center rounded-none align-middle">
                   <div className="flex items-center justify-center">
                     <input
                       type="checkbox"
@@ -444,7 +444,7 @@ export function TableComponent<T>({
               )}
 
               {/* Data Column Headers */}
-              {orderedVisibleColumns.map((col) => {
+              {orderedVisibleColumns.map((col, idx) => {
                 const align = getColumnAlign(col);
                 const alignClass =
                   align === "center"
@@ -458,11 +458,12 @@ export function TableComponent<T>({
                     : align === "right"
                     ? "justify-end"
                     : "justify-start";
+                const isLast = idx === orderedVisibleColumns.length - 1;
 
                 return (
                   <th
                     key={getColId(col)}
-                    className={`px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-white whitespace-nowrap rounded-none ${alignClass}`}
+                    className={`px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-white whitespace-nowrap rounded-none ${alignClass} ${isLast ? "pr-5 sm:pr-6" : ""}`}
                     style={{
                       fontFamily: "Outfit, sans-serif",
                       width: col.width,
@@ -525,7 +526,7 @@ export function TableComponent<T>({
                     {/* Column 1: Row Checkbox */}
                     {enableSelection && (
                       <td
-                        className="px-3 py-1 w-10 text-center rounded-none align-middle"
+                        className="pl-5 sm:pl-6 pr-3.5 py-1 w-10 text-center rounded-none align-middle"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-center">
@@ -591,7 +592,7 @@ export function TableComponent<T>({
                     )}
 
                     {/* Data Cells */}
-                    {orderedVisibleColumns.map((col) => {
+                    {orderedVisibleColumns.map((col, idx) => {
                       const align = getColumnAlign(col);
                       const alignClass =
                         align === "center"
@@ -605,6 +606,7 @@ export function TableComponent<T>({
                           : align === "right"
                           ? "justify-end"
                           : "justify-start";
+                      const isLast = idx === orderedVisibleColumns.length - 1;
 
                       let content: React.ReactNode;
                       if (col.render) {
@@ -618,7 +620,7 @@ export function TableComponent<T>({
                       return (
                         <td
                           key={getColId(col)}
-                          className={`px-3.5 py-1 text-xs text-gray-800 whitespace-nowrap rounded-none align-middle ${alignClass}`}
+                          className={`px-3.5 py-1 text-xs text-gray-800 whitespace-nowrap rounded-none align-middle ${alignClass} ${isLast ? "pr-5 sm:pr-6" : ""}`}
                           style={{
                             width: col.width,
                             minWidth: col.minWidth,

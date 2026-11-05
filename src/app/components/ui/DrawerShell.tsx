@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export interface DrawerShellProps {
@@ -8,7 +9,7 @@ export interface DrawerShellProps {
   subtitle?: string;
   icon?: React.ReactNode;
   width?: string; // e.g. "max-w-2xl" | "max-w-3xl"
-  zIndex?: number; // e.g. 600, 650, 700
+  zIndex?: number; // e.g. 600, 650, 700, 1000
   headerRight?: React.ReactNode;
   tabs?: React.ReactNode;
   bodyClassName?: string;
@@ -32,6 +33,15 @@ export default function DrawerShell({
   isGenerating = false,
   children,
 }: DrawerShellProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleAttemptClose = () => {
@@ -44,7 +54,7 @@ export default function DrawerShell({
     }
   };
 
-  return (
+  const content = (
     <div
       className="fixed inset-0 flex justify-end overflow-hidden"
       style={{ zIndex }}
@@ -119,4 +129,10 @@ export default function DrawerShell({
       </div>
     </div>
   );
+
+  if (typeof document !== "undefined") {
+    return createPortal(content, document.body);
+  }
+
+  return content;
 }

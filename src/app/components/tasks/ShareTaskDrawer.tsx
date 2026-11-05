@@ -66,10 +66,10 @@ export function sendTaskToPortalChat(
   task: TaskEntity,
   customMessage?: string
 ) {
-  const taskUrl = `${window.location.origin}/tasks?id=${task.id}`;
+  const taskUrl = `${window.location.origin}/patient/tasks`;
   const text =
     customMessage ||
-    `📋 Task Assigned [${task.code}]: ${task.title}\nStage: ${task.stageName || "Task Created"}\nDeadline: ${task.deadline || "None"}\nLink: ${taskUrl}`;
+    `📋 Task Assigned: ${task.title}\nStage: ${task.stageName || "Task Created"}\nDeadline: ${task.deadline || "None"}\nLink: ${taskUrl}`;
 
   try {
     const raw = localStorage.getItem("whatsappMockConversations");
