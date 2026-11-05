@@ -633,6 +633,64 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
     ];
   }
 
+  if (entityType === "task") {
+    return [
+      {
+        id: `${processIdPrefix}-task-pending`,
+        name: "Pending",
+        description: "Task queued and pending start",
+        status: "active",
+        color: "#64748B",
+        systemCategory: "pending",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
+        stageCategory: "in_progress",
+        stagePosition: "initial",
+        isInitial: true,
+      },
+      {
+        id: `${processIdPrefix}-task-inprogress`,
+        name: "In Progress",
+        description: "Work actively underway",
+        status: "active",
+        color: "#3B82F6",
+        systemCategory: "in_progress",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
+        stageCategory: "in_progress",
+        stagePosition: "intermediate",
+      },
+      {
+        id: `${processIdPrefix}-task-completed`,
+        name: "Completed",
+        description: "All requirements met and signed off",
+        status: "active",
+        color: "#10B981",
+        systemCategory: "completed",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
+        stageCategory: "success",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+      },
+      {
+        id: `${processIdPrefix}-task-cancelled`,
+        name: "Cancelled",
+        description: "Task abandoned or voided",
+        status: "active",
+        color: "#EF4444",
+        systemCategory: "cancelled",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
+        stageCategory: "lost",
+        stagePosition: "final",
+        isFinal: true,
+        isFinalStage: true,
+      },
+    ];
+  }
+
   // Default Process / Client: Stage 1 (Inprogress), Stage 2 (Won), Stage 3 (Lost)
   return [
     {
@@ -794,6 +852,11 @@ export function isPredefinedStage(stage: Stage | null | undefined, entityType?: 
   }
   if (ent === "invoice") {
     if (["draft", "payment recorded", "paid", "overdue"].includes(nameLower)) {
+      return true;
+    }
+  }
+  if (ent === "task") {
+    if (["pending", "in progress", "completed", "cancelled"].includes(nameLower)) {
       return true;
     }
   }
@@ -1198,6 +1261,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   DEFAULT_ENTITY_PROCESSES.appointment,
   DEFAULT_ENTITY_PROCESSES.invoice,
   DEFAULT_ENTITY_PROCESSES.insurance,
+  DEFAULT_ENTITY_PROCESSES.task,
 ];
 
 export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
@@ -1372,7 +1436,7 @@ export function getStoredProcesses(): Process[] {
 
   // Ensure singleton processes for non-client entities exist only if non-empty or not fresh
   if (!isFresh || list.length > 0) {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "task"];
     for (const et of nonClientTypes) {
       const exists = list.some((p) => p.entityType === et);
       if (!exists) {
@@ -1443,7 +1507,7 @@ export function getActiveOrganizationSync(): {
 
 export function saveStoredProcesses(processes: Process[]) {
   try {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "task"];
     const sanitized: Process[] = [];
 
     // 1. Client processes (free to add, edit, delete, reorder)

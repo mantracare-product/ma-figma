@@ -1132,13 +1132,14 @@ export default function Process() {
   }, [processes]);
 
   const handleEntityModeChange = (modeId: string) => {
-    if (modeId === "task") {
-      navigate("/tasks");
-      return;
-    }
     const nextEntity = modeId as EntityType;
     setSelectedEntity(nextEntity);
-    const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
+    let firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
+    if (!firstOfEntity && nextEntity === "task") {
+      const defaultTaskProc = DEFAULT_ENTITY_PROCESSES.task;
+      firstOfEntity = defaultTaskProc;
+      setProcesses((prev) => [...prev, defaultTaskProc]);
+    }
     if (firstOfEntity) {
       setSelectedProcess(firstOfEntity.id);
       setViewMode("process");
@@ -2809,6 +2810,7 @@ export default function Process() {
     const isAppointment = selectedEntity === "appointment";
     const isInsurance = selectedEntity === "insurance";
     const isInvoice = selectedEntity === "invoice";
+    const isTask = selectedEntity === "task";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
     const targetEntityType: EntityType = isAppointment
       ? "appointment"
@@ -2816,6 +2818,8 @@ export default function Process() {
       ? "insurance"
       : isInvoice
       ? "invoice"
+      : isTask
+      ? "task"
       : "client";
 
     // Auto-render predefined stages for this entity
@@ -2859,6 +2863,8 @@ export default function Process() {
                 ? ["insurance"]
                 : isInvoice
                 ? ["invoice"]
+                : isTask
+                ? ["task"]
                 : ["client", "process"],
             },
           ]
@@ -2887,6 +2893,8 @@ export default function Process() {
           ? "Insurance & Claim workflow"
           : isInvoice
           ? "Invoice workflow"
+          : isTask
+          ? "Task workflow"
           : "Workflow"
       } added successfully`
     );
@@ -2911,7 +2919,7 @@ export default function Process() {
 
   const handleDeleteProcess = (processId: string) => {
     const target = processes.find((p) => p.id === processId);
-    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment" && target.entityType !== "insurance") {
+    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment" && target.entityType !== "insurance" && target.entityType !== "task") {
       toast.error("Standard entity processes cannot be deleted.");
       return;
     }
@@ -2929,6 +2937,14 @@ export default function Process() {
       processes.filter((p) => p.entityType === "insurance").length <= 1
     ) {
       toast.error("Default insurance process cannot be deleted when it is the only process.");
+      return;
+    }
+    if (
+      target?.entityType === "task" &&
+      target.id === DEFAULT_ENTITY_PROCESSES.task.id &&
+      processes.filter((p) => p.entityType === "task").length <= 1
+    ) {
+      toast.error("Default task workflow cannot be deleted when it is the only task workflow.");
       return;
     }
     setProcesses((prev) => prev.filter((p) => p.id !== processId));
@@ -5729,6 +5745,8 @@ export default function Process() {
                   ? "Add Appointment Workflow"
                   : selectedEntity === "insurance"
                   ? "Add Insurance & Claim Workflow"
+                  : selectedEntity === "task"
+                  ? "Add Task Workflow"
                   : "Add Workflow"}
               </Button>
             </>
@@ -5744,6 +5762,8 @@ export default function Process() {
                   ? "e.g., Clinical Consultation Workflow"
                   : selectedEntity === "insurance"
                   ? "e.g., Pre-Authorization & Claims Workflow"
+                  : selectedEntity === "task"
+                  ? "e.g., Clinical Tasks & QA Review"
                   : "Enter process name"
               }
             />

@@ -127,6 +127,7 @@ const STANDARD_WORKSPACE_PAGES = [
   { label: "Call Logs", path: "/call-logs", iconName: "Phone", group: "Communication" },
   { label: "Chats", path: "/chats", iconName: "MessageCircle", group: "Communication" },
   { label: "Process Pipelines", path: "/deals", iconName: "RefreshCw", group: "Pipeline" },
+  { label: "Tasks", path: "/tasks", iconName: "CheckSquare", group: "General" },
   { label: "Appointments", path: "/appointments", iconName: "Calendar", group: "Scheduling" },
   { label: "AI Scribe", path: "/scribe", iconName: "Stethoscope", group: "Clinical" },
   { label: "Products & Services", path: "/services", iconName: "Package", group: "Revenue" },
@@ -149,6 +150,7 @@ const STANDARD_WORKSPACE_PAGES = [
 
 const ENTITY_OPTIONS = [
   { id: "client", label: "Clients & Deals" },
+  { id: "task", label: "Tasks" },
   { id: "appointment", label: "Appointments" },
   { id: "invoice", label: "Invoices & Billing" },
   { id: "insurance", label: "Insurance & Claims" },

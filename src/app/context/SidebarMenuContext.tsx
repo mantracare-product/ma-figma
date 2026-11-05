@@ -252,13 +252,32 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
   } catch {}
 
   // Apply resolved matching Admin Scoped Template for this organization
+  const templateSections: NavSectionConfig[] = JSON.parse(JSON.stringify(matchedTemplate.sections));
+  const wsSec = templateSections.find((s) => s.id === "workspace");
+  if (wsSec && !wsSec.items.some((it) => it.id === "tasks")) {
+    const procIdx = wsSec.items.findIndex((it) => it.id === "processes");
+    const taskItem: NavItemConfig = {
+      id: "tasks",
+      label: "Tasks",
+      iconName: "CheckSquare",
+      path: "/tasks",
+      visible: true,
+      isFeatured: true,
+    };
+    if (procIdx !== -1) {
+      wsSec.items.splice(procIdx + 1, 0, taskItem);
+    } else {
+      wsSec.items.push(taskItem);
+    }
+  }
+
   const newConfig: SidebarMenuConfig = {
-    version: 7,
+    version: 8,
     defaultStartPage: matchedTemplate.defaultStartPage || "/",
     templateId: matchedTemplate.id,
     templateName: matchedTemplate.name,
     isCustomizedByUser: false,
-    sections: JSON.parse(JSON.stringify(matchedTemplate.sections)),
+    sections: templateSections,
   };
 
   try {

@@ -56,6 +56,7 @@ export const DEFAULT_INITIAL_SIDEBAR_TEMPLATES: AdminSidebarTemplate[] = [
           { id: "call-logs", label: "Call Logs", iconName: "Phone", path: "/call-logs", visible: true, isFeatured: true },
           { id: "chats", label: "Chats", iconName: "MessageCircle", path: "/chats", visible: true, isFeatured: true },
           { id: "processes", label: "Process", iconName: "RefreshCw", path: "/deals", visible: true, isFeatured: true },
+          { id: "tasks", label: "Tasks", iconName: "CheckSquare", path: "/tasks", visible: true, isFeatured: true },
           { id: "appointments", label: "Appointments", iconName: "Calendar", path: "/appointments", visible: true, isFeatured: true },
           { id: "scribe", label: "AI Scribe", iconName: "Stethoscope", path: "/scribe", visible: true, isFeatured: true },
         ],
@@ -115,9 +116,42 @@ export function getStoredSidebarTemplates(): AdminSidebarTemplate[] {
         const cleaned = parsed.filter((t: AdminSidebarTemplate) => !legacyHardcodedIds.has(t.id));
 
         const hasDefault = cleaned.some((p: AdminSidebarTemplate) => p.id === "tpl-default-global");
-        const finalTemplates = hasDefault ? cleaned : [...DEFAULT_INITIAL_SIDEBAR_TEMPLATES, ...cleaned];
+        let finalTemplates = hasDefault ? cleaned : [...DEFAULT_INITIAL_SIDEBAR_TEMPLATES, ...cleaned];
 
-        if (cleaned.length !== parsed.length || !hasDefault) {
+        // Ensure every template has tasks under workspace
+        let templatesChanged = cleaned.length !== parsed.length || !hasDefault;
+        finalTemplates = finalTemplates.map((t: AdminSidebarTemplate) => {
+          let tChanged = false;
+          const updatedSections = (t.sections || []).map((sec: NavSectionConfig) => {
+            if (sec.id === "workspace" && !sec.items.some((it) => it.id === "tasks")) {
+              tChanged = true;
+              const procIdx = sec.items.findIndex((it) => it.id === "processes");
+              const taskItem: NavItemConfig = {
+                id: "tasks",
+                label: "Tasks",
+                iconName: "CheckSquare",
+                path: "/tasks",
+                visible: true,
+                isFeatured: true,
+              };
+              const items = [...sec.items];
+              if (procIdx !== -1) {
+                items.splice(procIdx + 1, 0, taskItem);
+              } else {
+                items.push(taskItem);
+              }
+              return { ...sec, items };
+            }
+            return sec;
+          });
+          if (tChanged) {
+            templatesChanged = true;
+            return { ...t, sections: updatedSections };
+          }
+          return t;
+        });
+
+        if (templatesChanged) {
           localStorage.setItem(SIDEBAR_TEMPLATES_STORAGE_KEY, JSON.stringify(finalTemplates));
         }
         return finalTemplates;

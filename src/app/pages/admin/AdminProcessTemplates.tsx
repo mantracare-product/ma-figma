@@ -963,7 +963,7 @@ export default function AdminProcessTemplates() {
     setProcesses((prev) => {
       let changed = false;
       const copy = [...prev];
-      const nonClientEntities: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+      const nonClientEntities: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task"];
       for (const et of nonClientEntities) {
         if (!copy.some((p) => p.entityType === et)) {
           copy.push(DEFAULT_ENTITY_PROCESSES[et]);
@@ -983,6 +983,7 @@ export default function AdminProcessTemplates() {
       invoice: 0,
       insurance: 0,
       claim: 0,
+      task: 0,
     };
     processes.forEach((p) => {
       const ent = (p.entityType || "client").toLowerCase();
@@ -990,6 +991,7 @@ export default function AdminProcessTemplates() {
       else if (ent === "invoice") counts.invoice++;
       else if (ent === "insurance") counts.insurance++;
       else if (ent === "claim") counts.claim++;
+      else if (ent === "task") counts.task++;
       else counts.process++; // "client" and "process" map to Processes
     });
     return counts;
@@ -3204,6 +3206,7 @@ export default function AdminProcessTemplates() {
                 <option value="invoice">Invoices ({entityCounts.invoice})</option>
                 <option value="insurance">Insurance ({entityCounts.insurance})</option>
                 <option value="claim">Claims ({entityCounts.claim})</option>
+                <option value="task">Tasks ({entityCounts.task})</option>
               </select>
 
               {/* 1. Industry Category */}
@@ -5407,6 +5410,7 @@ export default function AdminProcessTemplates() {
                 <option value="invoice">Invoices</option>
                 <option value="insurance">Insurance</option>
                 <option value="claim">Claims</option>
+                <option value="task">Tasks</option>
               </select>
               <p className="text-xs text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
                 Specify which entity this workflow process belongs to.

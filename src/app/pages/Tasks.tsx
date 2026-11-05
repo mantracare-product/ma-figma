@@ -239,8 +239,8 @@ export default function Tasks() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Workflow"
-          subtitle="Clinical processes, task execution schedules, and automation protocols"
+          title="Tasks"
+          subtitle="Clinical tasks, operational assignments, checklists, and deadline tracking"
         />
 
         {/* ── PageTopBar with Entity Switcher, Search, View Mode, and New Task Action ── */}
