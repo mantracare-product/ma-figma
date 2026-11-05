@@ -4,7 +4,6 @@ import {
   Plus,
   ChevronDown,
   Check,
-  Share2,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -16,7 +15,6 @@ import { useProcessStore, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES } fro
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
-import ShareTaskDrawer from "../components/tasks/ShareTaskDrawer";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 
@@ -76,17 +74,11 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("id"));
-  const [sharingTaskId, setSharingTaskId] = useState<string | null>(null);
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
     return tasks.find((t) => t.id === selectedTaskId) || null;
   }, [selectedTaskId, tasks]);
-
-  const sharingTask = useMemo(() => {
-    if (!sharingTaskId) return null;
-    return tasks.find((t) => t.id === sharingTaskId) || null;
-  }, [sharingTaskId, tasks]);
 
   // Current logged in username / persona
   const currentUserName = user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta");
@@ -504,10 +496,6 @@ export default function Tasks() {
       onClick: (task) => setSelectedTaskId(task.id),
     },
     {
-      label: "Share Task",
-      onClick: (task) => setSharingTaskId(task.id),
-    },
-    {
       label: "Mark Completed",
       onClick: (task) => {
         updateTaskStage(task.id, "Task Completed", "task-stg-completed");
@@ -670,12 +658,6 @@ export default function Tasks() {
         onRemoveObserver={removeObserver}
         onAddSubtask={addSubtask}
         onToggleSubtask={toggleSubtask}
-      />
-
-      <ShareTaskDrawer
-        isOpen={Boolean(sharingTaskId && sharingTask)}
-        onClose={() => setSharingTaskId(null)}
-        task={sharingTask}
       />
     </div>
   );

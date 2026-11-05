@@ -16,7 +16,6 @@ import {
   Calendar,
   Layers,
   ArrowRight,
-  Share2,
   MoreVertical,
   Edit2,
   Users,
@@ -40,7 +39,6 @@ import { Stage } from "../../../lib/useProcessStore";
 import { useTeamMembers } from "../../../lib/teamStore";
 import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
 import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
-import ShareTaskDrawer from "./ShareTaskDrawer";
 import { toast } from "sonner";
 
 export interface TaskDetailDrawerProps {
@@ -104,7 +102,6 @@ export default function TaskDetailDrawer({
   const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
 
   const [showObserverPicker, setShowObserverPicker] = useState(false);
-  const [showShareDrawer, setShowShareDrawer] = useState(false);
   const [showRecurrenceDrawer, setShowRecurrenceDrawer] = useState(false);
   const [showTimePlanningDrawer, setShowTimePlanningDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -190,18 +187,6 @@ export default function TaskDetailDrawer({
         zIndex={650}
         headerRight={
           <div className="flex items-center gap-2">
-            {/* Share Task Button */}
-            <Tooltip content="Share task via SMS, WhatsApp, Email, or Link">
-              <button
-                type="button"
-                onClick={() => setShowShareDrawer(true)}
-                className="p-1.5 rounded-xl border border-gray-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-1.5 px-2.5 text-xs font-semibold"
-              >
-                <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                <span>Share</span>
-              </button>
-            </Tooltip>
-
             {onDeleteTask && (
               <Tooltip content="Delete task">
                 <button
@@ -941,13 +926,6 @@ export default function TaskDetailDrawer({
           onUpdateTask(task.id, { timePlanning: cfg });
           toast.success("Time planning applied");
         }}
-      />
-
-      {/* Share Task Drawer */}
-      <ShareTaskDrawer
-        isOpen={showShareDrawer}
-        onClose={() => setShowShareDrawer(false)}
-        task={task}
       />
     </>
   );
