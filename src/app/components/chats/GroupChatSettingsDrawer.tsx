@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { Users, Lock, Globe, Shield, Info, Trash2, UserPlus, Clock, X, Check } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Users, Shield, Trash2, UserPlus, Search } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { Conversation, GroupChatConfig } from "../../../lib/useConversations";
 import { getClientList } from "../../../lib/getClientList";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { toast } from "sonner";
 
 export interface GroupChatSettingsDrawerProps {
@@ -14,7 +15,7 @@ export interface GroupChatSettingsDrawerProps {
   onUpdateGroup: (id: string, patch: Partial<GroupChatConfig>) => void;
 }
 
-const TEAM_MEMBERS = [
+const DEFAULT_TEAM_MEMBERS = [
   { id: "usr-doc-1", name: "Dr. Alistair Mehta", role: "Lead Physician" },
   { id: "usr-doc-2", name: "Dr. Rachel Reynolds", role: "Clinical Director" },
   { id: "usr-coord-1", name: "Elena Rostova", role: "Care Coordinator" },
@@ -33,27 +34,55 @@ export default function GroupChatSettingsDrawer({
   const [description, setDescription] = useState(cfg.description || "");
   const [whoCanAddMembers, setWhoCanAddMembers] = useState(cfg.permissions.whoCanAddMembers);
   const [whoCanPost, setWhoCanPost] = useState(cfg.permissions.whoCanPost);
-  const [autoDelete, setAutoDelete] = useState(cfg.autoDelete);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [addMemberTab, setAddMemberTab] = useState<"contacts" | "team">("contacts");
   const [searchMember, setSearchMember] = useState("");
 
+  // Contacts
   const allClients = getClientList();
-  const allCandidates = [
-    ...TEAM_MEMBERS,
-    ...allClients.slice(0, 15).map((c) => ({ id: c.id, name: c.name, role: "Patient / Client" })),
-  ];
+  const contactCandidates = useMemo(() => {
+    return allClients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      role: c.phoneNumber ? `${c.phoneNumber} • Contact` : "Patient / Contact",
+    }));
+  }, [allClients]);
+
+  // Team Members
+  const storedTeam = getStoredTeamMembers();
+  const teamCandidates = useMemo(() => {
+    const list = [...DEFAULT_TEAM_MEMBERS];
+    storedTeam.forEach((tm) => {
+      const idStr = String(tm.id);
+      if (!list.some((existing) => existing.id === idStr || existing.name.toLowerCase() === tm.name.toLowerCase())) {
+        list.push({
+          id: `usr-team-${idStr}`,
+          name: tm.name,
+          role: tm.role || tm.department || "Staff",
+        });
+      }
+    });
+    return list;
+  }, [storedTeam]);
+
+  const allCandidates = useMemo(() => {
+    return [...teamCandidates, ...contactCandidates];
+  }, [teamCandidates, contactCandidates]);
 
   const currentMembers = allCandidates.filter((c) => cfg.memberIds.includes(c.id));
-  const availableToAdd = allCandidates.filter(
+
+  // Available to add filtered by active tab
+  const activeCandidatesToAdd = addMemberTab === "contacts" ? contactCandidates : teamCandidates;
+  const availableToAdd = activeCandidatesToAdd.filter(
     (c) =>
       !cfg.memberIds.includes(c.id) &&
-      (c.name.toLowerCase().includes(searchMember.toLowerCase()) || c.role.toLowerCase().includes(searchMember.toLowerCase()))
+      (c.name.toLowerCase().includes(searchMember.toLowerCase()) ||
+        c.role.toLowerCase().includes(searchMember.toLowerCase()))
   );
 
   const handleSave = () => {
     onUpdateGroup(conversation.id, {
       description: description.trim() || undefined,
-      autoDelete,
       permissions: {
         whoCanAddMembers,
         whoCanPost,
@@ -122,44 +151,14 @@ export default function GroupChatSettingsDrawer({
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Group Information
           </h3>
-          <InfoTooltip content="Configured identity and retention properties for this channel" />
+          <InfoTooltip content="Configured identity and owner details for this channel" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-              Chat Type
-            </label>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-              {cfg.chatType === "private" ? <Lock className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
-              <span>{cfg.chatType === "private" ? "Private Chat" : "Public Chat"}</span>
-            </div>
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-              Owner
-            </label>
-            <p className="text-xs font-bold text-slate-800">{cfg.ownerName}</p>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Auto Delete Messages
-            </label>
-            <InfoTooltip content="Automatic retention window for compliance" />
-          </div>
-          <select
-            value={autoDelete}
-            onChange={(e) => setAutoDelete(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="never">Never (Keep entire history)</option>
-            <option value="24h">24 Hours</option>
-            <option value="7d">7 Days</option>
-            <option value="30d">30 Days</option>
-          </select>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+            Group Owner
+          </label>
+          <p className="text-xs font-bold text-slate-800">{cfg.ownerName}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -182,43 +181,75 @@ export default function GroupChatSettingsDrawer({
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Permissions
+            Access Permissions
           </h3>
-          <InfoTooltip content="Posting and invitation rights" />
+          <InfoTooltip content="Posting and member invitation rights" />
         </div>
 
+        {/* Who Can Add Members */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Who Can Add Members
-            </label>
-            <InfoTooltip content="Only moderators or any member can invite colleagues" />
+          <label className="text-xs font-semibold text-slate-700 block">
+            Who Can Add Members
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWhoCanAddMembers("moderators")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanAddMembers === "moderators"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Group Admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhoCanAddMembers("all")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanAddMembers === "all"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Anyone in the group</span>
+            </button>
           </div>
-          <select
-            value={whoCanAddMembers}
-            onChange={(e) => setWhoCanAddMembers(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="moderators">Only Owner & Moderators</option>
-            <option value="all">All Group Members</option>
-          </select>
         </div>
 
+        {/* Who Can Send Messages */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Who Can Post Messages
-            </label>
-            <InfoTooltip content="Restrict to moderators for broadcast channel mode" />
+          <label className="text-xs font-semibold text-slate-700 block">
+            Who Can Send Messages
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWhoCanPost("moderators")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanPost === "moderators"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Group Admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhoCanPost("all")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanPost === "all"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Anyone in the group</span>
+            </button>
           </div>
-          <select
-            value={whoCanPost}
-            onChange={(e) => setWhoCanPost(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="all">All Group Members</option>
-            <option value="moderators">Only Owner & Moderators</option>
-          </select>
         </div>
       </div>
 
@@ -231,25 +262,62 @@ export default function GroupChatSettingsDrawer({
           <button
             type="button"
             onClick={() => setShowAddMember((prev) => !prev)}
-            className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
+            className="text-xs text-slate-700 hover:text-slate-950 cursor-pointer flex items-center gap-1 font-semibold"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Add Member</span>
+            <span>{showAddMember ? "Close" : "+ Add Member"}</span>
           </button>
         </div>
 
+        {/* Add Member Drawer Panel with Two Toggles */}
         {showAddMember && (
-          <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
-            <input
-              type="text"
-              value={searchMember}
-              onChange={(e) => setSearchMember(e.target.value)}
-              placeholder="Search people to add..."
-              className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg text-slate-900"
-            />
+          <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-3">
+            {/* Two Toggles: Contacts and Team Member */}
+            <div className="flex items-center p-1 bg-white rounded-xl border border-gray-200">
+              <button
+                type="button"
+                onClick={() => setAddMemberTab("contacts")}
+                className={`flex-1 py-1 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  addMemberTab === "contacts"
+                    ? "bg-slate-900 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Contacts</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddMemberTab("team")}
+                className={`flex-1 py-1 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  addMemberTab === "team"
+                    ? "bg-slate-900 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Team Member</span>
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchMember}
+                onChange={(e) => setSearchMember(e.target.value)}
+                placeholder={
+                  addMemberTab === "contacts"
+                    ? "Search contacts to add..."
+                    : "Search team members to add..."
+                }
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-gray-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15"
+              />
+            </div>
+
             <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">
               {availableToAdd.length === 0 ? (
-                <p className="text-[11px] text-slate-400 p-2 italic">No more members to add</p>
+                <p className="text-[11px] text-slate-400 p-2 italic">
+                  No {addMemberTab === "contacts" ? "contacts" : "team members"} available to add
+                </p>
               ) : (
                 availableToAdd.map((cand) => (
                   <div key={cand.id} className="p-2 flex items-center justify-between">
@@ -260,7 +328,7 @@ export default function GroupChatSettingsDrawer({
                     <button
                       type="button"
                       onClick={() => handleAddMember(cand.id)}
-                      className="text-xs font-bold text-slate-700 hover:text-slate-900 px-2 py-1 rounded bg-white border border-gray-200 cursor-pointer"
+                      className="text-xs font-bold text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-lg bg-white border border-gray-200 hover:bg-slate-50 cursor-pointer shadow-2xs"
                     >
                       Add
                     </button>
@@ -271,6 +339,7 @@ export default function GroupChatSettingsDrawer({
           </div>
         )}
 
+        {/* Existing Members list */}
         <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl max-h-56 overflow-y-auto">
           {currentMembers.map((m) => {
             const isOwner = m.id === cfg.ownerId;
@@ -312,4 +381,3 @@ export default function GroupChatSettingsDrawer({
     </DrawerShell>
   );
 }
-

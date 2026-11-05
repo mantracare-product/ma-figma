@@ -75,13 +75,31 @@ export function sendTaskToPortalChat(
     const raw = localStorage.getItem("whatsappMockConversations");
     let convs: any[] = raw ? JSON.parse(raw) : [];
 
-    // Find conversation matching this client
+    // Purge any accidental task assignment messages from WhatsApp conversations
+    convs = convs.map((c: any) => {
+      if (c.channel === "whatsapp" && Array.isArray(c.messages)) {
+        const cleanedMsgs = c.messages.filter(
+          (m: any) => !m.text?.includes("Task Assigned:") && !m.text?.includes("Stage: Task Created")
+        );
+        const lastMsg = cleanedMsgs[cleanedMsgs.length - 1]?.text || "";
+        return {
+          ...c,
+          messages: cleanedMsgs,
+          lastMessage: c.lastMessage?.includes("Task Assigned:") ? lastMsg : c.lastMessage,
+        };
+      }
+      return c;
+    });
+
+    // Find companion conversation matching this client
     let conv = convs.find(
       (c: any) =>
-        c.clientId === clientId ||
-        c.contactName === clientName ||
-        c.id === `doc-${clientId}` ||
-        c.id === clientId
+        c.channel === "companion" &&
+        (c.clientId === clientId ||
+          c.contactName === clientName ||
+          c.id === `comp-${clientId}` ||
+          c.id === `conv-comp-${clientId}` ||
+          c.id === "conv-comp-1")
     );
 
     const newMsg = {
@@ -100,11 +118,11 @@ export function sendTaskToPortalChat(
       conv.timestamp = "Just now";
     } else {
       conv = {
-        id: `doc-${clientId}`,
+        id: `comp-${clientId}`,
         clientId,
         contactName: clientName,
-        phoneNumber: "+1 (555) 234-5678",
-        channel: "whatsapp",
+        phoneNumber: "Companion Portal",
+        channel: "companion",
         lastMessage: text,
         timestamp: "Just now",
         unreadCount: 1,
@@ -117,7 +135,7 @@ export function sendTaskToPortalChat(
     window.dispatchEvent(new Event(TEST_CHAT_SYNC_EVENT));
     window.dispatchEvent(new Event("storage"));
   } catch (err) {
-    console.error("Failed to sync task message to portal chat:", err);
+    console.error("Failed to sync task message to companion chat:", err);
   }
 }
 

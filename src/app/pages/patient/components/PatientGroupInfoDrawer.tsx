@@ -9,10 +9,6 @@ import {
   LogOut,
   AlertTriangle,
   Search,
-  Lock,
-  Globe,
-  Clock,
-  UserCheck,
 } from "lucide-react";
 import DrawerShell from "../../../components/ui/DrawerShell";
 import { Tooltip } from "../../../components/ui/Tooltip";
@@ -367,21 +363,6 @@ export default function PatientGroupInfoDrawer({
                   {cfg.description}
                 </p>
               )}
-
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[11px] text-slate-600">
-                <div className="flex items-center gap-1.5">
-                  {cfg?.chatType === "private" ? (
-                    <Lock className="w-3.5 h-3.5 text-slate-400" />
-                  ) : (
-                    <Globe className="w-3.5 h-3.5 text-slate-400" />
-                  )}
-                  <span>{cfg?.chatType === "private" ? "Private Care Group" : "Public Care Group"}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{cfg?.autoDelete === "never" ? "History retained" : `Auto-deletes ${cfg?.autoDelete}`}</span>
-                </div>
-              </div>
             </div>
 
             {/* Members Search & List */}
@@ -660,3 +641,4 @@ export default function PatientGroupInfoDrawer({
     </>
   );
 }
+

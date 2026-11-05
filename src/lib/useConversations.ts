@@ -1095,8 +1095,20 @@ export function getStoredConversations(): Conversation[] {
       const missingInitial = INITIAL_MOCK_CONVERSATIONS.filter((c) => !parsedIds.has(c.id));
       const merged = [...parsed, ...missingInitial];
       const updated = merged.map((c) => {
-        if (c.channel === "whatsapp" && (!c.inboxNumber || !validNumbers.has(c.inboxNumber))) {
-          return { ...c, inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber };
+        // Purge any accidental task assignment messages from WhatsApp conversations
+        if (c.channel === "whatsapp") {
+          const cleanedMsgs = (c.messages || []).filter(
+            (m: any) => !m.text?.includes("Task Assigned:") && !m.text?.includes("Stage: Task Created")
+          );
+          const lastMsg = cleanedMsgs[cleanedMsgs.length - 1]?.text || "";
+          return {
+            ...c,
+            messages: cleanedMsgs,
+            lastMessage: c.lastMessage?.includes("Task Assigned:") ? lastMsg : c.lastMessage,
+            inboxNumber: (!c.inboxNumber || !validNumbers.has(c.inboxNumber))
+              ? DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber
+              : c.inboxNumber,
+          };
         }
         return c;
       });

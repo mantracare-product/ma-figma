@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { Users, Lock, Globe, Shield, Info, X, Check, Clock, UserPlus } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Users, Shield, Check, UserPlus, Search } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { GroupChatConfig, GroupChatPermissions, Conversation } from "../../../lib/useConversations";
 import { getClientList } from "../../../lib/getClientList";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { toast } from "sonner";
 
 export interface CreateGroupChatDrawerProps {
@@ -23,7 +24,7 @@ export interface CreateGroupChatDrawerProps {
   }) => Conversation | void;
 }
 
-const TEAM_MEMBERS = [
+const DEFAULT_TEAM_MEMBERS = [
   { id: "usr-doc-1", name: "Dr. Alistair Mehta", role: "Lead Physician" },
   { id: "usr-doc-2", name: "Dr. Rachel Reynolds", role: "Clinical Director" },
   { id: "usr-coord-1", name: "Elena Rostova", role: "Care Coordinator" },
@@ -36,28 +37,56 @@ export default function CreateGroupChatDrawer({
   onCreateGroup,
 }: CreateGroupChatDrawerProps) {
   const [name, setName] = useState("");
-  const [chatType, setChatType] = useState<"private" | "public">("private");
-  const [autoDelete, setAutoDelete] = useState<"never" | "24h" | "7d" | "30d">("never");
   const [description, setDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>(["usr-admin-1"]);
   const [selectedModerators, setSelectedModerators] = useState<string[]>(["usr-admin-1"]);
   const [whoCanAddMembers, setWhoCanAddMembers] = useState<"all" | "moderators">("moderators");
   const [whoCanPost, setWhoCanPost] = useState<"all" | "moderators">("all");
+  const [memberTab, setMemberTab] = useState<"contacts" | "team">("contacts");
   const [memberSearch, setMemberSearch] = useState("");
 
+  // Contacts
   const allClients = getClientList();
-  const contactCandidates = allClients.slice(0, 15).map((c) => ({
-    id: c.id,
-    name: c.name,
-    role: "Patient / Client",
-  }));
+  const contactCandidates = useMemo(() => {
+    return allClients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      role: c.phoneNumber ? `${c.phoneNumber} • Contact` : "Patient / Contact",
+    }));
+  }, [allClients]);
 
-  const allCandidates = [...TEAM_MEMBERS, ...contactCandidates];
+  // Team Members
+  const storedTeam = getStoredTeamMembers();
+  const teamCandidates = useMemo(() => {
+    const list = [...DEFAULT_TEAM_MEMBERS];
+    storedTeam.forEach((tm) => {
+      const idStr = String(tm.id);
+      if (!list.some((existing) => existing.id === idStr || existing.name.toLowerCase() === tm.name.toLowerCase())) {
+        list.push({
+          id: `usr-team-${idStr}`,
+          name: tm.name,
+          role: tm.role || tm.department || "Staff",
+        });
+      }
+    });
+    return list;
+  }, [storedTeam]);
 
-  const filteredCandidates = allCandidates.filter((c) =>
-    c.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-    c.role.toLowerCase().includes(memberSearch.toLowerCase())
+  // Filter candidates based on active toggle
+  const activeCandidates = memberTab === "contacts" ? contactCandidates : teamCandidates;
+  const filteredCandidates = activeCandidates.filter(
+    (c) =>
+      c.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      c.role.toLowerCase().includes(memberSearch.toLowerCase())
   );
+
+  const selectedContactCount = selectedMembers.filter((id) =>
+    contactCandidates.some((c) => c.id === id)
+  ).length;
+
+  const selectedTeamCount = selectedMembers.filter((id) =>
+    teamCandidates.some((t) => t.id === id)
+  ).length;
 
   const toggleMember = (id: string) => {
     if (selectedMembers.includes(id)) {
@@ -96,8 +125,8 @@ export default function CreateGroupChatDrawer({
 
     onCreateGroup({
       name: name.trim(),
-      chatType,
-      autoDelete,
+      chatType: "private",
+      autoDelete: "never",
       description: description.trim() || undefined,
       memberIds: selectedMembers,
       moderatorIds: selectedModerators,
@@ -121,7 +150,7 @@ export default function CreateGroupChatDrawer({
     <DrawerShell
       isOpen={isOpen}
       onClose={onClose}
-      title="Create Chat"
+      title="Create Group"
       subtitle="New Group Collaboration"
       icon={<Users className="w-5 h-5 text-slate-700" />}
       width="max-w-[580px]"
@@ -141,7 +170,7 @@ export default function CreateGroupChatDrawer({
             disabled={!name.trim()}
             className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            Create Chat
+            Create Group
           </button>
         </div>
       }
@@ -151,16 +180,16 @@ export default function CreateGroupChatDrawer({
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            Chat Information
+            Group Information
           </h3>
-          <InfoTooltip content="Basic identity and visibility configuration for this group conversation" />
+          <InfoTooltip content="Basic identity and guidelines for this group conversation" />
         </div>
 
         {/* Chat Name */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-slate-700">
-              Chat Name <span className="text-red-500">*</span>
+              Group Name <span className="text-red-500">*</span>
             </label>
             <InfoTooltip content="The visible display title for all team members and clients in this channel" />
           </div>
@@ -171,62 +200,6 @@ export default function CreateGroupChatDrawer({
             placeholder="e.g. Oncology Clinical Pathway, Wellness Circle"
             className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900"
           />
-        </div>
-
-        {/* Chat Type (Private / Public) */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Chat Type
-            </label>
-            <InfoTooltip content="Private chats require invitation. Public chats can be joined by any clinic practitioner or enrolled client." />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setChatType("private")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                chatType === "private"
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Private Chat</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatType("public")}
-              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                chatType === "public"
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Public Chat</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Auto Delete Messages */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Auto Delete Messages
-            </label>
-            <InfoTooltip content="Automatically purge chat history after the designated retention period for compliance" />
-          </div>
-          <select
-            value={autoDelete}
-            onChange={(e) => setAutoDelete(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="never">Never (Keep entire history)</option>
-            <option value="24h">24 Hours</option>
-            <option value="7d">7 Days</option>
-            <option value="30d">30 Days</option>
-          </select>
         </div>
 
         {/* Description */}
@@ -253,65 +226,142 @@ export default function CreateGroupChatDrawer({
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             Access Permissions
           </h3>
-          <InfoTooltip content="Role-based permissions governing member recruitment and broadcast capabilities" />
+          <InfoTooltip content="Role-based permissions governing member addition and message posting rights" />
         </div>
 
-        {/* Who can add members */}
+        {/* Who Can Add Members */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Who Can Add Members
-            </label>
-            <InfoTooltip content="Define whether any member can invite colleagues or only designated moderators" />
+          <label className="text-xs font-semibold text-slate-700 block">
+            Who Can Add Members
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWhoCanAddMembers("moderators")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanAddMembers === "moderators"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Group Admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhoCanAddMembers("all")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanAddMembers === "all"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Anyone in the group</span>
+            </button>
           </div>
-          <select
-            value={whoCanAddMembers}
-            onChange={(e) => setWhoCanAddMembers(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="moderators">Only Owner & Moderators</option>
-            <option value="all">All Group Members</option>
-          </select>
         </div>
 
-        {/* Who can post */}
+        {/* Who Can Send Messages */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">
-              Who Can Post Messages
-            </label>
-            <InfoTooltip content="Restrict posting to turn this channel into an announcement broadcast stream" />
+          <label className="text-xs font-semibold text-slate-700 block">
+            Who Can Send Messages
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWhoCanPost("moderators")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanPost === "moderators"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Group Admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhoCanPost("all")}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                whoCanPost === "all"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Anyone in the group</span>
+            </button>
           </div>
-          <select
-            value={whoCanPost}
-            onChange={(e) => setWhoCanPost(e.target.value as any)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 cursor-pointer"
-          >
-            <option value="all">All Group Members (Two-way discussion)</option>
-            <option value="moderators">Only Owner & Moderators (Announcement Mode)</option>
-          </select>
         </div>
       </div>
 
-      {/* ── Members & Moderators Selection Card ── */}
+      {/* ── Add Members Selection Card with Two Toggles: Contacts & Team Member ── */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Members ({selectedMembers.length})
+              Add Members ({selectedMembers.length})
             </h3>
           </div>
-          <InfoTooltip content="Select practitioners and patients to add. Toggle moderator status to grant administrative controls." />
+          <InfoTooltip content="Select contacts and team members. Toggle moderator status for team members." />
+        </div>
+
+        {/* Two Toggles: Contacts and Team Member */}
+        <div className="flex items-center p-1 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setMemberTab("contacts")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              memberTab === "contacts"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span>Contacts</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                memberTab === "contacts" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+              }`}
+            >
+              {selectedContactCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMemberTab("team")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              memberTab === "team"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span>Team Member</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                memberTab === "team" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+              }`}
+            >
+              {selectedTeamCount}
+            </span>
+          </button>
         </div>
 
         {/* Member Search */}
-        <input
-          type="text"
-          value={memberSearch}
-          onChange={(e) => setMemberSearch(e.target.value)}
-          placeholder="Filter practitioners and patients..."
-          className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900"
-        />
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+            placeholder={
+              memberTab === "contacts"
+                ? "Search contacts by name or phone..."
+                : "Search team members by name or role..."
+            }
+            className="w-full text-xs pl-8 pr-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900"
+          />
+        </div>
 
         {/* Candidate List */}
         <div className="max-h-60 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-xl">
@@ -342,13 +392,13 @@ export default function CreateGroupChatDrawer({
                     <p className="text-xs font-bold text-slate-900 truncate">
                       {cand.name} {isOwner && "(Owner)"}
                     </p>
-                    <p className="text-[11px] text-slate-500 font-normal">
+                    <p className="text-[11px] text-slate-500 font-normal truncate">
                       {cand.role}
                     </p>
                   </div>
                 </div>
 
-                {isMember && !isOwner && (
+                {memberTab === "team" && isMember && !isOwner && (
                   <Tooltip content={isMod ? "Revoke moderator rights" : "Promote to moderator"}>
                     <button
                       type="button"
@@ -366,9 +416,14 @@ export default function CreateGroupChatDrawer({
               </div>
             );
           })}
+
+          {filteredCandidates.length === 0 && (
+            <div className="p-4 text-center text-xs text-slate-400">
+              No {memberTab === "contacts" ? "contacts" : "team members"} match "{memberSearch}"
+            </div>
+          )}
         </div>
       </div>
     </DrawerShell>
   );
 }
-
