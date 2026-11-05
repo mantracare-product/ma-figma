@@ -170,8 +170,9 @@ export default function Tasks() {
         (t.workflowName && t.workflowName.toLowerCase().includes(q)) ||
         (t.project && t.project.toLowerCase().includes(q));
 
-      // 4. Workflow filter
+      // 4. Workflow filter (only applies in Tasks by me or Admin; in My Tasks all assigned tasks are shown)
       const matchesWorkflow =
+        (!isAdmin && clientTab === "my_tasks") ||
         selectedWorkflowId === "all" ||
         t.workflowId === selectedWorkflowId ||
         t.workflowName === activeTaskWorkflow.name ||
@@ -472,29 +473,37 @@ export default function Tasks() {
     return baseCols;
   }, [isAdmin, clientTab, taskStages, updateTaskStage]);
 
-  const rowActions: TableRowAction<TaskEntity>[] = [
-    {
-      label: "View Details",
-      onClick: (task) => setSelectedTaskId(task.id),
-    },
-    {
-      label: "Mark Completed",
-      onClick: (task) => {
-        updateTaskStage(task.id, "Task Completed", "task-stg-completed");
-        toast.success(`Task ${task.code} marked completed`);
+  const rowActions: TableRowAction<TaskEntity>[] = useMemo(() => {
+    const actions: TableRowAction<TaskEntity>[] = [
+      {
+        label: "View Details",
+        onClick: (task) => setSelectedTaskId(task.id),
       },
-    },
-    {
-      label: "Delete",
-      isDanger: true,
-      onClick: (task) => {
-        if (window.confirm(`Delete task ${task.code}?`)) {
-          deleteTask(task.id);
-          toast.success("Task deleted");
-        }
+      {
+        label: "Mark Completed",
+        onClick: (task) => {
+          updateTaskStage(task.id, "Task Completed", "task-stg-completed");
+          toast.success(`Task ${task.code} marked completed`);
+        },
       },
-    },
-  ];
+    ];
+
+    // In My Tasks, no delete option is available; delete only in Tasks by me or Admin
+    if (isAdmin || clientTab === "tasks_by_me") {
+      actions.push({
+        label: "Delete",
+        isDanger: true,
+        onClick: (task) => {
+          if (window.confirm(`Delete task ${task.code}?`)) {
+            deleteTask(task.id);
+            toast.success("Task deleted");
+          }
+        },
+      });
+    }
+
+    return actions;
+  }, [isAdmin, clientTab, updateTaskStage, deleteTask]);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -521,77 +530,84 @@ export default function Tasks() {
           activeMode={clientTab}
           onModeChange={(id) => setClientTab(id as "my_tasks" | "tasks_by_me")}
           leftElement={
-            <div className="flex items-center gap-3">
-              {/* Task Workflow Switcher Dropdown */}
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowWorkflowDropdown((prev) => !prev)}
-                  className="h-[36px] px-3.5 flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 transition-colors shadow-2xs cursor-pointer shrink-0"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title="Switch Task Workflow"
-                >
-                  <span className="truncate max-w-[200px] font-semibold text-gray-800">
-                    {selectedWorkflowId === "all" ? "All Workflows" : activeTaskWorkflow.name}
-                  </span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showWorkflowDropdown ? "rotate-180" : ""}`} />
-                </button>
+            // Workflow switcher only in "Tasks by me" or Admin; hidden in "My Tasks"
+            (isAdmin || clientTab === "tasks_by_me") ? (
+              <div className="flex items-center gap-3">
+                {/* Task Workflow Switcher Dropdown */}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowWorkflowDropdown((prev) => !prev)}
+                    className="h-[36px] px-3.5 flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 transition-colors shadow-2xs cursor-pointer shrink-0"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title="Switch Task Workflow"
+                  >
+                    <span className="truncate max-w-[200px] font-semibold text-gray-800">
+                      {selectedWorkflowId === "all" ? "All Workflows" : activeTaskWorkflow.name}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showWorkflowDropdown ? "rotate-180" : ""}`} />
+                  </button>
 
-                {showWorkflowDropdown && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowWorkflowDropdown(false)}
-                    />
-                    <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedWorkflowId("all");
-                          setShowWorkflowDropdown(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                          selectedWorkflowId === "all" ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
-                        }`}
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        <span className="truncate">All Workflows</span>
-                        {selectedWorkflowId === "all" && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-                      </button>
-                      {taskWorkflows.map((wf) => {
-                        const isSelected = selectedWorkflowId === wf.id;
-                        return (
-                          <button
-                            key={wf.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedWorkflowId(wf.id);
-                              setShowWorkflowDropdown(false);
-                            }}
-                            className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                              isSelected ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
-                            }`}
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <span className="truncate">{wf.name}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
+                  {showWorkflowDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowWorkflowDropdown(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWorkflowId("all");
+                            setShowWorkflowDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                            selectedWorkflowId === "all" ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <span className="truncate">All Workflows</span>
+                          {selectedWorkflowId === "all" && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                        </button>
+                        {taskWorkflows.map((wf) => {
+                          const isSelected = selectedWorkflowId === wf.id;
+                          return (
+                            <button
+                              key={wf.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedWorkflowId(wf.id);
+                                setShowWorkflowDropdown(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                isSelected ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <span className="truncate">{wf.name}</span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : undefined
           }
           searchPlaceholder="Search tasks by title, ID, responsible, observer, or project..."
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          primaryAction={{
-            label: "New Task",
-            icon: <Plus className="w-4 h-4" />,
-            onClick: () => setShowQuickCreate(true),
-          }}
+          primaryAction={
+            (!isAdmin && clientTab === "my_tasks")
+              ? undefined
+              : {
+                  label: "New Task",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => setShowQuickCreate(true),
+                }
+          }
         />
 
         {/* ── Main Viewport: Standard 32px Table ── */}
@@ -628,7 +644,7 @@ export default function Tasks() {
         taskStages={selectedTask ? getTaskStages(selectedTask) : taskStages}
         onUpdateTask={updateTask}
         onUpdateStage={updateTaskStage}
-        onDeleteTask={deleteTask}
+        onDeleteTask={!isAdmin && clientTab === "my_tasks" ? undefined : deleteTask}
         onToggleStatus={toggleTaskStatus}
         onToggleChecklistItem={toggleChecklistItem}
         onToggleItemImportance={toggleItemImportance}

@@ -139,6 +139,7 @@ export default function TaskDetailDrawer({
       deadlineTime,
     });
     toast.success("Task updated");
+    onClose();
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,8 +179,8 @@ export default function TaskDetailDrawer({
         width="max-w-[580px]"
         zIndex={650}
         headerRight={
-          <div className="flex items-center gap-2">
-            {onDeleteTask && (
+          !isMyTasksView && onDeleteTask ? (
+            <div className="flex items-center gap-2">
               <Tooltip content="Delete task">
                 <button
                   type="button"
@@ -194,12 +195,22 @@ export default function TaskDetailDrawer({
                   <Trash2 className="w-4 h-4" />
                 </button>
               </Tooltip>
-            )}
-
+            </div>
+          ) : undefined
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
             <button
               type="button"
               onClick={handleSaveBasic}
-              className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-[#1E293B] hover:bg-black text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               Save Changes
             </button>
