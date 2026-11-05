@@ -326,7 +326,6 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                   link: "/tasks",
                   module: "tasks",
                 });
-                toast.success("Notification sent! Look at the top-right corner.");
               }}
               className="px-3 py-1.5 rounded-xl bg-white border border-gray-200 hover:bg-slate-100 text-xs font-semibold text-slate-800 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5 shrink-0"
             >
