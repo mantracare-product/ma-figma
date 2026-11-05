@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { InAppNotification } from "../types/notification";
+import { isModuleNotificationAllowed } from "./notificationSettingsStore";
 
 export const NOTIFICATIONS_STORAGE_KEY = "mantra_notifications_store";
 export const NOTIFICATIONS_STORE_EVENT = "mantra-notifications-updated";
+export const NEW_NOTIFICATION_POPUP_EVENT = "mantra-new-notification-popup";
+export const OPEN_NOTIFICATIONS_DRAWER_EVENT = "mantra-open-notifications-drawer";
 
 export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
   {
@@ -13,7 +16,8 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     timestamp: "10 minutes ago",
     read: false,
     link: "/tasks?id=tsk-001",
-    meta: { taskId: "tsk-001" },
+    module: "tasks",
+    meta: { taskId: "tsk-001", module: "tasks" },
   },
   {
     id: "notif-2",
@@ -23,7 +27,8 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     timestamp: "45 minutes ago",
     read: false,
     link: "/chats",
-    meta: { conversationId: "grp-clinical-care", senderName: "Dr. Alistair Mehta" },
+    module: "chats",
+    meta: { conversationId: "grp-clinical-care", senderName: "Dr. Alistair Mehta", module: "chats" },
   },
   {
     id: "notif-3",
@@ -33,7 +38,8 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     timestamp: "2 hours ago",
     read: false,
     link: "/tasks?id=tsk-004",
-    meta: { taskId: "tsk-004" },
+    module: "tasks",
+    meta: { taskId: "tsk-004", module: "tasks" },
   },
   {
     id: "notif-4",
@@ -43,7 +49,8 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     timestamp: "Yesterday",
     read: true,
     link: "/tasks?id=tsk-005",
-    meta: { taskId: "tsk-005" },
+    module: "billings",
+    meta: { taskId: "tsk-005", module: "billings" },
   },
 ];
 
@@ -75,15 +82,28 @@ export function saveStoredNotifications(list: InAppNotification[]): void {
 }
 
 export function addNotification(notifData: Omit<InAppNotification, "id" | "timestamp" | "read">): InAppNotification {
+  const modId = notifData.module || notifData.meta?.module || notifData.type;
+
   const current = getStoredNotifications();
   const newNotif: InAppNotification = {
     ...notifData,
     id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
     timestamp: "Just now",
     read: false,
+    module: modId,
   };
-  const updated = [newNotif, ...current];
-  saveStoredNotifications(updated);
+
+  // Only store and trigger popup if notification module is enabled by user settings
+  if (isModuleNotificationAllowed(modId)) {
+    const updated = [newNotif, ...current];
+    saveStoredNotifications(updated);
+
+    // Emit event for slim top-right corner notification popup (lasts 60s)
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(NEW_NOTIFICATION_POPUP_EVENT, { detail: newNotif }));
+    }
+  }
+
   return newNotif;
 }
 
@@ -128,4 +148,3 @@ export function useNotifications() {
     clearAll,
   };
 }
-

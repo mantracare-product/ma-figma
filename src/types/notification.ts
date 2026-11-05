@@ -8,12 +8,13 @@ export interface InAppNotification {
   timestamp: string;
   read: boolean;
   link?: string;
+  module?: string;
   meta?: {
     taskId?: string;
     conversationId?: string;
     clientId?: string;
     invoiceId?: string;
     senderName?: string;
+    module?: string;
   };
 }
-

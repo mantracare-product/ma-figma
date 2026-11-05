@@ -1,12 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
-import { useNotifications } from "../../../lib/notificationsStore";
+import { useNotifications, OPEN_NOTIFICATIONS_DRAWER_EVENT } from "../../../lib/notificationsStore";
 import { Tooltip } from "../ui/Tooltip";
 import NotificationDrawer from "./NotificationDrawer";
+import NotificationPopup from "./NotificationPopup";
 
 export default function TopBarNotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const { unreadCount } = useNotifications();
+
+  // Listen to programmatic open requests (e.g. clicking the popup banner)
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener(OPEN_NOTIFICATIONS_DRAWER_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_NOTIFICATIONS_DRAWER_EVENT, handleOpen);
+  }, []);
 
   return (
     <>
@@ -27,7 +35,9 @@ export default function TopBarNotificationBell() {
       </Tooltip>
 
       <NotificationDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+
+      {/* Global 60-second slim rectangle popup */}
+      <NotificationPopup />
     </>
   );
 }
-
