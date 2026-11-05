@@ -21,6 +21,7 @@ import {
   Plus,
   ShieldCheck,
   ArrowLeft,
+  Menu,
 } from "lucide-react";
 import {
   useConversations,
@@ -30,6 +31,7 @@ import {
   MessageReplyReference,
 } from "../../../lib/useConversations";
 import { Tooltip } from "../../components/ui/Tooltip";
+import PatientGroupInfoDrawer from "./components/PatientGroupInfoDrawer";
 import { toast } from "sonner";
 
 interface OutletContextType {
@@ -65,8 +67,18 @@ const CARE_BOT_SHORTCUTS = [
 
 export default function PatientMessagesScreen() {
   const { activeClient } = useOutletContext<OutletContextType>();
-  const { conversations, sendMessage } = useConversations();
+  const { conversations, sendMessage, updateGroupConfig } = useConversations();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Track left group IDs across sessions
+  const [leftGroupIds, setLeftGroupIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("patient_left_groups");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Find all relevant channels for this client
   const clientConversations = useMemo(() => {
@@ -111,11 +123,12 @@ export default function PatientMessagesScreen() {
       ],
     };
 
-    // 2. Group Chats this client is part of
+    // 2. Group Chats this client is part of (excluding any left groups)
     const groupChats: Conversation[] = conversations.filter(
       (c) =>
         c.isGroup &&
         c.groupConfig &&
+        !leftGroupIds.includes(c.id) &&
         (c.groupConfig.memberIds.includes(activeClient.id) ||
           c.groupConfig.memberIds.includes("CL-001") ||
           c.groupConfig.chatType === "public")
@@ -204,6 +217,33 @@ export default function PatientMessagesScreen() {
 
   const handleBackToList = () => {
     setSearchParams({}, { replace: false });
+  };
+
+  const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
+
+  const handleLeaveGroup = (groupId: string) => {
+    const conv = conversations.find((c) => c.id === groupId);
+    if (conv && conv.groupConfig) {
+      const updatedMembers = conv.groupConfig.memberIds.filter(
+        (id) => id !== activeClient.id && id !== "CL-001"
+      );
+      updateGroupConfig(groupId, { memberIds: updatedMembers });
+    }
+
+    const nextLeft = Array.from(new Set([...leftGroupIds, groupId]));
+    setLeftGroupIds(nextLeft);
+    try {
+      localStorage.setItem("patient_left_groups", JSON.stringify(nextLeft));
+    } catch {}
+
+    // Fallback to direct doctor chat or care bot
+    const remainingChats = clientConversations.filter((c) => c.id !== groupId);
+    const newChatId = remainingChats[0]?.id || "care-bot-system";
+    setSelectedChatId(newChatId);
+    setSearchParams({ chat: newChatId }, { replace: false });
+
+    setIsGroupInfoOpen(false);
+    toast.success(`You have left "${conv?.contactName || "the group"}"`);
   };
 
   const getBotKnowledgeResponse = (text: string): string => {
@@ -439,6 +479,19 @@ export default function PatientMessagesScreen() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span className="hidden sm:inline">Encrypted Channel</span>
               </span>
+
+              {activeChat.isGroup && (
+                <Tooltip content="Group details & options">
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupInfoOpen(true)}
+                    className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer ml-1"
+                    aria-label="Open group menu"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           </div>
         </div>
@@ -714,6 +767,17 @@ export default function PatientMessagesScreen() {
           </div>
         </div>
       </div>
+
+      {/* ── Patient Group Info Drawer ── */}
+      {activeChat.isGroup && (
+        <PatientGroupInfoDrawer
+          isOpen={isGroupInfoOpen}
+          onClose={() => setIsGroupInfoOpen(false)}
+          conversation={activeChat}
+          activeClient={activeClient}
+          onLeaveGroup={() => handleLeaveGroup(activeChat.id)}
+        />
+      )}
     </div>
   );
 }
