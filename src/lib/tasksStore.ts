@@ -316,6 +316,194 @@ export const INITIAL_TASKS: TaskEntity[] = [
     },
     attachments: [],
   },
+  {
+    id: "tsk-009",
+    code: "TSK-109",
+    title: "Review Outpatient Lab Results & Critical Values for Oncology Cohort",
+    description: "Review comprehensive metabolic panels, CBC with diff, and renal clearance markers for chemotherapy cycle 3 outpatients. Sign off on pending lab orders.",
+    status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
+    workflowId: "process-task-default",
+    workflowName: "Clinical & Operational Tasks",
+    isImportant: true,
+    scopeLevel: "client",
+    assignee: {
+      scopeLevel: "client",
+      assigneeName: "Dr. Alistair Mehta",
+      roleName: "Lead Physician",
+    },
+    creator: {
+      id: "usr-admin-1",
+      name: "Super Admin",
+      role: "Clinical Director",
+    },
+    project: "Oncology Care Pathway",
+    deadline: "Today, 6:00 PM",
+    deadlineDate: "2026-11-05",
+    deadlineTime: "18:00",
+    createdAt: "2026-11-05 08:00 AM",
+    updatedAt: "2026-11-05 09:30 AM",
+    checklists: [
+      {
+        id: "chk-9-1",
+        title: "Lab Evaluation Steps",
+        items: [
+          { id: "it-9-1", text: "Review absolute neutrophil count (ANC) thresholds (>1500/mcL)", isCompleted: true, isImportant: true },
+          { id: "it-9-2", text: "Confirm glomerular filtration rate (eGFR > 60 mL/min)", isCompleted: true, isImportant: false },
+          { id: "it-9-3", text: "Electronically counter-sign pending LabCorp and Quest requisition orders", isCompleted: false, isImportant: true },
+          { id: "it-9-4", text: "Send clinical notification to pharmacy team for infusion clearance", isCompleted: false, isImportant: false },
+        ],
+      },
+    ],
+    observers: [
+      { id: "obs-6", name: "Elena Rostova", role: "Care Coordinator" },
+    ],
+    subtasks: [
+      { id: "sub-9-1", title: "Verify electrolyte panel for bed #4", isCompleted: true, assigneeName: "Dr. Alistair Mehta", deadline: "Today" },
+      { id: "sub-9-2", title: "Attach infusion authorization to chart", isCompleted: false, assigneeName: "Elena Rostova", deadline: "Today" },
+    ],
+    attachments: [
+      { id: "att-9-1", name: "Cohort_3_Lab_Panels_Merged.pdf", size: "480 KB", type: "application/pdf", uploadedAt: "Today 08:15 AM" },
+    ],
+  },
+  {
+    id: "tsk-010",
+    code: "TSK-110",
+    title: "Pre-Operative Clearance Documentation & Surgical Risk Assessment",
+    description: "Review pre-op cardiac clearance notes, 12-lead ECG traces, and surgical consent documentation for upcoming elective arthroscopy.",
+    status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
+    workflowId: "process-task-default",
+    workflowName: "Clinical & Operational Tasks",
+    isImportant: false,
+    scopeLevel: "client",
+    assignee: {
+      scopeLevel: "client",
+      assigneeName: "Dr. Alistair Mehta",
+      roleName: "Attending Clinician",
+    },
+    creator: {
+      id: "usr-coord-1",
+      name: "David Miller",
+      role: "Surgical Coordinator",
+    },
+    project: "Pre-Op Surgical Clearance",
+    deadline: "Tomorrow, 11:30 AM",
+    deadlineDate: "2026-11-06",
+    deadlineTime: "11:30",
+    createdAt: "2026-11-04 02:15 PM",
+    updatedAt: "2026-11-05 10:20 AM",
+    checklists: [
+      {
+        id: "chk-10-1",
+        title: "Pre-Op Clearance Items",
+        items: [
+          { id: "it-10-1", text: "Confirm ASA Physical Status classification (Class II)", isCompleted: true, isImportant: false },
+          { id: "it-10-2", text: "Verify NPO protocol compliance guidelines communicated to patient", isCompleted: false, isImportant: true },
+          { id: "it-10-3", text: "Sign off pre-anesthesia medication reconciliation sheet", isCompleted: false, isImportant: true },
+        ],
+      },
+    ],
+    observers: [
+      { id: "obs-7", name: "David Miller", role: "Surgical Coordinator" },
+    ],
+    subtasks: [],
+    attachments: [
+      { id: "att-10-1", name: "12_Lead_ECG_Trace_Report.pdf", size: "1.1 MB", type: "application/pdf", uploadedAt: "Yesterday" },
+    ],
+  },
+  {
+    id: "tsk-011",
+    code: "TSK-111",
+    title: "Annual Peer Review & Medical Protocol Adherence Sign-off",
+    description: "Complete peer chart reviews across 10 randomized patient cases and confirm alignment with current clinical practice guidelines.",
+    status: "in_progress",
+    stageName: "Task Created",
+    stageId: "task-stg-created",
+    workflowId: "process-task-compliance",
+    workflowName: "Compliance & Credentialing",
+    isImportant: false,
+    scopeLevel: "client",
+    assignee: {
+      scopeLevel: "client",
+      assigneeName: "Lead Physician",
+      roleName: "Lead Physician",
+    },
+    creator: {
+      id: "usr-admin-1",
+      name: "Super Admin",
+      role: "Chief Medical Officer",
+    },
+    project: "Quality & Compliance",
+    deadline: "Nov 12, 2026",
+    deadlineDate: "2026-11-12",
+    deadlineTime: "17:00",
+    createdAt: "2026-11-03 04:00 PM",
+    updatedAt: "2026-11-05 11:00 AM",
+    checklists: [
+      {
+        id: "chk-11-1",
+        title: "Peer Review Checkpoints",
+        items: [
+          { id: "it-11-1", text: "Review charting compliance for 5 random acute care visits", isCompleted: true, isImportant: false },
+          { id: "it-11-2", text: "Review prescription rationale and DEA schedule II audit logs", isCompleted: true, isImportant: true },
+          { id: "it-11-3", text: "Submit signed QA/QI feedback summary to Medical Board", isCompleted: false, isImportant: true },
+        ],
+      },
+    ],
+    observers: [
+      { id: "obs-8", name: "Elena Rostova", role: "Compliance Lead" },
+    ],
+    subtasks: [],
+    attachments: [],
+  },
+  {
+    id: "tsk-012",
+    code: "TSK-112",
+    title: "Telehealth Consultation Follow-up & Prescription Refill Requests",
+    description: "Review and approve 4 pending e-prescriptions and triage 2 refill requests submitted via the patient companion portal.",
+    status: "completed",
+    stageName: "Task Completed",
+    stageId: "task-stg-completed",
+    workflowId: "process-task-default",
+    workflowName: "Clinical & Operational Tasks",
+    isImportant: true,
+    scopeLevel: "client",
+    assignee: {
+      scopeLevel: "client",
+      assigneeName: "Dr. Alistair Mehta",
+      roleName: "Lead Physician",
+    },
+    creator: {
+      id: "usr-sys-1",
+      name: "Automated Intake System",
+      role: "Portal Dispatcher",
+    },
+    project: "Patient Care Follow-up",
+    deadline: "Nov 04, 2026",
+    deadlineDate: "2026-11-04",
+    deadlineTime: "16:00",
+    createdAt: "2026-11-04 09:00 AM",
+    updatedAt: "2026-11-04 03:45 PM",
+    checklists: [
+      {
+        id: "chk-12-1",
+        title: "Refill Protocol",
+        items: [
+          { id: "it-12-1", text: "Cross-reference blood pressure logs for Lisinopril refill", isCompleted: true, isImportant: true },
+          { id: "it-12-2", text: "Transmit electronic refill order to CVS Pharmacy #4092", isCompleted: true, isImportant: true },
+          { id: "it-12-3", text: "Send portal notification to patient confirming fulfillment", isCompleted: true, isImportant: false },
+        ],
+      },
+    ],
+    observers: [
+      { id: "obs-9", name: "Elena Rostova", role: "Care Coordinator" },
+    ],
+    subtasks: [],
+    attachments: [],
+  },
 ];
 
 export function getStoredTasks(): TaskEntity[] {
@@ -327,7 +515,12 @@ export function getStoredTasks(): TaskEntity[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.map((t: any) => {
+      // Automatically merge in any missing initial tasks
+      const existingIds = new Set(parsed.map((t: any) => t.id));
+      const missingInitial = INITIAL_TASKS.filter((init) => !existingIds.has(init.id));
+      const combined = [...parsed, ...missingInitial];
+
+      return combined.map((t: any) => {
         let stageName = t.stageName;
         let stageId = t.stageId;
         if (!stageName) {

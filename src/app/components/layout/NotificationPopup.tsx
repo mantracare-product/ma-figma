@@ -159,3 +159,4 @@ export default function NotificationPopup() {
 
   return createPortal(content, document.body);
 }
+
