@@ -1,35 +1,32 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import {
-  X,
-  Bell,
-  CheckSquare,
-  MessageCircle,
-  Receipt,
-  PhoneCall,
-  Calendar,
-  Sparkles,
-  ArrowRight,
-} from "lucide-react";
-import { InAppNotification, NotificationType } from "../../../types/notification";
+import { CheckCircle2, X } from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
+import { InAppNotification } from "../../../types/notification";
 import {
   NEW_NOTIFICATION_POPUP_EVENT,
   OPEN_NOTIFICATIONS_DRAWER_EVENT,
 } from "../../../lib/notificationsStore";
 
-const POPUP_DURATION_MS = 60000; // 1 minute (60 seconds)
+const POPUP_DURATION_MS = 60000; // 60 seconds (1 minute)
 
 export default function NotificationPopup() {
   const [activeNotification, setActiveNotification] = useState<InAppNotification | null>(null);
-  const [progress, setProgress] = useState(100);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const [remainingMs, setRemainingMs] = useState(POPUP_DURATION_MS);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
+
+  const remainingMsRef = useRef(POPUP_DURATION_MS);
+  remainingMsRef.current = remainingMs;
+
+  const lastTickRef = useRef<number>(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const dismiss = () => {
     setActiveNotification(null);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
   };
 
   const handleOpenDrawer = () => {
@@ -46,24 +43,27 @@ export default function NotificationPopup() {
 
       const notif = customEvent.detail;
       setActiveNotification(notif);
-      setProgress(100);
-      startTimeRef.current = Date.now();
+      setRemainingMs(POPUP_DURATION_MS);
+      setIsPaused(false);
+      lastTickRef.current = Date.now();
 
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
 
-      // Auto dismiss after 1 minute (60s)
-      timerRef.current = setTimeout(() => {
-        dismiss();
-      }, POPUP_DURATION_MS);
+      intervalRef.current = setInterval(() => {
+        if (isPausedRef.current) {
+          lastTickRef.current = Date.now();
+          return;
+        }
 
-      // Smooth progress bar update every 100ms
-      progressIntervalRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTimeRef.current;
-        const remaining = Math.max(0, 100 - (elapsed / POPUP_DURATION_MS) * 100);
-        setProgress(remaining);
-        if (remaining <= 0 && progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
+        const now = Date.now();
+        const delta = now - lastTickRef.current;
+        lastTickRef.current = now;
+
+        const next = Math.max(0, remainingMsRef.current - delta);
+        setRemainingMs(next);
+
+        if (next <= 0) {
+          dismiss();
         }
       }, 100);
     };
@@ -71,27 +71,13 @@ export default function NotificationPopup() {
     window.addEventListener(NEW_NOTIFICATION_POPUP_EVENT, handleNewNotification);
     return () => {
       window.removeEventListener(NEW_NOTIFICATION_POPUP_EVENT, handleNewNotification);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
   if (!activeNotification || typeof document === "undefined") return null;
 
-  const getIcon = (type: NotificationType) => {
-    switch (type) {
-      case "task":
-        return <CheckSquare className="w-3.5 h-3.5 text-blue-600" />;
-      case "chat":
-        return <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />;
-      case "billing":
-        return <Receipt className="w-3.5 h-3.5 text-amber-600" />;
-      default:
-        return <Bell className="w-3.5 h-3.5 text-indigo-600" />;
-    }
-  };
-
-  // Strip task id prefix in patient portal if needed
+  // Format title and message, cleaning any prefix in patient view if applicable
   const isPatientPortal = typeof window !== "undefined" && window.location.pathname.startsWith("/patient");
   const displayTitle = isPatientPortal
     ? activeNotification.title.replace(/\bTSK-\d+\b[:\s-]*/gi, "").trim()
@@ -100,58 +86,69 @@ export default function NotificationPopup() {
     ? activeNotification.message.replace(/\bTSK-\d+\b[:\s-]*/gi, "").trim()
     : activeNotification.message;
 
+  const progressPercent = (remainingMs / POPUP_DURATION_MS) * 100;
+
   const content = (
     <div
       role="alert"
       aria-live="assertive"
       onClick={handleOpenDrawer}
-      className="fixed top-4 right-4 z-[99999] w-[360px] max-w-[calc(100vw-32px)] bg-white border border-gray-200/90 rounded-xl shadow-2xl shadow-slate-900/15 overflow-hidden cursor-pointer hover:border-blue-400/80 transition-all group animate-in slide-in-from-right duration-250 select-none"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      className="fixed top-4 right-4 z-[99999] w-[356px] max-w-[calc(100vw-32px)] bg-white border border-gray-200/90 rounded-xl shadow-lg shadow-black/5 overflow-hidden cursor-pointer hover:border-slate-300 transition-all select-none animate-in fade-in slide-in-from-top-2 duration-200"
     >
-      <div className="p-3 flex items-start gap-3">
-        {/* Module Icon Badge */}
-        <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200/70 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
-          {getIcon(activeNotification.type)}
-        </div>
+      <div className="p-3.5 flex items-start gap-3">
+        {/* Check-circle icon at the left in existing emerald tone */}
+        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
 
-        {/* Message Content */}
+        {/* Center Content */}
         <div className="flex-1 min-w-0 pr-1">
-          <div className="flex items-center justify-between gap-1.5 mb-0.5">
+          {/* Top Line: Bold Title + Mono Timestamp + Close Button */}
+          <div className="flex items-start justify-between gap-2">
             <h4 className="text-xs font-bold text-slate-900 truncate">
               {displayTitle}
             </h4>
-            <span className="text-[10px] font-mono tabular-nums text-slate-400 shrink-0">
-              Just now
+            <div className="flex items-center gap-1.5 shrink-0 -mt-0.5">
+              <span className="text-[10px] font-mono tabular-nums text-slate-400">
+                Just now
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dismiss();
+                }}
+                className="p-1 -mr-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer shrink-0"
+                title="Close"
+                aria-label="Close"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Message Line: Truncated to one line with ellipsis and tooltip */}
+          <Tooltip content={displayMessage}>
+            <p className="text-xs text-slate-600 truncate block mt-0.5 cursor-default">
+              {displayMessage}
+            </p>
+          </Tooltip>
+
+          {/* Click to open notifications link */}
+          <div className="mt-2.5">
+            <span className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1">
+              <span>Click to open notifications</span>
+              <span className="font-normal">→</span>
             </span>
           </div>
-          <p className="text-xs text-slate-600 truncate leading-snug">
-            {displayMessage}
-          </p>
-          <div className="flex items-center gap-1 mt-1 text-[10px] font-semibold text-[#1456f0] group-hover:underline">
-            <span>Click to open notifications</span>
-            <ArrowRight className="w-2.5 h-2.5" />
-          </div>
         </div>
-
-        {/* Dismiss Button (X) */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            dismiss();
-          }}
-          className="p-1 -mr-1 -mt-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
-          title="Dismiss popup"
-          aria-label="Dismiss popup"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
 
-      {/* Slim 1-minute progress countdown bar */}
+      {/* Auto-dismiss progress bar along the bottom edge in neutral slate tone */}
       <div className="w-full bg-slate-100 h-1 overflow-hidden">
         <div
-          className="bg-[#1456f0] h-full transition-all duration-100 ease-linear"
-          style={{ width: `${progress}%` }}
+          className="bg-slate-400 h-full transition-all duration-100 ease-linear"
+          style={{ width: `${progressPercent}%` }}
         />
       </div>
     </div>
@@ -159,4 +156,3 @@ export default function NotificationPopup() {
 
   return createPortal(content, document.body);
 }
-

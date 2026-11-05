@@ -321,8 +321,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
               onClick={() => {
                 addNotification({
                   type: "task",
-                  title: "Pre-Op Checklist Assigned",
-                  message: "Dr. Alistair Mehta assigned you to review fasting verification docs.",
+                  title: "New Action Item for You",
+                  message: "Task 'Verify Patient Insurance Eligibility' has been assigned to your queue.",
                   link: "/tasks",
                   module: "tasks",
                 });
