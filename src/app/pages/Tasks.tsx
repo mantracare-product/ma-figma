@@ -90,6 +90,7 @@ export default function Tasks() {
         t.title.toLowerCase().includes(q) ||
         t.code.toLowerCase().includes(q) ||
         t.assignee.assigneeName.toLowerCase().includes(q) ||
+        (t.observers && t.observers.some((o) => o.name.toLowerCase().includes(q))) ||
         (t.project && t.project.toLowerCase().includes(q));
 
       const matchesStage = stageFilter === "all" || (t.stageName || "Task Created") === stageFilter;
@@ -101,30 +102,6 @@ export default function Tasks() {
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = [
     {
-      key: "isImportant",
-      header: "PRIORITY",
-      width: "70px",
-      align: "center",
-      render: (task) => (
-        <Tooltip content={task.isImportant ? "High Priority" : "Normal Priority"}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              updateTask(task.id, { isImportant: !task.isImportant });
-            }}
-            className="p-1 hover:text-amber-500 transition-colors cursor-pointer"
-          >
-            <Star
-              className={`w-3.5 h-3.5 ${
-                task.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-300"
-              }`}
-            />
-          </button>
-        </Tooltip>
-      ),
-    },
-    {
       key: "code",
       header: "TASK ID",
       width: "100px",
@@ -132,6 +109,22 @@ export default function Tasks() {
         <span className="font-mono text-xs font-semibold tabular-nums text-slate-700">
           {task.code}
         </span>
+      ),
+    },
+    {
+      key: "stage",
+      header: "STAGE",
+      width: "190px",
+      render: (task) => (
+        <SegmentedStageBar
+          stages={taskStages}
+          currentStageName={task.stageName || "Task Created"}
+          currentStageId={task.stageId}
+          onStageSelect={(stg) => {
+            updateTaskStage(task.id, stg.name, stg.id);
+            toast.success(`Task moved to ${stg.name}`);
+          }}
+        />
       ),
     },
     {
@@ -151,8 +144,8 @@ export default function Tasks() {
     },
     {
       key: "assignee",
-      header: "ASSIGNEE",
-      width: "180px",
+      header: "RESPONSIBLE",
+      width: "170px",
       render: (task) => (
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-xs font-semibold text-slate-800 truncate">
@@ -160,6 +153,24 @@ export default function Tasks() {
           </span>
         </div>
       ),
+    },
+    {
+      key: "observers",
+      header: "OBSERVERS",
+      width: "170px",
+      render: (task) => {
+        if (!task.observers || task.observers.length === 0) {
+          return <span className="text-xs text-slate-400">—</span>;
+        }
+        const displayNames = task.observers.map((o) => o.name).join(", ");
+        return (
+          <Tooltip content={task.observers.map((o) => `${o.name}${o.role ? ` (${o.role})` : ""}`).join(", ")}>
+            <span className="text-xs text-slate-600 truncate block cursor-default">
+              {displayNames}
+            </span>
+          </Tooltip>
+        );
+      },
     },
     {
       key: "deadline",
@@ -172,25 +183,9 @@ export default function Tasks() {
       ),
     },
     {
-      key: "stage",
-      header: "STAGE",
-      width: "200px",
-      render: (task) => (
-        <SegmentedStageBar
-          stages={taskStages}
-          currentStageName={task.stageName || "Task Created"}
-          currentStageId={task.stageId}
-          onStageSelect={(stg) => {
-            updateTaskStage(task.id, stg.name, stg.id);
-            toast.success(`Task moved to ${stg.name}`);
-          }}
-        />
-      ),
-    },
-    {
       key: "checklists",
       header: "CHECKLIST",
-      width: "110px",
+      width: "100px",
       render: (task) => {
         const totalItems = task.checklists.reduce((acc, c) => acc + c.items.length, 0);
         const completedItems = task.checklists.reduce(
@@ -301,7 +296,7 @@ export default function Tasks() {
               </select>
             </div>
           }
-          searchPlaceholder="Search tasks by title, ID, assignee, or project..."
+          searchPlaceholder="Search tasks by title, ID, responsible, observer, or project..."
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           viewToggles={[

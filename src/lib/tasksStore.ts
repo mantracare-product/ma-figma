@@ -240,7 +240,9 @@ export const INITIAL_TASKS: TaskEntity[] = [
         ],
       },
     ],
-    observers: [],
+    observers: [
+      { id: "obs-4", name: "Dr. Alistair Mehta", role: "Attending Clinician" },
+    ],
     subtasks: [],
     timePlanning: {
       startDate: "2026-11-01",
@@ -287,7 +289,9 @@ export const INITIAL_TASKS: TaskEntity[] = [
         ],
       },
     ],
-    observers: [],
+    observers: [
+      { id: "obs-5", name: "Elena Rostova", role: "Operations Lead" },
+    ],
     subtasks: [],
     timePlanning: {
       startDate: "2026-10-31",
@@ -325,8 +329,12 @@ export function getStoredTasks(): TaskEntity[] {
             stageId = "task-stg-created";
           }
         }
+        const initialMatching = INITIAL_TASKS.find((init) => init.id === t.id);
+        const observers = t.observers && t.observers.length > 0 ? t.observers : (initialMatching?.observers || []);
+
         return {
           ...t,
+          observers,
           stageName,
           stageId: stageId || (stageName === "Task Completed" ? "task-stg-completed" : stageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created"),
         };
