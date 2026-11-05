@@ -107,7 +107,6 @@ export default function TaskQuickCreateDrawer({
   const [selectedAdminOrgId, setSelectedAdminOrgId] = useState("org-1");
   const availableAdminRoles = ADMIN_ORG_ROLES[selectedAdminOrgId] || ADMIN_ORG_ROLES["org-1"];
   const [selectedAdminRole, setSelectedAdminRole] = useState(availableAdminRoles[0]);
-  const [selectedAdminAssigneeIds, setSelectedAdminAssigneeIds] = useState<string[]>(["1"]);
 
   // Non-Admin: Assignment mode (Team Member vs Contact)
   const [assignmentType, setAssignmentType] = useState<"team" | "contact">("team");
@@ -345,27 +344,20 @@ export default function TaskQuickCreateDrawer({
 
     if (isAdmin) {
       const org = ADMIN_ORGANIZATIONS.find((o) => o.id === selectedAdminOrgId) || ADMIN_ORGANIZATIONS[0];
-      const selectedMembers = teamMembers.filter((m) => selectedAdminAssigneeIds.includes(String(m.id)));
-      const assigneeName = selectedMembers[0]?.name || "Corporate Lead Physician";
+      const adminScopeName = adminScopingRules.length > 0
+        ? adminScopingRules.map((r) => r.industryCategory).join(", ")
+        : "Healthcare (5 industries, US)";
 
       primaryAssignee = {
         scopeLevel: "org_role",
         orgId: org.id,
         orgName: org.name,
         roleName: selectedAdminRole,
-        assigneeName,
+        adminScopeName,
+        assigneeName: selectedAdminRole,
       };
 
-      assigneesList = selectedMembers.length > 0
-        ? selectedMembers.map((m) => ({
-            scopeLevel: "org_role" as const,
-            orgId: org.id,
-            orgName: org.name,
-            roleName: selectedAdminRole,
-            userId: String(m.id),
-            assigneeName: m.name,
-          }))
-        : [primaryAssignee];
+      assigneesList = [primaryAssignee];
     } else if (assignmentType === "team") {
       const selectedMembers = teamMembers.filter((m) => selectedTeamMemberIds.includes(String(m.id)));
       if (selectedMembers.length === 0) {
@@ -660,7 +652,7 @@ export default function TaskQuickCreateDrawer({
                 <select
                   value={selectedAdminRole}
                   onChange={(e) => setSelectedAdminRole(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
                 >
                   {availableAdminRoles.map((role) => (
                     <option key={role} value={role}>
@@ -670,68 +662,10 @@ export default function TaskQuickCreateDrawer({
                 </select>
               </div>
 
-              {/* Assignee Person / Multi-select Team Members in this Role */}
-              <div className="space-y-1.5">
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                  <Users className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Assignee Member(s)</span>
-                  <InfoTooltip content="Designate one or multiple users matching this corporate role" />
-                </label>
-                <select
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (id && !selectedAdminAssigneeIds.includes(id)) {
-                      setSelectedAdminAssigneeIds((prev) => [...prev, id]);
-                    }
-                    e.target.value = "";
-                  }}
-                  defaultValue=""
-                  className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                >
-                  <option value="" disabled>
-                    + Add team member for {selectedAdminRole}...
-                  </option>
-                  {teamMembers.map((m) => {
-                    const isAdded = selectedAdminAssigneeIds.includes(String(m.id));
-                    return (
-                      <option key={m.id} value={String(m.id)} disabled={isAdded}>
-                        {m.name} ({m.role || selectedAdminRole}) {isAdded ? "✓ Added" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-
-                {/* Selected Members Badges */}
-                <div className="flex flex-wrap gap-1.5 pt-1.5">
-                  {selectedAdminAssigneeIds.map((id) => {
-                    const member = teamMembers.find((m) => String(m.id) === String(id));
-                    if (!member) return null;
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
-                      >
-                        <Users className="w-3 h-3 text-slate-500" />
-                        <span>{member.name}</span>
-                        <span className="text-[10px] text-slate-500 font-normal">
-                          ({selectedAdminRole})
-                        </span>
-                        {selectedAdminAssigneeIds.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedAdminAssigneeIds((prev) => prev.filter((x) => x !== id))
-                            }
-                            className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Admin Delegation Note */}
+              <p className="text-[11px] text-slate-500 bg-white p-2.5 rounded-lg border border-gray-200 leading-relaxed">
+                Corporate tasks are delegated directly to the <strong>{selectedAdminRole}</strong> role at <strong>{ADMIN_ORGANIZATIONS.find((o) => o.id === selectedAdminOrgId)?.name}</strong> across all active tenant members with that role.
+              </p>
             </div>
           ) : (
             /* NON-ADMIN ASSIGNMENT: Team Member vs Contact */

@@ -99,7 +99,8 @@ export const INITIAL_TASKS: TaskEntity[] = [
       scopeLevel: "org_role",
       orgName: "Demo Mantra Care",
       roleName: "Clinical Director",
-      assigneeName: "Dr. Rachel Reynolds",
+      adminScopeName: "Healthcare (5 industries, US)",
+      assigneeName: "Clinical Director",
     },
     creator: {
       id: "usr-admin-1",
@@ -276,8 +277,10 @@ export const INITIAL_TASKS: TaskEntity[] = [
     scopeLevel: "admin",
     assignee: {
       scopeLevel: "org_role",
+      orgName: "Demo Mantra Care",
       roleName: "Financial Analyst",
-      assigneeName: "David Miller",
+      adminScopeName: "All Industries & Countries",
+      assigneeName: "Financial Analyst",
     },
     creator: {
       id: "usr-admin-1",
@@ -344,8 +347,15 @@ export function getStoredTasks(): TaskEntity[] {
         const workflowId = t.workflowId || initialMatching?.workflowId || "process-task-default";
         const workflowName = t.workflowName || initialMatching?.workflowName || "Clinical & Operational Tasks";
 
+        const assignee = {
+          ...t.assignee,
+          orgName: t.assignee?.orgName || initialMatching?.assignee?.orgName || (t.scopeLevel === "admin" ? "Demo Mantra Care" : undefined),
+          adminScopeName: t.assignee?.adminScopeName || initialMatching?.assignee?.adminScopeName || (t.scopeLevel === "admin" ? "Healthcare Scope" : undefined),
+        };
+
         return {
           ...t,
+          assignee,
           workflowId,
           workflowName,
           observers,

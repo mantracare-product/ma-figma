@@ -335,11 +335,25 @@ export default function TaskDetailDrawer({
           <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
             <div>
               <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                <span>Responsible Assignee(s)</span>
-                <InfoTooltip content="Team members or contact responsible for completing this task" />
+                <span>{isAdmin ? "Target Organization & Role" : "Responsible Assignee(s)"}</span>
+                <InfoTooltip content="Corporate organization and role or team member responsible for this task" />
               </label>
 
-              {task.assignees && task.assignees.length > 0 ? (
+              {isAdmin ? (
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-slate-900">
+                    {task.assignee.orgName || "Demo Mantra Care"}
+                  </p>
+                  <p className="text-xs font-medium text-slate-700">
+                    Role: {task.assignee.roleName || task.assignee.assigneeName}
+                  </p>
+                  {task.assignee.adminScopeName && (
+                    <p className="text-[11px] text-slate-500">
+                      Scope: {task.assignee.adminScopeName}
+                    </p>
+                  )}
+                </div>
+              ) : task.assignees && task.assignees.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {task.assignees.map((a, idx) => (
                     <span

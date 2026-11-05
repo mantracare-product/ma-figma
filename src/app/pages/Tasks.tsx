@@ -127,120 +127,179 @@ export default function Tasks() {
     });
   }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, assignmentFilter, currentUserName]);
 
-  // Columns for 32px TableComponent
-  const columns: TableColumn<TaskEntity>[] = [
-    {
-      key: "code",
-      header: "TASK ID",
-      width: "100px",
-      render: (task) => (
-        <span className="font-mono text-xs font-semibold tabular-nums text-slate-700">
-          {task.code}
-        </span>
-      ),
-    },
-    {
-      key: "stage",
-      header: "STAGE",
-      width: "190px",
-      render: (task) => (
-        <SegmentedStageBar
-          stages={taskStages}
-          currentStageName={task.stageName || "Task Created"}
-          currentStageId={task.stageId}
-          onStageSelect={(stg) => {
-            updateTaskStage(task.id, stg.name, stg.id);
-            toast.success(`Task moved to ${stg.name}`);
-          }}
-        />
-      ),
-    },
-    {
-      key: "title",
-      header: "TASK NAME",
-      render: (task) => (
-        <div className="min-w-0 pr-2">
-          <span
-            onClick={() => setSelectedTaskId(task.id)}
-            className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            {task.title}
+  // Columns for 32px TableComponent (Admin includes SCOPE & ORGANIZATION)
+  const columns: TableColumn<TaskEntity>[] = useMemo(() => {
+    const baseCols: TableColumn<TaskEntity>[] = [
+      {
+        key: "code",
+        header: "TASK ID",
+        width: "90px",
+        render: (task) => (
+          <span className="font-mono text-xs font-semibold tabular-nums text-slate-700">
+            {task.code}
           </span>
-        </div>
-      ),
-    },
-    {
-      key: "assignee",
-      header: "RESPONSIBLE",
-      width: "170px",
-      render: (task) => {
-        if (task.assignees && task.assignees.length > 1) {
-          const names = task.assignees.map((a) => a.assigneeName).join(", ");
+        ),
+      },
+      {
+        key: "stage",
+        header: "STAGE",
+        width: "180px",
+        render: (task) => (
+          <SegmentedStageBar
+            stages={taskStages}
+            currentStageName={task.stageName || "Task Created"}
+            currentStageId={task.stageId}
+            onStageSelect={(stg) => {
+              updateTaskStage(task.id, stg.name, stg.id);
+              toast.success(`Task moved to ${stg.name}`);
+            }}
+          />
+        ),
+      },
+      {
+        key: "title",
+        header: "TASK NAME",
+        render: (task) => (
+          <div className="min-w-0 pr-2">
+            <span
+              onClick={() => setSelectedTaskId(task.id)}
+              className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              {task.title}
+            </span>
+          </div>
+        ),
+      },
+    ];
+
+    if (isAdmin) {
+      baseCols.push(
+        {
+          key: "scope",
+          header: "SCOPE",
+          width: "170px",
+          render: (task) => {
+            const scopeDisplay =
+              task.assignee?.adminScopeName ||
+              (task.scopingRules && task.scopingRules.length > 0
+                ? task.scopingRules.map((r) => r.industryCategory || "Healthcare").join(", ")
+                : "Healthcare (US)");
+            return (
+              <Tooltip content={scopeDisplay}>
+                <span className="text-xs text-slate-700 font-medium truncate block cursor-default">
+                  {scopeDisplay}
+                </span>
+              </Tooltip>
+            );
+          },
+        },
+        {
+          key: "organization",
+          header: "ORGANIZATION",
+          width: "170px",
+          render: (task) => {
+            const orgDisplay = task.assignee?.orgName || "Demo Mantra Care";
+            return (
+              <Tooltip content={orgDisplay}>
+                <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                  {orgDisplay}
+                </span>
+              </Tooltip>
+            );
+          },
+        },
+        {
+          key: "assignee",
+          header: "ROLE / RESPONSIBLE",
+          width: "160px",
+          render: (task) => (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold text-slate-800 truncate">
+                {task.assignee.roleName || task.assignee.assigneeName}
+              </span>
+            </div>
+          ),
+        }
+      );
+    } else {
+      baseCols.push({
+        key: "assignee",
+        header: "RESPONSIBLE",
+        width: "170px",
+        render: (task) => {
+          if (task.assignees && task.assignees.length > 1) {
+            const names = task.assignees.map((a) => a.assigneeName).join(", ");
+            return (
+              <Tooltip content={names}>
+                <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
+                  {task.assignees[0].assigneeName} +{task.assignees.length - 1} more
+                </span>
+              </Tooltip>
+            );
+          }
           return (
-            <Tooltip content={names}>
-              <span className="text-xs font-semibold text-slate-800 truncate block cursor-default">
-                {task.assignees[0].assigneeName} +{task.assignees.length - 1} more
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold text-slate-800 truncate">
+                {task.assignee.assigneeName}
+              </span>
+            </div>
+          );
+        },
+      });
+    }
+
+    baseCols.push(
+      {
+        key: "observers",
+        header: "OBSERVERS",
+        width: "150px",
+        render: (task) => {
+          if (!task.observers || task.observers.length === 0) {
+            return <span className="text-xs text-slate-400">—</span>;
+          }
+          const displayNames = task.observers.map((o) => o.name).join(", ");
+          return (
+            <Tooltip content={task.observers.map((o) => `${o.name}${o.role ? ` (${o.role})` : ""}`).join(", ")}>
+              <span className="text-xs text-slate-600 truncate block cursor-default">
+                {displayNames}
               </span>
             </Tooltip>
           );
-        }
-        return (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-semibold text-slate-800 truncate">
-              {task.assignee.assigneeName}
-            </span>
-          </div>
-        );
+        },
       },
-    },
-    {
-      key: "observers",
-      header: "OBSERVERS",
-      width: "170px",
-      render: (task) => {
-        if (!task.observers || task.observers.length === 0) {
-          return <span className="text-xs text-slate-400">—</span>;
-        }
-        const displayNames = task.observers.map((o) => o.name).join(", ");
-        return (
-          <Tooltip content={task.observers.map((o) => `${o.name}${o.role ? ` (${o.role})` : ""}`).join(", ")}>
-            <span className="text-xs text-slate-600 truncate block cursor-default">
-              {displayNames}
-            </span>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      key: "deadline",
-      header: "DEADLINE",
-      width: "160px",
-      render: (task) => (
-        <span className="font-mono text-xs text-slate-500 tabular-nums">
-          {task.deadline || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "checklists",
-      header: "CHECKLIST",
-      width: "100px",
-      render: (task) => {
-        const totalItems = task.checklists.reduce((acc, c) => acc + c.items.length, 0);
-        const completedItems = task.checklists.reduce(
-          (acc, c) => acc + c.items.filter((it) => it.isCompleted).length,
-          0
-        );
-        if (totalItems === 0) return <span className="text-xs text-slate-300">—</span>;
-        return (
-          <span className="font-mono text-xs text-slate-600 tabular-nums">
-            {completedItems}/{totalItems}
+      {
+        key: "deadline",
+        header: "DEADLINE",
+        width: "150px",
+        render: (task) => (
+          <span className="font-mono text-xs text-slate-500 tabular-nums">
+            {task.deadline || "—"}
           </span>
-        );
+        ),
       },
-    },
-  ];
+      {
+        key: "checklists",
+        header: "CHECKLIST",
+        width: "90px",
+        render: (task) => {
+          const totalItems = task.checklists.reduce((acc, c) => acc + c.items.length, 0);
+          const completedItems = task.checklists.reduce(
+            (acc, c) => acc + c.items.filter((it) => it.isCompleted).length,
+            0
+          );
+          if (totalItems === 0) return <span className="text-xs text-slate-300">—</span>;
+          return (
+            <span className="font-mono text-xs text-slate-600 tabular-nums">
+              {completedItems}/{totalItems}
+            </span>
+          );
+        },
+      }
+    );
+
+    return baseCols;
+  }, [isAdmin, taskStages, updateTaskStage]);
 
   const rowActions: TableRowAction<TaskEntity>[] = [
     {
