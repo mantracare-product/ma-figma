@@ -448,224 +448,192 @@ export default function AIScribePopup({
         {step === "record" && (
           <div className="flex-1 flex flex-col justify-between h-full">
             <div className="flex flex-col items-center my-auto w-full">
-              {/* Minimal Mode Pill Switcher */}
-              <div className="flex items-center bg-white dark:bg-zinc-800/90 p-0.5 rounded-xl border border-slate-200/90 dark:border-zinc-700/80 mb-3 w-full max-w-[240px]">
-                <button
-                  type="button"
-                  onClick={() => setAudioInputMode("live")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                    audioInputMode === "live"
-                      ? "bg-[#1456f0] text-white shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
-                  }`}
-                >
-                  <Mic className="w-3.5 h-3.5" />
-                  Live Ambient
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAudioInputMode("upload")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                    audioInputMode === "upload"
-                      ? "bg-[#1456f0] text-white shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
-                  }`}
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  Upload Audio
-                </button>
-              </div>
-
-              {audioInputMode === "live" ? (
-                /* ── Live Ambient Mode ── */
+              {!isRecording ? (
+                /* ── Idle State (Ready to Record / Upload) ── */
                 <>
-                  {!isRecording ? (
-                    /* Idle State: Clean Static Symbol Badge & Capabilities Card */
-                    <>
-                      <div className="w-13 h-13 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-200/90 dark:border-zinc-700/80 shadow-xs flex items-center justify-center my-1.5">
-                        <img
-                          src={symbolLogo}
-                          alt="Mantra AI Scribe"
-                          className="w-7 h-7 object-contain"
-                        />
-                      </div>
+                  {/* Static Brand Mark Badge */}
+                  <div className="w-13 h-13 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-200/90 dark:border-zinc-700/80 shadow-xs flex items-center justify-center mb-2">
+                    <img
+                      src={symbolLogo}
+                      alt="Mantra AI Scribe"
+                      className="w-7 h-7 object-contain"
+                    />
+                  </div>
 
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-zinc-100 tracking-tight text-center mt-1">
-                        AI Clinical Scribe
-                      </h2>
-                      <p className="text-slate-500 dark:text-zinc-400 text-xs text-center mt-0.5">
-                        Ambient voice intelligence for consultations
+                  {/* Title & Subtext */}
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-zinc-100 tracking-tight text-center">
+                    AI Clinical Scribe
+                  </h2>
+                  <p className="text-slate-500 dark:text-zinc-400 text-xs text-center mt-0.5 mb-3.5">
+                    Ambient voice intelligence for consultations
+                  </p>
+
+                  {/* Mode Pill Switcher (Placed immediately after Title & Subtext) */}
+                  <div className="flex items-center bg-white dark:bg-zinc-800/90 p-0.5 rounded-xl border border-slate-200/90 dark:border-zinc-700/80 mb-5 w-full max-w-[240px] shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setAudioInputMode("live")}
+                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        audioInputMode === "live"
+                          ? "bg-[#1456f0] text-white shadow-xs"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                      }`}
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                      Live Ambient
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAudioInputMode("upload")}
+                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        audioInputMode === "upload"
+                          ? "bg-[#1456f0] text-white shadow-xs"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                      }`}
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      Upload Audio
+                    </button>
+                  </div>
+
+                  {/* Mode Body (Without clunky ambient features card) */}
+                  {audioInputMode === "live" ? (
+                    <div className="flex flex-col items-center justify-center my-auto py-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleRecording}
+                        className="w-24 h-24 rounded-full bg-white dark:bg-zinc-800 border border-slate-200/90 dark:border-zinc-700/80 shadow-[0_10px_35px_rgba(20,86,240,0.14)] flex items-center justify-center group hover:scale-105 active:scale-95 transition-all cursor-pointer mb-3"
+                        title="Click to start ambient recording"
+                      >
+                        <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#1456f0] dark:text-blue-400 flex items-center justify-center group-hover:bg-[#1456f0] group-hover:text-white transition-colors">
+                          <Mic className="w-7 h-7" />
+                        </div>
+                      </button>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-200 text-center">
+                        Click to start ambient recording
                       </p>
-
-                      {/* Clean Athelas-Style Capabilities Card */}
-                      <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-4">
-                        <span className="block text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                          Ambient Features:
-                        </span>
-
-                        <div className="space-y-1.5 text-xs text-slate-700 dark:text-zinc-300">
-                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
-                            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center shrink-0">
-                              <Mic className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
-                                Real-time Ambient Audio
-                              </p>
-                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-                                Captures doctor-patient dialogue naturally
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
-                            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                              <FileText className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
-                                Automated SOAP Notes
-                              </p>
-                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-                                Subjective, Objective, Assessment & Plan
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
-                            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 flex items-center justify-center shrink-0">
-                              <Pill className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
-                                Rx & ICD-10 Coding
-                              </p>
-                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-                                Instant prescriptions & clinical codes
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
+                      <p className="text-[11px] text-slate-400 dark:text-zinc-500 text-center mt-0.5">
+                        Microphone is ready for physician-patient dialogue
+                      </p>
+                    </div>
                   ) : (
-                    /* Active Recording State: Hero Audio Visualizer & Waveform */
-                    <div className="flex flex-col items-center w-full my-auto py-3">
-                      {/* Live Pulsing Microphone Centerpiece */}
-                      <div className="relative mb-3 flex items-center justify-center">
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-                          isPaused
-                            ? "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
-                            : "bg-blue-600 text-white shadow-[0_0_30px_rgba(20,86,240,0.4)] animate-pulse"
-                        }`}>
-                          <Mic className="w-9 h-9" />
+                    /* Audio File Upload Box */
+                    <div className="w-full my-auto px-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setUploadedFile(file);
+                            toast.success(`Loaded audio: ${file.name}`);
+                          }
+                        }}
+                      />
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-6 border-2 border-dashed border-slate-200 dark:border-zinc-700 hover:border-blue-500 cursor-pointer transition-all text-center shadow-2xs"
+                      >
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center mx-auto mb-2">
+                          <UploadCloud className="w-6 h-6" />
                         </div>
-                        {!isPaused && (
-                          <div className="absolute inset-0 rounded-full border-2 border-blue-400/50 animate-ping pointer-events-none" />
-                        )}
-                      </div>
-
-                      {/* Large Live Timer */}
-                      <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 font-mono">
-                        {formatTime(recordingSec)}
-                      </div>
-
-                      {/* Status Badge */}
-                      <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shadow-2xs">
-                        <span className={`h-2 w-2 rounded-full ${isPaused ? "bg-amber-500" : "bg-emerald-500 animate-ping"}`} />
-                        <span className="text-slate-700 dark:text-zinc-300">
-                          {isPaused ? "Recording Paused" : "Listening to Consultation..."}
-                        </span>
-                      </div>
-
-                      {/* Smooth Sound Waveform Visualizer */}
-                      <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-4 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-5">
-                        <div className="h-10 flex items-center justify-center gap-1.5 overflow-hidden">
-                          {[14, 28, 18, 36, 22, 38, 16, 32, 42, 20, 36, 26, 40, 18, 30, 22, 34, 16].map(
-                            (h, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  height: isPaused ? "6px" : `${Math.max(6, (h * ((i % 4) + 1)) % 38)}px`,
-                                  transition: "height 180ms ease-in-out",
-                                }}
-                                className={`w-1 rounded-full ${
-                                  isPaused
-                                    ? "bg-slate-300 dark:bg-zinc-700"
-                                    : "bg-gradient-to-t from-blue-600 to-indigo-400"
-                                }`}
-                              />
-                            )
-                          )}
-                        </div>
-
-                        <p className="text-[11px] text-slate-400 dark:text-zinc-500 text-center mt-2 font-medium">
-                          Speech is encrypted & processed in compliance with HIPAA
+                        <p className="text-xs font-bold text-slate-800 dark:text-zinc-100">
+                          {uploadedFile ? uploadedFile.name : "Select or Drop Audio File"}
                         </p>
-                      </div>
-
-                      {/* Inline Pause/Resume & Stop Controls */}
-                      <div className="flex items-center justify-center gap-3 mt-4">
-                        <button
-                          type="button"
-                          onClick={handleToggleRecording}
-                          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all"
-                        >
-                          {isPaused ? (
-                            <>
-                              <Play className="w-3.5 h-3.5 text-emerald-600" />
-                              Resume
-                            </>
-                          ) : (
-                            <>
-                              <Pause className="w-3.5 h-3.5 text-amber-600" />
-                              Pause
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleReset}
-                          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-500 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all"
-                          title="Restart recording"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Restart
-                        </button>
+                        <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
+                          Supports MP3, WAV, M4A recorded consultations
+                        </p>
                       </div>
                     </div>
                   )}
                 </>
               ) : (
-                /* ── Clean Audio File Upload Mode ── */
-                <div className="w-full my-auto">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setUploadedFile(file);
-                        toast.success(`Loaded audio: ${file.name}`);
-                      }
-                    }}
-                  />
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-6 border-2 border-dashed border-slate-200 dark:border-zinc-700 hover:border-blue-500 cursor-pointer transition-all text-center shadow-2xs"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center mx-auto mb-2">
-                      <UploadCloud className="w-6 h-6" />
+                /* ── Active Recording State: Hero Audio Visualizer & Waveform ── */
+                <div className="flex flex-col items-center w-full my-auto py-3">
+                  {/* Live Pulsing Microphone Centerpiece */}
+                  <div className="relative mb-3 flex items-center justify-center">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+                      isPaused
+                        ? "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
+                        : "bg-blue-600 text-white shadow-[0_0_30px_rgba(20,86,240,0.4)] animate-pulse"
+                    }`}>
+                      <Mic className="w-9 h-9" />
                     </div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-zinc-100">
-                      {uploadedFile ? uploadedFile.name : "Select or Drop Audio File"}
+                    {!isPaused && (
+                      <div className="absolute inset-0 rounded-full border-2 border-blue-400/50 animate-ping pointer-events-none" />
+                    )}
+                  </div>
+
+                  {/* Large Live Timer */}
+                  <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 font-mono">
+                    {formatTime(recordingSec)}
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shadow-2xs">
+                    <span className={`h-2 w-2 rounded-full ${isPaused ? "bg-amber-500" : "bg-emerald-500 animate-ping"}`} />
+                    <span className="text-slate-700 dark:text-zinc-300">
+                      {isPaused ? "Recording Paused" : "Listening to Consultation..."}
+                    </span>
+                  </div>
+
+                  {/* Smooth Sound Waveform Visualizer */}
+                  <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-4 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-5">
+                    <div className="h-10 flex items-center justify-center gap-1.5 overflow-hidden">
+                      {[14, 28, 18, 36, 22, 38, 16, 32, 42, 20, 36, 26, 40, 18, 30, 22, 34, 16].map(
+                        (h, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              height: isPaused ? "6px" : `${Math.max(6, (h * ((i % 4) + 1)) % 38)}px`,
+                              transition: "height 180ms ease-in-out",
+                            }}
+                            className={`w-1 rounded-full ${
+                              isPaused
+                                ? "bg-slate-300 dark:bg-zinc-700"
+                                : "bg-gradient-to-t from-blue-600 to-indigo-400"
+                            }`}
+                          />
+                        )
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 dark:text-zinc-500 text-center mt-2 font-medium">
+                      Speech is encrypted & processed in compliance with HIPAA
                     </p>
-                    <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
-                      Supports MP3, WAV, M4A recorded consultations
-                    </p>
+                  </div>
+
+                  {/* Inline Pause/Resume & Stop Controls */}
+                  <div className="flex items-center justify-center gap-3 mt-4">
+                    <button
+                      type="button"
+                      onClick={handleToggleRecording}
+                      className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      {isPaused ? (
+                        <>
+                          <Play className="w-3.5 h-3.5 text-emerald-600" />
+                          Resume
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-3.5 h-3.5 text-amber-600" />
+                          Pause
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-500 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="Restart recording"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Restart
+                    </button>
                   </div>
                 </div>
               )}
