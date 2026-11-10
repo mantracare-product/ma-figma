@@ -19,7 +19,9 @@ import {
 import { Switch } from "./ui/switch";
 import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
+import SecurityTab from "./settings/SecurityTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TeamMember } from "../../lib/teamStore";
+import { useAuth } from "../context/AuthContext";
 import {
   useFieldRegistry,
   FieldDefinition,
@@ -58,6 +60,8 @@ import {
   Edit3,
 } from "lucide-react";
 
+export const OPEN_USER_PROFILE_DRAWER_EVENT = "mantra-open-user-profile-drawer";
+
 export interface MemberCustomFieldItem {
   id: string;
   key: string;
@@ -88,7 +92,7 @@ export interface TeamMemberDrawerProps {
     [key: string]: any;
   }) | null;
   zIndex?: number;
-  initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services";
+  initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services" | "security";
   onSave?: (updated?: any) => void;
 }
 
@@ -167,8 +171,88 @@ export function TeamMemberDrawer({
   initialTab = "personal-info",
   onSave,
 }: TeamMemberDrawerProps) {
+  // Current user & authentication context for permission gating
+  const { user: currentUser } = useAuth();
+
   // Tab state
-  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services">(initialTab);
+  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services" | "security">(initialTab);
+
+  // Actions dropdown state
+  const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+  const actionsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (actionsDropdownRef.current && !actionsDropdownRef.current.contains(e.target as Node)) {
+        setShowActionsDropdown(false);
+      }
+    };
+    if (showActionsDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showActionsDropdown]);
+
+  // Permission check: Administrator via ModulePermissionConfig delete on settings/users
+  const canRemoveMember = useMemo(() => {
+    if (!currentUser || !member) return false;
+
+    // Self-removal protection: cannot remove self
+    const isSelf =
+      ((currentUser as any).id && member.id && String((currentUser as any).id) === String(member.id)) ||
+      (currentUser.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase()) ||
+      (currentUser.name && member.name && currentUser.name.toLowerCase() === member.name.toLowerCase());
+
+    if (isSelf) return false;
+
+    const userRoleStr = (currentUser.role || "").toLowerCase();
+    if (userRoleStr.includes("super admin") || userRoleStr.includes("platform administrator") || userRoleStr.includes("administrator")) {
+      return true;
+    }
+
+    try {
+      const rawRoles = localStorage.getItem("ma_admin_roles_store_v2");
+      if (rawRoles) {
+        const roles = JSON.parse(rawRoles);
+        const matched = roles.find(
+          (r: any) =>
+            (r.roleName || "").toLowerCase() === userRoleStr ||
+            (r.name || "").toLowerCase() === userRoleStr
+        );
+        if (matched?.permissions) {
+          const perm = matched.permissions.settings || matched.permissions.users || matched.permissions.team;
+          if (perm && perm.delete === true) {
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error evaluating role permissions:", e);
+    }
+    return false;
+  }, [currentUser, member]);
+
+  const handleRemoveMember = () => {
+    if (!member) return;
+    setShowActionsDropdown(false);
+    const confirmMsg = `Are you sure you want to remove ${member.name} from the team?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const allMembers = getStoredTeamMembers();
+      const updated = allMembers.filter(
+        (m) =>
+          String(m.id) !== String(member.id) &&
+          m.email?.toLowerCase() !== member.email?.toLowerCase()
+      );
+      saveStoredTeamMembers(updated);
+      toast.success(`${member.name} was removed from the team`);
+      onClose();
+      if (onSave) onSave();
+    } catch (err) {
+      toast.error("Failed to remove team member");
+    }
+  };
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -566,7 +650,7 @@ export function TeamMemberDrawer({
       <Drawer
         isOpen={isOpen}
         onClose={onClose}
-        maxWidth="max-w-[60vw]"
+        maxWidth="max-w-4xl w-[920px]"
         headerClassName="px-6 py-2"
         zIndex={zIndex}
         title={
@@ -664,23 +748,126 @@ export function TeamMemberDrawer({
                     >
                       Services
                     </button>
+                    <button
+                      onClick={() => setActiveTab("security")}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "security"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
+                          : "border-transparent text-gray-600 hover:text-gray-900"
+                        }`}
+                    >
+                      Security
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Personal Info Tab */}
+              {/* Personal Info Tab (Two-Column Layout) */}
               {activeTab === "personal-info" && (
-                <div className="space-y-4">
-                  {/* SECTION 1: BASIC INFO */}
-                  <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
-                          BASIC INFO
-                        </h3>
+                <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
+                  {/* Left Column: Identity Card */}
+                  <div className="space-y-4 md:sticky md:top-0">
+                    <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs flex flex-col items-center text-center relative">
+                      {/* Actions dropdown trigger on identity card */}
+                      {canRemoveMember && (
+                        <div className="absolute top-3.5 right-3.5" ref={actionsDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setShowActionsDropdown((v) => !v)}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                          >
+                            <span>Actions</span>
+                            <ChevronDown className="w-3 h-3 text-slate-400" />
+                          </button>
+                          {showActionsDropdown && (
+                            <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl border border-gray-200 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-150 text-left">
+                              <button
+                                type="button"
+                                onClick={handleRemoveMember}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                <span>Remove team member</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Large Avatar */}
+                      <div
+                        onClick={() => profilePictureInputRef.current?.click()}
+                        className="w-20 h-20 rounded-2xl flex items-center justify-center relative overflow-hidden transition-all hover:opacity-90 cursor-pointer shadow-sm mt-2 mb-3 bg-[#1F2937] group"
+                      >
+                        {profilePicture ? (
+                          <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-white text-xl font-bold select-none">
+                            {(member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                          </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-semibold">
+                          Change
+                        </div>
+                      </div>
+
+                      {/* Name & Role */}
+                      <h3 className="text-base font-bold text-slate-900 leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {member?.name || personalInfo.fullName}
+                      </h3>
+                      <div className="mt-1.5 flex items-center justify-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                          {member?.role || personalInfo.role || "Team Member"}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {personalInfo.status ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+
+                      {/* Quick Contact Summary */}
+                      <div className="w-full mt-4 pt-4 border-t border-gray-100 space-y-2 text-left text-xs">
+                        <div className="flex items-center justify-between text-slate-600">
+                          <span className="text-slate-400 font-medium text-[11px]">Email</span>
+                          <span className="font-medium text-slate-800 truncate max-w-[170px]" title={member?.email}>
+                            {member?.email || personalInfo.email}
+                          </span>
+                        </div>
+                        {personalInfo.phone && (
+                          <div className="flex items-center justify-between text-slate-600">
+                            <span className="text-slate-400 font-medium text-[11px]">Phone</span>
+                            <span className="font-mono text-slate-800 tabular-nums">
+                              {personalInfo.phone}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-slate-600">
+                          <span className="text-slate-400 font-medium text-[11px]">Department</span>
+                          <span className="font-medium text-slate-800">
+                            {member?.department || personalInfo.department}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-600">
+                          <span className="text-slate-400 font-medium text-[11px]">Timezone</span>
+                          <span className="font-medium text-slate-800">
+                            {personalInfo.timezone}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Right Column: Forms & Custom Sections */}
+                  <div className="space-y-4 min-w-0">
+                    {/* SECTION 1: BASIC INFO */}
+                    <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                            BASIC INFO
+                          </h3>
+                        </div>
+                      </div>
 
                     <div className="flex flex-col gap-3.5">
                       {/* Full Name */}
@@ -1179,9 +1366,17 @@ export function TeamMemberDrawer({
                     </button>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Calendar Tab */}
+            {/* Security Tab */}
+            {activeTab === "security" && (
+              <div className="pt-2">
+                <SecurityTab member={member} />
+              </div>
+            )}
+
+            {/* Calendar Tab */}
               {activeTab === "calendar" && (
                 <div className="space-y-6">
                   {/* Sync with Calendar Hero Section */}

@@ -223,7 +223,7 @@ export default function ShareTaskDrawer({
           type: "task",
           title: "Task Sent to Portal Chat",
           message: `Task ${task.code} was posted to ${client.name}'s care chat channel.`,
-          link: `/tasks?id=${task.id}`,
+          link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
           meta: { taskId: task.id, clientId: client.id },
         });
       });

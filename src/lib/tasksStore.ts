@@ -14,6 +14,78 @@ import { addNotification } from "./notificationsStore";
 
 export const TASKS_STORAGE_KEY = "mantra_tasks_store";
 export const TASKS_STORE_EVENT = "mantra-tasks-updated";
+export const OVERDUE_NOTIFIED_STORAGE_KEY = "mantra_overdue_notified_tasks";
+
+export function getNotifiedOverdueTaskIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(OVERDUE_NOTIFIED_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveNotifiedOverdueTaskId(taskId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const set = getNotifiedOverdueTaskIds();
+    set.add(taskId);
+    localStorage.setItem(OVERDUE_NOTIFIED_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function checkAndNotifyOverdueTasks(): void {
+  if (typeof window === "undefined") return;
+  const tasks = getStoredTasks();
+  const notifiedIds = getNotifiedOverdueTaskIds();
+  const now = new Date();
+
+  tasks.forEach((task) => {
+    if (task.status === "completed" || notifiedIds.has(task.id)) {
+      return;
+    }
+
+    let isPastDeadline = false;
+    if (task.deadlineDate) {
+      const deadlineStr = task.deadlineTime
+        ? `${task.deadlineDate}T${task.deadlineTime}`
+        : `${task.deadlineDate}T23:59:59`;
+      const deadlineDateObj = new Date(deadlineStr);
+      if (!isNaN(deadlineDateObj.getTime()) && now > deadlineDateObj) {
+        isPastDeadline = true;
+      }
+    } else if (task.deadline) {
+      const lower = task.deadline.toLowerCase();
+      if (lower.includes("yesterday")) {
+        isPastDeadline = true;
+      } else {
+        const parsed = Date.parse(task.deadline);
+        if (!isNaN(parsed) && now.getTime() > parsed) {
+          isPastDeadline = true;
+        }
+      }
+    }
+
+    if (isPastDeadline) {
+      saveNotifiedOverdueTaskId(task.id);
+      const observersList = task.observers?.map((o) => o.name).join(", ");
+      const assigneeName = task.assignee?.assigneeName || "Assignee";
+      const notifyMessage = observersList
+        ? `Task '${task.title}' assigned to ${assigneeName} is overdue. Observers notified: ${observersList}`
+        : `Task '${task.title}' assigned to ${assigneeName} is past its planned deadline (${task.deadline || "Scheduled date"}).`;
+
+      addNotification({
+        type: "task",
+        title: "Task Overdue Alert",
+        message: notifyMessage,
+        link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
+        module: "tasks",
+        meta: { taskId: task.id, module: "tasks" },
+      });
+    }
+  });
+}
 
 export const INITIAL_TASKS: TaskEntity[] = [
   {
@@ -205,6 +277,43 @@ export const INITIAL_TASKS: TaskEntity[] = [
     attachments: [
       { id: "att-pt-1", name: "Lumbar_Spine_Protocol_V2.pdf", size: "1.2 MB", type: "application/pdf", uploadedAt: "Nov 02" },
     ],
+    isPage: true,
+    htmlContent: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; color: #1e293b; background: #ffffff; line-height: 1.6; }
+    .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    h1 { margin: 0 0 6px 0; font-size: 20px; color: #0f172a; }
+    p.lead { color: #64748b; font-size: 13px; margin: 0; }
+    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .card-title { font-weight: 700; font-size: 13px; color: #334155; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+    ol { margin: 0; padding-left: 20px; font-size: 13px; }
+    li { margin-bottom: 6px; }
+    .alert { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 12px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="badge">Clinical Care Protocol</div>
+    <h1>Post-Consultation Physical Therapy Regimen</h1>
+    <p class="lead">Personalized Lumbar Flexion & Spinal Stabilization Protocol for Sarah Johnson</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Daily Exercise Instructions</div>
+    <ol>
+      <li><strong>Pelvic Tilts:</strong> Perform 3 sets of 10 repetitions twice daily on a firm surface.</li>
+      <li><strong>Knee-to-Chest Stretches:</strong> Hold each leg for 20 seconds; 3 repetitions per side.</li>
+      <li><strong>Isometric Quad Sets:</strong> 10-second holds, 15 reps morning and evening.</li>
+    </ol>
+  </div>
+  <div class="alert">
+    <strong>Notice:</strong> Discontinue any movement that produces sharp radicular discomfort exceeding 4/10 on the VAS pain scale. Log all observations in your patient portal daily log.
+  </div>
+</body>
+</html>`,
   },
   {
     id: "tsk-004",
@@ -586,6 +695,13 @@ export function useTasks() {
     };
   }, []);
 
+  // Periodic overdue task check (fires once per overdue task, every 60s)
+  useEffect(() => {
+    checkAndNotifyOverdueTasks();
+    const interval = setInterval(checkAndNotifyOverdueTasks, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const createTask = useCallback((newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => {
     const current = getStoredTasks();
     const nextNumber = current.length + 101;
@@ -604,7 +720,7 @@ export function useTasks() {
       type: "task",
       title: "New Task Assigned",
       message: `${task.code}: ${task.title} assigned to ${task.assignee.assigneeName}`,
-      link: `/tasks?id=${task.id}`,
+      link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
       meta: { taskId: task.id },
     });
 
@@ -620,7 +736,7 @@ export function useTasks() {
             type: "task",
             title: "Task Reassigned",
             message: `${t.code}: '${t.title}' reassigned to ${patch.assignee.assigneeName}`,
-            link: `/tasks?id=${t.id}`,
+            link: `/${t.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${t.id}`,
             meta: { taskId: t.id },
           });
         }
@@ -643,6 +759,7 @@ export function useTasks() {
 
   const toggleTaskStatus = useCallback((id: string, newStatus: TaskStatus) => {
     const current = getStoredTasks();
+    let affectedTask: TaskEntity | undefined;
     const updated = current.map((t) => {
       if (t.id === id) {
         let stageName = t.stageName;
@@ -654,17 +771,29 @@ export function useTasks() {
           stageName = "Task Overdue";
           stageId = "task-stg-overdue";
         }
-        return {
+        affectedTask = {
           ...t,
           status: newStatus,
           stageName,
           stageId,
           updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
         };
+        return affectedTask;
       }
       return t;
     });
     saveStoredTasks(updated);
+
+    if (affectedTask && newStatus === "completed") {
+      addNotification({
+        type: "task",
+        title: "Task Completed",
+        message: `${affectedTask.code}: '${affectedTask.title}' has been marked completed`,
+        link: `/${affectedTask.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${affectedTask.id}`,
+        module: "tasks",
+        meta: { taskId: affectedTask.id, module: "tasks" },
+      });
+    }
   }, []);
 
   const updateTaskStage = useCallback((id: string, stageName: string, stageId?: string) => {
@@ -679,19 +808,43 @@ export function useTasks() {
       nextStatus = "pending";
     }
 
+    let affectedTask: TaskEntity | undefined;
     const updated = current.map((t) => {
       if (t.id === id) {
-        return {
+        affectedTask = {
           ...t,
           stageName,
           stageId: stageId || t.stageId,
           status: nextStatus,
           updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
         };
+        return affectedTask;
       }
       return t;
     });
     saveStoredTasks(updated);
+
+    if (affectedTask) {
+      if (nextStatus === "completed") {
+        addNotification({
+          type: "task",
+          title: "Task Completed",
+          message: `${affectedTask.code}: '${affectedTask.title}' moved to ${stageName}`,
+          link: `/${affectedTask.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${affectedTask.id}`,
+          module: "tasks",
+          meta: { taskId: affectedTask.id, module: "tasks" },
+        });
+      } else {
+        addNotification({
+          type: "task",
+          title: "Task Stage Updated",
+          message: `${affectedTask.code}: '${affectedTask.title}' is now in ${stageName}`,
+          link: `/${affectedTask.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${affectedTask.id}`,
+          module: "tasks",
+          meta: { taskId: affectedTask.id, module: "tasks" },
+        });
+      }
+    }
   }, []);
 
   const toggleChecklistItem = useCallback((taskId: string, checklistId: string, itemId: string) => {

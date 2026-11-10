@@ -257,6 +257,32 @@ function sanitizeOrg(o: any, idx: number): OrganizationItem {
   };
 }
 
+// Enforce unique Org IDs across all organizations in the list (no duplicates)
+export function sanitizeOrgList(rawList: any[]): OrganizationItem[] {
+  const usedCodes = new Set<string>();
+  let counter = 1;
+
+  const nextUniqueCode = () => {
+    while (usedCodes.has(`ORG-${String(counter).padStart(4, "0")}`)) {
+      counter++;
+    }
+    const c = `ORG-${String(counter).padStart(4, "0")}`;
+    usedCodes.add(c);
+    return c;
+  };
+
+  return rawList.map((o: any, idx: number) => {
+    let code = o.orgCode;
+    // Check if code is missing or already claimed
+    if (!code || usedCodes.has(code)) {
+      code = nextUniqueCode();
+    } else {
+      usedCodes.add(code);
+    }
+    return sanitizeOrg({ ...o, orgCode: code }, idx);
+  });
+}
+
 // ── Reusable Label with Info Tooltip (replaces all subtext in drawer) ──
 function DrawerFieldLabel({
   label,
@@ -294,7 +320,7 @@ export default function Organizations() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const sanitized = parsed.map((o: any, idx: number) => sanitizeOrg(o, idx));
+          const sanitized = sanitizeOrgList(parsed);
           localStorage.setItem("mantra_organizations_v1", JSON.stringify(sanitized));
           return sanitized;
         }

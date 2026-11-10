@@ -81,6 +81,14 @@ export const ROLE_PERMISSION_MODULES = [
   { id: "processes", label: "Processes" },
   { id: "settings", label: "Settings" },
   { id: "webForms", label: "WebForms" },
+  { id: "telephonyNumbers", label: "Phone Numbers" },
+  { id: "telephonyCalls", label: "Call Logs" },
+  { id: "billingOrders", label: "Orders" },
+  { id: "billingSubscriptions", label: "Subscriptions" },
+  { id: "productAnalytics", label: "Product Analytics" },
+  { id: "telephonyProviders", label: "Telephony Providers" },
+  { id: "userManagement", label: "User Management" },
+  { id: "auditLogs", label: "Audit Logs" },
 ];
 
 export function createDefaultModulePermissions(preset?: "full" | "standard" | "viewOnly" | "blank"): Record<string, SimpleModulePermission> {

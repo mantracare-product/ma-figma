@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { Link, useNavigate } from "react-router";
 import {
   AreaChart,
   Area,
@@ -23,10 +24,26 @@ import {
   ArrowUpRight,
   TrendingUp,
   AlertCircle,
+  CheckSquare,
+  Bell,
+  ArrowRight,
+  Calendar,
+  Star,
+  ExternalLink,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT, type CallLog } from "../../lib/processLogsStore";
 import { isFreshWorkspace } from "../../lib/onboardingWorkspace";
+import { getStoredTasks, TASKS_STORE_EVENT } from "../../lib/tasksStore";
+import type { TaskEntity } from "../../types/task";
+import {
+  getStoredNotifications,
+  NOTIFICATIONS_STORE_EVENT,
+  OPEN_NOTIFICATIONS_DRAWER_EVENT,
+  InAppNotification,
+  markNotificationAsRead,
+} from "../../lib/notificationsStore";
+import { CircularProgressRing } from "../components/ui/CircularProgressRing";
 
 // Dates series matching reference UI (Jul 7 to Aug 13)
 const performanceData = [
@@ -111,26 +128,46 @@ const CustomPerformanceTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Overview() {
+  const navigate = useNavigate();
+
   const [filterProcess, setFilterProcess] = useState("All Processes");
   const [filterStage, setFilterStage] = useState("All Stages");
   const [filterDate, setFilterDate] = useState("All Time");
   const [filterCallType, setFilterCallType] = useState("Call Type");
 
   const [callLogs, setCallLogs] = useState<CallLog[]>(() => getStoredCallLogs());
+  const [tasks, setTasks] = useState<TaskEntity[]>(() => getStoredTasks());
+  const [notifications, setNotifications] = useState<InAppNotification[]>(() => getStoredNotifications());
 
   useEffect(() => {
     const handleUpdate = () => {
       setCallLogs(getStoredCallLogs());
     };
+    const handleTasksUpdate = () => {
+      setTasks(getStoredTasks());
+    };
+    const handleNotifsUpdate = () => {
+      setNotifications(getStoredNotifications());
+    };
+
     window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleUpdate);
     window.addEventListener("organizationChanged", handleUpdate);
     window.addEventListener("mantra_organization_changed", handleUpdate);
+    window.addEventListener(TASKS_STORE_EVENT, handleTasksUpdate);
+    window.addEventListener(NOTIFICATIONS_STORE_EVENT, handleNotifsUpdate);
     window.addEventListener("storage", handleUpdate);
+    window.addEventListener("storage", handleTasksUpdate);
+    window.addEventListener("storage", handleNotifsUpdate);
+
     return () => {
       window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleUpdate);
       window.removeEventListener("organizationChanged", handleUpdate);
       window.removeEventListener("mantra_organization_changed", handleUpdate);
+      window.removeEventListener(TASKS_STORE_EVENT, handleTasksUpdate);
+      window.removeEventListener(NOTIFICATIONS_STORE_EVENT, handleNotifsUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("storage", handleTasksUpdate);
+      window.removeEventListener("storage", handleNotifsUpdate);
     };
   }, []);
 
@@ -142,108 +179,126 @@ export default function Overview() {
   const successRate = totalCalls > 0 ? `${((completedCalls / totalCalls) * 100).toFixed(1)}%` : "0.0%";
   const avgDuration = isFresh ? "0m 00s" : "0m 14s";
 
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
+  // Top 5 tasks for quick overview
+  const displayedTasks = useMemo(() => {
+    return tasks.slice(0, 5);
+  }, [tasks]);
+
+  // Top 5 notifications for quick overview
+  const displayedNotifications = useMemo(() => {
+    return notifications.slice(0, 5);
+  }, [notifications]);
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
-        <PageHeader
-          title="Overview Analytics"
-          subtitle="Track call performance and automation health with precision"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Analytics
-            </span>
-          }
-        />
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full">
+        {/* ── Strict 6-Column Grid ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-start">
+          {/* ROW 1: Page Header & Dropdown Filter Pills (Col-span 6) */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-6 space-y-4">
+            <PageHeader
+              title="Overview Analytics"
+              subtitle="Track call performance, automation health, active tasks, and team notifications"
+              badge={
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+                  Analytics
+                </span>
+              }
+            />
 
-        {/* 4 Dropdown Filter Pills */}
-        <div className="flex items-center justify-end">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Filter by process */}
-            <div className="space-y-1">
-              <span className="block text-[10px] font-semibold text-slate-400">
-                Filter by process
-              </span>
-              <div className="relative">
-                <select
-                  value={filterProcess}
-                  onChange={(e) => setFilterProcess(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
-                >
-                  <option value="All Processes">All Processes</option>
-                  <option value="Patient Intake">Patient Intake</option>
-                  <option value="Appointment Scheduling">Appointment Scheduling</option>
-                  <option value="Follow-up Calls">Follow-up Calls</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
+            <div className="flex items-center justify-end">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Filter by process */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-semibold text-slate-400">
+                    Filter by process
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={filterProcess}
+                      onChange={(e) => setFilterProcess(e.target.value)}
+                      className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                    >
+                      <option value="All Processes">All Processes</option>
+                      <option value="Patient Intake">Patient Intake</option>
+                      <option value="Appointment Scheduling">Appointment Scheduling</option>
+                      <option value="Follow-up Calls">Follow-up Calls</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
 
-            {/* Filter by stage */}
-            <div className="space-y-1">
-              <span className="block text-[10px] font-semibold text-slate-400">
-                Filter by stage
-              </span>
-              <div className="relative">
-                <select
-                  value={filterStage}
-                  onChange={(e) => setFilterStage(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
-                >
-                  <option value="All Stages">All Stages</option>
-                  <option value="Initial Contact">Initial Contact</option>
-                  <option value="Insurance Verify">Insurance Verify</option>
-                  <option value="Schedule Appointment">Schedule Appointment</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
+                {/* Filter by stage */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-semibold text-slate-400">
+                    Filter by stage
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={filterStage}
+                      onChange={(e) => setFilterStage(e.target.value)}
+                      className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                    >
+                      <option value="All Stages">All Stages</option>
+                      <option value="Initial Contact">Initial Contact</option>
+                      <option value="Insurance Verify">Insurance Verify</option>
+                      <option value="Schedule Appointment">Schedule Appointment</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
 
-            {/* Filter by date */}
-            <div className="space-y-1">
-              <span className="block text-[10px] font-semibold text-slate-400">
-                Filter by date
-              </span>
-              <div className="relative">
-                <select
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
-                >
-                  <option value="All Time">All Time</option>
-                  <option value="Today">Today</option>
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="This Month">This Month</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
+                {/* Filter by date */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-semibold text-slate-400">
+                    Filter by date
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                    >
+                      <option value="All Time">All Time</option>
+                      <option value="Today">Today</option>
+                      <option value="Last 7 Days">Last 7 Days</option>
+                      <option value="This Month">This Month</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
 
-            {/* Filter by call type */}
-            <div className="space-y-1">
-              <span className="block text-[10px] font-semibold text-slate-400">
-                Filter by call type
-              </span>
-              <div className="relative">
-                <select
-                  value={filterCallType}
-                  onChange={(e) => setFilterCallType(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
-                >
-                  <option value="Call Type">Call Type</option>
-                  <option value="Outbound">Outbound</option>
-                  <option value="Inbound">Inbound</option>
-                  <option value="Both">Both</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {/* Filter by call type */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-semibold text-slate-400">
+                    Filter by call type
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={filterCallType}
+                      onChange={(e) => setFilterCallType(e.target.value)}
+                      className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                    >
+                      <option value="Call Type">Call Type</option>
+                      <option value="Outbound">Outbound</option>
+                      <option value="Inbound">Inbound</option>
+                      <option value="Both">Both</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 4 KPI Stat Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Total Calls */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+          {/* ROW 2: 4 Stat Cards in 2 rows (3 + 3 spans each) */}
+          {/* Card 1: Total Calls */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#1456f0] flex-shrink-0">
               <Phone className="w-5 h-5" />
             </div>
@@ -252,7 +307,7 @@ export default function Overview() {
                 TOTAL CALLS
               </p>
               <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
+                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {totalCalls}
@@ -263,8 +318,8 @@ export default function Overview() {
             </div>
           </div>
 
-          {/* Completed */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+          {/* Card 2: Completed */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-[#10b981] flex-shrink-0">
               <CheckCircle className="w-5 h-5" />
             </div>
@@ -273,19 +328,19 @@ export default function Overview() {
                 COMPLETED
               </p>
               <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
+                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {completedCalls}
               </p>
-              <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-                {isFresh ? "0% success rate" : `${successRate}% success rate`}
+              <p className="text-[11px] text-emerald-600 font-semibold mt-0.5 tabular-nums">
+                {isFresh ? "0% success rate" : `${successRate} success rate`}
               </p>
             </div>
           </div>
 
-          {/* Failed / Missed */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+          {/* Card 3: Failed / Missed */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
             <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100/80 flex items-center justify-center text-[#ef4444] flex-shrink-0">
               <AlertCircle className="w-5 h-5" />
             </div>
@@ -294,7 +349,7 @@ export default function Overview() {
                 FAILED / MISSED
               </p>
               <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
+                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {failedCalls}
@@ -305,8 +360,8 @@ export default function Overview() {
             </div>
           </div>
 
-          {/* Avg Duration */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+          {/* Card 4: Avg Duration */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600 flex-shrink-0">
               <Clock className="w-5 h-5" />
             </div>
@@ -315,7 +370,7 @@ export default function Overview() {
                 AVG. DURATION
               </p>
               <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5"
+                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums font-mono"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {avgDuration}
@@ -325,12 +380,10 @@ export default function Overview() {
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Charts Row: All Time Performance & Call Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* All Time Performance (Left Card ~65%) */}
-          <div className="lg:col-span-8 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col justify-between">
+          {/* ROW 3: Trend Overview (Span 4) + Call Distribution (Span 2) */}
+          {/* Trend Overview */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col justify-between">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#1456f0] flex items-center justify-center flex-shrink-0 shadow-2xs">
@@ -341,7 +394,7 @@ export default function Overview() {
                     className="text-base font-bold text-[#222222]"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    All Time Performance
+                    Trend Overview
                   </h3>
                   <p className="text-xs text-[#64748b]">
                     Visualizing call performance and volume trends
@@ -356,7 +409,7 @@ export default function Overview() {
                     0% <span className="text-[10px] text-slate-400 font-normal">ACTIVITY</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs tabular-nums">
                     ↗ +12.5% <span className="text-[10px] text-emerald-500 font-normal">GROWTH</span>
                   </span>
                 )}
@@ -378,47 +431,45 @@ export default function Overview() {
             {/* Area Chart or Clean Empty State */}
             {isFresh && callLogs.length === 0 ? (
               <div className="h-72 w-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#1456f0] flex items-center justify-center mb-3">
-                  <TrendingUp className="w-6 h-6 text-[#1456f0]/70" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">No Call Activity Recorded Yet</h4>
-                <p className="text-xs text-slate-500 max-w-sm mt-1">
-                  Your workspace is clean and ready. When incoming or outbound AI calls occur, volume trends and success rates will be charted here in real-time.
+                <BarChart3 className="w-10 h-10 text-slate-300 mb-2" />
+                <p className="text-xs font-bold text-slate-700">No Performance Data Yet</p>
+                <p className="text-[11px] text-slate-400 max-w-xs mt-0.5">
+                  Your call volumes and success rates will chart automatically as callers engage with your assistant.
                 </p>
               </div>
             ) : (
               <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={performanceData}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-                  >
+                  <AreaChart data={performanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#1456f0" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#1456f0" stopOpacity={0} />
+                        <stop offset="95%" stopColor="#1456f0" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#94a3b8"
-                      fontSize={10}
-                      angle={-45}
-                      textAnchor="end"
-                      interval={0}
-                      tickLine={false}
-                    />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
                     <ChartTooltip content={<CustomPerformanceTooltip />} />
                     <Area
                       type="monotone"
                       dataKey="totalVolume"
                       stroke="#1456f0"
                       strokeWidth={2.5}
-                      dot={{ r: 3, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 1.5 }}
-                      activeDot={{ r: 5, fill: "#1456f0", stroke: "#ffffff", strokeWidth: 2 }}
-                      fill="url(#volumeGradient)"
+                      fillOpacity={1}
+                      fill="url(#colorTotal)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="successful"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorSuccess)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -426,8 +477,8 @@ export default function Overview() {
             )}
           </div>
 
-          {/* Call Distribution (Right Card ~35%) */}
-          <div className="lg:col-span-4 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col justify-between">
+          {/* Call Distribution */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-2 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col justify-between">
             <div>
               <h3
                 className="text-base font-bold text-[#222222] mb-1"
@@ -437,7 +488,7 @@ export default function Overview() {
               </h3>
             </div>
 
-            {/* Donut Chart with Inner Total Counter or Empty State */}
+            {/* Donut Chart with Inner Total Counter */}
             {isFresh && callLogs.length === 0 ? (
               <div className="relative w-full h-56 flex items-center justify-center my-2">
                 <div className="w-40 h-40 rounded-full border-4 border-dashed border-slate-200 flex flex-col items-center justify-center">
@@ -475,7 +526,7 @@ export default function Overview() {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span
-                    className="text-3xl font-bold text-[#222222] tracking-tight"
+                    className="text-3xl font-bold text-[#222222] tracking-tight tabular-nums"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     {totalCalls}
@@ -490,7 +541,7 @@ export default function Overview() {
             {/* Legend Pills Grid */}
             {isFresh && callLogs.length === 0 ? (
               <div className="pt-2 border-t border-slate-100 text-center text-xs text-slate-400">
-                Awaiting caller outcomes & stages
+                Awaiting caller outcomes &amp; stages
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
@@ -506,12 +557,220 @@ export default function Overview() {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Bottom Section: Conversion Overview & Performance Analysis */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* ROW 4: Tasks & Notifications Section (Span 3 + Span 3) */}
+          {/* Tasks Panel */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center">
+                  <CheckSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className="text-xs font-bold uppercase tracking-wider text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Tasks
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 tabular-nums">
+                      {tasks.length}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Active assigned tasks and clinical deliverables
+                  </p>
+                </div>
+              </div>
+
+              <Link
+                to="/tasks"
+                className="text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>View all</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {/* Tasks Rows List */}
+            {displayedTasks.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 italic">
+                No active tasks.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {displayedTasks.map((task) => {
+                  const allItems = task.checklists?.flatMap((c) => c.items) || [];
+                  const completedItems = allItems.filter((i) => i.isCompleted);
+                  const totalItems = allItems.length;
+                  const isCompleted = task.status === "completed";
+                  const targetUrl = `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`;
+
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => navigate(targetUrl)}
+                      className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {totalItems > 0 ? (
+                          <div className="shrink-0 flex items-center">
+                            <CircularProgressRing
+                              value={completedItems.length}
+                              max={totalItems}
+                              size={20}
+                              strokeWidth={2.5}
+                              indicatorColor={isCompleted ? "#10b981" : "#1456f0"}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                              isCompleted
+                                ? "bg-emerald-500 border-emerald-500 text-white"
+                                : "border-slate-300 text-transparent"
+                            }`}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {task.isImportant && (
+                              <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                            )}
+                            <span
+                              className={`text-xs font-semibold truncate ${
+                                isCompleted
+                                  ? "line-through text-slate-400"
+                                  : "text-slate-900 group-hover:text-[#1456f0]"
+                              }`}
+                            >
+                              {task.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 font-medium">
+                            {task.deadline && (
+                              <span className="flex items-center gap-1 tabular-nums">
+                                <Calendar className="w-3 h-3" />
+                                {task.deadline}
+                              </span>
+                            )}
+                            {totalItems > 0 && (
+                              <span className="tabular-nums">
+                                · {completedItems.length}/{totalItems} done
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                          {task.stageName || "Task Created"}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Notifications Panel */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className="text-xs font-bold uppercase tracking-wider text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Notifications
+                    </h3>
+                    {unreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-[#1456f0] tabular-nums">
+                        {unreadCount} unread
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Live system alerts and workflow dispatches
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent(OPEN_NOTIFICATIONS_DRAWER_EVENT)
+                  )
+                }
+                className="text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Open Center</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Notifications Rows List */}
+            {displayedNotifications.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 italic">
+                No recent notifications.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {displayedNotifications.map((notif) => {
+                  return (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        markNotificationAsRead(notif.id);
+                        if (notif.link) {
+                          navigate(notif.link);
+                        }
+                      }}
+                      className={`py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors cursor-pointer flex items-start justify-between gap-3 group ${
+                        !notif.read ? "bg-blue-50/20" : ""
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                            !notif.read ? "bg-[#1456f0]" : "bg-slate-300"
+                          }`}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-900 group-hover:text-[#1456f0] truncate">
+                            {notif.title}
+                          </p>
+                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                            {notif.message}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5 font-mono">
+                        {notif.timestamp || "Recently"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ROW 5: Conversion Overview (Span 3) + Performance Analysis (Span 3) */}
           {/* Conversion Overview */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6">
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-2xl bg-blue-50 text-[#1456f0] flex items-center justify-center">
@@ -551,7 +810,7 @@ export default function Overview() {
           </div>
 
           {/* Performance Analysis */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 space-y-4">
+          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
                 <Sparkles className="w-4 h-4" />

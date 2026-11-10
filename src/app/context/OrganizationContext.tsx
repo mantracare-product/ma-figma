@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useMemo, useEffect, ReactNode } fr
 export interface Organization {
   id: string;
   name: string;
+  orgCode?: string;
   industryCategory?: string;
   industry: string;
   locations?: string[];

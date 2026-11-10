@@ -19,6 +19,7 @@ import {
   Shield,
   Globe,
   Calendar,
+  FileCode,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { InfoTooltip } from "../help/InfoTooltip";
@@ -93,6 +94,8 @@ export default function TaskQuickCreateDrawer({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isImportant, setIsImportant] = useState(false);
+  const [isPage, setIsPage] = useState(false);
+  const [htmlContent, setHtmlContent] = useState("");
 
   // Deadline: Date & Time
   const [deadlineDate, setDeadlineDate] = useState(() => {
@@ -459,6 +462,8 @@ export default function TaskQuickCreateDrawer({
       recurrence: recurrenceConfig,
       timePlanning: timePlanningConfig,
       attachments,
+      isPage,
+      htmlContent: isPage ? htmlContent : undefined,
     });
 
     // If assigned to a client contact or marked visible in portal, sync to client portal companion chat & notify
@@ -556,6 +561,55 @@ export default function TaskQuickCreateDrawer({
               placeholder="Provide context and execution instructions..."
               className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 resize-none leading-relaxed"
             />
+          </div>
+
+          {/* Create as Page (HTML Content) Option */}
+          <div className="pt-2 border-t border-gray-100 space-y-3">
+            <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
+              <div className="flex items-center gap-2.5">
+                <FileCode className="w-4 h-4 text-slate-600" />
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">Create as Page (HTML Content)</span>
+                  <span className="text-[11px] text-slate-500">Render custom isolated HTML/CSS in a sandboxed container</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isPage}
+                onClick={() => setIsPage((prev) => !prev)}
+                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                  isPage ? "bg-[#1E293B]" : "bg-gray-200"
+                }`}
+              >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                    isPage ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isPage && (
+              <div className="space-y-1.5 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                    <span>HTML &amp; CSS Source Code</span>
+                    <span className="text-red-500">*</span>
+                    <InfoTooltip content="Sandboxed HTML rendered in a strict bordered container. Styles and scripts will not leak to the app." />
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">iframe srcdoc sandbox</span>
+                </div>
+                <textarea
+                  rows={8}
+                  value={htmlContent}
+                  onChange={(e) => setHtmlContent(e.target.value)}
+                  placeholder={`<div style="padding: 20px; font-family: sans-serif;">\n  <h2>Protocol Title</h2>\n  <p>Custom clinical instructions...</p>\n</div>`}
+                  className="w-full text-xs p-3 font-mono bg-slate-900 text-emerald-400 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/30 resize-y leading-relaxed"
+                  spellCheck={false}
+                />
+              </div>
+            )}
           </div>
 
           {/* Admin Scope: Plain dropdown field (Replaces the multi-tenant accordion card, no outer card or boundary) */}

@@ -12,7 +12,6 @@ import { useTasks } from "../../../lib/tasksStore";
 import type { Client } from "../../../lib/clientsStore";
 import { TaskEntity } from "../../../types/task";
 import { Tooltip } from "../../components/ui/Tooltip";
-import PatientTaskDetailModal from "../../components/tasks/PatientTaskDetailModal";
 
 interface OutletContextType {
   activeClient?: Client;
@@ -27,7 +26,6 @@ export default function PatientTasksScreen() {
 
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "completed">("pending");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Filter tasks that belong to this client or are scoped to the patient portal
   const clientTasks = useMemo(() => {
@@ -93,12 +91,6 @@ export default function PatientTasksScreen() {
       return matchTitle || matchDesc || matchChecklist;
     });
   }, [clientTasks, activeTab, searchQuery]);
-
-  // Selected task resolved reactively from live store
-  const selectedTask = useMemo(() => {
-    if (!selectedTaskId) return null;
-    return tasks.find((t) => t.id === selectedTaskId) || null;
-  }, [tasks, selectedTaskId]);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -264,7 +256,7 @@ export default function PatientTasksScreen() {
                     {/* Title + Important star */}
                     <div className="flex items-center gap-2 min-w-0">
                       <h2
-                        onClick={() => setSelectedTaskId(task.id)}
+                        onClick={() => navigate(`/patient/tasks/${task.id}`)}
                         className={`text-sm font-bold truncate hover:text-blue-600 cursor-pointer transition-colors ${
                           isCompleted ? "text-slate-400 line-through" : "text-slate-900"
                         }`}
@@ -315,7 +307,7 @@ export default function PatientTasksScreen() {
                   {/* View Details button (neutral secondary style) */}
                   <button
                     type="button"
-                    onClick={() => setSelectedTaskId(task.id)}
+                    onClick={() => navigate(`/patient/tasks/${task.id}`)}
                     className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                   >
                     View details
@@ -365,15 +357,6 @@ export default function PatientTasksScreen() {
           })}
         </div>
       )}
-
-      {/* ── Task Detail Popup ── */}
-      <PatientTaskDetailModal
-        task={selectedTask}
-        isOpen={Boolean(selectedTask)}
-        onClose={() => setSelectedTaskId(null)}
-        onToggleChecklistItem={handleToggleItem}
-        onToggleComplete={handleMarkTaskComplete}
-      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Bell } from "lucide-react";
 import { useNotifications, OPEN_NOTIFICATIONS_DRAWER_EVENT } from "../../../lib/notificationsStore";
 import { Tooltip } from "../ui/Tooltip";
@@ -8,6 +8,7 @@ import NotificationPopup from "./NotificationPopup";
 export default function TopBarNotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const { unreadCount } = useNotifications();
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Listen to programmatic open requests (e.g. clicking the popup banner)
   useEffect(() => {
@@ -17,12 +18,15 @@ export default function TopBarNotificationBell() {
   }, []);
 
   return (
-    <>
+    <div className="relative inline-flex items-center">
       <Tooltip content={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "Notifications"}>
         <button
+          ref={buttonRef}
           type="button"
-          onClick={() => setIsOpen(true)}
-          className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={`relative p-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center shrink-0 ${
+            isOpen ? "bg-slate-100 text-slate-800" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+          }`}
           aria-label="Open notifications"
         >
           <Bell className="w-4 h-4" />
@@ -34,10 +38,14 @@ export default function TopBarNotificationBell() {
         </button>
       </Tooltip>
 
-      <NotificationDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <NotificationDrawer
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        anchorRef={buttonRef}
+      />
 
       {/* Global 60-second slim rectangle popup */}
       <NotificationPopup />
-    </>
+    </div>
   );
 }

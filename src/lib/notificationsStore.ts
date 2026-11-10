@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { InAppNotification } from "../types/notification";
 import { isModuleNotificationAllowed } from "./notificationSettingsStore";
+import { sendBrowserNotification } from "./browserPushNotifications";
 
 export const NOTIFICATIONS_STORAGE_KEY = "mantra_notifications_store";
 export const NOTIFICATIONS_STORE_EVENT = "mantra-notifications-updated";
@@ -101,11 +102,29 @@ export function addNotification(notifData: Omit<InAppNotification, "id" | "times
     // Emit event for slim top-right corner notification popup (lasts 60s)
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(NEW_NOTIFICATION_POPUP_EVENT, { detail: newNotif }));
+      
+      // Native desktop push notification (while MantraAssist is active or in background)
+      sendBrowserNotification(newNotif.title, {
+        body: newNotif.message,
+        onClick: () => {
+          if (newNotif.link && typeof window !== "undefined") {
+            window.location.href = newNotif.link;
+          }
+        },
+      });
     }
   }
 
   return newNotif;
 }
+
+export function markNotificationAsRead(id: string) {
+  const current = getStoredNotifications();
+  const updated = current.map((n) => (n.id === id ? { ...n, read: true } : n));
+  saveStoredNotifications(updated);
+}
+
+export type { InAppNotification };
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<InAppNotification[]>(() => getStoredNotifications());

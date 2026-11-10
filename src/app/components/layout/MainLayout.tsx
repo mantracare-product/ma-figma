@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Outlet, Link } from "react-router";
 import Sidebar from "./Sidebar";
 import AIAssistantCapsule from "../ai/AIAssistantCapsule";
@@ -7,11 +7,42 @@ import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
 import TopBarNotificationBell from "./TopBarNotificationBell";
+import TeamMemberDrawer, { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
+import { useAuth } from "../../context/AuthContext";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
 
 export default function MainLayout() {
   const { collapsed, setCollapsed } = useSidebar();
   const { isConfiguring } = useSidebarMenu();
   const isCollapsed = collapsed && !isConfiguring;
+  const { user } = useAuth();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setIsProfileOpen(true);
+    window.addEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
+  }, []);
+
+  const profileMember = useMemo(() => {
+    const members = getStoredTeamMembers();
+    const found = members.find(
+      (m) =>
+        (user?.email && m.email?.toLowerCase() === user.email.toLowerCase()) ||
+        (user?.name && m.name?.toLowerCase() === user.name.toLowerCase())
+    );
+    if (found) return found;
+    return {
+      id: "current-user",
+      name: user?.name || "Admin User",
+      email: user?.email || "admin@mantra.care",
+      role: user?.role || "SystemAdmin",
+      department: "Administration",
+      phone: "+1 (555) 019-2834",
+      status: true,
+      canBookAppointments: true,
+    };
+  }, [user]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#fafafa] font-sans antialiased text-[#222222]">
@@ -67,6 +98,13 @@ export default function MainLayout() {
           <AIAssistantCapsule />
         </main>
       </div>
+
+      {/* Shared User Profile Drawer */}
+      <TeamMemberDrawer
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        member={profileMember}
+      />
     </div>
   );
 }

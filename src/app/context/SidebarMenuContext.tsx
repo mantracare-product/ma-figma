@@ -89,6 +89,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
         { id: "settings-audit", label: "Audit Logs", iconName: "ScrollText", path: "/settings/audit-logs", visible: true },
         { id: "settings-security", label: "Security", iconName: "Lock", path: "/settings/security", visible: true },
+        { id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true },
       ],
     },
   ],

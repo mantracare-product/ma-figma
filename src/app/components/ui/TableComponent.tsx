@@ -86,7 +86,7 @@ export function TableComponent<T>({
   pagination = true,
   onRowClick,
   renderFooter,
-  actionIcon = "dots",
+  actionIcon = "menu",
 }: TableComponentProps<T>) {
   const getColId = (c: TableColumn<T>): string => c.id || c.key || (typeof c.header === "string" ? c.header : "col");
 
@@ -140,7 +140,7 @@ export function TableComponent<T>({
     }
   };
 
-  // Close menus on click outside & scroll
+  // Close menus on click outside, scroll, resize & Escape
   useEffect(() => {
     const handleClickOutside = () => {
       setShowColumnMenu(false);
@@ -150,13 +150,22 @@ export function TableComponent<T>({
     const handleCloseOnScroll = () => {
       setActionMenuState(null);
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowColumnMenu(false);
+        setOpenActionRowId(null);
+        setActionMenuState(null);
+      }
+    };
     window.addEventListener("click", handleClickOutside);
     window.addEventListener("scroll", handleCloseOnScroll, true);
     window.addEventListener("resize", handleCloseOnScroll);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("click", handleClickOutside);
       window.removeEventListener("scroll", handleCloseOnScroll, true);
       window.removeEventListener("resize", handleCloseOnScroll);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -558,30 +567,31 @@ export function TableComponent<T>({
                                 } else {
                                   const rect = e.currentTarget.getBoundingClientRect();
                                   const estHeight = visibleActions.length * 36 + 16;
-                                  let top = rect.top;
+                                  let top = rect.bottom + 4;
+                                  // Auto-flip upward if not enough space below the row
                                   if (top + estHeight > window.innerHeight - 10) {
-                                    top = Math.max(10, rect.bottom - estHeight);
+                                    top = Math.max(10, rect.top - estHeight - 4);
                                   }
                                   setActionMenuState({
                                     rowId,
                                     row,
                                     actions: visibleActions,
                                     top: Math.max(10, top),
-                                    left: Math.min(rect.right + 6, window.innerWidth - 220),
+                                    left: Math.max(10, Math.min(rect.right + 6, window.innerWidth - 220)),
                                   });
                                   setOpenActionRowId(rowId);
                                 }
                               }}
-                              className={`p-1 hover:bg-gray-200/80 rounded-none transition-colors cursor-pointer ${
+                              className={`p-1 hover:bg-gray-200/80 rounded transition-colors cursor-pointer ${
                                 actionMenuState?.rowId === rowId ? "bg-gray-200/80 text-gray-700" : "text-gray-400 hover:text-gray-700"
                               }`}
                               title="Actions"
                               aria-label="Actions"
                             >
-                              {actionIcon === "menu" ? (
-                                <Menu className="w-3.5 h-3.5 text-gray-400" />
-                              ) : (
+                              {actionIcon === "dots" ? (
                                 <MoreVertical className="w-3.5 h-3.5" />
+                              ) : (
+                                <Menu className="w-3.5 h-3.5 text-gray-500 hover:text-gray-800" />
                               )}
                             </button>
                           </div>
@@ -724,14 +734,15 @@ export function TableComponent<T>({
           </div>
         </div>
       )}
-          {/* ── Page-Relative Action Popup (Portaled to document.body) ── */}
+          {/* ── Page-Relative Action Popup (Portaled to document.body, above drawers (1000) but below notification popup (99999)) ── */}
       {actionMenuState && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed bg-white rounded-xl shadow-2xl border border-gray-200/90 py-1.5 z-[99999] min-w-[190px] w-max max-w-xs text-left animate-in fade-in zoom-in-95 duration-100"
+          className="fixed bg-white rounded-xl shadow-2xl border border-gray-200/90 py-1.5 z-[1050] min-w-[190px] w-max max-w-xs text-left animate-in fade-in zoom-in-95 duration-100"
           style={{
             fontFamily: "Outfit, sans-serif",
             top: `${actionMenuState.top}px`,
             left: `${actionMenuState.left}px`,
+            zIndex: 1050,
           }}
           onClick={(e) => e.stopPropagation()}
         >

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useSearchParams, useLocation } from "react-router";
+import { useSearchParams, useLocation, useNavigate } from "react-router";
 import {
   Plus,
   ChevronDown,
@@ -14,15 +14,15 @@ import { TaskEntity } from "../../types/task";
 import { useProcessStore, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES } from "../../lib/useProcessStore";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
-import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 
 export default function Tasks() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = location.pathname.startsWith("/admin");
   const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const {
     tasks,
     createTask,
@@ -73,12 +73,18 @@ export default function Tasks() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("id"));
 
-  const selectedTask = useMemo(() => {
-    if (!selectedTaskId) return null;
-    return tasks.find((t) => t.id === selectedTaskId) || null;
-  }, [selectedTaskId, tasks]);
+  // Auto-redirect legacy ?id= links to full task page
+  React.useEffect(() => {
+    const legacyId = searchParams.get("id");
+    if (legacyId) {
+      navigate(isAdmin ? `/admin/tasks/${legacyId}` : `/tasks/${legacyId}`, { replace: true });
+    }
+  }, [searchParams, isAdmin, navigate]);
+
+  const handleOpenTaskPage = (taskId: string) => {
+    navigate(isAdmin ? `/admin/tasks/${taskId}` : `/tasks/${taskId}`);
+  };
 
   // Current logged in username / persona
   const currentUserName = user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta");
@@ -212,7 +218,7 @@ export default function Tasks() {
             <Tooltip content={task.title || "NA"}>
               <div className="min-w-0 pr-2">
                 <span
-                  onClick={() => setSelectedTaskId(task.id)}
+                  onClick={() => handleOpenTaskPage(task.id)}
                   className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
@@ -329,7 +335,7 @@ export default function Tasks() {
               <Tooltip content={task.title || "NA"}>
                 <div className="min-w-0 pr-2">
                   <span
-                    onClick={() => setSelectedTaskId(task.id)}
+                    onClick={() => handleOpenTaskPage(task.id)}
                     className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
@@ -381,7 +387,7 @@ export default function Tasks() {
               <Tooltip content={task.title || "NA"}>
                 <div className="min-w-0 pr-2">
                   <span
-                    onClick={() => setSelectedTaskId(task.id)}
+                    onClick={() => handleOpenTaskPage(task.id)}
                     className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
@@ -477,7 +483,7 @@ export default function Tasks() {
     const actions: TableRowAction<TaskEntity>[] = [
       {
         label: "View Details",
-        onClick: (task) => setSelectedTaskId(task.id),
+        onClick: (task) => handleOpenTaskPage(task.id),
       },
       {
         label: "Mark Completed",
@@ -616,7 +622,7 @@ export default function Tasks() {
           columns={columns}
           getRowId={(t) => t.id}
           rowActions={rowActions}
-          onRowClick={(task) => setSelectedTaskId(task.id)}
+          onRowClick={(task) => handleOpenTaskPage(task.id)}
           emptyMessage="No tasks found matching your filters."
         />
       </div>
@@ -630,32 +636,6 @@ export default function Tasks() {
         taskStages={taskStages}
         defaultWorkflowName={activeTaskWorkflow.name}
         defaultWorkflowId={activeTaskWorkflow.id}
-      />
-
-      <TaskDetailDrawer
-        isOpen={Boolean(selectedTaskId && selectedTask)}
-        onClose={() => {
-          setSelectedTaskId(null);
-          setSearchParams({});
-        }}
-        task={selectedTask}
-        isAdmin={isAdmin}
-        isMyTasksView={!isAdmin && clientTab === "my_tasks"}
-        taskStages={selectedTask ? getTaskStages(selectedTask) : taskStages}
-        onUpdateTask={updateTask}
-        onUpdateStage={updateTaskStage}
-        onDeleteTask={!isAdmin && clientTab === "my_tasks" ? undefined : deleteTask}
-        onToggleStatus={toggleTaskStatus}
-        onToggleChecklistItem={toggleChecklistItem}
-        onToggleItemImportance={toggleItemImportance}
-        onAddChecklistItem={addChecklistItem}
-        onDeleteChecklistItem={deleteChecklistItem}
-        onAddChecklist={addChecklist}
-        onDeleteChecklist={deleteChecklist}
-        onAddObserver={addObserver}
-        onRemoveObserver={removeObserver}
-        onAddSubtask={addSubtask}
-        onToggleSubtask={toggleSubtask}
       />
     </div>
   );

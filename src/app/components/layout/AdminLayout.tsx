@@ -9,16 +9,47 @@
  * - Main content area enjoys 100% full viewport width.
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Outlet, Link, useLocation } from "react-router";
 import AdminSidebar from "./AdminSidebar";
 import logo from "../../../imports/ma_logo.png";
 import TopBarNotificationBell from "./TopBarNotificationBell";
 import { Menu, X } from "lucide-react";
+import TeamMemberDrawer, { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
+import { useAuth } from "../../context/AuthContext";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
 
 export default function AdminLayout() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setIsProfileOpen(true);
+    window.addEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
+  }, []);
+
+  const profileMember = useMemo(() => {
+    const members = getStoredTeamMembers();
+    const found = members.find(
+      (m) =>
+        (user?.email && m.email?.toLowerCase() === user.email.toLowerCase()) ||
+        (user?.name && m.name?.toLowerCase() === user.name.toLowerCase())
+    );
+    if (found) return found;
+    return {
+      id: "current-admin-user",
+      name: user?.name || "Admin User",
+      email: user?.email || "admin@mantra.care",
+      role: user?.role || "SystemAdmin",
+      department: "Administration",
+      phone: "+1 (555) 019-2834",
+      status: true,
+      canBookAppointments: true,
+    };
+  }, [user]);
 
   // Close drawer on page route navigation
   useEffect(() => {
@@ -99,6 +130,13 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Shared User Profile Drawer */}
+      <TeamMemberDrawer
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        member={profileMember}
+      />
     </div>
   );
 }

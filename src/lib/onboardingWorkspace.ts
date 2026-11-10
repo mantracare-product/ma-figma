@@ -214,11 +214,24 @@ export function initializeFreshSignupWorkspace({
     }
   } catch {}
 
-  const mergedOrgs = [
-    formattedOrg,
-    ...existingOrgs.filter(
+  const usedCodes = new Set<string>(["ORG-0001"]);
+  let codeNum = 2;
+  const filteredExisting = existingOrgs
+    .filter(
       (o: any) => o.id !== orgId && (o.name || "").toLowerCase() !== cleanOrgName.toLowerCase()
-    ),
+    )
+    .map((o: any) => {
+      let code = o.orgCode;
+      if (!code || usedCodes.has(code)) {
+        code = `ORG-${String(codeNum++).padStart(4, "0")}`;
+      }
+      usedCodes.add(code);
+      return { ...o, orgCode: code };
+    });
+
+  const mergedOrgs = [
+    { ...formattedOrg, orgCode: "ORG-0001" },
+    ...filteredExisting,
   ];
 
   localStorage.setItem("mantra_organizations_v1", JSON.stringify(mergedOrgs));

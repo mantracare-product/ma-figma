@@ -7,6 +7,7 @@
  * - Navigation sections match exact MA client hover and active styles.
  * - Links automatically close drawer on selection.
  * - Bottom has pinned Admin user card with avatar, role, and logout menu.
+ * - 6 Group Restructure: CORPORATE, TELEPHONY, BILLING & ORDERS, PRODUCT ANALYTICS, TEMPLATES, INTEGRATIONS, SETTINGS.
  */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -29,17 +30,21 @@ import {
   BarChart2,
   Users,
   FileText,
-  Megaphone,
   LogOut,
   Zap,
   Sparkles,
   User,
-  ChevronsUpDown,
   Tag,
   BookOpen,
+  ShieldCheck,
+  Phone,
+  Radio,
+  Workflow,
+  DollarSign,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
+import { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -67,8 +72,11 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
   // Accordion state - auto-expanded section containing active route
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     corporate: true,
-    templates: true,
-    integrations: true,
+    telephony: true,
+    billingOrders: true,
+    productAnalytics: true,
+    templates: false,
+    integrations: false,
     settings: false,
   });
 
@@ -108,7 +116,34 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
         { id: "tasks", label: "Tasks", icon: CheckSquare, path: "/admin/tasks" },
         { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
-        { id: "analytics", label: "Analytics", icon: BarChart2, path: "/admin/reports" },
+      ],
+    },
+    {
+      id: "telephony",
+      title: "TELEPHONY",
+      items: [
+        { id: "phone-numbers", label: "Phone Numbers", icon: Phone, path: "/admin/telephony/numbers" },
+        { id: "call-logs", label: "Call Logs", icon: PhoneCall, path: "/admin/telephony/calls" },
+      ],
+    },
+    {
+      id: "billingOrders",
+      title: "BILLING & ORDERS",
+      items: [
+        { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/billing/orders" },
+        { id: "subscriptions", label: "Subscriptions", icon: CreditCard, path: "/admin/billing/subscriptions" },
+        { id: "plans", label: "Plans & Credits", icon: Coins, path: "/admin/plans" },
+      ],
+    },
+    {
+      id: "productAnalytics",
+      title: "PRODUCT ANALYTICS",
+      items: [
+        { id: "overview", label: "Overview", icon: BarChart2, path: "/admin/product-analytics/overview" },
+        { id: "calls", label: "Calls", icon: PhoneCall, path: "/admin/product-analytics/calls" },
+        { id: "process-movement", label: "Process Movement", icon: Workflow, path: "/admin/product-analytics/process-movement" },
+        { id: "organization-usage", label: "Organization Usage", icon: Building2, path: "/admin/product-analytics/organization-usage" },
+        { id: "revenue-invoices", label: "Revenue & Invoices", icon: DollarSign, path: "/admin/product-analytics/revenue-invoices" },
       ],
     },
     {
@@ -131,16 +166,16 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "INTEGRATIONS",
       items: [
         { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
+        { id: "telephony-providers", label: "Telephony Providers", icon: Radio, path: "/admin/integrations/telephony-providers" },
       ],
     },
     {
       id: "settings",
       title: "SETTINGS",
       items: [
-        { id: "plans", label: "Plans & Credits", icon: CreditCard, path: "/admin/plans" },
-        { id: "user-management", label: "User Management", icon: Users, path: "/admin/users" },
-        { id: "logs", label: "Logs", icon: FileText, path: "/admin/logs" },
-        { id: "campaigns", label: "Campaigns", icon: Megaphone, path: "/admin/campaigns" },
+        { id: "user-management", label: "User Management", icon: Users, path: "/admin/settings/users" },
+        { id: "security", label: "Security", icon: ShieldCheck, path: "/admin/security" },
+        { id: "logs", label: "Audit Logs", icon: FileText, path: "/admin/settings/logs" },
       ],
     },
   ];
@@ -211,6 +246,25 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         location.pathname === "/admin/roles-and-permissions"
       );
     }
+    if (itemPath === "/admin/settings/users") {
+      return (
+        location.pathname === "/admin/settings/users" ||
+        location.pathname === "/admin/users"
+      );
+    }
+    if (itemPath === "/admin/settings/logs") {
+      return (
+        location.pathname === "/admin/settings/logs" ||
+        location.pathname === "/admin/logs"
+      );
+    }
+    if (itemPath === "/admin/plans") {
+      return (
+        location.pathname === "/admin/plans" ||
+        location.pathname === "/admin/plans-credits" ||
+        location.pathname === "/admin/credits"
+      );
+    }
     return location.pathname === itemPath;
   };
 
@@ -228,7 +282,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
   }, [location.pathname]);
 
   return (
-    <aside className="h-full w-64 min-w-[256px] max-w-[256px] bg-white flex flex-col shrink-0 select-none z-30 relative">
+    <aside className="h-full w-64 min-w-[256px] max-w-[256px] bg-white flex flex-col shrink-0 select-none z-30 relative border-r border-gray-200/80">
       <div className="h-full w-full flex flex-col justify-between overflow-hidden">
         {/* ── Middle Scrollable Navigation List (Starts right below the topbar) ── */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
@@ -301,7 +355,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
                 type="button"
                 onClick={() => {
                   setShowUserMenu(false);
-                  navigate("/profile");
+                  window.dispatchEvent(new CustomEvent(OPEN_USER_PROFILE_DRAWER_EVENT));
                   if (onClose) onClose();
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-[#1456f0] hover:bg-blue-50/60 transition-colors cursor-pointer"
@@ -317,47 +371,35 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
                     setShowUserMenu(false);
                     handleSignOut();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50/60 transition-colors cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4 text-red-500" />
+                  <LogOut className="w-4 h-4 text-rose-500" />
                   <span>Log out</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Admin User card trigger button */}
+          {/* Trigger Card Button */}
           <button
             type="button"
-            onClick={() => setShowUserMenu((v) => !v)}
-            className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-gray-100 transition-all cursor-pointer group"
-            aria-expanded={showUserMenu}
-            aria-label="Admin user menu"
+            onClick={() => setShowUserMenu((prev) => !prev)}
+            className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-gray-200/60 transition-all text-left cursor-pointer group"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#1E293B] to-[#334155] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ring-1 ring-black/5">
-                {user?.name
-                  ? user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()
-                  : "AD"}
+              <div className="w-8 h-8 rounded-lg bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : "AD"}
               </div>
-              <div className="flex flex-col text-left min-w-0">
-                <span
-                  className="text-xs font-bold text-gray-900 truncate group-hover:text-black"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-gray-900 truncate">
                   {user?.name || "Admin"}
-                </span>
-                <span className="text-[11px] text-gray-400 truncate">
-                  {user?.role || "Administrator"}
-                </span>
+                </div>
+                <div className="text-[10px] text-gray-500 font-medium truncate">
+                  {user?.role || "SystemAdmin"}
+                </div>
               </div>
             </div>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 shrink-0" />
+            <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 shrink-0" />
           </button>
         </div>
       </div>

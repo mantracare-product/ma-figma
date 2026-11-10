@@ -34,6 +34,7 @@ const CallDetails = withLazy(() => import("./pages/CallDetails"));
 const Deals = withLazy(() => import("./pages/Deals"));
 const Process = withLazy(() => import("./pages/Process"));
 const Tasks = withLazy(() => import("./pages/Tasks"));
+const TaskDetailPage = withLazy(() => import("./pages/TaskDetailPage"));
 const Automation = withLazy(() => import("./pages/Automation"));
 const KnowledgeBase = withLazy(() => import("./pages/KnowledgeBase"));
 const WebForms = withLazy(() => import("./pages/WebForms"));
@@ -83,6 +84,7 @@ const PatientProfileScreen = withLazy(() => import("./pages/patient/PatientProfi
 const PatientCareBotScreen = withLazy(() => import("./pages/patient/PatientCareBotScreen"));
 const PatientMessagesScreen = withLazy(() => import("./pages/patient/PatientMessagesScreen"));
 const PatientTasksScreen = withLazy(() => import("./pages/patient/PatientTasksScreen"));
+const PatientTaskDetailPage = withLazy(() => import("./pages/patient/PatientTaskDetailPage"));
 const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
 const AdminPlans = withLazy(() => import("./pages/admin/AdminPlans"));
 const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
@@ -90,6 +92,19 @@ const AdminProductsServices = withLazy(() => import("./pages/admin/AdminProducts
 const AdminKnowledgeBase = withLazy(() => import("./pages/admin/AdminKnowledgeBase"));
 const AdminRolesPermissions = withLazy(() => import("./pages/admin/AdminRolesPermissions"));
 const AdminSidebarConfig = withLazy(() => import("./pages/admin/AdminSidebarConfig"));
+const AdminSecurity = withLazy(() => import("./pages/admin/AdminSecurity"));
+const AdminAuditLogs = withLazy(() => import("./pages/admin/AdminAuditLogs"));
+const AdminPhoneNumbers = withLazy(() => import("./pages/admin/AdminPhoneNumbers"));
+const AdminCallLogs = withLazy(() => import("./pages/admin/AdminCallLogs"));
+const AdminTelephonyProviders = withLazy(() => import("./pages/admin/AdminTelephonyProviders"));
+const AdminOrders = withLazy(() => import("./pages/admin/AdminOrders"));
+const AdminSubscriptions = withLazy(() => import("./pages/admin/AdminSubscriptions"));
+const AdminAnalyticsOverview = withLazy(() => import("./pages/admin/AdminAnalyticsOverview"));
+const AdminAnalyticsCalls = withLazy(() => import("./pages/admin/AdminAnalyticsCalls"));
+const AdminAnalyticsProcessMovement = withLazy(() => import("./pages/admin/AdminAnalyticsProcessMovement"));
+const AdminAnalyticsOrgUsage = withLazy(() => import("./pages/admin/AdminAnalyticsOrgUsage"));
+const AdminAnalyticsRevenueInvoices = withLazy(() => import("./pages/admin/AdminAnalyticsRevenueInvoices"));
+const AdminUserManagement = withLazy(() => import("./pages/admin/AdminUserManagement"));
 
 export const router = createBrowserRouter([
   {
@@ -146,6 +161,7 @@ export const router = createBrowserRouter([
       { path: "checkin", Component: PatientStatusScreen },
       { path: "book", Component: PatientBookingScreen },
       { path: "tasks", Component: PatientTasksScreen },
+      { path: "tasks/:taskId", Component: PatientTaskDetailPage },
       { path: "documents", Component: PatientDocumentsScreen },
       { path: "forms", Component: PatientFormsScreen },
       { path: "forms/:formId", Component: PatientFormFillScreen },
@@ -216,6 +232,7 @@ export const router = createBrowserRouter([
           { path: "deals", Component: Deals },
           { path: "process", Component: Process },
           { path: "tasks", Component: Tasks },
+          { path: "tasks/:taskId", Component: TaskDetailPage },
           { path: "automation", Component: Automation },
           { path: "knowledge-base", Component: KnowledgeBase },
           { path: "forms", element: <Navigate to="/web-forms" replace /> },
@@ -242,6 +259,7 @@ export const router = createBrowserRouter([
               { path: "settings/team/:id", Component: ManageTeamMember },
               { path: "billing", Component: Settings },
               { path: "billing/:subtab", Component: Settings },
+              { path: "account/notifications", element: <Navigate to="/settings/notifications" replace /> },
             ],
           },
           { path: "services", Component: Services },
@@ -276,7 +294,8 @@ export const router = createBrowserRouter([
           { path: "voice-config", Component: AdminAIVoicesModels },
           { path: "document-templates", Component: AdminDocumentTemplates },
           { path: "document-template", Component: AdminDocumentTemplates },
-          { path: "users", Component: UserManagement },
+          { path: "users", Component: AdminUserManagement },
+          { path: "settings/users", Component: AdminUserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: AdminFormTemplates },
           { path: "form-templates", Component: AdminFormTemplates },
@@ -297,11 +316,26 @@ export const router = createBrowserRouter([
           { path: "plans", Component: AdminPlans },
           { path: "plans-credits", Component: AdminPlans },
           { path: "billing", Component: AdminBilling },
-          { path: "subscriptions", Component: AdminBilling },
+          { path: "billing/orders", Component: AdminOrders },
+          { path: "billing/subscriptions", Component: AdminSubscriptions },
+          { path: "subscriptions", Component: AdminSubscriptions },
           { path: "credits", Component: AdminPlans },
+          { path: "telephony/numbers", Component: AdminPhoneNumbers },
+          { path: "telephony/calls", Component: AdminCallLogs },
+          { path: "integrations/telephony-providers", Component: AdminTelephonyProviders },
+          { path: "product-analytics/overview", Component: AdminAnalyticsOverview },
+          { path: "product-analytics/calls", Component: AdminAnalyticsCalls },
+          { path: "product-analytics/process-movement", Component: AdminAnalyticsProcessMovement },
+          { path: "product-analytics/organization-usage", Component: AdminAnalyticsOrgUsage },
+          { path: "product-analytics/revenue-invoices", Component: AdminAnalyticsRevenueInvoices },
+          { path: "security", Component: AdminSecurity },
           { path: "settings", Component: Settings },
+          { path: "settings/logs", Component: AdminAuditLogs },
+          { path: "logs", Component: AdminAuditLogs },
           { path: "tasks", Component: Tasks },
+          { path: "tasks/:taskId", Component: TaskDetailPage },
           { path: "reports", Component: Reports },
+          { path: "campaigns", Component: Reports },
         ],
       },
     ],

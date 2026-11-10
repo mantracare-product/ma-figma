@@ -19,6 +19,7 @@ import { DataExportModal } from "../components/common/DataExportModal";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import NotificationsSettingsTab from "../components/settings/NotificationsSettingsTab";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
@@ -4021,6 +4022,8 @@ export default function Settings() {
         return "Audit Logs";
       case "security":
         return "Security";
+      case "notifications":
+        return "Notifications";
       default:
         return "Organization";
     }
@@ -4049,6 +4052,8 @@ export default function Settings() {
         return "View detailed activity and security audit trail across your organization";
       case "security":
         return "Configure security, authentication policies, and spam call protection";
+      case "notifications":
+        return "Choose what you're notified about and where. Changes save automatically and apply to this organization.";
       default:
         return "Configure system integrations, billing plans, notification channels, and preferences";
     }
@@ -8010,6 +8015,11 @@ export default function Settings() {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* Notifications Tab */}
+            {activeTab === "notifications" && (
+              <NotificationsSettingsTab />
             )}
 
             {/* Integrations Tab */}

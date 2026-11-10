@@ -109,5 +109,8 @@ export interface TaskEntity {
   recurrence?: TaskRecurrenceConfig;
   timePlanning?: TaskTimePlanningConfig;
   attachments: TaskFileAttachment[];
+  department?: string;
+  isPage?: boolean;
+  htmlContent?: string;
 }
 

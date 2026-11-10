@@ -57,6 +57,7 @@ import { useSidebar } from "../../context/SidebarContext";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
 import { getSidebarIcon } from "./ConfigureMenuModal";
 import { toast } from "sonner";
+import { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
 
 interface NavItem {
   id: string;
@@ -335,7 +336,7 @@ function CollapsedUserMenu({
               type="button"
               onClick={() => {
                 setIsOpen(false);
-                onNavigate("/profile");
+                window.dispatchEvent(new CustomEvent(OPEN_USER_PROFILE_DRAWER_EVENT));
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-[#1456f0] hover:bg-blue-50/60 transition-colors cursor-pointer"
             >
@@ -1005,7 +1006,7 @@ export default function Sidebar() {
                   type="button"
                   onClick={() => {
                     setShowUserMenu(false);
-                    navigate("/profile");
+                    window.dispatchEvent(new CustomEvent(OPEN_USER_PROFILE_DRAWER_EVENT));
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-[#1456f0] hover:bg-blue-50/60 transition-colors cursor-pointer"
                 >
