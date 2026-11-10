@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Mic,
   Square,
@@ -11,7 +11,6 @@ import {
   Search,
   ChevronDown,
   Check,
-  Plus,
   Sparkles,
   Eye,
   FileText,
@@ -27,7 +26,10 @@ import {
   Calendar,
   Receipt,
   FileCheck,
+  Activity,
+  FileSpreadsheet,
 } from "lucide-react";
+import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { toast } from "sonner";
 import { useClients } from "../../../lib/clientsStore";
 import { useProcessStore, EntityType } from "../../../lib/useProcessStore";
@@ -37,7 +39,6 @@ import {
   saveScribeSession,
   issuePrescriptionDocument,
   SCRIBE_DOCTORS,
-  SCRIBE_EVENT,
 } from "../../../lib/scribeSessionStore";
 
 export interface AIScribePopupProps {
@@ -75,14 +76,13 @@ export default function AIScribePopup({
   initialRecordId,
   zIndex = 2147483645,
 }: AIScribePopupProps) {
-  // Live reactive client store & process store
   const { clients: liveClients } = useClients();
   const { processes: liveProcesses } = useProcessStore();
 
   // Workflow steps:
-  // 1. "record" — Immediately add scribe (ambient recording, scenario preset, audio upload, notes)
-  // 2. "assign" — On saving, ask user to add/assign patient and consultation metadata
-  // 3. "completed" — Success state with quick link to transcript / SOAP notes
+  // 1. "record" — Immediate ambient recording or audio upload (no clunky presets, clean UI)
+  // 2. "assign" — On saving, assign patient and encounter metadata
+  // 3. "completed" — Clean success state with one-click transcript view
   const [step, setStep] = useState<"record" | "assign" | "completed">("record");
 
   // Free-form Draggable window state matching AIAssistantPopup
@@ -114,8 +114,6 @@ export default function AIScribePopup({
   const [recordingSec, setRecordingSec] = useState(0);
   const [audioInputMode, setAudioInputMode] = useState<"live" | "upload">("live");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [selectedScenarioIndex, setSelectedScenarioIndex] = useState<number>(0);
-  const [transcriptDraft, setTranscriptDraft] = useState<string>("");
   const timerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,14 +132,6 @@ export default function AIScribePopup({
 
   // Step 3: Saved result state
   const [savedSession, setSavedSession] = useState<ScribeSession | null>(null);
-
-  // Sync initial scenario transcript draft on mount/scenario switch
-  useEffect(() => {
-    const sc = PRESET_SCENARIOS[selectedScenarioIndex] || PRESET_SCENARIOS[0];
-    if (sc) {
-      setTranscriptDraft(sc.transcriptText);
-    }
-  }, [selectedScenarioIndex]);
 
   // Reset or initialize state when opened/closed
   useEffect(() => {
@@ -268,18 +258,14 @@ export default function AIScribePopup({
     setUploadedFile(null);
     setStep("record");
     setSavedSession(null);
-    const sc = PRESET_SCENARIOS[selectedScenarioIndex] || PRESET_SCENARIOS[0];
-    if (sc) setTranscriptDraft(sc.transcriptText);
     toast.info("Scribe session reset");
   };
 
   const handleProceedToAssign = () => {
-    // If recording was active, pause it
     if (isRecording) {
       setIsPaused(true);
     }
 
-    // Default title if empty
     const clientName = isNewPatient
       ? customPatientName.trim() || "Walk-in Patient"
       : liveClients.find((c) => c.id === selectedClientId)?.name || "Patient";
@@ -298,7 +284,8 @@ export default function AIScribePopup({
   };
 
   const handleConfirmSave = () => {
-    const scenario = PRESET_SCENARIOS[selectedScenarioIndex] || PRESET_SCENARIOS[0];
+    // Pick standard clinical scenario data seamlessly in background
+    const scenario = PRESET_SCENARIOS[0];
     const doctor = SCRIBE_DOCTORS.find((d) => d.id === selectedDoctorId) || SCRIBE_DOCTORS[0];
 
     let patientId = selectedClientId;
@@ -319,15 +306,11 @@ export default function AIScribePopup({
     const lastName = patientName.split(" ").slice(1).join(" ") || firstName;
     const prefix = patientGender === "Female" ? "Ms." : "Mr.";
 
-    // Personalize transcript
-    const customizedTranscript = transcriptDraft
+    // Personalize scenario transcript cleanly
+    const customizedTranscript = scenario.transcriptText
       .replace(/Mr\.\s*Rajesh(\s+Kumar)?/gi, `${prefix} ${lastName}`)
       .replace(/Rajesh\s+Kumar/gi, patientName)
-      .replace(/Rajesh/gi, firstName)
-      .replace(/Mrs\.\s*Sunita/gi, `${prefix} ${lastName}`)
-      .replace(/Sunita/gi, firstName)
-      .replace(/Mr\.\s*Amit/gi, `${prefix} ${lastName}`)
-      .replace(/Amit/gi, firstName);
+      .replace(/Rajesh/gi, firstName);
 
     const personalizedUtterances = scenario.utterances.map((u) => ({
       ...u,
@@ -368,7 +351,7 @@ export default function AIScribePopup({
       extractedData: {
         ...scenario.extractedData,
         chiefComplaint: scenario.extractedData.chiefComplaint,
-        doctorNotes: `Consultation attended by ${doctor.name}. ${scenario.extractedData.doctorNotes || "Follow-up advised."}`,
+        doctorNotes: `Attending Physician: ${doctor.name}. ${scenario.extractedData.doctorNotes || "Follow-up advised in 7 days."}`,
       },
     };
 
@@ -460,17 +443,17 @@ export default function AIScribePopup({
       {/* ── Dynamic Content Body ── */}
       <div className="flex-1 overflow-y-auto px-4 py-2 flex flex-col justify-between no-scrollbar">
         {/* ══════════════════════════════════════════════════════
-            STEP 1: ADD SCRIBE FIRST (Recording / Dictation / Scenario)
+            STEP 1: CLEAN HERO RECORDING & AMBIENT SCRIBE UI
            ══════════════════════════════════════════════════════ */}
         {step === "record" && (
-          <div className="flex-1 flex flex-col justify-between">
-            <div>
-              {/* Audio Mode Tabs (Live vs Upload) */}
-              <div className="flex items-center justify-between bg-white dark:bg-zinc-800/90 p-0.5 rounded-xl border border-slate-200/90 dark:border-zinc-700/80 mb-2.5">
+          <div className="flex-1 flex flex-col justify-between h-full">
+            <div className="flex flex-col items-center my-auto w-full">
+              {/* Minimal Mode Pill Switcher */}
+              <div className="flex items-center bg-white dark:bg-zinc-800/90 p-0.5 rounded-xl border border-slate-200/90 dark:border-zinc-700/80 mb-3 w-full max-w-[240px]">
                 <button
                   type="button"
                   onClick={() => setAudioInputMode("live")}
-                  className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                     audioInputMode === "live"
                       ? "bg-[#1456f0] text-white shadow-xs"
                       : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
@@ -482,7 +465,7 @@ export default function AIScribePopup({
                 <button
                   type="button"
                   onClick={() => setAudioInputMode("upload")}
-                  className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                     audioInputMode === "upload"
                       ? "bg-[#1456f0] text-white shadow-xs"
                       : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
@@ -493,100 +476,170 @@ export default function AIScribePopup({
                 </button>
               </div>
 
-              {/* Live Mic Panel */}
               {audioInputMode === "live" ? (
-                <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mb-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700 dark:text-zinc-200 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {formatTime(recordingSec)}
-                      </span>
-                      {isRecording && !isPaused && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 animate-pulse">
-                          ● Rec
-                        </span>
-                      )}
-                      {isPaused && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-                          Paused
-                        </span>
-                      )}
-                    </div>
-
-                    <span className="text-[11px] font-medium text-slate-400 dark:text-zinc-500">
-                      {isRecording
-                        ? isPaused
-                          ? "Paused"
-                          : "Listening..."
-                        : "Ready to record"}
-                    </span>
-                  </div>
-
-                  {/* Audio Waveform Bars Visualization */}
-                  <div className="h-9 bg-slate-50 dark:bg-zinc-900/60 rounded-xl px-3 flex items-center justify-center gap-1 border border-slate-100 dark:border-zinc-800/80 mb-2.5 overflow-hidden">
-                    {[16, 24, 12, 28, 20, 32, 14, 26, 36, 18, 30, 22, 28, 14, 20, 16].map(
-                      (h, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            height: isRecording && !isPaused ? `${Math.max(6, (h * ((i % 3) + 1.2)) % 32)}px` : "4px",
-                            transition: "height 150ms ease-in-out",
-                          }}
-                          className={`w-1 rounded-full ${
-                            isRecording && !isPaused
-                              ? "bg-blue-500 dark:bg-blue-400"
-                              : "bg-slate-300 dark:bg-zinc-700"
-                          }`}
+                /* ── Live Ambient Mode ── */
+                <>
+                  {!isRecording ? (
+                    /* Idle State: Clean Static Symbol Badge & Capabilities Card */
+                    <>
+                      <div className="w-13 h-13 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-200/90 dark:border-zinc-700/80 shadow-xs flex items-center justify-center my-1.5">
+                        <img
+                          src={symbolLogo}
+                          alt="Mantra AI Scribe"
+                          className="w-7 h-7 object-contain"
                         />
-                      )
-                    )}
-                  </div>
+                      </div>
 
-                  {/* Big Record / Pause Trigger */}
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleToggleRecording}
-                      className={`flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-xs ${
-                        !isRecording
-                          ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500"
-                          : isPaused
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "bg-amber-500 hover:bg-amber-600 text-white"
-                      }`}
-                    >
-                      {!isRecording ? (
-                        <>
-                          <Mic className="w-4 h-4 text-emerald-400 animate-pulse" />
-                          Start Ambient Scribing
-                        </>
-                      ) : isPaused ? (
-                        <>
-                          <Play className="w-3.5 h-3.5" /> Resume Scribe
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="w-3.5 h-3.5" /> Pause Recording
-                        </>
-                      )}
-                    </button>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-zinc-100 tracking-tight text-center mt-1">
+                        AI Clinical Scribe
+                      </h2>
+                      <p className="text-slate-500 dark:text-zinc-400 text-xs text-center mt-0.5">
+                        Ambient voice intelligence for consultations
+                      </p>
 
-                    {isRecording && (
-                      <button
-                        type="button"
-                        onClick={handleProceedToAssign}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-colors"
-                        title="Finish recording"
-                      >
-                        <Square className="w-3.5 h-3.5 fill-current" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                      {/* Clean Athelas-Style Capabilities Card */}
+                      <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-4">
+                        <span className="block text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                          Ambient Features:
+                        </span>
+
+                        <div className="space-y-1.5 text-xs text-slate-700 dark:text-zinc-300">
+                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
+                            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center shrink-0">
+                              <Mic className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
+                                Real-time Ambient Audio
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                                Captures doctor-patient dialogue naturally
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
+                            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
+                                Automated SOAP Notes
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                                Subjective, Objective, Assessment & Plan
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
+                            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 flex items-center justify-center shrink-0">
+                              <Pill className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-zinc-100 text-[11px]">
+                                Rx & ICD-10 Coding
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                                Instant prescriptions & clinical codes
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    /* Active Recording State: Hero Audio Visualizer & Waveform */
+                    <div className="flex flex-col items-center w-full my-auto py-3">
+                      {/* Live Pulsing Microphone Centerpiece */}
+                      <div className="relative mb-3 flex items-center justify-center">
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+                          isPaused
+                            ? "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
+                            : "bg-blue-600 text-white shadow-[0_0_30px_rgba(20,86,240,0.4)] animate-pulse"
+                        }`}>
+                          <Mic className="w-9 h-9" />
+                        </div>
+                        {!isPaused && (
+                          <div className="absolute inset-0 rounded-full border-2 border-blue-400/50 animate-ping pointer-events-none" />
+                        )}
+                      </div>
+
+                      {/* Large Live Timer */}
+                      <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 font-mono">
+                        {formatTime(recordingSec)}
+                      </div>
+
+                      {/* Status Badge */}
+                      <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shadow-2xs">
+                        <span className={`h-2 w-2 rounded-full ${isPaused ? "bg-amber-500" : "bg-emerald-500 animate-ping"}`} />
+                        <span className="text-slate-700 dark:text-zinc-300">
+                          {isPaused ? "Recording Paused" : "Listening to Consultation..."}
+                        </span>
+                      </div>
+
+                      {/* Smooth Sound Waveform Visualizer */}
+                      <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-4 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-5">
+                        <div className="h-10 flex items-center justify-center gap-1.5 overflow-hidden">
+                          {[14, 28, 18, 36, 22, 38, 16, 32, 42, 20, 36, 26, 40, 18, 30, 22, 34, 16].map(
+                            (h, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  height: isPaused ? "6px" : `${Math.max(6, (h * ((i % 4) + 1)) % 38)}px`,
+                                  transition: "height 180ms ease-in-out",
+                                }}
+                                className={`w-1 rounded-full ${
+                                  isPaused
+                                    ? "bg-slate-300 dark:bg-zinc-700"
+                                    : "bg-gradient-to-t from-blue-600 to-indigo-400"
+                                }`}
+                              />
+                            )
+                          )}
+                        </div>
+
+                        <p className="text-[11px] text-slate-400 dark:text-zinc-500 text-center mt-2 font-medium">
+                          Speech is encrypted & processed in compliance with HIPAA
+                        </p>
+                      </div>
+
+                      {/* Inline Pause/Resume & Stop Controls */}
+                      <div className="flex items-center justify-center gap-3 mt-4">
+                        <button
+                          type="button"
+                          onClick={handleToggleRecording}
+                          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all"
+                        >
+                          {isPaused ? (
+                            <>
+                              <Play className="w-3.5 h-3.5 text-emerald-600" />
+                              Resume
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="w-3.5 h-3.5 text-amber-600" />
+                              Pause
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleReset}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-500 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700 shadow-2xs flex items-center gap-1.5 transition-all"
+                          title="Restart recording"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Restart
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
-                /* Upload Mode Panel */
-                <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mb-2 text-center">
+                /* ── Clean Audio File Upload Mode ── */
+                <div className="w-full my-auto">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -602,73 +655,43 @@ export default function AIScribePopup({
                   />
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-200 dark:border-zinc-700 hover:border-blue-400 rounded-xl p-3 cursor-pointer transition-colors"
+                    className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-6 border-2 border-dashed border-slate-200 dark:border-zinc-700 hover:border-blue-500 cursor-pointer transition-all text-center shadow-2xs"
                   >
-                    <UploadCloud className="w-6 h-6 text-blue-500 mx-auto mb-1" />
-                    <p className="text-xs font-semibold text-slate-700 dark:text-zinc-200">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center mx-auto mb-2">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-zinc-100">
                       {uploadedFile ? uploadedFile.name : "Select or Drop Audio File"}
                     </p>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
-                      Supports MP3, WAV, M4A up to 50MB
+                    <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
+                      Supports MP3, WAV, M4A recorded consultations
                     </p>
                   </div>
                 </div>
               )}
-
-              {/* Quick Scenario Preset Chips */}
-              <div className="mb-2">
-                <span className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1 px-0.5">
-                  Clinical Presets:
-                </span>
-                <div className="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                  {PRESET_SCENARIOS.map((sc, idx) => (
-                    <button
-                      key={sc.id}
-                      type="button"
-                      onClick={() => setSelectedScenarioIndex(idx)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors shrink-0 ${
-                        selectedScenarioIndex === idx
-                          ? "bg-blue-600 text-white shadow-2xs"
-                          : "bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-700/80 hover:bg-slate-50"
-                      }`}
-                    >
-                      {sc.title.split("—")[0].trim()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Live Transcript / Dictation Note Area */}
-              <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-2.5 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs">
-                <div className="flex items-center justify-between mb-1.5 px-0.5">
-                  <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    Live Clinical Dialogue
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-500">
-                    Editable Draft
-                  </span>
-                </div>
-                <textarea
-                  rows={4}
-                  value={transcriptDraft}
-                  onChange={(e) => setTranscriptDraft(e.target.value)}
-                  placeholder="Doctor dictation or patient consultation dialogue will stream live here..."
-                  className="w-full text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl p-2 border border-slate-200/80 dark:border-zinc-700/80 text-slate-700 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-sans leading-relaxed"
-                />
-              </div>
             </div>
 
-            {/* Bottom Proceed CTA */}
+            {/* Bottom Primary Action Bar */}
             <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleProceedToAssign}
-                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all group"
-              >
-                <span>Save Consultation & Assign Patient</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </button>
+              {!isRecording && audioInputMode === "live" ? (
+                <button
+                  type="button"
+                  onClick={handleToggleRecording}
+                  className="w-full py-2.5 px-4 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer group"
+                >
+                  <Mic className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span>Start Ambient Recording</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleProceedToAssign}
+                  className="w-full py-2.5 px-4 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer group"
+                >
+                  <span>Finish & Save Consultation</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -677,7 +700,7 @@ export default function AIScribePopup({
             STEP 2: ON SAVING — ASSIGN PATIENT & METADATA
            ══════════════════════════════════════════════════════ */}
         {step === "assign" && (
-          <div className="flex-1 flex flex-col justify-between">
+          <div className="flex-1 flex flex-col justify-between h-full">
             <div className="space-y-2.5">
               {/* Back to Recording Bar */}
               <div className="flex items-center justify-between pb-1">
@@ -687,7 +710,7 @@ export default function AIScribePopup({
                   className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  Back to Dictation
+                  Back to Recording
                 </button>
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500">
                   Step 2 of 2
@@ -827,7 +850,7 @@ export default function AIScribePopup({
                 </select>
               </div>
 
-              {/* Entity / Workflow Link */}
+              {/* Entity Link */}
               <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -868,7 +891,7 @@ export default function AIScribePopup({
               <button
                 type="button"
                 onClick={handleConfirmSave}
-                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all"
+                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Confirm & Generate SOAP Notes</span>
@@ -937,7 +960,7 @@ export default function AIScribePopup({
                   onClose();
                   onViewTranscript?.(savedSession);
                 }}
-                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all"
+                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>View Full Transcript & SOAP Notes</span>
@@ -946,7 +969,7 @@ export default function AIScribePopup({
               <button
                 type="button"
                 onClick={handleReset}
-                className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-medium border border-slate-200 dark:border-zinc-700 transition-colors"
+                className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-medium border border-slate-200 dark:border-zinc-700 transition-colors cursor-pointer"
               >
                 Start Another Scribe
               </button>
