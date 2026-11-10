@@ -1,6 +1,7 @@
 import React from "react";
 import { Outlet, Link } from "react-router";
 import Sidebar from "./Sidebar";
+import AIAssistantCapsule from "../ai/AIAssistantCapsule";
 import logo from "../../../imports/ma_logo.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useSidebar } from "../../context/SidebarContext";
@@ -63,6 +64,7 @@ export default function MainLayout() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto relative min-w-0 bg-[#fafafa]">
           <Outlet />
+          <AIAssistantCapsule />
         </main>
       </div>
     </div>
