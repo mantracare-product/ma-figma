@@ -5,6 +5,7 @@ import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../../constants/channels";
 
 export interface ConversationHeaderProps {
   conversation: Conversation;
+  channel?: string;
   isDrawer?: boolean;
   onClose?: () => void;
   onToggleBotStatus?: () => void;
@@ -16,6 +17,7 @@ export interface ConversationHeaderProps {
 
 export default function ConversationHeader({
   conversation,
+  channel,
   isDrawer,
   onClose,
   onToggleBotStatus,
@@ -28,8 +30,13 @@ export default function ConversationHeader({
     { id: "3", name: "Emily Rodriguez" },
   ],
 }: ConversationHeaderProps) {
-  const channelKey = conversation.channel || "whatsapp";
+  const channelKey = conversation.channel || channel || "whatsapp";
   const channelLabel = CHANNEL_LABELS[channelKey] || "WhatsApp";
+
+  const isCompanion =
+    conversation.channel === "companion" ||
+    conversation.id === "care-bot-system" ||
+    channel === "companion";
 
   const initials = conversation.contactName
     ? conversation.contactName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -66,7 +73,7 @@ export default function ConversationHeader({
               <span>Group Settings</span>
             </button>
           )
-        ) : (
+        ) : !isCompanion ? (
           <>
             {conversation.botStatus === "active" ? (
               <button
@@ -98,7 +105,7 @@ export default function ConversationHeader({
               </button>
             )}
           </>
-        )}
+        ) : null}
 
         {isDrawer && onClose && (
           <button

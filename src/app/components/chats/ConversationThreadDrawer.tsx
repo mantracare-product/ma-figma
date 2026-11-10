@@ -144,14 +144,33 @@ export default function ConversationThreadDrawer({
     toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
   };
 
+  const handleToggleBotStatus = () => {
+    const isBotActive = conversation.botStatus === "active";
+    const nextStatus = isBotActive ? "off" : "active";
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversation.id
+          ? {
+              ...c,
+              botStatus: nextStatus,
+              assignedPersonId: nextStatus === "active" ? null : c.assignedPersonId,
+            }
+          : c
+      )
+    );
+    toast.success(isBotActive ? "Care Bot paused" : "Care Bot active");
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity">
       <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
         {/* Shared Header */}
         <ConversationHeader
           conversation={conversation}
+          channel={conversation.channel}
           isDrawer={true}
           onClose={onClose}
+          onToggleBotStatus={handleToggleBotStatus}
         />
 
         {/* Shared Message List */}
@@ -163,11 +182,13 @@ export default function ConversationThreadDrawer({
         {/* Shared Composer Bar */}
         <MessageComposerBar
           conversation={conversation}
+          channel={conversation.channel}
           session={session}
           onSendMessage={handleSendMessage}
           onSendTemplate={handleSendTemplate}
           onEnrollCampaign={handleEnrollCampaign}
           onAssignResponsible={handleAssignResponsible}
+          onToggleBotStatus={handleToggleBotStatus}
         />
       </div>
     </div>

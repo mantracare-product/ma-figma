@@ -2910,6 +2910,7 @@ export default function Chats() {
                   {/* Shared Chat Subcomponents */}
                   <ConversationHeader
                     conversation={activeConversation}
+                    channel={channelFilter || activeConversation.channel}
                     onToggleBotStatus={handleToggleBotStatus}
                     onOpenAssignBotModal={() => setShowAssignBotModal(true)}
                     onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
@@ -2923,12 +2924,13 @@ export default function Chats() {
                   />
                   <MessageComposerBar
                     conversation={activeConversation}
-                    channel={channelFilter}
+                    channel={channelFilter || activeConversation.channel}
                     session={computeSessionWindow(activeConversation)}
                     onSendMessage={(text, opts) => handleSendMessage(text, opts)}
                     onSendTemplate={handleSendTemplateDirectly}
                     onEnrollCampaign={handleEnrollCampaign}
                     onAssignResponsible={handleAssignPerson}
+                    onToggleBotStatus={handleToggleBotStatus}
                     replyingTo={replyingToMessage}
                     onCancelReply={() => setReplyingToMessage(null)}
                   />
