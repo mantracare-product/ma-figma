@@ -479,39 +479,25 @@ export default function PatientPortalLayout() {
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Brand / Clinic Badge */}
-            <div className="flex items-center gap-2">
-              <NavLink to={overviewPath} className="flex items-center gap-2">
-                <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+            {/* Brand / Companion Badge */}
+            <div className="flex items-center gap-2.5">
+              <NavLink to={overviewPath} className="flex items-center">
+                {/* Desktop & Tablet: Full logo */}
+                <img
+                  src={maLogo}
+                  alt="MantraAssist"
+                  className="h-6 w-auto object-contain hidden md:block"
+                />
+                {/* Mobile: Symbol mark */}
+                <img
+                  src={symbolLogo}
+                  alt="MantraAssist"
+                  className="h-7 w-auto object-contain block md:hidden"
+                />
               </NavLink>
               <div className="h-3.5 w-px bg-slate-200" />
-              <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] sm:max-w-xs">
-                {activeOrganization?.name || "Mantra Care"}
-              </span>
-            </div>
-
-            {/* Desktop Breadcrumb */}
-            <div className="hidden md:flex items-center gap-2 text-xs pl-2 border-l border-slate-200">
-              <span className="text-slate-400 font-medium">Companion</span>
-              <span className="text-slate-300">/</span>
-              <span className="font-bold text-slate-900">
-                {location.pathname.includes("profile")
-                  ? "Profile"
-                  : location.pathname.includes("tasks")
-                    ? "Tasks"
-                    : location.pathname.includes("messages") || location.pathname.includes("care-bot") || location.pathname.includes("bot")
-                    ? "Messages"
-                    : location.pathname.includes("book")
-                      ? "Visits"
-                      : location.pathname.includes("bill") || location.pathname.includes("pay")
-                        ? "Billing"
-                        : location.pathname.includes("documents")
-                          ? "Documents"
-                          : location.pathname.includes("forms")
-                            ? "Forms"
-                            : location.pathname.includes("pharmacy")
-                              ? "Dispensary & Pharmacy"
-                              : "Today"}
+              <span className="text-xs font-bold text-slate-800">
+                Companion
               </span>
             </div>
           </div>
@@ -562,18 +548,17 @@ export default function PatientPortalLayout() {
         </main>
       </div>
 
-      {/* Floating Messages Launcher Button (navigates to page, hides when on messages) */}
-      {!location.pathname.includes("messages") && !location.pathname.includes("care-bot") && !location.pathname.includes("bot") && (
+      {/* Floating Care Bot Launcher Button (hides when on care-bot or messages) */}
+      {!location.pathname.includes("care-bot") && !location.pathname.includes("bot") && !location.pathname.includes("messages") && (
         <button
           type="button"
-          onClick={() => navigate("/patient/messages")}
-          className="fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2.5 shadow-lg shadow-blue-600/30 flex items-center gap-2 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-          title="Open Messages"
-          aria-label="Open Messages"
+          onClick={() => navigate("/patient/care-bot")}
+          className="fixed right-5 sm:right-6 z-40 w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
+          title="Open Care Bot chat"
+          aria-label="Open Care Bot chat"
         >
-          <MessageSquare className="w-4 h-4" />
-          <span>Messages</span>
+          <Bot className="w-5 h-5" />
         </button>
       )}
 
