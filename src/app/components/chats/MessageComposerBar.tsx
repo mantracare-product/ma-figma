@@ -10,6 +10,7 @@ import AssignResponsibleModal from "./AssignResponsibleModal";
 export interface MessageComposerBarProps {
   conversation?: Conversation;
   session: SessionWindowStatus;
+  channel?: "all" | "whatsapp" | "sms" | "website" | "email" | "companion" | null;
   onSendMessage: (
     text: string,
     options?: {
@@ -27,6 +28,7 @@ export interface MessageComposerBarProps {
 export default function MessageComposerBar({
   conversation,
   session,
+  channel,
   onSendMessage,
   onSendTemplate,
   onAssignResponsible,
@@ -42,6 +44,9 @@ export default function MessageComposerBar({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+
+  // Determine if this is a website conversation (hide More Actions & Settings on website channel)
+  const isWebsite = conversation?.channel === "website" || channel === "website";
 
   const isGroup = Boolean(conversation?.isGroup);
   const isOnlyModeratorsCanPost = isGroup && conversation?.groupConfig?.permissions.whoCanPost === "moderators";
@@ -205,55 +210,57 @@ export default function MessageComposerBar({
             </button>
           </Tooltip>
 
-          {/* Gear Settings Button + Popover */}
-          <div className="relative" ref={gearMenuRef}>
-            <Tooltip content="Message Actions & Settings">
-              <button
-                type="button"
-                onClick={() => setShowGearMenu((prev) => !prev)}
-                className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                  showGearMenu ? "bg-blue-50 text-[#1456f0]" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </Tooltip>
-
-            {/* Settings Dropdown Popover */}
-            {showGearMenu && (
-              <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-border rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+          {/* Gear Settings Button + Popover (Hidden on Website channel) */}
+          {!isWebsite && (
+            <div className="relative" ref={gearMenuRef}>
+              <Tooltip content="Message Actions & Settings">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowTemplateModal(true);
-                    setShowGearMenu(false);
-                  }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
+                  onClick={() => setShowGearMenu((prev) => !prev)}
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                    showGearMenu ? "bg-blue-50 text-[#1456f0]" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  }`}
                 >
-                  <span className="flex items-center gap-2 font-medium">
-                    <FileText className="w-4 h-4 text-[#1456f0]" />
-                    Share Template Message
-                  </span>
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                  <Settings className="w-4 h-4" />
                 </button>
+              </Tooltip>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAssignModal(true);
-                    setShowGearMenu(false);
-                  }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                >
-                  <span className="flex items-center gap-2 font-medium">
-                    <UserCheck className="w-4 h-4 text-[#1456f0]" />
-                    Assign Responsible
-                  </span>
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
-                </button>
-              </div>
-            )}
-          </div>
+              {/* Settings Dropdown Popover */}
+              {showGearMenu && (
+                <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-border rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTemplateModal(true);
+                      setShowGearMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      <FileText className="w-4 h-4 text-[#1456f0]" />
+                      Share Template Message
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAssignModal(true);
+                      setShowGearMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      <UserCheck className="w-4 h-4 text-[#1456f0]" />
+                      Assign Responsible
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Text input */}
           <textarea

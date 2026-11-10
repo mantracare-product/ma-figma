@@ -29,14 +29,22 @@ import {
   MapPin,
   Building2,
   ArrowRight,
+  GripVertical,
+  UserCheck,
 } from "lucide-react";
 import {
   getWebsiteWidgetConfig,
   saveWebsiteWidgetConfig,
   WebsiteWidgetConfig,
 } from "../../../lib/websiteWidgetStore";
-import { getStoredProcesses } from "../../../lib/useProcessStore";
-import { getStoredTeamMembers } from "../../../lib/teamStore";
+import {
+  getStoredProcesses,
+  isProcessMatchingOrg,
+  DEFAULT_ENTITY_PROCESSES,
+  EntityType,
+  getEntityProcess,
+} from "../../../lib/useProcessStore";
+import { getStoredTeamMembers, TeamMember } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { processWebsiteVisitorSubmission } from "../../../lib/websiteChatSimulator";
 import { toast } from "sonner";
@@ -44,7 +52,7 @@ import { InfoTooltip } from "../help/InfoTooltip";
 
 interface WebsiteWidgetSettingsTabProps {
   onNavigateToInbox?: () => void;
-  registerSaveHandler?: (fn: () => void) => void;
+  registerSaveHandler?: (fn: () => boolean | void) => void;
   searchQuery?: string;
   onClearSearch?: () => void;
 }
@@ -70,12 +78,19 @@ const SYSTEM_AVATARS = [
   "https://ui-avatars.com/api/?name=M4&background=e2e8f0&color=334155",
 ];
 
-interface MockAgent {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  image: string;
+function formatLocationSchedule(workingHours?: any): string {
+  if (!workingHours) return "Monday – Friday: 9:00 AM – 5:00 PM";
+  const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  const enabledDays = days.filter((d) => workingHours[d]?.enabled);
+  if (enabledDays.length === 0) return "Closed";
+  const first = workingHours[enabledDays[0]];
+  const start = first?.start || "09:00";
+  const end = first?.end || "17:00";
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1, 3);
+  if (enabledDays.length === 5 && enabledDays[0] === "monday" && enabledDays[4] === "friday") {
+    return `Mon – Fri: ${start} – ${end}`;
+  }
+  return `${enabledDays.map(cap).join(", ")}: ${start} – ${end}`;
 }
 
 export default function WebsiteWidgetSettingsTab({
@@ -86,10 +101,10 @@ export default function WebsiteWidgetSettingsTab({
 }: WebsiteWidgetSettingsTabProps) {
   const [config, setConfig] = useState<WebsiteWidgetConfig>(getWebsiteWidgetConfig);
   const processes = getStoredProcesses();
-  const teamMembers = getStoredTeamMembers();
+  const allTeamMembers = getStoredTeamMembers();
   const { activeOrganization } = useOrganization();
 
-  // Load locations from the active organization
+  // Load configured locations from the active organization data (no hardcoded branches)
   const availableOrgLocations = useMemo(() => {
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization?.id || "demo"}`);
@@ -99,73 +114,144 @@ export default function WebsiteWidgetSettingsTab({
           return parsed.map((item: any) => ({
             id: item.id || item.name,
             name: item.name,
-            address: item.address || "123 Health Ave, Suite 400",
-            schedule: "Monday – Friday: 9:00 AM – 5:00 PM",
-            timezone: "America/Los_Angeles (PT)",
+            address: item.address || `${item.name} Location`,
+            schedule: formatLocationSchedule(item.workingHours),
+            timezone: activeOrganization?.country === "India" ? "IST (UTC+05:30)" : "EST / PST (US)",
+            workingHours: item.workingHours,
           }));
         }
       }
-    } catch { }
+    } catch {}
 
     const locNames =
       activeOrganization?.locations && activeOrganization.locations.length > 0
         ? activeOrganization.locations
-        : ["California Branch", "New York Center", "Online / Virtual"];
+        : [activeOrganization?.location || "Headquarters"];
 
     return locNames.map((name, i) => ({
       id: `loc-${i + 1}`,
       name,
-      address: name.includes("New York")
-        ? "450 Lexington Ave, Suite 210, New York, NY"
-        : name.includes("California")
-          ? "123 Health Ave, Suite 400, Los Angeles, CA"
-          : "Online Telehealth Service",
+      address: `${name} Office`,
       schedule: "Monday – Friday: 9:00 AM – 5:00 PM",
-      timezone: name.includes("New York") ? "Eastern Time (EST)" : "Pacific Time (PST)",
+      timezone: activeOrganization?.country === "India" ? "IST (UTC+05:30)" : "America/New_York (EST)",
+      workingHours: null,
     }));
   }, [activeOrganization]);
 
-  // Accordion Section States
-  const [showWidgetSection, setShowWidgetSection] = useState(true);
-  const [showRoutingSection, setShowRoutingSection] = useState(true);
+  // Team members strictly belonging to this organization (no hardcoded or sample users)
+  const orgTeamMembers = useMemo(() => {
+    return allTeamMembers.filter((m) => {
+      if (m.organizationId && activeOrganization?.id) {
+        if (m.organizationId === activeOrganization.id) return true;
+        if (
+          m.organizationId === "1" &&
+          (activeOrganization.id === "1" || activeOrganization.id === "demo" || activeOrganization.id === "eye-mantra")
+        ) {
+          return true;
+        }
+        return false;
+      }
+      return true;
+    });
+  }, [allTeamMembers, activeOrganization]);
+
+  // Check if a member is available for the selected branch/location
+  const isMemberAvailableForBranch = (member: TeamMember, branchName?: string) => {
+    if (!branchName) return true;
+    const memberLocations = [
+      ...(member.locations || []),
+      ...(member.availableLocations || []),
+    ].map((l) => l.toLowerCase().trim());
+
+    if (memberLocations.length === 0) return true; // not restricted
+    const target = branchName.toLowerCase().trim();
+    return memberLocations.some(
+      (loc) => target.includes(loc) || loc.includes(target) || loc === "online" || loc === "all"
+    );
+  };
+
+  // Entities configured for the organization
+  const configuredEntities = useMemo(() => {
+    const list = [
+      { id: "client", label: "Contact (Client)" },
+      { id: "appointment", label: "Appointment" },
+      { id: "invoice", label: "Invoice" },
+      { id: "insurance", label: "Insurance & Claims" },
+      { id: "task", label: "Task" },
+    ];
+    return list;
+  }, []);
 
   // Search filtering logic
   const q = (searchQuery || "").toLowerCase().trim();
 
-  useEffect(() => {
-    if (q) {
-      setShowWidgetSection(true);
-      setShowRoutingSection(true);
-    }
-  }, [q]);
+  const matchesPosition =
+    !q ||
+    ["position", "mockup", "launcher", "corner", "bottom-right", "bottom-left", "top-right", "top-left", "top-center", "bottom-center", "floating", "anchor"].some(
+      (k) => k.includes(q) || q.includes(k)
+    );
+  const matchesTheme =
+    !q || ["theme", "color", "colors", "palette", "mode", "dark", "light", "blue", "primary"].some((k) => k.includes(q) || q.includes(k));
+  const matchesLauncherIcon =
+    !q || ["launcher", "icon", "header", "title", "subtitle", "greeting", "chat", "phone", "message", "headset", "branding"].some((k) => k.includes(q) || q.includes(k));
+  const matchesIntake =
+    !q ||
+    [
+      "intake",
+      "form",
+      "fields",
+      "name",
+      "email",
+      "phone",
+      "mandatory",
+      "visitor",
+      "pre-chat",
+      "requirements",
+      "requirement",
+      "greeting",
+      "welcome",
+      "auto create",
+      "contact",
+      "entity",
+    ].some((k) => k.includes(q) || q.includes(k));
+  const matchesFirstResponder =
+    !q || ["responder", "first responder", "ai", "bot", "human", "agent"].some((k) => k.includes(q) || q.includes(k));
+  const matchesResponsible =
+    !q ||
+    [
+      "responsible",
+      "responsible settings",
+      "queue",
+      "team",
+      "routing",
+      "priority",
+      "sequential",
+      "round robin",
+      "broadcast",
+      "working hours",
+      "hours",
+      "schedule",
+      "location",
+      "branch",
+    ].some((k) => k.includes(q) || q.includes(k));
+  const matchesEmbed =
+    !q || ["embed", "script", "code", "html", "snippet", "install", "cdn", "website", "head"].some((k) => k.includes(q) || q.includes(k));
 
-  const matchesPosition = !q || ["position", "mockup", "launcher", "corner", "bottom-right", "bottom-left", "top-right", "top-left", "top-center", "bottom-center", "floating", "anchor"].some(k => k.includes(q) || q.includes(k));
-  const matchesTheme = !q || ["theme", "color", "colors", "palette", "mode", "dark", "light", "blue", "primary"].some(k => k.includes(q) || q.includes(k));
-  const matchesLauncherIcon = !q || ["launcher", "icon", "header", "title", "subtitle", "greeting", "chat", "phone", "message", "headset", "branding"].some(k => k.includes(q) || q.includes(k));
-  const matchesHours = !q || ["hours", "working hours", "business hours", "schedule", "location", "branch", "timezone", "operating"].some(k => k.includes(q) || q.includes(k));
-  const matchesIntake = !q || ["intake", "form", "fields", "name", "email", "phone", "mandatory", "visitor", "pre-chat", "requirements", "requirement", "mapping", "process", "stage"].some(k => k.includes(q) || q.includes(k));
-  const matchesFirstResponder = !q || ["responder", "first responder", "ai", "bot", "human", "agent", "routing"].some(k => k.includes(q) || q.includes(k));
-  const matchesQueue = !q || ["agent", "queue", "team", "care team", "assignment", "round robin", "coordinator", "avatar", "fallback", "display"].some(k => k.includes(q) || q.includes(k));
-  const matchesEmbed = !q || ["embed", "script", "code", "html", "snippet", "install", "cdn", "website", "head"].some(k => k.includes(q) || q.includes(k));
-
-  const hasWidgetSectionMatches = matchesTheme || matchesLauncherIcon || matchesHours || matchesIntake;
-  const hasRoutingSectionMatches = matchesFirstResponder || matchesQueue;
   const totalMatches = [
     matchesPosition,
     matchesTheme,
     matchesLauncherIcon,
-    matchesHours,
     matchesIntake,
     matchesFirstResponder,
-    matchesQueue,
+    matchesResponsible,
     matchesEmbed,
   ].filter(Boolean).length;
 
-
-  // Agent Queue State
+  // Agent Queue / Responsible State
   const [agentSearch, setAgentSearch] = useState("");
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const agentSelectRef = useRef<HTMLDivElement>(null);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   // Custom Profile Avatar Popover
   const [popoverAgentId, setPopoverAgentId] = useState<string | null>(null);
@@ -180,53 +266,11 @@ export default function WebsiteWidgetSettingsTab({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
+  // Auto-save changes to localStorage (only if not in invalid auto-create state)
   useEffect(() => {
-    if (!simRequirementId && config.requirements?.length > 0) {
-      setSimRequirementId(config.requirements[0].id);
+    if (config.autoCreateClientEnabled && !config.autoCreateEntity) {
+      return;
     }
-  }, [config.requirements, simRequirementId]);
-
-  // Build combined agent list from team store + seeds
-  const availableAgents: MockAgent[] = [
-    {
-      id: "u1",
-      name: "Dr. Sarah Mitchell",
-      email: "sarah.m@mantra.care",
-      role: "Lead Care Coordinator",
-      image: "https://ui-avatars.com/api/?name=Sarah+Mitchell&background=1456f0&color=fff",
-    },
-    {
-      id: "u2",
-      name: "Marcus Vance",
-      email: "marcus.v@mantra.care",
-      role: "Patient Intake Specialist",
-      image: "https://ui-avatars.com/api/?name=Marcus+Vance&background=64748b&color=fff",
-    },
-    {
-      id: "u3",
-      name: "Elena Rostova",
-      email: "elena.r@mantra.care",
-      role: "Triage Nurse",
-      image: "https://ui-avatars.com/api/?name=Elena+Rostova&background=047857&color=fff",
-    },
-    {
-      id: "u4",
-      name: "Technical Support",
-      email: "support@mantra.care",
-      role: "Support Team",
-      image: "https://ui-avatars.com/api/?name=Technical+Support&background=0284c7&color=fff",
-    },
-    ...teamMembers.map((tm) => ({
-      id: String(tm.id),
-      name: tm.name,
-      email: tm.email,
-      role: tm.role || "Team Member",
-      image: `https://ui-avatars.com/api/?name=${encodeURIComponent(tm.name)}&background=1E293B&color=fff`,
-    })),
-  ].filter((a, index, self) => index === self.findIndex((t) => t.id === a.id));
-
-  // Auto-save changes to localStorage
-  useEffect(() => {
     saveWebsiteWidgetConfig(config);
   }, [config]);
 
@@ -242,8 +286,13 @@ export default function WebsiteWidgetSettingsTab({
   }, []);
 
   const handleSave = () => {
+    if (config.autoCreateClientEnabled && !config.autoCreateEntity) {
+      toast.error("Please select an Entity for Auto Create Contact before saving.");
+      return false;
+    }
     saveWebsiteWidgetConfig(config);
     toast.success("Website widget settings saved successfully!");
+    return true;
   };
 
   useEffect(() => {
@@ -252,12 +301,19 @@ export default function WebsiteWidgetSettingsTab({
     }
   }, [registerSaveHandler, config]);
 
+  const handleEntityChange = (newEntity: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      autoCreateEntity: newEntity,
+      autoCreateStage: "", // Changing the entity resets the stage selection
+    }));
+  };
+
   const handleAddRequirement = () => {
     const newReqId = `req-${Date.now()}`;
     const newReq = {
       id: newReqId,
       label: "New Requirement",
-      processId: processes[0]?.id || "1",
     };
     setConfig((prev) => ({
       ...prev,
@@ -265,11 +321,11 @@ export default function WebsiteWidgetSettingsTab({
     }));
   };
 
-  const handleUpdateRequirement = (index: number, field: "label" | "processId", value: string) => {
+  const handleUpdateRequirement = (index: number, value: string) => {
     setConfig((prev) => {
       const updated = [...(prev.requirements || [])];
       if (updated[index]) {
-        updated[index] = { ...updated[index], [field]: value };
+        updated[index] = { ...updated[index], label: value };
       }
       return { ...prev, requirements: updated };
     });
@@ -282,17 +338,37 @@ export default function WebsiteWidgetSettingsTab({
     }));
   };
 
-
-
   const toggleQueueAgent = (id: string) => {
     setConfig((prev) => {
       const current = prev.agentQueue || [];
-      const updated = current.includes(id)
-        ? current.filter((i) => i !== id)
-        : [...current, id];
+      const updated = current.includes(id) ? current.filter((i) => i !== id) : [...current, id];
       return { ...prev, agentQueue: updated };
     });
     setAgentSearch("");
+  };
+
+  const movePriority = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= (config.agentQueue || []).length) return;
+    const newQueue = [...(config.agentQueue || [])];
+    const [moved] = newQueue.splice(fromIndex, 1);
+    newQueue.splice(toIndex, 0, moved);
+    setConfig((prev) => ({ ...prev, agentQueue: newQueue }));
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.setData("text/plain", String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIndex) return;
+    movePriority(draggedIdx, dropIndex);
+    setDraggedIdx(null);
   };
 
   const updateCustomProfile = (agentId: string, field: "name" | "position" | "image", value: string) => {
@@ -320,11 +396,11 @@ export default function WebsiteWidgetSettingsTab({
   // Embed script snippet
   const embedScriptSnippet = `<script 
   src="https://app.mantraassist.com/widget.js" 
-  data-bot-name="${config.botName.replace(/"/g, '&quot;')}"
+  data-bot-name="${(config.botName || "MantraAssist Care Bot").replace(/"/g, "&quot;")}"
   data-theme-color="${config.themeColor}"
   data-theme-mode="${config.themeMode}"
-  data-position="${config.position || 'bottom-right'}"
-  data-first-responder="${config.firstResponder || 'ai'}"
+  data-position="${config.position || "bottom-right"}"
+  data-first-responder="${config.firstResponder || "ai"}"
   async
 ></script>`;
 
@@ -333,13 +409,6 @@ export default function WebsiteWidgetSettingsTab({
     setCopiedSnippet(true);
     toast.success("Widget embed code copied to clipboard!");
     setTimeout(() => setCopiedSnippet(false), 3000);
-  };
-
-  const scrollToStep = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
   };
 
   const handleRunSimulator = (e: React.FormEvent) => {
@@ -354,19 +423,17 @@ export default function WebsiteWidgetSettingsTab({
     }
 
     const chosenReq = (config.requirements || []).find((r) => r.id === simRequirementId) || config.requirements?.[0];
-    const targetProcessId = (config.formFields.requirement ?? true) && chosenReq
-      ? chosenReq.processId
-      : config.autoCreateProcessId || processes[0]?.id || "1";
     const targetReqLabel = (config.formFields.requirement ?? true) && chosenReq ? chosenReq.label : undefined;
 
     setIsSubmitting(true);
+    // Auto-created contacts are not assigned to or trigger any Process
     const result = processWebsiteVisitorSubmission({
       name: simName,
       email: simEmail,
       phone: simPhone,
-      processId: targetProcessId,
       firstMessage: simMessage,
       requirementLabel: targetReqLabel,
+      stageName: config.autoCreateClientEnabled ? config.autoCreateStage || "New Contact" : "New Contact",
     });
 
     setIsSubmitting(false);
@@ -377,36 +444,39 @@ export default function WebsiteWidgetSettingsTab({
         {
           sender: "bot",
           text: result.botReply,
-          header: result.header,
-          buttons: result.buttons,
         },
       ]);
       const reqInfo = targetReqLabel ? ` (${targetReqLabel})` : "";
       toast.success(
-        `Website visitor created! Client: "${simName}" enrolled in "${result.processName}"${reqInfo} at stage "${result.stageName}".`,
+        `Website visitor created! Contact: "${simName}" created${reqInfo}${
+          config.autoCreateClientEnabled && config.autoCreateStage ? ` at stage "${config.autoCreateStage}"` : ""
+        }.`,
         {
-          action: onNavigateToInbox ? {
-            label: "Open Inbox",
-            onClick: onNavigateToInbox,
-          } : undefined,
+          action: onNavigateToInbox
+            ? {
+                label: "Open Inbox",
+                onClick: onNavigateToInbox,
+              }
+            : undefined,
         }
       );
     }
   };
 
-  // Process & Stage selection for Auto Create Client
-  const selectedProcess = processes.find((p) => p.id === (config.autoCreateProcessId || processes[0]?.id));
-  const processStages = selectedProcess ? selectedProcess.stages.map((s) => s.name) : ["New Lead", "Contacted", "Qualified"];
+  const activeBranchLocation =
+    availableOrgLocations.find((l) => l.name === (config.selectedLocation || availableOrgLocations[0]?.name)) ||
+    availableOrgLocations[0];
 
   return (
     <div className="space-y-6 pb-12">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* ── Left Column: Live Widget Simulator & Position Mockup (Sticky Non-scrolling) ── */}
+        {/* ── Left Column: Live Widget Simulator & Position Mockup (Sticky) ── */}
         <div className="lg:col-span-5 space-y-5 sticky top-4 self-start max-h-[calc(100vh-32px)] overflow-y-auto pr-0.5">
           {/* Widget Card Container */}
           <div
-            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all max-w-[380px] w-full mx-auto lg:mx-0 ${config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
-              }`}
+            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all max-w-[380px] w-full mx-auto lg:mx-0 ${
+              config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
+            }`}
           >
             {/* Widget Top Bar */}
             <div
@@ -442,8 +512,9 @@ export default function WebsiteWidgetSettingsTab({
                   <Bot className="w-3.5 h-3.5" />
                 </div>
                 <div
-                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
-                    }`}
+                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${
+                    config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
+                  }`}
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   {config.welcomeMessage}
@@ -549,34 +620,16 @@ export default function WebsiteWidgetSettingsTab({
                       className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
                     >
                       <div
-                        className={`p-3 rounded-2xl text-xs max-w-[90%] space-y-1 ${m.sender === "user"
-                            ? "text-white rounded-br-xs"
-                            : "bg-slate-100 dark:bg-slate-800 text-[#1E293B] dark:text-slate-100 rounded-bl-xs"
-                          }`}
-                        style={{
-                          backgroundColor: m.sender === "user" ? config.themeColor : undefined,
-                          fontFamily: "DM Sans, sans-serif",
-                        }}
+                        className={`p-2.5 rounded-xl text-xs max-w-[85%] ${
+                          m.sender === "user"
+                            ? "bg-[#1456f0] text-white"
+                            : config.themeMode === "dark"
+                            ? "bg-slate-800 text-slate-100"
+                            : "bg-gray-100 text-[#1E293B]"
+                        }`}
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
                       >
-                        {m.header?.text && (
-                          <div className="font-bold text-[11px] pb-1 border-b border-gray-200/40">
-                            {m.header.text}
-                          </div>
-                        )}
-                        <p>{m.text}</p>
-
-                        {m.buttons && m.buttons.length > 0 && (
-                          <div className="pt-2 flex flex-wrap gap-1.5">
-                            {m.buttons.map((b, bi) => (
-                              <span
-                                key={bi}
-                                className="px-2 py-0.5 bg-white/20 text-white rounded-full text-[10px] font-medium"
-                              >
-                                {b.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {m.text}
                       </div>
                     </div>
                   ))}
@@ -585,80 +638,70 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           </div>
 
-          {/* ── Choose Position Grid Mockup (ai-chat-module parity) ── */}
+          {/* ── Choose Position Grid Mockup ── */}
           {matchesPosition && (
-            <div id="setting-position" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs max-w-[380px] w-full mx-auto lg:mx-0">
+            <div id="setting-position" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-4 space-y-3 shadow-xs">
               <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <Sliders className="w-4 h-4 text-[#1456f0]" />
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <MapPin className="w-3.5 h-3.5 text-[#1456f0]" />
                   <span>Choose Widget Position</span>
-                </h3>
-                <span className="text-[11px] font-mono text-[#64748b] bg-slate-100 px-2 py-0.5 rounded-md">
+                </div>
+                <span className="text-[10px] font-mono font-bold text-[#1456f0] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                   {config.position || "bottom-right"}
                 </span>
               </div>
 
-              <p className="text-xs text-[#64748b]">Select where the floating launcher button anchors on website visitor screens:</p>
-
-              {/* Position Mockup Window */}
-              <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-xs">
-                {/* Browser window header */}
-                <div className="bg-[#f1f5f9] border-b border-[#E2E8F0] h-6 flex items-center gap-1.5 px-3">
-                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                </div>
-
-                {/* 3x2 Grid */}
-                <div className="grid grid-cols-3 grid-rows-2 gap-[1px] bg-[#E2E8F0]">
-                  {[
-                    { id: "top-left", label: "Top Left", arrow: "↖" },
-                    { id: "top-center", label: "Top Center", arrow: "↑" },
-                    { id: "top-right", label: "Top Right", arrow: "↗" },
-                    { id: "bottom-left", label: "Bottom Left", arrow: "↙" },
-                    { id: "bottom-center", label: "Bottom Center", arrow: "↓" },
-                    { id: "bottom-right", label: "Bottom Right", arrow: "↘" },
-                  ].map((pos) => {
-                    const isActive = (config.position || "bottom-right") === pos.id;
-                    return (
-                      <div
-                        key={pos.id}
-                        onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
-                        className={`h-20 bg-white flex flex-col items-center justify-center cursor-pointer transition-all relative ${isActive
-                            ? "bg-blue-50/80 text-[#1456f0] ring-2 ring-inset ring-[#1456f0]"
-                            : "hover:bg-slate-50 text-slate-300 hover:text-slate-500"
-                          }`}
-                      >
-                        <span className="text-xl font-bold select-none">{pos.arrow}</span>
-                        <span className="text-[10px] font-semibold mt-0.5 select-none">{pos.label}</span>
-
-                        {/* Active floating widget button badge */}
-                        {isActive && (
-                          <div
-                            className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center text-xs shadow-md transition-transform scale-105"
-                            style={{
-                              backgroundColor: config.themeColor,
-                              top: pos.id.includes("top") ? "6px" : undefined,
-                              bottom: pos.id.includes("bottom") ? "6px" : undefined,
-                              left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
-                              right: pos.id.includes("right") ? "6px" : undefined,
-                            }}
-                          >
-                            <PhoneCall className="w-3.5 h-3.5" />
-                          </div>
-                        )}
+              <div className="grid grid-cols-3 gap-2.5 pt-1">
+                {[
+                  { id: "top-left", label: "Top Left" },
+                  { id: "top-center", label: "Top Center" },
+                  { id: "top-right", label: "Top Right" },
+                  { id: "bottom-left", label: "Bottom Left" },
+                  { id: "bottom-center", label: "Bottom Center" },
+                  { id: "bottom-right", label: "Bottom Right" },
+                ].map((pos) => {
+                  const isActive = (config.position || "bottom-right") === pos.id;
+                  return (
+                    <div
+                      key={pos.id}
+                      onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
+                      className={`relative h-20 rounded-xl border-2 cursor-pointer transition-all p-1.5 flex flex-col justify-between ${
+                        isActive
+                          ? "border-[#1456f0] bg-blue-50/40 shadow-xs ring-2 ring-[#1456f0]/20"
+                          : "border-[#E2E8F0] bg-slate-50/50 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#475569]">{pos.label}</span>
+                        {isActive && <Check className="w-3 h-3 text-[#1456f0]" />}
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Mockup Dot */}
+                      {isActive && (
+                        <div
+                          className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center shadow-md animate-in zoom-in-75 duration-150"
+                          style={{
+                            backgroundColor: config.themeColor,
+                            top: pos.id.includes("top") ? "6px" : undefined,
+                            bottom: pos.id.includes("bottom") ? "6px" : undefined,
+                            left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
+                            right: pos.id.includes("right") ? "6px" : undefined,
+                          }}
+                        >
+                          <PhoneCall className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* ── Right Column: Configuration Settings (Separated Cards) ── */}
+        {/* ── Right Column: Configuration Cards in Required Strict Order ── */}
         <div className="lg:col-span-7 space-y-5 min-w-0">
-          {/* Search Results Feedback Banner */}
+          {/* Search Feedback */}
           {q && (
             <div className="bg-blue-50/80 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs animate-in fade-in">
               <div className="flex items-center gap-2">
@@ -679,14 +722,11 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
 
-          {/* Empty Search State */}
+          {/* Empty Search */}
           {q && totalMatches === 0 && (
             <div className="p-8 bg-white border border-[#E2E8F0] rounded-2xl text-center space-y-2.5">
               <Sliders className="w-7 h-7 text-slate-300 mx-auto" />
               <h4 className="text-sm font-bold text-slate-800">No settings found matching &quot;{searchQuery}&quot;</h4>
-              <p className="text-xs text-slate-500">
-                Try searching for <span className="font-semibold">theme</span>, <span className="font-semibold">intake</span>, <span className="font-semibold">position</span>, <span className="font-semibold">hours</span>, or <span className="font-semibold">code</span>.
-              </p>
               {onClearSearch && (
                 <button
                   type="button"
@@ -699,7 +739,10 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
 
-          {/* 1. Theme & Colors */}
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION 1: Widget Design / Position (unchanged)
+          ════════════════════════════════════════════════════════════════════ */}
+          {/* 1.1 Theme & Colors */}
           {matchesTheme && (
             <div id="setting-theme" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -762,7 +805,7 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
 
-          {/* 2. Branding & Header */}
+          {/* 1.2 Branding & Header */}
           {matchesLauncherIcon && (
             <div id="setting-launcher-icon" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -804,296 +847,210 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
 
-          {/* 3. Working Time Preferences */}
-          {matchesHours && (
-            <div id="setting-working-hours" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[#1456f0]" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Working Time Preferences
-                  </h3>
-                  <InfoTooltip text="Show the widget only during specific business work hours based on location schedule" />
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.workHoursEnabled}
-                    onChange={(e) => setConfig((prev) => ({ ...prev, workHoursEnabled: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
-                </label>
-              </div>
-
-              {config.workHoursEnabled && (
-                <div className="space-y-4 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Choose Organization Location
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={config.selectedLocation || availableOrgLocations[0]?.name}
-                        onChange={(e) => {
-                          const found = availableOrgLocations.find((l) => l.name === e.target.value);
-                          setConfig((prev) => ({
-                            ...prev,
-                            selectedLocation: e.target.value,
-                            selectedLocationId: found?.id,
-                          }));
-                        }}
-                        className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 pl-8 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none cursor-pointer"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        {availableOrgLocations.map((loc) => (
-                          <option key={loc.id} value={loc.name}>
-                            {loc.name}
-                          </option>
-                        ))}
-                      </select>
-                      <MapPin className="w-4 h-4 text-[#1456f0] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Location Operating Hours Summary Card */}
-                  {(() => {
-                    const activeLoc =
-                      availableOrgLocations.find(
-                        (l) => l.name === (config.selectedLocation || availableOrgLocations[0]?.name)
-                      ) || availableOrgLocations[0];
-                    if (!activeLoc) return null;
-                    return (
-                      <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            <Building2 className="w-3.5 h-3.5 text-[#1456f0]" />
-                            <span>{activeLoc.name}</span>
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                              Synced with Location
-                            </span>
-                            <InfoTooltip text="Working hours and days are automatically inherited from this location's schedule configured in Organization Settings." />
-                          </div>
-                        </div>
-                        <div className="text-[11px] text-[#475569] space-y-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          <div><strong className="text-[#1E293B]">Address:</strong> {activeLoc.address}</div>
-                          <div><strong className="text-[#1E293B]">Work Hours:</strong> {activeLoc.schedule}</div>
-                          <div><strong className="text-[#1E293B]">Timezone:</strong> {activeLoc.timezone}</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 4. Pre-Chat Form */}
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION 2: Pre-Chat Form
+          ════════════════════════════════════════════════════════════════════ */}
           {matchesIntake && (
             <div id="setting-intake-form" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Layers className="w-4 h-4 text-[#1456f0]" />
                   <span>Pre-Chat Form</span>
-                  <InfoTooltip text="Intake fields collected from web visitors before initiating the conversation" />
+                  <InfoTooltip text="Intake fields, greeting message, and auto-contact creation collected from web visitors before initiating the conversation" />
                 </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={config.enablePreChatForm}
-                        onChange={(e) => setConfig((prev) => ({ ...prev, enablePreChatForm: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
-                    </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.enablePreChatForm}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, enablePreChatForm: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
+                </label>
+              </div>
+
+              {config.enablePreChatForm && (
+                <div className="space-y-4 pt-1">
+                  {/* Greeting Message (Inside Pre-Chat Form only) */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Greeting Message
+                      </label>
+                      <InfoTooltip text="Greeting displayed to visitors at the top of the pre-chat intake form" />
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={config.welcomeMessage}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))}
+                      placeholder="e.g. Hello! Welcome to Mantra Health. How can we assist you today?"
+                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 text-[#1E293B] font-medium bg-white focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none resize-none"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    />
                   </div>
 
-                  {config.enablePreChatForm && (
-                    <div className="space-y-4 pt-1">
-                      {/* Form Fields: Full Name, Email, Phone, Requirement */}
-                      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
-                        <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={config.formFields.name}
-                            onChange={(e) =>
-                              setConfig((prev) => ({
-                                ...prev,
-                                formFields: { ...prev.formFields, name: e.target.checked },
-                              }))
-                            }
-                            className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                          />
-                          <User className="w-3.5 h-3.5 text-[#64748b]" /> Full Name
-                        </label>
+                  {/* Form Field Checkboxes */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Intake Fields
+                    </label>
+                    <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                      <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={config.formFields.name}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              formFields: { ...prev.formFields, name: e.target.checked },
+                            }))
+                          }
+                          className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                        />
+                        <User className="w-3.5 h-3.5 text-[#64748b]" /> Full Name
+                      </label>
 
-                        <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={config.formFields.email}
-                            onChange={(e) =>
-                              setConfig((prev) => ({
-                                ...prev,
-                                formFields: { ...prev.formFields, email: e.target.checked },
-                              }))
-                            }
-                            className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                          />
-                          <Mail className="w-3.5 h-3.5 text-[#64748b]" /> Email Address
-                        </label>
+                      <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={config.formFields.email}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              formFields: { ...prev.formFields, email: e.target.checked },
+                            }))
+                          }
+                          className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                        />
+                        <Mail className="w-3.5 h-3.5 text-[#64748b]" /> Email Address
+                      </label>
 
-                        <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={config.formFields.phone}
-                            onChange={(e) =>
-                              setConfig((prev) => ({
-                                ...prev,
-                                formFields: { ...prev.formFields, phone: e.target.checked },
-                              }))
-                            }
-                            className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                          />
-                          <Phone className="w-3.5 h-3.5 text-[#64748b]" /> Phone Number
-                        </label>
+                      <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={config.formFields.phone}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              formFields: { ...prev.formFields, phone: e.target.checked },
+                            }))
+                          }
+                          className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                        />
+                        <Phone className="w-3.5 h-3.5 text-[#64748b]" /> Phone Number
+                      </label>
 
-                        <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={config.formFields.requirement ?? true}
-                            onChange={(e) =>
-                              setConfig((prev) => ({
-                                ...prev,
-                                formFields: { ...prev.formFields, requirement: e.target.checked, processSelect: e.target.checked },
-                              }))
-                            }
-                            className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                          />
-                          <HelpCircle className="w-3.5 h-3.5 text-[#64748b]" /> Requirement
-                        </label>
+                      <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={config.formFields.requirement ?? true}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              formFields: { ...prev.formFields, requirement: e.target.checked },
+                            }))
+                          }
+                          className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                        />
+                        <HelpCircle className="w-3.5 h-3.5 text-[#64748b]" /> Requirement
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Requirement Options List (No Process Mapping Dropdown) */}
+                  {(config.formFields.requirement ?? true) && (
+                    <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Requirement Options
+                          </span>
+                          <InfoTooltip text="Options presented to website visitors in the Pre-chat form" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddRequirement}
+                          className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" /> Add Requirement
+                        </button>
                       </div>
 
-                      {/* 1. Requirement to Process Mapping (maps visitor options to processes for prompt & routing) */}
-                      {(config.formFields.requirement ?? true) && (
-                        <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Requirement to Process Mapping
-                              </span>
-                              <InfoTooltip text="Map each visitor requirement choice to its target process for chatbot prompt instructions and workflow routing" />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleAddRequirement}
-                              className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" /> Add Requirement
-                            </button>
-                          </div>
-
-                          <div className="space-y-2">
-                            {(config.requirements || []).map((req, idx) => (
-                              <div key={req.id || idx} className="flex items-center gap-2 min-w-0">
-                                <input
-                                  type="text"
-                                  value={req.label}
-                                  onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
-                                  placeholder="Requirement Option (e.g. Booking)"
-                                  className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                />
-                                <span className="text-xs text-[#94a3b8] font-mono shrink-0">→</span>
-                                <select
-                                  value={req.processId}
-                                  onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
-                                  className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                >
-                                  {processes.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                {(config.requirements || []).length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveRequirement(idx)}
-                                    className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors shrink-0"
-                                    title="Remove requirement"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 2. Auto Create the Client */}
-                      <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              Auto Create the Client
-                            </span>
-                            <InfoTooltip text="Automatically enroll new visitors as CRM clients in workflow" />
-                          </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
+                      <div className="space-y-2">
+                        {(config.requirements || []).map((req, idx) => (
+                          <div key={req.id || idx} className="flex items-center gap-2 min-w-0">
                             <input
-                              type="checkbox"
-                              checked={config.autoCreateClientEnabled}
-                              onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateClientEnabled: e.target.checked }))}
-                              className="sr-only peer"
+                              type="text"
+                              value={req.label}
+                              onChange={(e) => handleUpdateRequirement(idx, e.target.value)}
+                              placeholder="Requirement Option (e.g. Book an Appointment)"
+                              className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
                             />
-                            <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
-                          </label>
-                        </div>
-
-                        {config.autoCreateClientEnabled && (
-                          <div className="grid grid-cols-2 gap-3 pt-1">
-                            {!(config.formFields.requirement ?? true) && (
-                              <div>
-                                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                  Process
-                                </label>
-                                <select
-                                  value={config.autoCreateProcessId}
-                                  onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateProcessId: e.target.value }))}
-                                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                >
-                                  {processes.map((p) => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-
-                            <div className={!(config.formFields.requirement ?? true) ? "" : "col-span-2"}>
-                              <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                Initial Stage for Created Clients
-                              </label>
-                              <select
-                                value={config.autoCreateStage}
-                                onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateStage: e.target.value }))}
-                                className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                            {(config.requirements || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRequirement(idx)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors shrink-0"
+                                title="Remove requirement"
                               >
-                                {processStages.map((stage) => (
-                                  <option key={stage} value={stage}>{stage}</option>
-                                ))}
-                              </select>
-                            </div>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}
+
+                  {/* Auto Create Contact (Inside Pre-Chat Form only) */}
+                  <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Auto Create Contact
+                        </span>
+                        <InfoTooltip text="Automatically create contact records for web visitors under a configured Entity" />
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.autoCreateClientEnabled}
+                          onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateClientEnabled: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
+                      </label>
+                    </div>
+
+                    {config.autoCreateClientEnabled && (
+                      <div className="pt-1">
+                        <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Entity
+                        </label>
+                        <select
+                          value={config.autoCreateEntity || ""}
+                          onChange={(e) => handleEntityChange(e.target.value)}
+                          className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <option value="">-- Choose an Entity --</option>
+                          {configuredEntities.map((ent) => (
+                            <option key={ent.id} value={ent.id}>
+                              {ent.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* 5. First Responder */}
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION 4: First Responder (unchanged)
+          ════════════════════════════════════════════════════════════════════ */}
           {matchesFirstResponder && (
             <div id="setting-first-responder" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -1135,49 +1092,138 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
 
-          {/* 6. Queue & Routing */}
-          {matchesQueue && (
-            <div id="setting-agent-queue" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION 5: Responsible Settings (renamed and expanded, items 4-6)
+          ════════════════════════════════════════════════════════════════════ */}
+          {matchesResponsible && (
+            <div id="setting-responsible" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-5 shadow-xs">
+              {/* Card Header */}
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Users className="w-4 h-4 text-[#1456f0]" />
-                  <span>Queue & Routing</span>
-                  <InfoTooltip text="Search and assign team members to the visitor chat queue and configure distribution" />
+                  <span>Responsible Settings</span>
+                  <InfoTooltip text="Manage responsible team members, distribution routing modes, sequential priority ordering, and branch working hours." />
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-slate-50 text-[#475569] border-slate-200">
-                  {config.agentQueue?.length || 0} Assigned
+                  {config.agentQueue?.length || 0} Members Assigned
                 </span>
               </div>
 
-              {/* Agent Queue Multi-select */}
-              <div className="space-y-1.5" ref={agentSelectRef}>
-                <div className="flex items-center gap-1.5">
-                  <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Agent Queue ({config.agentQueue?.length || 0} assigned)
+              {/* 5.1 Working Hours (Moved inside Responsible Settings only, item 6) */}
+              <div className="p-4 border border-[#E2E8F0] rounded-xl bg-slate-50/50 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#1456f0]" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Branch &amp; Working Hours Restriction
+                    </span>
+                    <InfoTooltip text="Only route chats during configured working hours, and filter responsible members to those available at the selected branch" />
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.workHoursEnabled}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, workHoursEnabled: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
                   </label>
-                  <InfoTooltip text="Search and assign team members to the visitor chat queue" />
                 </div>
 
+                {config.workHoursEnabled && (
+                  <div className="space-y-3.5 pt-1">
+                    {/* Branch / Location Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Select Organization Branch
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={config.selectedLocation || availableOrgLocations[0]?.name}
+                          onChange={(e) => {
+                            const found = availableOrgLocations.find((l) => l.name === e.target.value);
+                            setConfig((prev) => ({
+                              ...prev,
+                              selectedLocation: e.target.value,
+                              selectedLocationId: found?.id,
+                            }));
+                          }}
+                          className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 pl-8 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {availableOrgLocations.map((loc) => (
+                            <option key={loc.id} value={loc.name}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
+                        <MapPin className="w-4 h-4 text-[#1456f0] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* Synced Branch Schedule Card */}
+                    {activeBranchLocation && (
+                      <div className="p-3 bg-white border border-[#E2E8F0] rounded-xl space-y-1.5 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <Building2 className="w-3.5 h-3.5 text-[#1456f0]" />
+                            <span>{activeBranchLocation.name}</span>
+                          </span>
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                            Synced from Org Data
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-[#475569] space-y-0.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          <div><strong className="text-[#1E293B]">Address:</strong> {activeBranchLocation.address}</div>
+                          <div><strong className="text-[#1E293B]">Hours:</strong> {activeBranchLocation.schedule}</div>
+                          <div><strong className="text-[#1E293B]">Timezone:</strong> {activeBranchLocation.timezone}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 5.2 Responsible Team Members (Item 4) */}
+              <div className="space-y-1.5" ref={agentSelectRef}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Responsible Team Members ({config.agentQueue?.length || 0} assigned)
+                    </label>
+                    <InfoTooltip text="Only organization team members can be assigned. Members are checked for branch availability." />
+                  </div>
+                </div>
+
+                {/* Selected members pill box */}
                 <div
                   onClick={() => setAgentDropdownOpen(true)}
                   className="min-h-[44px] p-2 border border-[#E2E8F0] rounded-xl bg-white flex flex-wrap items-center gap-1.5 cursor-text focus-within:border-[#1456f0] focus-within:ring-2 focus-within:ring-[#1456f0]/10 transition-all"
                 >
                   {(config.agentQueue || []).map((id) => {
-                    const agent = availableAgents.find((a) => a.id === id);
-                    if (!agent) return null;
+                    const member = orgTeamMembers.find((m) => String(m.id) === String(id));
+                    if (!member) return null;
                     const custom = config.customProfiles?.[id];
-                    const name = custom?.name || agent.name;
-                    const avatar = custom?.image || agent.image;
+                    const name = custom?.name || member.name;
+                    const avatar = custom?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=1E293B&color=fff`;
+                    const isAvailable = isMemberAvailableForBranch(member, config.selectedLocation);
 
                     return (
                       <span
                         key={id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-[#1E293B]"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${
+                          !isAvailable && config.workHoursEnabled
+                            ? "bg-amber-50 border-amber-200 text-amber-900"
+                            : "bg-slate-100 border-slate-200 text-[#1E293B]"
+                        }`}
                       >
                         <img src={avatar} alt={name} className="w-4 h-4 rounded-full object-cover" />
                         <span>{name}</span>
+                        {!isAvailable && config.workHoursEnabled && (
+                          <span className="text-[9px] text-amber-600 font-normal">(Off Branch)</span>
+                        )}
                         <X
-                          className="w-3 h-3 text-slate-400 hover:text-red-500 cursor-pointer"
+                          className="w-3 h-3 text-slate-400 hover:text-red-500 cursor-pointer ml-0.5"
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleQueueAgent(id);
@@ -1195,82 +1241,213 @@ export default function WebsiteWidgetSettingsTab({
                       setAgentDropdownOpen(true);
                     }}
                     onFocus={() => setAgentDropdownOpen(true)}
-                    placeholder={(config.agentQueue || []).length === 0 ? "Search team members to assign..." : "Add more..."}
-                    className="flex-1 text-xs outline-none bg-transparent min-w-[120px] text-[#1E293B]"
+                    placeholder={(config.agentQueue || []).length === 0 ? "Search organization team members to assign..." : "Add more team members..."}
+                    className="flex-1 text-xs outline-none bg-transparent min-w-[140px] text-[#1E293B]"
                   />
                 </div>
 
-                {/* Agent Dropdown list */}
+                {/* Team Members Dropdown List */}
                 {agentDropdownOpen && (
-                  <div className="border border-[#E2E8F0] rounded-xl bg-white shadow-lg max-h-48 overflow-y-auto mt-1 p-1 z-30">
-                    {availableAgents
+                  <div className="border border-[#E2E8F0] rounded-xl bg-white shadow-lg max-h-52 overflow-y-auto mt-1 p-1 z-30">
+                    {orgTeamMembers
                       .filter(
-                        (a) =>
-                          !(config.agentQueue || []).includes(a.id) &&
-                          a.name.toLowerCase().includes(agentSearch.toLowerCase())
+                        (m) =>
+                          !(config.agentQueue || []).includes(String(m.id)) &&
+                          (m.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                            m.email.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                            (m.role || "").toLowerCase().includes(agentSearch.toLowerCase()))
                       )
-                      .map((a) => (
-                        <div
-                          key={a.id}
-                          onClick={() => toggleQueueAgent(a.id)}
-                          className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <img src={a.image} alt={a.name} className="w-6 h-6 rounded-full object-cover" />
-                            <div>
-                              <div className="text-xs font-bold text-[#1E293B]">{a.name}</div>
-                              <div className="text-[10px] text-[#64748b]">{a.role}</div>
+                      .map((m) => {
+                        const isAvailable = isMemberAvailableForBranch(m, config.selectedLocation);
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => toggleQueueAgent(String(m.id))}
+                            className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=1E293B&color=fff`}
+                                alt={m.name}
+                                className="w-6 h-6 rounded-full object-cover shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-[#1E293B] truncate">{m.name}</div>
+                                <div className="text-[10px] text-[#64748b] truncate">
+                                  {m.role || m.department || m.email}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {config.workHoursEnabled && (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                                    isAvailable ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                                  }`}
+                                >
+                                  {isAvailable ? "Available in Branch" : "Other Branch"}
+                                </span>
+                              )}
+                              <span className="text-[11px] font-semibold text-[#1456f0]">+ Add</span>
                             </div>
                           </div>
-                          <span className="text-[11px] font-semibold text-[#1456f0]">+ Add</span>
-                        </div>
-                      ))}
-                    {availableAgents.filter(
-                      (a) =>
-                        !(config.agentQueue || []).includes(a.id) &&
-                        a.name.toLowerCase().includes(agentSearch.toLowerCase())
+                        );
+                      })}
+                    {orgTeamMembers.filter(
+                      (m) =>
+                        !(config.agentQueue || []).includes(String(m.id)) &&
+                        m.name.toLowerCase().includes(agentSearch.toLowerCase())
                     ).length === 0 && (
-                        <div className="p-3 text-center text-xs text-[#94a3b8]">No more agents found</div>
-                      )}
+                      <div className="p-3 text-center text-xs text-[#94a3b8]">No organization members found</div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Distribute submissions among employees */}
+              {/* 5.3 Distribution Mode Dropdown (Item 4) */}
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
                     Distribute Submissions Among Employees
                   </label>
-                  <InfoTooltip text="Routing strategy: To everybody (simultaneous), evenly (round-robin), or as enqueued (sequential)" />
+                  <InfoTooltip text="Routing strategy: Simultaneous broadcast to all members, round-robin load balancing, or sequential priority order" />
                 </div>
                 <select
                   value={config.distribution}
                   onChange={(e) => setConfig((prev) => ({ ...prev, distribution: e.target.value as any }))}
-                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
-                  <option value="To everybody">To everybody (Simultaneous broadcast)</option>
-                  <option value="Evenly">Evenly (Round-robin balancing)</option>
-                  <option value="Exactly as enqueued">Exactly as enqueued (Sequential priority)</option>
+                  <option value="To everybody">Simultaneous broadcast (To everybody)</option>
+                  <option value="Evenly">Round-robin (Evenly distribute)</option>
+                  <option value="Exactly as enqueued">Sequential priority (Exactly as enqueued)</option>
                 </select>
               </div>
-            </div>
-          )}
 
-          {/* 7. Agent Display Settings */}
-          {matchesQueue && (
-            <div id="setting-agent-display" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <User className="w-4 h-4 text-[#1456f0]" />
-                  <span>Agent Display Settings</span>
-                  <InfoTooltip text="Choose how agent identities appear to website visitors: actual account, custom alias/avatar, or anonymous" />
+              {/* 5.4 Priority Assignment for Sequential Mode (Item 5 - Hidden for other modes) */}
+              {config.distribution === "Exactly as enqueued" && (
+                <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/20 space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-blue-100/60 pb-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-[#1E293B] uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Sequential Routing Priority
+                      </span>
+                      <InfoTooltip text="Priority 1 receives the chat first. If unavailable or unanswered, falls through to Priority 2, 3, etc. Drag to reorder priority." />
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-semibold">
+                      {config.agentQueue.length} {config.agentQueue.length === 1 ? "member" : "members"} ordered
+                    </span>
+                  </div>
+
+                  {(config.agentQueue || []).length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                      Assign team members above to configure sequential priority order.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {config.agentQueue.map((agentId, index) => {
+                        const member = orgTeamMembers.find((m) => String(m.id) === String(agentId));
+                        if (!member) return null;
+                        const custom = config.customProfiles?.[agentId];
+                        const name = custom?.name || member.name;
+                        const role = custom?.position || member.role || "Team Member";
+                        const isAvailable = isMemberAvailableForBranch(member, config.selectedLocation);
+
+                        return (
+                          <div
+                            key={agentId}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragOver={(e) => handleDragOver(e, index)}
+                            onDrop={(e) => handleDrop(e, index)}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border bg-white transition-all shadow-2xs ${
+                              draggedIdx === index ? "opacity-50 border-blue-400 bg-blue-50/40" : "border-[#E2E8F0] hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {/* Drag handle */}
+                              <div
+                                className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-0.5"
+                                title="Drag to reorder priority"
+                              >
+                                <GripVertical className="w-4 h-4" />
+                              </div>
+
+                              {/* Numbered Priority Badge */}
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  index === 0
+                                    ? "bg-[#1456f0] text-white shadow-xs"
+                                    : "bg-slate-100 text-[#475569] border border-slate-200"
+                                }`}
+                              >
+                                {index + 1}
+                              </div>
+
+                              {/* Member Avatar */}
+                              <div className="relative shrink-0">
+                                <img
+                                  src={
+                                    custom?.image ||
+                                    `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=1E293B&color=fff`
+                                  }
+                                  alt={name}
+                                  className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                                />
+                                {config.workHoursEnabled && (
+                                  <span
+                                    className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${
+                                      isAvailable ? "bg-emerald-500" : "bg-amber-400"
+                                    }`}
+                                  />
+                                )}
+                              </div>
+
+                              {/* Member Details */}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-bold text-[#1E293B] truncate">{name}</span>
+                                  {index === 0 ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-[#1456f0] border border-blue-200">
+                                      Priority 1 (First Responder)
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-50 text-slate-600 border border-slate-200">
+                                      Fallback #{index}
+                                    </span>
+                                  )}
+                                  {!isAvailable && config.workHoursEnabled && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                      Off Branch
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-[#64748b] truncate">{role}</div>
+                              </div>
+                            </div>
+
+                            {/* Remove button */}
+                            <div className="flex items-center shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleQueueAgent(agentId)}
+                                className="p-1 text-slate-400 hover:text-red-500 cursor-pointer"
+                                title="Remove member"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
+              {/* 5.5 Agent Information Display Mode */}
+              <div className="pt-2 border-t border-gray-100 space-y-3">
+                <div className="flex items-center gap-1.5">
                   <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
                     Agent Information Display Mode
                   </label>
@@ -1279,129 +1456,132 @@ export default function WebsiteWidgetSettingsTab({
                 <select
                   value={config.agentDisplay}
                   onChange={(e) => setConfig((prev) => ({ ...prev, agentDisplay: e.target.value as any }))}
-                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   <option value="user">User Profile (Show actual account info)</option>
                   <option value="custom">Use Custom Profile (Mask real identity)</option>
                   <option value="hide">Hide User Information (Anonymous agent)</option>
                 </select>
-              </div>
 
-              {config.agentDisplay === "custom" && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Custom Profiles
-                    </span>
-                    <InfoTooltip text="Configure custom aliases and avatars for queue agents" />
-                  </div>
-
-                  {(config.agentQueue || []).length === 0 ? (
-                    <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-400">
-                      No agents in queue. Add agents in the Queue section above.
+                {config.agentDisplay === "custom" && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Custom Profiles
+                      </span>
+                      <InfoTooltip text="Configure custom aliases and avatars for queue agents" />
                     </div>
-                  ) : (
-                    (config.agentQueue || []).map((id) => {
-                      const base = availableAgents.find((a) => a.id === id);
-                      if (!base) return null;
-                      const custom = config.customProfiles?.[id] || {};
-                      const displayName = custom.name !== undefined ? custom.name : base.name;
-                      const displayPosition = custom.position !== undefined ? custom.position : base.role;
-                      const displayImage = custom.image || base.image;
 
-                      return (
-                        <div key={id} className="p-3.5 border border-[#E2E8F0] rounded-xl bg-blue-50/20 space-y-3 relative">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-[#64748b] text-[11px] flex items-center gap-1.5">
-                              <img src={base.image} alt={base.name} className="w-4 h-4 rounded-full opacity-60" />
-                              Syncing from: <strong className="text-[#1E293B]">{base.name}</strong>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => toggleQueueAgent(id)}
-                              className="text-[#94a3b8] hover:text-red-500 cursor-pointer text-xs"
-                              title="Remove from queue"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                    {(config.agentQueue || []).length === 0 ? (
+                      <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-400">
+                        No team members in queue. Add members in the Responsible Settings above.
+                      </div>
+                    ) : (
+                      (config.agentQueue || []).map((id) => {
+                        const base = orgTeamMembers.find((m) => String(m.id) === String(id));
+                        if (!base) return null;
+                        const custom = config.customProfiles?.[id] || {};
+                        const displayName = custom.name !== undefined ? custom.name : base.name;
+                        const displayPosition = custom.position !== undefined ? custom.position : base.role || "Care Coordinator";
+                        const displayImage =
+                          custom.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(base.name)}&background=1E293B&color=fff`;
 
-                          <div className="flex items-center gap-3">
-                            {/* Avatar with popover */}
-                            <div className="relative">
-                              <img
-                                src={displayImage}
-                                alt={displayName}
-                                onClick={() => setPopoverAgentId(popoverAgentId === id ? null : id)}
-                                className="w-12 h-12 rounded-full object-cover border-2 border-[#1456f0]/30 cursor-pointer hover:border-[#1456f0] transition-colors"
-                                title="Click to choose avatar"
-                              />
-
-                              {popoverAgentId === id && (
-                                <div className="absolute top-14 left-0 bg-white border border-[#E2E8F0] rounded-xl p-3 shadow-xl z-50 w-56 space-y-2.5">
-                                  <div className="text-[11px] font-bold text-[#475569] uppercase">Select System Avatar</div>
-                                  <div className="grid grid-cols-4 gap-2">
-                                    {SYSTEM_AVATARS.map((url, i) => (
-                                      <img
-                                        key={i}
-                                        src={url}
-                                        onClick={() => {
-                                          updateCustomProfile(id, "image", url);
-                                          setPopoverAgentId(null);
-                                        }}
-                                        className="w-8 h-8 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform"
-                                      />
-                                    ))}
-                                  </div>
-                                  <div className="border-t border-gray-100 pt-2">
-                                    <label className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer justify-center">
-                                      <Upload className="w-3 h-3" /> Upload Custom Photo
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => handleCustomAvatarUpload(id, e)}
-                                      />
-                                    </label>
-                                  </div>
-                                </div>
-                              )}
+                        return (
+                          <div key={id} className="p-3.5 border border-[#E2E8F0] rounded-xl bg-blue-50/20 space-y-3 relative">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-[#64748b] text-[11px] flex items-center gap-1.5">
+                                <img src={displayImage} alt={base.name} className="w-4 h-4 rounded-full opacity-60" />
+                                Customizing for: <strong className="text-[#1E293B]">{base.name}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleQueueAgent(id)}
+                                className="text-[#94a3b8] hover:text-red-500 cursor-pointer text-xs"
+                                title="Remove from queue"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
 
-                            <div className="flex-1 grid grid-cols-2 gap-2">
-                              <input
-                                type="text"
-                                value={displayName}
-                                onChange={(e) => updateCustomProfile(id, "name", e.target.value)}
-                                placeholder="Public Display Name"
-                                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                              />
-                              <input
-                                type="text"
-                                value={displayPosition}
-                                onChange={(e) => updateCustomProfile(id, "position", e.target.value)}
-                                placeholder="Position / Title"
-                                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                              />
+                            <div className="flex items-center gap-3">
+                              {/* Avatar with popover */}
+                              <div className="relative">
+                                <img
+                                  src={displayImage}
+                                  alt={displayName}
+                                  onClick={() => setPopoverAgentId(popoverAgentId === id ? null : id)}
+                                  className="w-12 h-12 rounded-full object-cover border-2 border-[#1456f0]/30 cursor-pointer hover:border-[#1456f0] transition-colors"
+                                  title="Click to choose avatar"
+                                />
+
+                                {popoverAgentId === id && (
+                                  <div className="absolute top-14 left-0 bg-white border border-[#E2E8F0] rounded-xl p-3 shadow-xl z-50 w-56 space-y-2.5">
+                                    <div className="text-[11px] font-bold text-[#475569] uppercase">Select System Avatar</div>
+                                    <div className="grid grid-cols-4 gap-2">
+                                      {SYSTEM_AVATARS.map((url, i) => (
+                                        <img
+                                          key={i}
+                                          src={url}
+                                          onClick={() => {
+                                            updateCustomProfile(id, "image", url);
+                                            setPopoverAgentId(null);
+                                          }}
+                                          className="w-8 h-8 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform"
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="border-t border-gray-100 pt-2">
+                                      <label className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer justify-center">
+                                        <Upload className="w-3 h-3" /> Upload Custom Photo
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          onChange={(e) => handleCustomAvatarUpload(id, e)}
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex-1 grid grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={displayName}
+                                  onChange={(e) => updateCustomProfile(id, "name", e.target.value)}
+                                  placeholder="Public Display Name"
+                                  className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                />
+                                <input
+                                  type="text"
+                                  value={displayPosition}
+                                  onChange={(e) => updateCustomProfile(id, "position", e.target.value)}
+                                  placeholder="Position / Title"
+                                  className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* 8. Widget Installation & Embed Code */}
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION 6: Widget Installation & Embed Code (at the bottom)
+          ════════════════════════════════════════════════════════════════════ */}
           {matchesEmbed && (
             <div id="setting-embed-code" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Code className="w-4 h-4 text-[#1456f0]" />
-                  <span>Widget Installation & Embed Code</span>
+                  <span>Widget Installation &amp; Embed Code</span>
                   <InfoTooltip text="Paste this HTML snippet right before the closing </body> tag of your website to activate the chatbot widget" />
                 </div>
                 <button
@@ -1427,7 +1607,6 @@ export default function WebsiteWidgetSettingsTab({
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

@@ -2767,15 +2767,17 @@ export default function Chats() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateGroupDrawer(true)}
-                  className="h-[36px] px-4 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>New Group</span>
-                </button>
+                {channelFilter === "companion" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateGroupDrawer(true)}
+                    className="h-[36px] px-4 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>New Group</span>
+                  </button>
+                )}
                 {(channelFilter === "website" || channelFilter === "companion") && (
                   <button
                     type="button"
@@ -2921,6 +2923,7 @@ export default function Chats() {
                   />
                   <MessageComposerBar
                     conversation={activeConversation}
+                    channel={channelFilter}
                     session={computeSessionWindow(activeConversation)}
                     onSendMessage={(text, opts) => handleSendMessage(text, opts)}
                     onSendTemplate={handleSendTemplateDirectly}

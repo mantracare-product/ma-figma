@@ -83,3 +83,37 @@ export function createClientWithProcessStage(
     return null;
   }
 }
+
+export function createContactWithoutProcess(
+  name: string,
+  phone: string,
+  email: string = "",
+  stage: string = ""
+): any {
+  try {
+    const raw = sessionStorage.getItem("clients");
+    const clients = raw ? JSON.parse(raw) : [];
+    const newClient = {
+      id: `CL-SIM-${Date.now()}`,
+      name,
+      email,
+      phone,
+      phoneNumber: phone,
+      country: "US",
+      countryCode: "+1",
+      countryFlag: "🇺🇸",
+      processes: [], // Contacts must not be assigned to or trigger any Process
+      stage: stage || "New Contact",
+      source: "website",
+      responsible: "",
+      lastContact: new Date().toISOString().split("T")[0],
+      status: "Active",
+      processStages: [],
+    };
+    sessionStorage.setItem("clients", JSON.stringify([newClient, ...clients]));
+    notifyClientsChanged();
+    return newClient;
+  } catch {
+    return null;
+  }
+}

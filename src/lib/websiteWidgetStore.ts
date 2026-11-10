@@ -4,7 +4,7 @@ const STORAGE_KEY = "websiteWidgetConfig";
 export interface RequirementItem {
   id: string;
   label: string;
-  processId: string;
+  processId?: string;
 }
 
 export interface WebsiteWidgetConfig {
@@ -15,7 +15,7 @@ export interface WebsiteWidgetConfig {
   removeSignature: boolean;
   position: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
-  // Working time preferences
+  // Working time preferences (inside Responsible Settings)
   workHoursEnabled: boolean;
   selectedLocationId?: string;
   selectedLocation?: string;
@@ -39,26 +39,29 @@ export interface WebsiteWidgetConfig {
     processSelect?: boolean;
   };
   requirements: RequirementItem[];
-  defaultProcessId: string;
-  processLabelMap: Record<string, string>;
+  defaultProcessId?: string;
+  processLabelMap?: Record<string, string>;
 
-  // Chat Routing Settings
+  // Auto Create Contact
+  autoCreateClientEnabled: boolean;
+  autoCreateEntity?: string;
+  autoCreateProcessId?: string;
+  autoCreateStage: string;
+
+  // Responsible Settings
   firstResponder: "ai" | "human";
   aiTransferPhrases: string;
   agentQueue: string[];
-  autoCreateClientEnabled: boolean;
-  autoCreateProcessId: string;
-  autoCreateStage: string;
   distribution: "To everybody" | "Evenly" | "Exactly as enqueued";
   agentDisplay: "user" | "custom" | "hide";
   customProfiles: Record<string, { name?: string; position?: string; image?: string }>;
 }
 
 export const DEFAULT_REQUIREMENTS: RequirementItem[] = [
-  { id: "req-1", label: "Book an Appointment", processId: "1" },
-  { id: "req-2", label: "Insurance & Coverage Inquiry", processId: "2" },
-  { id: "req-3", label: "Billing & Invoices", processId: "3" },
-  { id: "req-4", label: "General Health Consultation", processId: "1" },
+  { id: "req-1", label: "Book an Appointment" },
+  { id: "req-2", label: "Insurance & Coverage Inquiry" },
+  { id: "req-3", label: "Billing & Invoices" },
+  { id: "req-4", label: "General Health Consultation" },
 ];
 
 const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
@@ -70,8 +73,8 @@ const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
   position: "bottom-right",
 
   workHoursEnabled: false,
-  selectedLocationId: "loc-1",
-  selectedLocation: "California Branch",
+  selectedLocationId: "",
+  selectedLocation: "",
   timezone: "(UTC-05:00) Eastern Time (US & Canada)",
   workHoursFrom: "09:00",
   workHoursTo: "17:00",
@@ -87,23 +90,17 @@ const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
     email: true,
     phone: true,
     requirement: true,
-    processSelect: true,
+    processSelect: false,
   },
   requirements: DEFAULT_REQUIREMENTS,
-  defaultProcessId: "1", // Client Intake
-  processLabelMap: {
-    "1": "Book an Intake Appointment",
-    "2": "Insurance Verification & Coverage",
-    "3": "Billing & Payment Inquiry",
-    "4": "Schedule Follow-up Consultation",
-  },
 
   firstResponder: "ai",
   aiTransferPhrases: "talk to human, agent, support, representative",
-  agentQueue: ["1", "2"],
-  autoCreateClientEnabled: true,
-  autoCreateProcessId: "1",
-  autoCreateStage: "New Lead",
+  agentQueue: [],
+  autoCreateClientEnabled: false,
+  autoCreateEntity: "",
+  autoCreateProcessId: "",
+  autoCreateStage: "",
   distribution: "Evenly",
   agentDisplay: "user",
   customProfiles: {},
@@ -127,17 +124,15 @@ export function getWebsiteWidgetConfig(): WebsiteWidgetConfig {
         requirement: parsed.formFields?.requirement !== undefined ? parsed.formFields.requirement : true,
       },
       requirements: Array.isArray(parsed.requirements) && parsed.requirements.length > 0
-        ? parsed.requirements
+        ? parsed.requirements.map((r: any) => ({ id: r.id || `req-${Math.random()}`, label: r.label || "" }))
         : DEFAULT_REQUIREMENTS,
-      processLabelMap: {
-        ...DEFAULT_WIDGET_CONFIG.processLabelMap,
-        ...(parsed.processLabelMap || {}),
-      },
       workDays: parsed.workDays || DEFAULT_WIDGET_CONFIG.workDays,
       excludePages: parsed.excludePages || DEFAULT_WIDGET_CONFIG.excludePages,
       includePages: parsed.includePages || DEFAULT_WIDGET_CONFIG.includePages,
-      agentQueue: parsed.agentQueue || DEFAULT_WIDGET_CONFIG.agentQueue,
+      agentQueue: Array.isArray(parsed.agentQueue) ? parsed.agentQueue : DEFAULT_WIDGET_CONFIG.agentQueue,
       customProfiles: parsed.customProfiles || DEFAULT_WIDGET_CONFIG.customProfiles,
+      autoCreateEntity: parsed.autoCreateEntity || "",
+      autoCreateStage: parsed.autoCreateStage || "",
     };
   } catch {
     return DEFAULT_WIDGET_CONFIG;
@@ -150,4 +145,3 @@ export function saveWebsiteWidgetConfig(config: WebsiteWidgetConfig): void {
     notifyConfigChanged();
   } catch {}
 }
-
