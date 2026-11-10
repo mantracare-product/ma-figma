@@ -693,11 +693,12 @@ export default function NewConsultationDrawer({
     <DrawerShell
       isOpen={isOpen}
       onClose={onClose}
-      title="Add New Scribe"
+      title="Ambient AI Scribe"
       subtitle=""
       icon={<Mic className="w-5 h-5 text-[#2c3e50]" />}
       width="max-w-2xl"
       zIndex={zIndex}
+      isModal={true}
       footer={
         <div className="flex items-center justify-between w-full">
           <button

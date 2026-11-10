@@ -15,6 +15,7 @@ export interface DrawerShellProps {
   bodyClassName?: string;
   footer?: React.ReactNode;
   isGenerating?: boolean;
+  isModal?: boolean;
   children: React.ReactNode;
 }
 
@@ -31,6 +32,7 @@ export default function DrawerShell({
   bodyClassName,
   footer,
   isGenerating = false,
+  isModal = false,
   children,
 }: DrawerShellProps) {
   useEffect(() => {
@@ -54,7 +56,81 @@ export default function DrawerShell({
     }
   };
 
-  const content = (
+  const content = isModal ? (
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 overflow-hidden"
+      style={{ zIndex }}
+    >
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        onClick={handleAttemptClose}
+      />
+
+      {/* Modal Popup Panel */}
+      <div
+        className={`relative w-full ${width || "max-w-2xl"} max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden animate-in zoom-in-95 duration-200`}
+        style={{ fontFamily: "DM Sans, sans-serif" }}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            {icon && (
+              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
+                {icon}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h2
+                className="text-base font-bold text-gray-900 truncate"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                {title}
+              </h2>
+              {subtitle && (
+                <p
+                  className="text-xs text-gray-500 truncate mt-0.5"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {subtitle}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {headerRight}
+            <button
+              type="button"
+              onClick={handleAttemptClose}
+              className="w-8 h-8 rounded-lg hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Optional Tabs Bar */}
+        {tabs && (
+          <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-2.5">
+            {tabs}
+          </div>
+        )}
+
+        {/* Modal Scrollable Body */}
+        <div className={`flex-1 overflow-y-auto overflow-x-hidden min-h-0 ${bodyClassName !== undefined ? bodyClassName : "p-6 space-y-6"}`}>
+          {children}
+        </div>
+
+        {/* Modal Sticky Footer */}
+        {footer && (
+          <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : (
     <div
       className="fixed inset-0 flex justify-end overflow-hidden"
       style={{ zIndex }}
