@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, Sparkles, GripVertical } from "lucide-react";
 import AIAssistantPopup from "./AIAssistantPopup";
-import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import AIScribePopup from "../scribe/AIScribePopup";
 import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
 import { ScribeSession } from "../../../lib/scribeSessionStore";
 
@@ -153,11 +153,11 @@ export default function AIAssistantCapsule() {
         }}
       />
 
-      {/* ── Scribe Consultation Drawer ── */}
-      <NewConsultationDrawer
+      {/* ── Slim Draggable AI Scribe Popup Window ── */}
+      <AIScribePopup
         isOpen={isNewConsultationOpen}
         onClose={() => setIsNewConsultationOpen(false)}
-        zIndex={2147483640}
+        zIndex={2147483645}
         onSessionCreated={() => {
           window.dispatchEvent(new Event("scribe-store-updated"));
         }}
