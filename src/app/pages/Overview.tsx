@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   PieChart,
@@ -189,6 +187,7 @@ export default function Overview() {
     return tasks.slice(0, 5);
   }, [tasks]);
 
+
   // Top 5 notifications for quick overview
   const displayedNotifications = useMemo(() => {
     return notifications.slice(0, 5);
@@ -296,185 +295,215 @@ export default function Overview() {
             </div>
           </div>
 
-          {/* ROW 2: 4 Stat Cards in 2 rows (3 + 3 spans each) */}
-          {/* Card 1: Total Calls */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#1456f0] flex-shrink-0">
-              <Phone className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
-                TOTAL CALLS
-              </p>
-              <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {totalCalls}
-              </p>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                {isFresh ? "No calls registered yet" : "Across selected filters"}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 2: Completed */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-[#10b981] flex-shrink-0">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
-                COMPLETED
-              </p>
-              <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {completedCalls}
-              </p>
-              <p className="text-[11px] text-emerald-600 font-semibold mt-0.5 tabular-nums">
-                {isFresh ? "0% success rate" : `${successRate} success rate`}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3: Failed / Missed */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100/80 flex items-center justify-center text-[#ef4444] flex-shrink-0">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
-                FAILED / MISSED
-              </p>
-              <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {failedCalls}
-              </p>
-              <p className="text-[11px] text-rose-500 font-semibold mt-0.5">
-                {isFresh ? "Clean record" : "Requires attention"}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 4: Avg Duration */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600 flex-shrink-0">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
-                AVG. DURATION
-              </p>
-              <p
-                className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums font-mono"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {avgDuration}
-              </p>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                Per successful call
-              </p>
-            </div>
-          </div>
-
-          {/* ROW 3: Trend Overview (Span 4) + Call Distribution (Span 2) */}
-          {/* Trend Overview */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col justify-between">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#1456f0] flex items-center justify-center flex-shrink-0 shadow-2xs">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3
-                    className="text-base font-bold text-[#222222]"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Trend Overview
-                  </h3>
-                  <p className="text-xs text-[#64748b]">
-                    Visualizing call performance and volume trends
-                  </p>
-                </div>
+          {/* ROW 2: 4 Call Stat Cards in a Single Row (Span 6, 4 columns) */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Card 1: Total Calls */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#1456f0] flex-shrink-0">
+                <Phone className="w-5 h-5" />
               </div>
-
-              {/* Growth Pill Badge */}
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                {isFresh && callLogs.length === 0 ? (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200/60 shadow-2xs">
-                    0% <span className="text-[10px] text-slate-400 font-normal">ACTIVITY</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs tabular-nums">
-                    ↗ +12.5% <span className="text-[10px] text-emerald-500 font-normal">GROWTH</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="flex items-center justify-end gap-4 text-xs mb-2">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#1456f0]" />
-                <span className="text-slate-600 font-medium">Total Volume</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#10b981]" />
-                <span className="text-slate-600 font-medium">Successful</span>
-              </div>
-            </div>
-
-            {/* Area Chart or Clean Empty State */}
-            {isFresh && callLogs.length === 0 ? (
-              <div className="h-72 w-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                <BarChart3 className="w-10 h-10 text-slate-300 mb-2" />
-                <p className="text-xs font-bold text-slate-700">No Performance Data Yet</p>
-                <p className="text-[11px] text-slate-400 max-w-xs mt-0.5">
-                  Your call volumes and success rates will chart automatically as callers engage with your assistant.
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
+                  TOTAL CALLS
+                </p>
+                <p
+                  className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {totalCalls}
+                </p>
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                  {isFresh ? "No calls registered yet" : "Across selected filters"}
                 </p>
               </div>
-            ) : (
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={performanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#1456f0" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#1456f0" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
-                    <ChartTooltip content={<CustomPerformanceTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="totalVolume"
-                      stroke="#1456f0"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#colorTotal)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="successful"
-                      stroke="#10b981"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#colorSuccess)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+            </div>
+
+            {/* Card 2: Completed */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-[#10b981] flex-shrink-0">
+                <CheckCircle className="w-5 h-5" />
               </div>
-            )}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
+                  COMPLETED
+                </p>
+                <p
+                  className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {completedCalls}
+                </p>
+                <p className="text-[11px] text-emerald-600 font-semibold mt-0.5 tabular-nums">
+                  {isFresh ? "0% success rate" : `${successRate} success rate`}
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Failed / Missed */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100/80 flex items-center justify-center text-[#ef4444] flex-shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
+                  FAILED / MISSED
+                </p>
+                <p
+                  className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {failedCalls}
+                </p>
+                <p className="text-[11px] text-rose-500 font-semibold mt-0.5">
+                  {isFresh ? "Clean record" : "Requires attention"}
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Avg Duration */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center gap-4 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600 flex-shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-display">
+                  AVG. DURATION
+                </p>
+                <p
+                  className="text-2xl sm:text-3xl font-bold text-[#222222] tracking-tight mt-0.5 tabular-nums font-mono"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {avgDuration}
+                </p>
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                  Per successful call
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ROW 3: Active Tasks (Span 4) + Call Distribution (Span 2) in the Same Row */}
+          {/* Active Tasks */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 space-y-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3.5 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center">
+                    <CheckSquare className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3
+                        className="text-xs font-bold uppercase tracking-wider text-slate-900"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Active Tasks
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 tabular-nums">
+                        {tasks.length}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Active assigned tasks, deliverables, and team execution pipelines
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  to="/tasks"
+                  className="text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>View all tasks</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* Tasks Rows List */}
+              {displayedTasks.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 italic">
+                  No active tasks.
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {displayedTasks.map((task) => {
+                    const allItems = task.checklists?.flatMap((c) => c.items) || [];
+                    const completedItems = allItems.filter((i) => i.isCompleted);
+                    const totalItems = allItems.length;
+                    const isCompleted = task.status === "completed";
+                    const targetUrl = `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`;
+
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => navigate(targetUrl)}
+                        className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {totalItems > 0 ? (
+                            <div className="shrink-0 flex items-center">
+                              <CircularProgressRing
+                                value={completedItems.length}
+                                max={totalItems}
+                                size={20}
+                                strokeWidth={2.5}
+                                indicatorColor={isCompleted ? "#10b981" : "#1456f0"}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                                isCompleted
+                                  ? "bg-emerald-500 border-emerald-500 text-white"
+                                  : "border-slate-300 text-transparent"
+                              }`}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              {task.isImportant && (
+                                <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                              )}
+                              <span
+                                className={`text-xs font-semibold truncate ${
+                                  isCompleted
+                                    ? "line-through text-slate-400"
+                                    : "text-slate-900 group-hover:text-[#1456f0]"
+                                }`}
+                              >
+                                {task.title}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 font-medium">
+                              {task.deadline && (
+                                <span className="flex items-center gap-1 tabular-nums">
+                                  <Calendar className="w-3 h-3" />
+                                  {task.deadline}
+                                </span>
+                              )}
+                              {totalItems > 0 && (
+                                <span className="tabular-nums">
+                                  · {completedItems.length}/{totalItems} done
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {task.stageName || "Task Created"}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Call Distribution */}
@@ -558,217 +587,7 @@ export default function Overview() {
             )}
           </div>
 
-          {/* ROW 4: Tasks & Notifications Section (Span 3 + Span 3) */}
-          {/* Tasks Panel */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center">
-                  <CheckSquare className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3
-                      className="text-xs font-bold uppercase tracking-wider text-slate-900"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Tasks
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 tabular-nums">
-                      {tasks.length}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Active assigned tasks and clinical deliverables
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                to="/tasks"
-                className="text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                <span>View all</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {/* Tasks Rows List */}
-            {displayedTasks.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 italic">
-                No active tasks.
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {displayedTasks.map((task) => {
-                  const allItems = task.checklists?.flatMap((c) => c.items) || [];
-                  const completedItems = allItems.filter((i) => i.isCompleted);
-                  const totalItems = allItems.length;
-                  const isCompleted = task.status === "completed";
-                  const targetUrl = `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`;
-
-                  return (
-                    <div
-                      key={task.id}
-                      onClick={() => navigate(targetUrl)}
-                      className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {totalItems > 0 ? (
-                          <div className="shrink-0 flex items-center">
-                            <CircularProgressRing
-                              value={completedItems.length}
-                              max={totalItems}
-                              size={20}
-                              strokeWidth={2.5}
-                              indicatorColor={isCompleted ? "#10b981" : "#1456f0"}
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                              isCompleted
-                                ? "bg-emerald-500 border-emerald-500 text-white"
-                                : "border-slate-300 text-transparent"
-                            }`}
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                          </div>
-                        )}
-
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            {task.isImportant && (
-                              <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
-                            )}
-                            <span
-                              className={`text-xs font-semibold truncate ${
-                                isCompleted
-                                  ? "line-through text-slate-400"
-                                  : "text-slate-900 group-hover:text-[#1456f0]"
-                              }`}
-                            >
-                              {task.title}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 font-medium">
-                            {task.deadline && (
-                              <span className="flex items-center gap-1 tabular-nums">
-                                <Calendar className="w-3 h-3" />
-                                {task.deadline}
-                              </span>
-                            )}
-                            {totalItems > 0 && (
-                              <span className="tabular-nums">
-                                · {completedItems.length}/{totalItems} done
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                          {task.stageName || "Task Created"}
-                        </span>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Notifications Panel */}
-          <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                  <Bell className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3
-                      className="text-xs font-bold uppercase tracking-wider text-slate-900"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Notifications
-                    </h3>
-                    {unreadCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-[#1456f0] tabular-nums">
-                        {unreadCount} unread
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Live system alerts and workflow dispatches
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  window.dispatchEvent(
-                    new CustomEvent(OPEN_NOTIFICATIONS_DRAWER_EVENT)
-                  )
-                }
-                className="text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                <span>Open Center</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Notifications Rows List */}
-            {displayedNotifications.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 italic">
-                No recent notifications.
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {displayedNotifications.map((notif) => {
-                  return (
-                    <div
-                      key={notif.id}
-                      onClick={() => {
-                        markNotificationAsRead(notif.id);
-                        if (notif.link) {
-                          navigate(notif.link);
-                        }
-                      }}
-                      className={`py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors cursor-pointer flex items-start justify-between gap-3 group ${
-                        !notif.read ? "bg-blue-50/20" : ""
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <span
-                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                            !notif.read ? "bg-[#1456f0]" : "bg-slate-300"
-                          }`}
-                        />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 group-hover:text-[#1456f0] truncate">
-                            {notif.title}
-                          </p>
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                            {notif.message}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5 font-mono">
-                        {notif.timestamp || "Recently"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ROW 5: Conversion Overview (Span 3) + Performance Analysis (Span 3) */}
+          {/* ROW 4: Conversion Overview (Span 3) + Performance Analysis (Span 3) */}
           {/* Conversion Overview */}
           <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6">
             <div className="flex items-center justify-between mb-4">

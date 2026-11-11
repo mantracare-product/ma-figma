@@ -1,34 +1,40 @@
-import React, { useRef, useMemo } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router";
 import {
   ArrowLeft,
+  Check,
   CheckSquare,
+  CheckCircle2,
   Star,
   Trash2,
   FileCode,
   AlertTriangle,
   Lock,
   Share2,
+  Calendar,
+  Clock,
+  Eye,
+  User,
+  Users,
+  ExternalLink,
+  Download,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
-import { useTasks } from "../../lib/tasksStore";
-import { TaskEntity, TaskStatus } from "../../types/task";
+import {
+  useTasks,
+  getPersonTaskProgress,
+  getTaskOverallProgress,
+} from "../../lib/tasksStore";
+import { TaskEntity, TaskStatus, TaskStudioItem } from "../../types/task";
 import { useProcessStore, DEFAULT_TASK_PROCESSES, DEFAULT_ENTITY_PROCESSES, Stage } from "../../lib/useProcessStore";
 import { useTeamMembers } from "../../lib/teamStore";
 import { useAuth } from "../context/AuthContext";
-import TaskRecurrenceDrawer from "../components/tasks/TaskRecurrenceDrawer";
-import TaskTimePlanningDrawer from "../components/tasks/TaskTimePlanningDrawer";
 import ShareTaskDrawer from "../components/tasks/ShareTaskDrawer";
-import {
-  TaskDescriptionSection,
-  TaskChecklistsSection,
-  TaskSubtasksSection,
-  TaskAttachmentsSection,
-  TaskStageSection,
-  TaskAssignmentSection,
-  TaskPlanningSection,
-  TaskObserversSection,
-} from "../components/tasks/TaskContentSections";
+import { CircularProgressRing } from "../components/ui/CircularProgressRing";
 import { toast } from "sonner";
 
 export default function TaskDetailPage() {
@@ -45,16 +51,7 @@ export default function TaskDetailPage() {
     deleteTask,
     toggleTaskStatus,
     updateTaskStage,
-    toggleChecklistItem,
-    toggleItemImportance,
-    addChecklistItem,
-    deleteChecklistItem,
-    addChecklist,
-    deleteChecklist,
-    addObserver,
-    removeObserver,
-    addSubtask,
-    toggleSubtask,
+    toggleStudioItemCompletion,
   } = useTasks();
 
   const { processes } = useProcessStore();
@@ -68,8 +65,9 @@ export default function TaskDetailPage() {
     return tasks.find((t) => t.id === taskId) || null;
   }, [taskId, tasks]);
 
-  // Current persona for permission scoping
+  // Current persona for permission scoping & completion
   const currentUserName = user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta");
+  const currentUserId = (user as any)?.id || (isAdmin ? "admin-1" : "usr-lead-physician");
 
   const isAssignedToUser = (t: TaskEntity) => {
     const u = currentUserName.toLowerCase();
@@ -93,6 +91,15 @@ export default function TaskDetailPage() {
       return true;
     }
     if (
+      t.responsiblePeople &&
+      t.responsiblePeople.some((p) => {
+        const pName = (p.name || "").toLowerCase();
+        return pName.includes(u) || u.includes(pName) || pName.includes("alistair");
+      })
+    ) {
+      return true;
+    }
+    if (
       t.assignees &&
       t.assignees.some((a) => {
         const name = (a.assigneeName || "").toLowerCase();
@@ -109,6 +116,13 @@ export default function TaskDetailPage() {
     return false;
   };
 
+  // "for the task that i created show the task edititng drawere only , for the task assigned to me show pages"
+  React.useEffect(() => {
+    if (task && !isAssignedToUser(task)) {
+      navigate(isAdmin ? `/admin/tasks?editTaskId=${task.id}` : `/tasks?editTaskId=${task.id}`, { replace: true });
+    }
+  }, [task, isAdmin, navigate]);
+
   // Determine stage options
   const taskStages = useMemo<Stage[]>(() => {
     if (task?.workflowId) {
@@ -122,10 +136,8 @@ export default function TaskDetailPage() {
     ];
   }, [task, taskWorkflows]);
 
-  const [showRecurrenceDrawer, setShowRecurrenceDrawer] = React.useState(false);
-  const [showTimePlanningDrawer, setShowTimePlanningDrawer] = React.useState(false);
-  const [showShareDrawer, setShowShareDrawer] = React.useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showShareDrawer, setShowShareDrawer] = useState(false);
+  const [showPeopleBreakdown, setShowPeopleBreakdown] = useState(false);
 
   const backUrl = isAdmin ? "/admin/tasks" : "/tasks";
 
@@ -158,188 +170,94 @@ export default function TaskDetailPage() {
     );
   }
 
-  // 2. Comprehensive ModulePermissionConfig Role Scope Check (all / department / own / deny)
-  const permissionCheck = (() => {
-    if (isAdmin) return { allowed: true };
-
-    const userRoleStr = (user?.role || "Staff").toLowerCase();
-    if (userRoleStr.includes("super admin") || userRoleStr.includes("platform administrator")) {
-      return { allowed: true };
-    }
-
-    try {
-      const rawRoles = localStorage.getItem("ma_admin_roles_store_v2");
-      if (rawRoles) {
-        const roles = JSON.parse(rawRoles);
-        const matchedRole = roles.find(
-          (r: any) =>
-            (r.roleName || "").toLowerCase() === userRoleStr ||
-            (r.name || "").toLowerCase() === userRoleStr
-        );
-        if (matchedRole && matchedRole.permissions) {
-          const taskPerm = matchedRole.permissions.tasks || matchedRole.permissions.processes;
-          if (taskPerm) {
-            // "deny" or read = false
-            if (taskPerm.read === false || taskPerm.scope === "deny") {
-              return {
-                allowed: false,
-                reason: "Your role is restricted from viewing tasks (ModulePermissionConfig: deny).",
-              };
-            }
-            // "own"
-            if (taskPerm.scope === "own") {
-              const isAssigned = isAssignedToUser(task);
-              const isCreator =
-                task.creator?.id === (user as any)?.id ||
-                (task.creator?.name && user?.name && task.creator.name.toLowerCase() === user.name.toLowerCase());
-              if (!isAssigned && !isCreator) {
-                return {
-                  allowed: false,
-                  reason: "Your role permission is scoped to 'own' tasks only.",
-                };
-              }
-            }
-            // "department"
-            if (taskPerm.scope === "department") {
-              const userDept = ((user as any)?.department || "").toLowerCase().trim();
-              const taskDept = (task.department || "").toLowerCase().trim();
-              const isAssigned = isAssignedToUser(task);
-              // If the task has no department, deny access (unless directly assigned to user)
-              if (!taskDept || (taskDept !== userDept && !isAssigned)) {
-                return {
-                  allowed: false,
-                  reason: "Your role permission is scoped to department tasks only, and this task has no matching department.",
-                };
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Error reading role permissions:", err);
-    }
-
-    // Organization & multi-tenant scope isolation for admin tasks
-    if (task.scopeLevel === "admin") {
-      const isTargetedToClient =
-        isAssignedToUser(task) ||
-        task.assignee?.orgName?.toLowerCase().includes("mantra") ||
-        task.assignee?.roleName?.toLowerCase().includes("physician") ||
-        task.assignee?.roleName?.toLowerCase().includes("director");
-
-      if (!isTargetedToClient) {
-        return {
-          allowed: false,
-          reason: "This administrative task is scoped to another organization or role and cannot be accessed from this workspace.",
-        };
-      }
-    }
-
-    return { allowed: true };
-  })();
-
-  if (!permissionCheck.allowed) {
-    return (
-      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-6">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 max-w-md w-full text-center shadow-xs space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center mx-auto text-amber-600">
-            <Lock className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Access Denied
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              {permissionCheck.reason || "You do not have permission to view this task."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(backUrl)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Tasks</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // 2. Permission Check
+  const isAssigned = isAssignedToUser(task);
+  const isMyTask = !isAdmin && isAssigned;
   const isCompleted = task.status === "completed";
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const sizeStr =
-        file.size > 1024 * 1024
-          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-          : `${Math.round(file.size / 1024)} KB`;
-      const newAtt = {
-        id: `att-${Date.now()}`,
-        name: file.name,
-        size: sizeStr,
-        type: file.type || "application/pdf",
-        uploadedAt: "Just now",
-      };
-      updateTask(task.id, {
-        attachments: [...(task.attachments || []), newAtt],
-      });
-      toast.success(`Attached "${file.name}"`);
+  // Progress computations
+  const myProgress = getPersonTaskProgress(task, currentUserId) || getPersonTaskProgress(task, currentUserName);
+  const overallProgress = getTaskOverallProgress(task);
+
+  // Mark item done handler (per-person)
+  const handleToggleItemDone = (item: TaskStudioItem) => {
+    toggleStudioItemCompletion(task.id, item.id, currentUserId, currentUserName);
+    const wasDone = !!(item.completion?.[currentUserId]?.done || item.completion?.[currentUserName]?.done);
+    if (!wasDone) {
+      toast.success(`Completed "${item.title}"`);
+    } else {
+      toast.info(`Marked "${item.title}" incomplete`);
     }
   };
 
+  const items = task.studioItems || [];
+
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      {/* ── PageHeader Portals into TopBar ── */}
+    <div className="min-h-screen bg-[#fafafa] pb-16">
       <PageHeader
         title={task.code ? `${task.code}: ${task.title}` : task.title}
-        subtitle={`Workflow: ${task.workflowName || "Clinical & Operational Tasks"} • Created ${task.createdAt}`}
-        actions={
+        subtitle={
+          isMyTask
+            ? `Assigned to you • Created ${task.createdAt}`
+            : `Workflow: ${task.workflowName || "Clinical & Operational Tasks"} • Created ${task.createdAt}`
+        }
+      />
+
+      {/* ── Main Viewport: ONE CENTERED COLUMN (No right sidebar anywhere) ── */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-in fade-in duration-150">
+        {/* Above the first block: Back button & Top Actions */}
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(backUrl)}
+            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer group"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-transform group-hover:-translate-x-0.5" />
+            <span>Back to Tasks</span>
+          </button>
+
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate(backUrl)}
-              className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
-              <span>Back</span>
-            </button>
+            {/* Share & Delete: ONLY in Tasks by me or Admin; NEVER in My Tasks */}
+            {!isMyTask && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowShareDrawer(true)}
+                  className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Share task"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Share</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setShowShareDrawer(true)}
-              className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Share task via SMS, WhatsApp, Email, or Companion Chat"
-            >
-              <Share2 className="w-3.5 h-3.5 text-slate-500" />
-              <span>Share</span>
-            </button>
+                {(isAdmin || task.creator?.name?.toLowerCase().includes("admin")) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Permanently delete task ${task.code}?`)) {
+                        deleteTask(task.id);
+                        toast.success("Task deleted");
+                        navigate(backUrl);
+                      }
+                    }}
+                    className="p-1.5 rounded-xl border border-gray-200 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer shadow-2xs"
+                    title="Delete Task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </>
+            )}
 
-            <button
-              type="button"
-              onClick={() => {
-                const nextStatus: TaskStatus = isCompleted ? "in_progress" : "completed";
-                toggleTaskStatus(task.id, nextStatus);
-                toast.success(isCompleted ? "Task reopened" : "Task marked completed");
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                isCompleted
-                  ? "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
-                  : "bg-[#1E293B] text-white hover:bg-slate-800"
-              }`}
-            >
-              <CheckSquare className="w-3.5 h-3.5" />
-              <span>{isCompleted ? "Reopen Task" : "Mark Complete"}</span>
-            </button>
-
+            {/* Importance star */}
             <button
               type="button"
               onClick={() => {
                 updateTask(task.id, { isImportant: !task.isImportant });
                 toast.success(task.isImportant ? "Unmarked important" : "Marked as important");
               }}
-              className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-xl border transition-colors cursor-pointer shadow-2xs ${
                 task.isImportant
                   ? "border-amber-200 bg-amber-50 text-amber-600"
                   : "border-gray-200 bg-white text-slate-400 hover:text-amber-500"
@@ -348,156 +266,375 @@ export default function TaskDetailPage() {
             >
               <Star className={`w-4 h-4 ${task.isImportant ? "fill-amber-500" : ""}`} />
             </button>
-
-            {(isAdmin || task.creator?.name?.toLowerCase().includes("admin")) && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm(`Permanently delete task ${task.code}?`)) {
-                    deleteTask(task.id);
-                    toast.success("Task deleted");
-                    navigate(backUrl);
-                  }
-                }}
-                className="p-1.5 rounded-xl border border-gray-200 bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                title="Delete Task"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
           </div>
-        }
-      />
-
-      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-
-      {/* ── Main Viewport Content ── */}
-      <div className="px-6 sm:px-10 py-6 max-w-7xl mx-auto space-y-6">
-        {/* Navigation Breadcrumb Strip */}
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <button
-            type="button"
-            onClick={() => navigate(backUrl)}
-            className="hover:text-slate-900 transition-colors font-semibold cursor-pointer"
-          >
-            {isAdmin ? "Admin Tasks" : "Tasks"}
-          </button>
-          <span>/</span>
-          <span className="font-mono text-slate-700 font-semibold">{task.code}</span>
         </div>
 
-        {/* ── If Task is created as Page: Sandboxed HTML Iframe Container ── */}
-        {task.isPage && task.htmlContent ? (
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-[#E2E8F0] bg-slate-50/80 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-slate-600" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Custom Page Content
-                </h3>
+        {/* ── 1. FIRST BLOCK: "TASK INFO" ── */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-5">
+          {/* Header Row: Title, Code, and Important Badge */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5 min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                  {task.code}
+                </span>
+                {task.isImportant && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">
+                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                    <span>Important</span>
+                  </span>
+                )}
+                {/* Workflow stage badge (ONLY shown in Tasks by me / Admin; hidden in My Tasks) */}
+                {!isMyTask && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#1456f0] border border-blue-200/60">
+                    {task.stageName || "Task Created"}
+                  </span>
+                )}
               </div>
-              <span className="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                Sandboxed HTML Iframe
+
+              <h1
+                className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-snug"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {task.title}
+              </h1>
+            </div>
+
+            {/* Overall status pill */}
+            <div className="shrink-0">
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  isCompleted
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                {isCompleted ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Completed</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-3.5 h-3.5 text-slate-500" />
+                    <span>In Progress</span>
+                  </>
+                )}
               </span>
             </div>
-            {/* Strict bounded container with internal scroll only */}
-            <div className="w-full h-[650px] relative overflow-hidden bg-white">
-              <iframe
-                srcDoc={task.htmlContent}
-                sandbox="allow-same-origin"
-                title="Task Page Document"
-                className="w-full h-full border-0 overflow-auto"
-                style={{ display: "block" }}
-              />
+          </div>
+
+          {/* Description */}
+          {task.description && (
+            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/60">
+              {task.description}
+            </p>
+          )}
+
+          {/* Metadata Row: Observers & Deadline */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 text-xs">
+            {/* Deadline */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1456f0] flex items-center justify-center shrink-0">
+                <Calendar className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Deadline
+                </span>
+                <span className="font-semibold text-slate-800">
+                  {task.deadline || "No scheduled deadline"}
+                </span>
+              </div>
+            </div>
+
+            {/* Observers */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Eye className="w-3.5 h-3.5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Observers ({task.observers?.length || 0})
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap truncate">
+                  {task.observers && task.observers.length > 0 ? (
+                    task.observers.map((o) => (
+                      <span
+                        key={o.id}
+                        className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md"
+                      >
+                        {o.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">None</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        ) : null}
 
-        {/* ── Structured Content Grid (2 Columns: Main 2/3, Sidebar 1/3) ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* ── Left Column: Details, Checklists, Subtasks, Attachments ── */}
-          <div className="lg:col-span-2 space-y-6">
-            <TaskDescriptionSection task={task} onUpdateTask={updateTask} />
+          {/* ── Per-person Progress Summary ── */}
+          <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CircularProgressRing
+                  value={isMyTask ? myProgress.completed : overallProgress.finishedPeopleCount}
+                  max={isMyTask ? myProgress.total : overallProgress.totalPeopleCount}
+                  size={24}
+                  strokeWidth={3}
+                  indicatorColor={
+                    (isMyTask ? myProgress.isFinished : overallProgress.isAllDone)
+                      ? "#10b981"
+                      : "#1456f0"
+                  }
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {isMyTask
+                      ? `Your Progress: ${myProgress.completed}/${myProgress.total} Items Completed`
+                      : `Overall Completion: ${overallProgress.finishedPeopleCount}/${overallProgress.totalPeopleCount} People Finished`}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {isMyTask
+                      ? myProgress.isFinished
+                        ? "You have completed all items assigned to you"
+                        : "Check off your deliverables below as you finish them"
+                      : overallProgress.isAllDone
+                      ? "All responsible people have completed every deliverable"
+                      : "Task completes when all responsible members finish"}
+                  </span>
+                </div>
+              </div>
 
-            <TaskChecklistsSection
-              task={task}
-              onToggleChecklistItem={toggleChecklistItem}
-              onToggleItemImportance={toggleItemImportance}
-              onAddChecklistItem={addChecklistItem}
-              onDeleteChecklistItem={deleteChecklistItem}
-              onAddChecklist={addChecklist}
-              onDeleteChecklist={deleteChecklist}
-            />
+              {/* In Tasks by me: toggle expandable per-person breakdown */}
+              {!isMyTask && overallProgress.breakdown.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setShowPeopleBreakdown(!showPeopleBreakdown)}
+                  className="flex items-center gap-1 text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer"
+                >
+                  <span>{showPeopleBreakdown ? "Hide Details" : "View Breakdown"}</span>
+                  {showPeopleBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
 
-            <TaskSubtasksSection
-              task={task}
-              onAddSubtask={addSubtask}
-              onToggleSubtask={toggleSubtask}
-            />
+            {/* Expandable Per-Person Breakdown (Tasks by me) */}
+            {!isMyTask && showPeopleBreakdown && (
+              <div className="pt-3 border-t border-slate-200/60 space-y-2 animate-in fade-in duration-150">
+                {overallProgress.breakdown.map((b) => (
+                  <div
+                    key={b.person.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200/80 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[9px]">
+                        {b.person.name.charAt(0)}
+                      </div>
+                      <span className="font-semibold text-slate-800">{b.person.name}</span>
+                      {b.person.role && <span className="text-[10px] text-slate-400">({b.person.role})</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-slate-600 tabular-nums">
+                        {b.completed}/{b.total} items
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          b.isFinished
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {b.isFinished ? "Done" : `${b.percent}%`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
-            <TaskAttachmentsSection
-              task={task}
-              onUpdateTask={updateTask}
-              fileInputRef={fileInputRef}
-            />
+        {/* ── 2. BELOW IT: TASK STUDIO ITEMS (Line by Line) ── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h2
+              className="text-xs font-bold uppercase tracking-wider text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Deliverables & Studio Items ({items.length})
+            </h2>
+            <span className="text-xs text-slate-400">
+              Each member completes their own copy
+            </span>
           </div>
 
-          {/* ── Right Column: Workflow Stage, Responsibility, Planning, Observers ── */}
-          <div className="space-y-6">
-            <TaskStageSection
-              task={task}
-              taskStages={taskStages}
-              onUpdateStage={updateTaskStage}
-            />
+          <div className="space-y-3">
+            {items.map((item, index) => {
+              const isDoneByMe = !!(
+                item.completion?.[currentUserId]?.done ||
+                item.completion?.[currentUserName]?.done
+              );
 
-            <TaskAssignmentSection
-              task={task}
-              isAdmin={isAdmin}
-              onOpenShare={() => setShowShareDrawer(true)}
-            />
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-white rounded-2xl border transition-all shadow-xs p-5 space-y-3.5 ${
+                    isDoneByMe
+                      ? "border-emerald-200/80 bg-emerald-50/20"
+                      : "border-slate-200/90 hover:border-slate-300"
+                  }`}
+                >
+                  {/* Item Row Header: Number, Star, Title, and Mark As Done Button */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                      <span
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 mt-0.5 ${
+                          isDoneByMe
+                            ? "bg-emerald-600 text-white"
+                            : "bg-slate-100 text-slate-700 border border-slate-200"
+                        }`}
+                      >
+                        {isDoneByMe ? "✓" : index + 1}
+                      </span>
 
-            <TaskPlanningSection
-              task={task}
-              onUpdateTask={updateTask}
-              onOpenRecurrence={() => setShowRecurrenceDrawer(true)}
-              onOpenTimePlanning={() => setShowTimePlanningDrawer(true)}
-            />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {item.isImportant && (
+                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                          )}
+                          <h3
+                            className={`text-sm font-bold leading-snug ${
+                              isDoneByMe ? "line-through text-slate-500" : "text-slate-900"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {item.title}
+                          </h3>
+                        </div>
 
-            {!isAdmin && (
-              <TaskObserversSection
-                task={task}
-                teamMembers={teamMembers}
-                onAddObserver={addObserver}
-                onRemoveObserver={removeObserver}
-              />
-            )}
+                        {item.description && (
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action: Mark as done / Undo button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleItemDone(item)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0 ${
+                        isDoneByMe
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-white hover:bg-emerald-50 text-slate-700 border border-slate-300 hover:border-emerald-300 hover:text-emerald-700"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {isDoneByMe ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Done</span>
+                          <span className="text-[10px] opacity-75 ml-0.5">(Undo)</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckSquare className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Mark as done</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* ── Resource Rendering ── */}
+                  {item.resource && item.resource.value && (
+                    <div className="pt-2 border-t border-slate-100">
+                      {/* Image Resource */}
+                      {item.resource.type === "image" && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 p-1.5 max-w-lg">
+                          <img
+                            src={item.resource.value}
+                            alt={item.title}
+                            className="w-full max-h-72 object-contain rounded-lg"
+                          />
+                        </div>
+                      )}
+
+                      {/* Video Resource */}
+                      {item.resource.type === "video" && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-black max-w-lg">
+                          <video
+                            src={item.resource.value}
+                            controls
+                            className="w-full max-h-72 object-contain"
+                          />
+                        </div>
+                      )}
+
+                      {/* URL Resource */}
+                      {item.resource.type === "url" && (
+                        <a
+                          href={item.resource.value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50/70 border border-blue-200/70 text-xs font-semibold text-[#1456f0] hover:bg-blue-100/60 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate max-w-md">{item.resource.value}</span>
+                        </a>
+                      )}
+
+                      {/* File Resource */}
+                      {item.resource.type === "file" && (
+                        <a
+                          href={item.resource.value}
+                          download={item.resource.name || "document"}
+                          className="inline-flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-medium text-slate-800 transition-colors max-w-md cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                            <span className="truncate font-semibold">{item.resource.name || "Download Attachment"}</span>
+                            {item.resource.size && (
+                              <span className="text-[10px] text-slate-400 font-mono">({item.resource.size})</span>
+                            )}
+                          </div>
+                          <Download className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+                        </a>
+                      )}
+
+                      {/* HTML Block Resource (Strictly Sandboxed inside Bordered Container) */}
+                      {item.resource.type === "html" && (
+                        <div className="rounded-xl border border-slate-200/90 overflow-hidden bg-white shadow-2xs">
+                          <div className="px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <FileCode className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Sandboxed Custom HTML Block</span>
+                            </span>
+                            <span className="text-slate-400 font-mono">iframe sandbox</span>
+                          </div>
+                          <div className="w-full max-h-64 overflow-y-auto bg-white p-1">
+                            <iframe
+                              srcDoc={item.resource.value}
+                              sandbox="allow-same-origin"
+                              title={`HTML Block for ${item.title}`}
+                              className="w-full h-48 border-0 overflow-auto"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Recurrence Sub-Drawer */}
-      <TaskRecurrenceDrawer
-        isOpen={showRecurrenceDrawer}
-        onClose={() => setShowRecurrenceDrawer(false)}
-        config={task.recurrence}
-        onSave={(cfg) => {
-          updateTask(task.id, { recurrence: cfg });
-          toast.success("Recurrence schedule applied");
-        }}
-      />
-
-      {/* Time Planning Sub-Drawer */}
-      <TaskTimePlanningDrawer
-        isOpen={showTimePlanningDrawer}
-        onClose={() => setShowTimePlanningDrawer(false)}
-        config={task.timePlanning}
-        onSave={(cfg) => {
-          updateTask(task.id, { timePlanning: cfg });
-          toast.success("Time planning applied");
-        }}
-      />
-
-      {/* Share Task Drawer (SMS, WhatsApp, Email, Companion Chat) */}
+      {/* Share Task Drawer */}
       <ShareTaskDrawer
         isOpen={showShareDrawer}
         onClose={() => setShowShareDrawer(false)}

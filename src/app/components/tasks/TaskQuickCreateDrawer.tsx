@@ -12,17 +12,30 @@ import {
   User,
   Users,
   Eye,
-  MoreVertical,
-  Edit2,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  ArrowRight,
+  ArrowLeft,
   Check,
   Building2,
   Shield,
   Globe,
   Calendar,
   FileCode,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Upload,
+  AlertCircle,
+  Sparkles,
+  Info,
+  Download,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
+import { CircularProgressRing } from "../ui/CircularProgressRing";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { Tooltip } from "../ui/Tooltip";
 import {
   TaskEntity,
   TaskScopeLevel,
@@ -31,23 +44,27 @@ import {
   TaskChecklistItem,
   TaskObserver,
   TaskRecurrenceConfig,
-  TaskTimePlanningConfig,
   TaskFileAttachment,
   TaskAssigneeScope,
+  TaskStudioItem,
+  TaskStudioItemResource,
+  TaskStudioResourceType,
+  TaskResponsiblePerson,
 } from "../../../types/task";
-import { Stage } from "../../../lib/useProcessStore";
+import { useProcessStore, DEFAULT_TASK_PROCESSES, Stage } from "../../../lib/useProcessStore";
 import { useTeamMembers } from "../../../lib/teamStore";
 import { initialClients } from "../../../data/canonicalClients";
-import TaskRecurrenceDrawer from "./TaskRecurrenceDrawer";
-import TaskTimePlanningDrawer from "./TaskTimePlanningDrawer";
-import { sendTaskToPortalChat } from "./ShareTaskDrawer";
-import { addNotification } from "../../../lib/notificationsStore";
+import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
+import type { ScopingRule } from "../../context/FieldRegistryContext";
 
 export interface TaskQuickCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateTask: (taskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => void;
+  onUpdateTask?: (id: string, patch: Partial<TaskEntity>) => void;
+  taskToEdit?: TaskEntity | null;
   isAdmin?: boolean;
   taskStages?: Stage[];
   defaultWorkflowName?: string;
@@ -56,107 +73,405 @@ export interface TaskQuickCreateDrawerProps {
 
 const CONTACT_CATEGORIES = ["All Categories", "Client", "Lead", "Supplier", "Vendor"];
 
-const ADMIN_ORGANIZATIONS = [
-  { id: "org-1", name: "Demo Mantra Care", industry: "Healthcare", country: "US" },
-  { id: "org-2", name: "Apex Cardiology Center", industry: "Healthcare", country: "US" },
-  { id: "org-3", name: "Metro General Hospital", industry: "Healthcare", country: "US" },
-  { id: "org-4", name: "California Wellness Practice", industry: "Wellness", country: "US" },
-  { id: "org-5", name: "London Central Clinic", industry: "Healthcare", country: "UK" },
-];
-
-export const ADMIN_SCOPE_OPTIONS = [
-  { id: "all", name: "All Scopes (Global)" },
-  { id: "healthcare-us", name: "Healthcare (US)", industry: "Healthcare", country: "US" },
-  { id: "wellness-us", name: "Wellness (US)", industry: "Wellness", country: "US" },
-  { id: "healthcare-uk", name: "Healthcare (UK)", industry: "Healthcare", country: "UK" },
-];
-
-const ADMIN_ORG_ROLES: Record<string, string[]> = {
-  "org-1": ["Lead Physician", "Clinical Director", "Care Coordinator", "Billing Specialist", "Practice Admin"],
-  "org-2": ["Cardiologist", "Catheterization Specialist", "ICU Nurse", "Practice Manager"],
-  "org-3": ["Chief Medical Officer", "Department Head", "Resident Doctor", "Staff Nurse"],
-  "org-4": ["Wellness Director", "Physical Therapist", "Nutritionist", "Clinic Coordinator"],
-  "org-5": ["General Practitioner", "Consultant Surgeon", "Reception Lead"],
+export const CATEGORY_ROLES_CATALOG: Record<string, string[]> = {
+  Healthcare: [
+    "Lead Physician",
+    "Clinical Director",
+    "Clinical Intake Coordinator",
+    "Care Coordinator",
+    "Practice Billing Specialist",
+    "Chief Medical Officer",
+    "Cardiologist",
+    "General Practitioner",
+    "Staff Nurse",
+    "Practice Manager",
+  ],
+  Automobile: [
+    "Dealership Service Advisor",
+    "Fleet Maintenance Lead",
+    "Master Technician",
+    "Parts Specialist",
+    "EV Diagnostic Specialist",
+    "Service Center Manager",
+  ],
+  "Coaching & Advisory": [
+    "Executive Practice Advisory Lead",
+    "Executive Leadership Coach",
+    "Career Advisory Specialist",
+    "Client Advisory Manager",
+    "Life & Wellness Coach",
+  ],
+  "Household Care": [
+    "Field Service Dispatcher",
+    "HVAC Service Lead",
+    "Master Electrician",
+    "Operations Dispatcher",
+    "Service Route Coordinator",
+  ],
+  "IT/Tech": [
+    "IT Technical Support Agent",
+    "Cloud Solutions Architect",
+    "Cybersecurity Analyst",
+    "DevOps Specialist",
+    "Data Infrastructure Lead",
+    "Systems Administrator",
+  ],
+  "Real Estate": [
+    "Property Leasing Manager",
+    "Commercial Broker Associate",
+    "Property Operations Lead",
+    "Tenant Relations Coordinator",
+    "HOA Community Manager",
+  ],
+  "Wellness & Lifestyle": [
+    "Wellness Director",
+    "Physical Therapist",
+    "Nutritionist",
+    "Clinic Coordinator",
+    "Mindfulness & Yoga Coach",
+  ],
 };
+
+// Size limit for uploads stored in localStorage (1 MB)
+const MAX_UPLOAD_BYTES = 1024 * 1024; // 1 MB
+
+interface StudioDraftItem {
+  id: string;
+  title: string;
+  description: string;
+  isImportant: boolean;
+  resourceType: "none" | TaskStudioResourceType;
+  resourceSource: "upload" | "url";
+  resourceValue: string;
+  resourceName: string;
+  resourceSize: string;
+  isExpanded?: boolean;
+}
+
+interface StudioItemCardProps {
+  item: StudioDraftItem;
+  index: number;
+  totalItems: number;
+  onUpdate: (id: string, patch: Partial<StudioDraftItem>) => void;
+  onMove: (index: number, direction: "up" | "down") => void;
+  onDelete: (id: string) => void;
+  onFileUpload: (id: string, file: File) => void;
+}
+
+function StudioItemCard({
+  item,
+  index,
+  totalItems,
+  onUpdate,
+  onMove,
+  onDelete,
+  onFileUpload,
+}: StudioItemCardProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 space-y-3 transition-all hover:border-slate-300">
+      {/* Item Header & Controls */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center font-mono text-[11px] font-bold text-slate-700 shrink-0">
+            {index + 1}
+          </span>
+          <input
+            type="text"
+            placeholder="Item title (required)..."
+            value={item.title}
+            onChange={(e) => onUpdate(item.id, { title: e.target.value })}
+            className="text-xs font-bold text-slate-900 w-full p-1.5 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-500 focus:bg-slate-50 rounded transition-all focus:outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Important Star */}
+          <button
+            type="button"
+            onClick={() => onUpdate(item.id, { isImportant: !item.isImportant })}
+            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              item.isImportant
+                ? "bg-amber-50 text-amber-500 border-amber-200"
+                : "bg-white text-slate-300 hover:text-amber-500 border-slate-200"
+            }`}
+            title={item.isImportant ? "Important" : "Mark as important"}
+          >
+            <Star className={`w-3.5 h-3.5 ${item.isImportant ? "fill-amber-500" : ""}`} />
+          </button>
+
+          {/* Reorder Up */}
+          <button
+            type="button"
+            disabled={index === 0}
+            onClick={() => onMove(index, "up")}
+            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            title="Move Up"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Reorder Down */}
+          <button
+            type="button"
+            disabled={index === totalItems - 1}
+            onClick={() => onMove(index, "down")}
+            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            title="Move Down"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Delete */}
+          <button
+            type="button"
+            onClick={() => onDelete(item.id)}
+            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+            title="Delete Item"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Item Description (Optional) */}
+      <input
+        type="text"
+        placeholder="Short description or instructions (optional)..."
+        value={item.description}
+        onChange={(e) => onUpdate(item.id, { description: e.target.value })}
+        className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
+      />
+
+      {/* Resource Selector Bar */}
+      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+          Resource:
+        </span>
+        {(["none", "file", "image", "video", "url", "html"] as const).map((rType) => (
+          <button
+            key={rType}
+            type="button"
+            onClick={() => {
+              onUpdate(item.id, {
+                resourceType: rType,
+                resourceValue: rType === item.resourceType ? item.resourceValue : "",
+              });
+            }}
+            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+              item.resourceType === rType
+                ? "bg-[#1E293B] text-white border-[#1E293B] shadow-2xs"
+                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+            }`}
+          >
+            {rType === "none"
+              ? "None"
+              : rType === "html"
+              ? "HTML Block"
+              : rType.charAt(0).toUpperCase() + rType.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Resource Input & Preview Area */}
+      {item.resourceType !== "none" && (
+        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5 animate-in fade-in duration-100">
+          {/* Image / Video: Choose Upload vs URL */}
+          {(item.resourceType === "image" || item.resourceType === "video") && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onUpdate(item.id, { resourceSource: "upload" })}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                  item.resourceSource === "upload"
+                    ? "bg-white text-slate-900 border border-slate-300 shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Direct Upload (max 1MB)
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdate(item.id, { resourceSource: "url" })}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                  item.resourceSource === "url"
+                    ? "bg-white text-slate-900 border border-slate-300 shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Online URL
+              </button>
+            </div>
+          )}
+
+          {/* File / Direct Upload */}
+          {(item.resourceType === "file" ||
+            ((item.resourceType === "image" || item.resourceType === "video") &&
+              item.resourceSource === "upload")) && (
+            <div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onFileUpload(item.id, f);
+                }}
+                className="hidden"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Upload className="w-3.5 h-3.5 text-slate-500" />
+                  <span>{item.resourceValue ? "Replace File" : "Choose File (Max 1MB)"}</span>
+                </button>
+                {item.resourceName && (
+                  <span className="text-xs font-mono text-slate-600 truncate max-w-[200px]">
+                    {item.resourceName} ({item.resourceSize})
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Online URL input */}
+          {(item.resourceType === "url" ||
+            ((item.resourceType === "image" || item.resourceType === "video") &&
+              item.resourceSource === "url")) && (
+            <div className="space-y-1">
+              <input
+                type="url"
+                placeholder="https://example.com/asset..."
+                value={item.resourceValue}
+                onChange={(e) => onUpdate(item.id, { resourceValue: e.target.value })}
+                className="w-full text-xs p-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <span className="text-[10px] text-slate-400 block">
+                Must begin with http:// or https:// (strict validation)
+              </span>
+            </div>
+          )}
+
+          {/* HTML Block Code Editor */}
+          {item.resourceType === "html" && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <FileCode className="w-3.5 h-3.5" />
+                <span>Monospace HTML / CSS Block (Sandboxed)</span>
+              </label>
+              <textarea
+                rows={4}
+                placeholder="<div style='padding: 12px;'>Custom HTML/CSS block...</div>"
+                value={item.resourceValue}
+                onChange={(e) => onUpdate(item.id, { resourceValue: e.target.value })}
+                className="w-full text-xs font-mono p-2.5 bg-slate-900 text-emerald-400 border border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+              />
+            </div>
+          )}
+
+          {/* Studio Resource Mini Preview */}
+          {item.resourceValue && (
+            <div className="mt-2 pt-2 border-t border-slate-200/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                Resource Preview
+              </span>
+
+              {item.resourceType === "image" && (
+                <div className="max-w-xs rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
+                  <img
+                    src={item.resourceValue}
+                    alt={item.title}
+                    className="w-full h-32 object-cover rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = "none";
+                    }}
+                  />
+                </div>
+              )}
+
+              {item.resourceType === "video" && (
+                <div className="max-w-xs rounded-xl overflow-hidden border border-slate-200 bg-black">
+                  <video
+                    src={item.resourceValue}
+                    controls
+                    className="w-full max-h-36 object-contain"
+                  />
+                </div>
+              )}
+
+              {item.resourceType === "url" && (
+                <a
+                  href={item.resourceValue}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-[#1456f0] hover:underline font-mono truncate max-w-sm"
+                >
+                  <LinkIcon className="w-3 h-3" />
+                  <span>{item.resourceValue}</span>
+                </a>
+              )}
+
+              {item.resourceType === "file" && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700">
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="font-mono">{item.resourceName || "Document"}</span>
+                  <span className="text-slate-400 font-mono text-[10px]">({item.resourceSize})</span>
+                </div>
+              )}
+
+              {item.resourceType === "html" && (
+                <div className="border border-slate-300 rounded-xl overflow-hidden max-h-40 bg-white">
+                  <iframe
+                    srcDoc={item.resourceValue}
+                    sandbox="allow-same-origin"
+                    title="HTML Block Preview"
+                    className="w-full h-36 border-0 overflow-auto"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TaskQuickCreateDrawer({
   isOpen,
   onClose,
   onCreateTask,
+  onUpdateTask,
+  taskToEdit = null,
   isAdmin = false,
   taskStages = [],
   defaultWorkflowName,
   defaultWorkflowId,
 }: TaskQuickCreateDrawerProps) {
   const { teamMembers } = useTeamMembers();
+  const { processes } = useProcessStore();
+  const { user } = useAuth();
 
-  // Basic task attributes
+  // Task workflows (processes)
+  const taskPipelines = useMemo(() => {
+    const list = processes.filter((p) => p.entityType === "task");
+    return list.length > 0 ? list : DEFAULT_TASK_PROCESSES;
+  }, [processes]);
+
+  // Current Step: 1 = Configure, 2 = Task Studio
+  const [step, setStep] = useState<1 | 2>(1);
+
+  // ── Step 1: Configure Fields ──
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [isImportant, setIsImportant] = useState(false);
-  const [isPage, setIsPage] = useState(false);
-  const [htmlContent, setHtmlContent] = useState("");
 
-  // Deadline: Date & Time
-  const [deadlineDate, setDeadlineDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split("T")[0];
-  });
-  const [deadlineTime, setDeadlineTime] = useState("17:00");
+  // Responsible Mode: "team" vs "contact" (Clinic) or "admin_org_role" (Admin)
+  const [responsibleType, setResponsibleType] = useState<"team" | "contact">("team");
 
-  // Workflow Stage
-  const defaultStage = taskStages[0]?.name || "Task Created";
-  const [selectedStageName, setSelectedStageName] = useState(defaultStage);
-
-  // Admin Scope: Single plain dropdown selector
-  const [selectedAdminScopeId, setSelectedAdminScopeId] = useState("all");
-
-  // Admin Scope filters Target Organizations
-  const filteredAdminOrganizations = useMemo(() => {
-    if (selectedAdminScopeId === "all") return ADMIN_ORGANIZATIONS;
-    const scopeObj = ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId);
-    if (!scopeObj) return ADMIN_ORGANIZATIONS;
-    return ADMIN_ORGANIZATIONS.filter(
-      (org) =>
-        (!scopeObj.industry || org.industry === scopeObj.industry) &&
-        (!scopeObj.country || org.country === scopeObj.country)
-    );
-  }, [selectedAdminScopeId]);
-
-  // Admin Mode: Organization & Role selection
-  const [selectedAdminOrgId, setSelectedAdminOrgId] = useState("org-1");
-
-  const availableAdminRoles = useMemo(() => {
-    return ADMIN_ORG_ROLES[selectedAdminOrgId] || ADMIN_ORG_ROLES["org-1"] || [];
-  }, [selectedAdminOrgId]);
-
-  const [selectedAdminRole, setSelectedAdminRole] = useState(availableAdminRoles[0] || "Lead Physician");
-
-  // Synchronize target organization when admin scope changes
-  useEffect(() => {
-    if (filteredAdminOrganizations.length > 0) {
-      const isCurrentValid = filteredAdminOrganizations.some((o) => o.id === selectedAdminOrgId);
-      if (!isCurrentValid) {
-        const nextOrgId = filteredAdminOrganizations[0].id;
-        setSelectedAdminOrgId(nextOrgId);
-        const nextRoles = ADMIN_ORG_ROLES[nextOrgId] || [];
-        if (nextRoles.length > 0) setSelectedAdminRole(nextRoles[0]);
-      }
-    }
-  }, [filteredAdminOrganizations, selectedAdminOrgId]);
-
-  // Synchronize role when organization changes
-  useEffect(() => {
-    if (availableAdminRoles.length > 0 && !availableAdminRoles.includes(selectedAdminRole)) {
-      setSelectedAdminRole(availableAdminRoles[0]);
-    }
-  }, [availableAdminRoles, selectedAdminRole]);
-
-  // Non-Admin: Assignment mode (Team Member vs Contact)
-  const [assignmentType, setAssignmentType] = useState<"team" | "contact">("team");
-
-  // Team Member Assignment (Role -> Multi-select members)
+  // Clinic: Team Member Assignment
   const availableRoles = useMemo(() => {
     const roles = Array.from(new Set(teamMembers.map((m) => m.role).filter(Boolean))) as string[];
     return ["All Roles", ...roles];
@@ -171,9 +486,9 @@ export default function TaskQuickCreateDrawer({
     return teamMembers.filter((m) => m.role === selectedRoleFilter);
   }, [teamMembers, selectedRoleFilter]);
 
-  // Contact Assignment (Category -> Contact)
+  // Clinic: Contact Assignment
   const [selectedContactCategory, setSelectedContactCategory] = useState("All Categories");
-  const [selectedContactId, setSelectedContactId] = useState<string>(initialClients[0]?.id || "CL-001");
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([initialClients[0]?.id || "CL-001"]);
 
   const filteredContacts = useMemo(() => {
     if (selectedContactCategory === "All Categories") return initialClients;
@@ -182,1130 +497,1826 @@ export default function TaskQuickCreateDrawer({
     );
   }, [selectedContactCategory]);
 
-  const [visibleInPortal, setVisibleInPortal] = useState(true);
+  // Admin Control (Scope Rules) & Roles
+  const [adminScopingRules, setAdminScopingRules] = useState<ScopingRule[]>([]);
+  const [selectedAdminRoles, setSelectedAdminRoles] = useState<string[]>(["Lead Physician"]);
 
-  // Checklists
-  const [checklists, setChecklists] = useState<TaskChecklist[]>([
-    {
-      id: "chk-init",
-      title: "Deliverables Checklist",
-      items: [
-        { id: "item-1", text: "Review chart documentation & verify baseline records", isCompleted: false, isImportant: true },
-        { id: "item-2", text: "Submit compliance authorization stamp", isCompleted: false, isImportant: false },
-      ],
-    },
-  ]);
-  const [newItemText, setNewItemText] = useState<{ [chkId: string]: string }>({});
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editingItemText, setEditingItemText] = useState("");
-  const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
+  const availableAdminRoles = useMemo(() => {
+    // 1. Get any custom roles saved in localStorage by Admin Roles console
+    let storedRoles: { roleName: string; category?: string }[] = [];
+    try {
+      const raw = localStorage.getItem("ma_admin_roles_store_v2");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          storedRoles = parsed.map((r: any) => ({
+            roleName: r.roleName || r.name,
+            category: r.category,
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    }
 
-  // Observers
+    // 2. Identify active categories from Admin Control scoping rules
+    const activeCategories = Array.from(
+      new Set(
+        adminScopingRules
+          .map((r) => r.industryCategory)
+          .filter(
+            (cat): cat is string =>
+              Boolean(cat && cat !== "All" && cat !== "All Categories" && cat !== "Global / Cross-Domain")
+          )
+      )
+    );
+
+    // If no specific scoping rules configured: return all roles across all categories
+    if (activeCategories.length === 0) {
+      const allRoles = new Set<string>();
+      Object.values(CATEGORY_ROLES_CATALOG).forEach((roles) => roles.forEach((r) => allRoles.add(r)));
+      storedRoles.forEach((r) => {
+        if (r.roleName) allRoles.add(r.roleName);
+      });
+      return Array.from(allRoles);
+    }
+
+    // If specific categories configured in Admin Control, strictly render only roles for those categories
+    const scopedRoles = new Set<string>();
+    activeCategories.forEach((cat) => {
+      const matchedKey = Object.keys(CATEGORY_ROLES_CATALOG).find(
+        (k) => k.toLowerCase() === cat.toLowerCase()
+      );
+      if (matchedKey) {
+        CATEGORY_ROLES_CATALOG[matchedKey].forEach((r) => scopedRoles.add(r));
+      }
+      storedRoles
+        .filter((sr) => sr.category && sr.category.toLowerCase() === cat.toLowerCase())
+        .forEach((sr) => scopedRoles.add(sr.roleName));
+    });
+
+    if (scopedRoles.size === 0) {
+      return ["Lead Physician", "Clinical Director", "Practice Manager", "Staff Specialist"];
+    }
+
+    return Array.from(scopedRoles);
+  }, [adminScopingRules]);
+
+  // Workflow (Required, shows only pipeline name)
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>(() => {
+    return defaultWorkflowId || taskPipelines[0]?.id || "process-task-default";
+  });
+
+  // ── Settings Accordion Rows State ──
+  const [openSettingsRow, setOpenSettingsRow] = useState<string | null>(null);
+
+  // Settings: Schedule & Priority
+  const [deadlineDate, setDeadlineDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  });
+  const [deadlineTime, setDeadlineTime] = useState("17:00");
+  const [isImportant, setIsImportant] = useState(false);
+
+  // Settings: Repeat
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatInterval, setRepeatInterval] = useState(1);
+  const [repeatUnit, setRepeatUnit] = useState<"days" | "weeks" | "months" | "years">("weeks");
+  const [repeatSkipWeekends, setRepeatSkipWeekends] = useState(true);
+  const [repeatStopRule, setRepeatStopRule] = useState<"never" | "count" | "date">("never");
+  const [repeatStopCount, setRepeatStopCount] = useState(10);
+  const [repeatStopDate, setRepeatStopDate] = useState("");
+
+  // Settings: Observers
   const [observers, setObservers] = useState<TaskObserver[]>([
     { id: "obs-1", name: "Elena Rostova", role: "Care Coordinator" },
   ]);
-  const [showAddObserver, setShowAddObserver] = useState(false);
+  const [newObserverName, setNewObserverName] = useState("");
 
-  // Recurrence & Time Planning Configs
-  const [recurrenceConfig, setRecurrenceConfig] = useState<TaskRecurrenceConfig | undefined>(undefined);
-  const [timePlanningConfig, setTimePlanningConfig] = useState<TaskTimePlanningConfig | undefined>(undefined);
+  // ── Step 2: Task Studio State ──
+  const [studioItems, setStudioItems] = useState<StudioDraftItem[]>([
+    {
+      id: "draft-item-1",
+      title: "Review patient chart & clinical intake baseline",
+      description: "Verify diagnostic codes and medical baseline history prior to evaluation.",
+      isImportant: true,
+      resourceType: "none",
+      resourceSource: "upload",
+      resourceValue: "",
+      resourceName: "",
+      resourceSize: "",
+      isExpanded: false,
+    },
+    {
+      id: "draft-item-2",
+      title: "Confirm insurance clearinghouse verification stamp",
+      description: "Submit electronic verification and attach verification code.",
+      isImportant: false,
+      resourceType: "none",
+      resourceSource: "upload",
+      resourceValue: "",
+      resourceName: "",
+      resourceSize: "",
+      isExpanded: false,
+    },
+  ]);
 
-  // Sub-drawers
-  const [showRecurrenceDrawer, setShowRecurrenceDrawer] = useState(false);
-  const [showTimePlanningDrawer, setShowTimePlanningDrawer] = useState(false);
-
-  // File Upload
-  const [attachments, setAttachments] = useState<TaskFileAttachment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const sizeStr = file.size > 1024 * 1024
-        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-        : `${Math.round(file.size / 1024)} KB`;
-      const newAtt: TaskFileAttachment = {
-        id: `att-${Date.now()}`,
-        name: file.name,
-        size: sizeStr,
-        type: file.type || "application/pdf",
-        uploadedAt: "Just now",
-      };
-      setAttachments((prev) => [...prev, newAtt]);
-      toast.success(`Attached "${file.name}"`);
-    }
-  };
-
-  const handleRemoveAttachment = (attId: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== attId));
-  };
-
-  const formatDeadlineDisplay = (dateStr: string, timeStr: string) => {
-    if (!dateStr) return "";
-    try {
-      const [year, month, day] = dateStr.split("-");
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const monthName = months[parseInt(month, 10) - 1] || month;
-
-      let formattedTime = "";
-      if (timeStr) {
-        const [h, m] = timeStr.split(":");
-        let hours = parseInt(h, 10);
-        const ampm = hours >= 12 ? "PM" : "AM";
-        hours = hours % 12 || 12;
-        formattedTime = `, ${hours}:${m} ${ampm}`;
-      }
-      return `${monthName} ${day}, ${year}${formattedTime}`;
-    } catch {
-      return `${dateStr} ${timeStr}`.trim();
-    }
-  };
-
-  const handleAddItem = (chkId: string) => {
-    const text = newItemText[chkId]?.trim();
-    if (!text) return;
-    setChecklists((prev) =>
-      prev.map((chk) => {
-        if (chk.id === chkId) {
-          return {
-            ...chk,
-            items: [
-              ...chk.items,
-              {
-                id: `item-${Date.now()}`,
-                text,
-                isCompleted: false,
-                isImportant: false,
-              },
-            ],
-          };
-        }
-        return chk;
-      })
-    );
-    setNewItemText((prev) => ({ ...prev, [chkId]: "" }));
-  };
-
-  const handleToggleItemImportance = (chkId: string, itemId: string) => {
-    setChecklists((prev) =>
-      prev.map((chk) => {
-        if (chk.id === chkId) {
-          return {
-            ...chk,
-            items: chk.items.map((it) => (it.id === itemId ? { ...it, isImportant: !it.isImportant } : it)),
-          };
-        }
-        return chk;
-      })
-    );
-  };
-
-  const handleDeleteItem = (chkId: string, itemId: string) => {
-    setChecklists((prev) =>
-      prev.map((chk) => {
-        if (chk.id === chkId) {
-          return {
-            ...chk,
-            items: chk.items.filter((it) => it.id !== itemId),
-          };
-        }
-        return chk;
-      })
-    );
-    setActiveItemMenuId(null);
-  };
-
-  const handleStartEditItem = (item: TaskChecklistItem) => {
-    setEditingItemId(item.id);
-    setEditingItemText(item.text);
-    setActiveItemMenuId(null);
-  };
-
-  const handleSaveEditItem = (chkId: string, itemId: string) => {
-    if (!editingItemText.trim()) return;
-    setChecklists((prev) =>
-      prev.map((chk) => {
-        if (chk.id === chkId) {
-          return {
-            ...chk,
-            items: chk.items.map((it) => (it.id === itemId ? { ...it, text: editingItemText.trim() } : it)),
-          };
-        }
-        return chk;
-      })
-    );
-    setEditingItemId(null);
-    setEditingItemText("");
-  };
-
-  const handleAddChecklist = () => {
-    const newChk: TaskChecklist = {
-      id: `chk-${Date.now()}`,
-      title: `Checklist ${checklists.length + 1}`,
-      items: [],
-    };
-    setChecklists((prev) => [...prev, newChk]);
-  };
-
-  const handleDeleteChecklist = (chkId: string) => {
-    setChecklists((prev) => prev.filter((c) => c.id !== chkId));
-  };
-
-  const handleAddObserver = (member: { id: string | number; name: string; role?: string }) => {
-    const strId = String(member.id);
-    if (observers.some((o) => o.id === strId || o.name === member.name)) {
-      toast.info(`${member.name} is already an observer`);
-      return;
-    }
-    setObservers((prev) => [...prev, { id: strId, name: member.name, role: member.role }]);
-    setShowAddObserver(false);
-    toast.success(`Added ${member.name} as observer`);
-  };
-
-  const handleRemoveObserver = (obsId: string) => {
-    setObservers((prev) => prev.filter((o) => o.id !== obsId));
-  };
-
-  const handleCreate = () => {
-    if (!title.trim()) {
-      toast.error("Task title is required");
+  // Reset or populate drawer state when opened/closed or taskToEdit changes
+  useEffect(() => {
+    if (!isOpen) {
+      setStep(1);
+      setStudioTab("builder");
+      setPreviewDoneItems({});
+      setOpenSettingsRow(null);
       return;
     }
 
-    const targetStage = taskStages.find((s) => s.name === selectedStageName) || taskStages[0];
-    const stageId = targetStage?.id || (selectedStageName === "Task Completed" ? "task-stg-completed" : selectedStageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created");
-    const normalizedStage = selectedStageName.toLowerCase();
-    const status: TaskStatus = normalizedStage.includes("completed") || normalizedStage.includes("won")
-      ? "completed"
-      : normalizedStage.includes("overdue") || normalizedStage.includes("lost")
-      ? "deferred"
-      : "in_progress";
+    if (taskToEdit) {
+      setTitle(taskToEdit.title || "");
+      setDescription(taskToEdit.description || "");
+      setIsImportant(Boolean(taskToEdit.isImportant));
 
-    const formattedDeadline = formatDeadlineDisplay(deadlineDate, deadlineTime);
-
-    // Build Assignees
-    let primaryAssignee: TaskAssigneeScope;
-    let assigneesList: TaskAssigneeScope[] = [];
-
-    if (isAdmin) {
-      const org = filteredAdminOrganizations.find((o) => o.id === selectedAdminOrgId) || filteredAdminOrganizations[0] || ADMIN_ORGANIZATIONS[0];
-      const selectedScopeObj = ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId);
-      const adminScopeName = selectedScopeObj && selectedScopeObj.id !== "all" ? selectedScopeObj.name : `${org.industry} (${org.country})`;
-
-      primaryAssignee = {
-        scopeLevel: "org_role",
-        orgId: org.id,
-        orgName: org.name,
-        roleName: selectedAdminRole,
-        adminScopeName,
-        assigneeName: selectedAdminRole,
-      };
-
-      assigneesList = [primaryAssignee];
-    } else if (assignmentType === "team") {
-      const selectedMembers = teamMembers.filter((m) => selectedTeamMemberIds.includes(String(m.id)));
-      if (selectedMembers.length === 0) {
-        toast.error("Please select at least one team member");
-        return;
+      if (taskToEdit.workflowId) {
+        setSelectedPipelineId(taskToEdit.workflowId);
       }
-      assigneesList = selectedMembers.map((m) => ({
-        scopeLevel: "client" as const,
-        userId: String(m.id),
-        assigneeName: m.name,
-        roleName: m.role,
-      }));
-      primaryAssignee = assigneesList[0];
+
+      if (taskToEdit.responsibleType === "contact") {
+        setResponsibleType("contact");
+        if (taskToEdit.responsiblePeople && taskToEdit.responsiblePeople.length > 0) {
+          setSelectedContactIds(taskToEdit.responsiblePeople.map((p) => p.id));
+        } else if (taskToEdit.assignee?.clientId) {
+          setSelectedContactIds([taskToEdit.assignee.clientId]);
+        }
+      } else {
+        setResponsibleType("team");
+        if (taskToEdit.responsiblePeople && taskToEdit.responsiblePeople.length > 0) {
+          setSelectedTeamMemberIds(taskToEdit.responsiblePeople.map((p) => p.id));
+        } else if (taskToEdit.assignee?.assigneeName) {
+          const match = teamMembers.find(
+            (m) => m.name.toLowerCase() === (taskToEdit.assignee?.assigneeName || "").toLowerCase()
+          );
+          if (match) setSelectedTeamMemberIds([String(match.id)]);
+        }
+      }
+
+      if (taskToEdit.scopingRules && Array.isArray(taskToEdit.scopingRules)) {
+        setAdminScopingRules(taskToEdit.scopingRules);
+      } else {
+        setAdminScopingRules([]);
+      }
+
+      if (taskToEdit.targetRole) {
+        const roles = taskToEdit.targetRole.split(",").map((r) => r.trim()).filter(Boolean);
+        setSelectedAdminRoles(roles.length > 0 ? roles : [taskToEdit.targetRole]);
+      } else if (taskToEdit.responsiblePeople && taskToEdit.responsiblePeople.length > 0) {
+        const roles = taskToEdit.responsiblePeople.map((p) => p.role).filter(Boolean) as string[];
+        if (roles.length > 0) {
+          setSelectedAdminRoles(Array.from(new Set(roles)));
+        } else {
+          setSelectedAdminRoles(["Lead Physician"]);
+        }
+      } else {
+        setSelectedAdminRoles(["Lead Physician"]);
+      }
+
+      if (taskToEdit.deadlineDate) {
+        setDeadlineDate(taskToEdit.deadlineDate);
+      }
+      if (taskToEdit.deadlineTime) {
+        setDeadlineTime(taskToEdit.deadlineTime);
+      }
+
+      if (taskToEdit.recurrence?.enabled) {
+        setRepeatEnabled(true);
+        setRepeatInterval(taskToEdit.recurrence.interval || 1);
+        setRepeatUnit(taskToEdit.recurrence.unit || "weeks");
+        setRepeatSkipWeekends(Boolean(taskToEdit.recurrence.skipWeekends));
+        setRepeatStopRule(taskToEdit.recurrence.stopRule || "never");
+        if (taskToEdit.recurrence.stopCount) setRepeatStopCount(taskToEdit.recurrence.stopCount);
+        if (taskToEdit.recurrence.stopDate) setRepeatStopDate(taskToEdit.recurrence.stopDate);
+      } else {
+        setRepeatEnabled(false);
+      }
+
+      if (taskToEdit.observers && taskToEdit.observers.length > 0) {
+        setObservers(taskToEdit.observers);
+      } else {
+        setObservers([]);
+      }
+
+      if (taskToEdit.studioItems && taskToEdit.studioItems.length > 0) {
+        setStudioItems(
+          taskToEdit.studioItems.map((si) => ({
+            id: si.id,
+            title: si.title,
+            description: si.description || "",
+            isImportant: Boolean(si.isImportant),
+            resourceType: si.resource?.type || "none",
+            resourceSource: si.resource?.source || "upload",
+            resourceValue: si.resource?.value || "",
+            resourceName: si.resource?.name || "",
+            resourceSize: si.resource?.size || "",
+            isExpanded: false,
+          }))
+        );
+      }
     } else {
-      const contact = initialClients.find((c) => c.id === selectedContactId) || initialClients[0];
-      primaryAssignee = {
-        scopeLevel: "contact",
-        clientId: contact?.id,
-        clientName: contact?.name || "Sarah Johnson",
-        assigneeName: contact?.name || "Sarah Johnson",
-        roleName: contact?.contactType || contact?.contact_type || "Client",
-      };
-      assigneesList = [primaryAssignee];
+      // Clear for new task
+      setTitle("");
+      setDescription("");
+      setIsImportant(false);
+      setRepeatEnabled(false);
+      setObservers([]);
+      setAdminScopingRules([]);
+      setSelectedAdminRoles(["Lead Physician"]);
+      setStudioItems([
+        {
+          id: "draft-item-1",
+          title: "Review patient chart & clinical intake baseline",
+          description: "Verify diagnostic codes and medical baseline history prior to evaluation.",
+          isImportant: true,
+          resourceType: "none",
+          resourceSource: "upload",
+          resourceValue: "",
+          resourceName: "",
+          resourceSize: "",
+          isExpanded: false,
+        },
+        {
+          id: "draft-item-2",
+          title: "Confirm insurance clearinghouse verification stamp",
+          description: "Submit electronic verification and attach verification code.",
+          isImportant: false,
+          resourceType: "none",
+          resourceSource: "upload",
+          resourceValue: "",
+          resourceName: "",
+          resourceSize: "",
+          isExpanded: false,
+        },
+      ]);
     }
+  }, [isOpen, taskToEdit, teamMembers]);
 
-    const resolvedScopeLevel: TaskScopeLevel = isAdmin
-      ? "admin"
-      : assignmentType === "contact" || visibleInPortal
-      ? "portal"
-      : "client";
+  // Step 2 Studio View Tab: "builder" vs "preview"
+  const [studioTab, setStudioTab] = useState<"builder" | "preview">("builder");
+  const [previewDoneItems, setPreviewDoneItems] = useState<Record<string, boolean>>({});
 
-    onCreateTask({
-      title: title.trim(),
-      description: description.trim(),
-      status,
-      stageName: selectedStageName,
-      stageId,
-      isImportant,
-      scopeLevel: resolvedScopeLevel,
-      assignee: primaryAssignee,
-      assignees: assigneesList,
-      creator: {
-        id: isAdmin ? "usr-admin-1" : "usr-clinic-1",
-        name: isAdmin ? "Platform Administrator" : "Clinic Administrator",
-        role: isAdmin ? "Super Admin" : "Practice Admin",
-      },
-      workflowId: defaultWorkflowId || "process-task-default",
-      workflowName: defaultWorkflowName || "Clinical & Operational Tasks",
-      deadline: formattedDeadline,
-      deadlineDate,
-      deadlineTime,
-      scopingRules: isAdmin
-        ? [{ industryCategory: ADMIN_SCOPE_OPTIONS.find((s) => s.id === selectedAdminScopeId)?.name || "Healthcare (US)" }]
-        : undefined,
-      checklists,
-      observers,
-      subtasks: [],
-      recurrence: recurrenceConfig,
-      timePlanning: timePlanningConfig,
-      attachments,
-      isPage,
-      htmlContent: isPage ? htmlContent : undefined,
-    });
+  const previewDoneCount = useMemo(() => {
+    return studioItems.filter((it) => previewDoneItems[it.id]).length;
+  }, [studioItems, previewDoneItems]);
 
-    // If assigned to a client contact or marked visible in portal, sync to client portal companion chat & notify
-    if (assignmentType === "contact" || visibleInPortal) {
-      const targetClientId = primaryAssignee.clientId || selectedContactId || "CL-001";
-      const targetClientName = primaryAssignee.clientName || primaryAssignee.assigneeName || "Client";
-      sendTaskToPortalChat(targetClientId, targetClientName, {
-        id: `tsk-${Date.now()}`,
-        code: `TSK-${Date.now()}`,
-        title: title.trim(),
-        stageName: selectedStageName,
-        deadline: formattedDeadline,
-      } as any);
+  const previewPercent = useMemo(() => {
+    if (studioItems.length === 0) return 0;
+    return Math.round((previewDoneCount / studioItems.length) * 100);
+  }, [previewDoneCount, studioItems.length]);
 
-      addNotification({
-        type: "task",
-        title: "New Action Item for You",
-        message: `Task '${title.trim()}' has been added to your portal tasks. Due: ${formattedDeadline || "Soon"}`,
-        link: `/patient/tasks`,
-        meta: { clientId: targetClientId },
+  const currentResponsiblePeople = useMemo<TaskResponsiblePerson[]>(() => {
+    if (isAdmin) {
+      const activeCats = adminScopingRules
+        .map((r) => r.industryCategory)
+        .filter(Boolean)
+        .join(", ");
+      return selectedAdminRoles.map((role, idx) => ({
+        id: `admin-role-${idx}`,
+        name: role,
+        role: role,
+        type: "org_role",
+        category: activeCats || "Global",
+      }));
+    } else if (responsibleType === "team") {
+      return selectedTeamMemberIds.map((id) => {
+        const m = teamMembers.find((tm) => String(tm.id) === id);
+        return {
+          id: String(m?.id || id),
+          name: m?.name || "Team Member",
+          role: m?.role,
+          type: "member",
+          avatar: (m as any)?.avatar,
+        };
+      });
+    } else {
+      return selectedContactIds.map((id) => {
+        const c = initialClients.find((cl) => cl.id === id);
+        return {
+          id: c?.id || id,
+          name: c?.name || "Patient / Contact",
+          role: c?.contactType || c?.contact_type || "Client",
+          category: c?.contactType || c?.contact_type || "Client",
+          type: "contact",
+        };
       });
     }
+  }, [isAdmin, adminScopingRules, selectedAdminRoles, responsibleType, selectedTeamMemberIds, teamMembers, selectedContactIds]);
 
+  const selectedPipeline = useMemo(() => {
+    return taskPipelines.find((p) => p.id === selectedPipelineId) || taskPipelines[0];
+  }, [taskPipelines, selectedPipelineId]);
+
+  const initialStage = selectedPipeline?.stages?.[0];
+  const stageName = initialStage?.name || "Task Created";
+  const stageId = initialStage?.id || "task-stg-created";
+
+  const deadlineFormatted = useMemo(() => {
+    if (!deadlineDate) return undefined;
+    return `${new Date(deadlineDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}${
+      deadlineTime ? `, ${deadlineTime}` : ""
+    }`;
+  }, [deadlineDate, deadlineTime]);
+
+  // Synchronize admin org roles
+  useEffect(() => {
+    if (availableAdminRoles.length > 0 && selectedAdminRoles.length === 0) {
+      setSelectedAdminRoles([availableAdminRoles[0]]);
+    }
+  }, [availableAdminRoles, selectedAdminRoles]);
+
+  // ── Handlers for Selection & Chips ──
+  const toggleTeamMemberSelection = (id: string) => {
+    setSelectedTeamMemberIds((prev) =>
+      prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id]
+    );
+  };
+
+  const removeTeamMemberChip = (id: string) => {
+    setSelectedTeamMemberIds((prev) => (prev.length > 1 ? prev.filter((x) => x !== id) : prev));
+  };
+
+  const toggleContactSelection = (id: string) => {
+    setSelectedContactIds((prev) =>
+      prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id]
+    );
+  };
+
+  const removeContactChip = (id: string) => {
+    setSelectedContactIds((prev) => (prev.length > 1 ? prev.filter((x) => x !== id) : prev));
+  };
+
+  const toggleAdminRoleSelection = (role: string) => {
+    setSelectedAdminRoles((prev) =>
+      prev.includes(role) ? (prev.length > 1 ? prev.filter((x) => x !== role) : prev) : [...prev, role]
+    );
+  };
+
+  const removeAdminRoleChip = (role: string) => {
+    setSelectedAdminRoles((prev) => (prev.length > 1 ? prev.filter((x) => x !== role) : prev));
+  };
+
+  const handleAddObserver = (memberId: string) => {
+    const member = teamMembers.find((m) => String(m.id) === memberId);
+    if (member && !observers.some((o) => o.id === String(member.id) || o.name === member.name)) {
+      setObservers((prev) => [...prev, { id: String(member.id), name: member.name, role: member.role }]);
+    }
+  };
+
+  const handleRemoveObserver = (id: string) => {
+    setObservers((prev) => prev.filter((o) => o.id !== id));
+  };
+
+  // ── File Upload Helper (Base64 + 1MB limit) ──
+  const handleItemFileUpload = (itemId: string, file: File) => {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error(`File size exceeds 1MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please choose a smaller file.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const sizeStr = file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB`;
+      setStudioItems((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? {
+                ...it,
+                resourceValue: dataUrl,
+                resourceName: file.name,
+                resourceSize: sizeStr,
+              }
+            : it
+        )
+      );
+      toast.success(`Attached "${file.name}"`);
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read file");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ── URL Validation ──
+  const isValidHttpUrl = (val: string) => {
+    try {
+      const u = new URL(val);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
+
+  // ── Studio Item Management ──
+  const handleAddStudioItem = () => {
+    const nextNum = studioItems.length + 1;
+    const newItem: StudioDraftItem = {
+      id: `draft-item-${Date.now()}-${nextNum}`,
+      title: `Task Deliverable ${nextNum}`,
+      description: "",
+      isImportant: false,
+      resourceType: "none",
+      resourceSource: "upload",
+      resourceValue: "",
+      resourceName: "",
+      resourceSize: "",
+      isExpanded: true,
+    };
+    setStudioItems((prev) => [...prev, newItem]);
+  };
+
+  const handleUpdateStudioItem = (id: string, patch: Partial<StudioDraftItem>) => {
+    setStudioItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  };
+
+  const handleDeleteStudioItem = (id: string) => {
+    if (studioItems.length <= 1) {
+      toast.error("A task must have at least one studio deliverable item");
+      return;
+    }
+    setStudioItems((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  const handleMoveStudioItem = (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= studioItems.length) return;
+    const items = [...studioItems];
+    const [moved] = items.splice(index, 1);
+    items.splice(targetIndex, 0, moved);
+    setStudioItems(items);
+  };
+
+  // ── Validation & Step Progression ──
+  const handleNextStep = () => {
+    if (!title.trim()) {
+      toast.error("Please enter a Task Title");
+      return;
+    }
+    if (!selectedPipelineId) {
+      toast.error("Please select a Workflow Pipeline");
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleFinalCreate = () => {
+    // Validate Studio Items
+    if (studioItems.length === 0) {
+      toast.error("Task Studio requires at least one item");
+      return;
+    }
+    const emptyTitleItem = studioItems.find((it) => !it.title.trim());
+    if (emptyTitleItem) {
+      toast.error("Every studio item must have a title");
+      return;
+    }
+
+    // Validate URLs if resourceType is url or (image/video with source url)
+    for (const it of studioItems) {
+      if (
+        it.resourceType === "url" ||
+        ((it.resourceType === "image" || it.resourceType === "video") && it.resourceSource === "url")
+      ) {
+        if (it.resourceValue && !isValidHttpUrl(it.resourceValue)) {
+          toast.error(`Invalid URL scheme for "${it.title}". Must start with http:// or https://`);
+          return;
+        }
+      }
+    }
+
+    // Construct Responsible People
+    const responsiblePeople = currentResponsiblePeople;
+
+    // Convert Studio Items
+    const finalStudioItems: TaskStudioItem[] = studioItems.map((draft, idx) => {
+      let resource: TaskStudioItemResource | undefined = undefined;
+      if (draft.resourceType !== "none" && draft.resourceValue) {
+        resource = {
+          type: draft.resourceType,
+          source: draft.resourceSource,
+          value: draft.resourceValue,
+          name: draft.resourceName || draft.title,
+          size: draft.resourceSize,
+        };
+      }
+      return {
+        id: draft.id,
+        title: draft.title.trim(),
+        description: draft.description.trim() || undefined,
+        resource,
+        isImportant: draft.isImportant,
+        order: idx,
+        completion: {},
+      };
+    });
+
+    // Primary Assignee for backward compatibility
+    const firstResp = responsiblePeople[0] || {
+      id: "resp-1",
+      name: "Assigned Staff",
+      type: "member" as const,
+    };
+    const primaryAssignee: TaskAssigneeScope = {
+      scopeLevel: isAdmin ? "org_role" : responsibleType === "contact" ? "contact" : "client",
+      assigneeName: firstResp.name,
+      roleName: firstResp.role,
+      userId: firstResp.type === "member" ? firstResp.id : undefined,
+      clientId: firstResp.type === "contact" ? firstResp.id : undefined,
+      clientName: firstResp.type === "contact" ? firstResp.name : undefined,
+      adminScopeName: isAdmin
+        ? adminScopingRules.map((r) => r.industryCategory).filter(Boolean).join(", ") || "Global"
+        : undefined,
+    };
+
+    const allAssignees: TaskAssigneeScope[] = responsiblePeople.map((r) => ({
+      scopeLevel: isAdmin ? "org_role" : r.type === "contact" ? "contact" : "client",
+      assigneeName: r.name,
+      roleName: r.role,
+      userId: r.type === "member" ? r.id : undefined,
+      clientId: r.type === "contact" ? r.id : undefined,
+      clientName: r.type === "contact" ? r.name : undefined,
+      adminScopeName: isAdmin
+        ? adminScopingRules.map((r) => r.industryCategory).filter(Boolean).join(", ") || "Global"
+        : undefined,
+    }));
+
+    // Recurrence config
+    let recurrence: TaskRecurrenceConfig | undefined = undefined;
+    if (repeatEnabled) {
+      recurrence = {
+        enabled: true,
+        interval: Math.max(1, repeatInterval),
+        unit: repeatUnit,
+        startDate: deadlineDate || new Date().toISOString().split("T")[0],
+        skipWeekends: repeatSkipWeekends,
+        stopRule: repeatStopRule,
+        stopCount: repeatStopRule === "count" ? repeatStopCount : undefined,
+        stopDate: repeatStopRule === "date" ? repeatStopDate : undefined,
+      };
+    }
+
+    // If editing existing task, update and return
+    if (taskToEdit && onUpdateTask) {
+      onUpdateTask(taskToEdit.id, {
+        title: title.trim(),
+        description: description.trim(),
+        workflowId: selectedPipeline.id,
+        workflowName: selectedPipeline.name,
+        isImportant,
+        scopeLevel: isAdmin ? "admin" : responsibleType === "contact" ? "portal" : "client",
+        assignee: primaryAssignee,
+        assignees: allAssignees,
+        responsiblePeople,
+        responsibleType: isAdmin ? "org_role" : responsibleType,
+        studioItems: finalStudioItems,
+        deadline: deadlineFormatted,
+        deadlineDate: deadlineDate || undefined,
+        deadlineTime: deadlineTime || undefined,
+        recurrence,
+        observers,
+        targetRole: isAdmin ? selectedAdminRoles.join(", ") : selectedRoleFilter !== "All Roles" ? selectedRoleFilter : undefined,
+        targetOrgId: undefined,
+        targetOrgName: undefined,
+        scopingRules: isAdmin ? adminScopingRules : taskToEdit.scopingRules,
+      });
+      toast.success(`Task ${taskToEdit.code} updated successfully`);
+      onClose();
+      return;
+    }
+
+    const newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt"> = {
+      title: title.trim(),
+      description: description.trim(),
+      creator: {
+        id: user?.email || (isAdmin ? "admin-1" : "member-1"),
+        name: user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta"),
+        role: user?.role || (isAdmin ? "SuperAdmin" : "Physician"),
+      },
+      status: "pending",
+      stageName,
+      stageId,
+      workflowId: selectedPipeline.id,
+      workflowName: selectedPipeline.name,
+      isImportant,
+      scopeLevel: isAdmin ? "admin" : responsibleType === "contact" ? "portal" : "client",
+      assignee: primaryAssignee,
+      assignees: allAssignees,
+      responsiblePeople,
+      responsibleType: isAdmin ? "org_role" : responsibleType,
+      targetRole: isAdmin ? selectedAdminRoles.join(", ") : undefined,
+      scopingRules: isAdmin ? adminScopingRules : undefined,
+      studioItems: finalStudioItems,
+      deadline: deadlineFormatted,
+      deadlineDate: deadlineDate || undefined,
+      deadlineTime: deadlineTime || undefined,
+      checklists: [
+        {
+          id: `chk-${Date.now()}`,
+          title: "Deliverables Checklist",
+          items: finalStudioItems.map((si) => ({
+            id: si.id,
+            text: si.title,
+            isCompleted: false,
+            isImportant: si.isImportant,
+          })),
+        },
+      ],
+      observers,
+      subtasks: [],
+      recurrence,
+      attachments: [],
+    };
+
+    onCreateTask(newTaskData);
+    toast.success(`Task "${title.trim()}" created successfully with ${finalStudioItems.length} studio items`);
     onClose();
   };
 
+  // Schedule summary chip
+  const scheduleChipSummary = useMemo(() => {
+    if (!deadlineDate) return isImportant ? "Important" : "None";
+    const dStr = new Date(deadlineDate).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const timeStr = deadlineTime ? `, ${deadlineTime}` : "";
+    return `${dStr}${timeStr}${isImportant ? " · Important" : ""}`;
+  }, [deadlineDate, deadlineTime, isImportant]);
+
+  // Repeat summary chip
+  const repeatChipSummary = useMemo(() => {
+    if (!repeatEnabled) return "Off";
+    return `Every ${repeatInterval} ${repeatUnit}`;
+  }, [repeatEnabled, repeatInterval, repeatUnit]);
+
   return (
-    <>
-      <DrawerShell
-        isOpen={isOpen}
-        onClose={onClose}
-        title="New Task"
-        subtitle="Quick Create Drawer"
-        icon={<CheckSquare className="w-5 h-5 text-slate-700" />}
-        width="max-w-[580px]"
-        zIndex={650}
-        headerRight={
-          <div className="flex items-center gap-2">
+    <DrawerShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={taskToEdit ? `Edit Task (${taskToEdit.code})` : "Create Task"}
+      subtitle={
+        taskToEdit
+          ? step === 1
+            ? "Step 1: Configure task scope & assignment"
+            : "Step 2: Task Studio & deliverables"
+          : step === 1
+          ? "Step 1: Configure task scope & assignment"
+          : "Step 2: Task Studio & deliverables"
+      }
+      icon={<CheckSquare className="w-5 h-5 text-slate-700" />}
+      width={step === 2 ? "max-w-[760px]" : "max-w-[640px]"}
+      zIndex={650}
+      headerRight={
+        <div className="flex items-center gap-3">
+          {/* Step Indicator */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
             <button
               type="button"
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              onClick={() => setStep(1)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                step === 1
+                  ? "bg-[#1E293B] text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              Cancel
+              <span>1</span>
+              <span>Configure</span>
             </button>
+            <div className="w-2.5 h-px bg-slate-300" />
             <button
               type="button"
-              onClick={handleCreate}
-              disabled={!title.trim()}
-              className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              onClick={() => {
+                if (title.trim()) setStep(2);
+                else toast.error("Please enter a Task Title first");
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                step === 2
+                  ? "bg-[#1E293B] text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              Create Task
+              <span>2</span>
+              <span>Task Studio</span>
             </button>
           </div>
-        }
-        bodyClassName="flex-1 overflow-y-auto p-5 space-y-5 bg-slate-50/50"
-      >
-        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-
-        {/* ── 1. Task Details Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Task Details</span>
-              <InfoTooltip content="Primary identifiers, title, description, and admin scoping rules" />
-            </h3>
-          </div>
-
-          {/* Task Name (required) */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <span>Task Name</span>
-              <span className="text-red-500">*</span>
-              <InfoTooltip content="Descriptive summary of the task objective" />
-            </label>
+        </div>
+      }
+      footer={
+        <div className="flex items-center justify-between w-full">
+          {step === 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-[#1E293B] hover:bg-slate-800 rounded-xl shadow-xs transition-all cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <span>Next: Task Studio</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Configure</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalCreate}
+                className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-xl shadow-xs transition-all cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Check className="w-4 h-4" />
+                <span>{taskToEdit ? "Save Changes" : "Create Task"}</span>
+              </button>
+            </>
+          )}
+        </div>
+      }
+      bodyClassName="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 bg-slate-50/50"
+    >
+      {/* ─────────────────────────────────────────────────────────────
+          STEP 1: CONFIGURE THE TASK
+      ───────────────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* 1. Task Title (Required) */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
+                <span>Task Title</span>
+                <span className="text-rose-500 font-bold">*</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">Required</span>
+            </div>
             <input
               type="text"
+              placeholder="e.g. Verify Patient Insurance Eligibility for Fasting Labs"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Verify Patient Insurance Eligibility for Fasting Labs"
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 font-semibold"
+              className="w-full text-sm font-semibold p-3 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] text-slate-900 placeholder:text-slate-400 transition-all"
             />
           </div>
 
-          {/* Description */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <span>Description</span>
-              <InfoTooltip content="Action items, guidelines, and reference steps for the assignee" />
+          {/* 2. Task Description */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-900 block">
+              Task Description
             </label>
             <textarea
               rows={3}
+              placeholder="Provide background context, clinical objectives, and deliverables instructions..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide context and execution instructions..."
-              className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] text-slate-900 resize-none leading-relaxed"
+              className="w-full text-xs p-3 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] text-slate-800 placeholder:text-slate-400 resize-none transition-all leading-relaxed"
             />
           </div>
 
-          {/* Create as Page (HTML Content) Option */}
-          <div className="pt-2 border-t border-gray-100 space-y-3">
-            <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
-              <div className="flex items-center gap-2.5">
-                <FileCode className="w-4 h-4 text-slate-600" />
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">Create as Page (HTML Content)</span>
-                  <span className="text-[11px] text-slate-500">Render custom isolated HTML/CSS in a sandboxed container</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isPage}
-                onClick={() => setIsPage((prev) => !prev)}
-                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                  isPage ? "bg-[#1E293B]" : "bg-gray-200"
-                }`}
-              >
-                <div
-                  className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                    isPage ? "translate-x-4" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-
-            {isPage && (
-              <div className="space-y-1.5 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span>HTML &amp; CSS Source Code</span>
-                    <span className="text-red-500">*</span>
-                    <InfoTooltip content="Sandboxed HTML rendered in a strict bordered container. Styles and scripts will not leak to the app." />
-                  </label>
-                  <span className="text-[10px] font-mono text-slate-500">iframe srcdoc sandbox</span>
-                </div>
-                <textarea
-                  rows={8}
-                  value={htmlContent}
-                  onChange={(e) => setHtmlContent(e.target.value)}
-                  placeholder={`<div style="padding: 20px; font-family: sans-serif;">\n  <h2>Protocol Title</h2>\n  <p>Custom clinical instructions...</p>\n</div>`}
-                  className="w-full text-xs p-3 font-mono bg-slate-900 text-emerald-400 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/30 resize-y leading-relaxed"
-                  spellCheck={false}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Admin Scope: Plain dropdown field (Replaces the multi-tenant accordion card, no outer card or boundary) */}
+          {/* Admin Control (Scope Rules) - Only in Admin Mode */}
           {isAdmin && (
-            <div className="space-y-1.5 pt-1">
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Globe className="w-3.5 h-3.5 text-slate-500" />
-                <span>Admin Scope</span>
-                <InfoTooltip content="Filter tenant organizations and roles by designated multi-tenant administrative scope" />
-              </label>
-              <select
-                value={selectedAdminScopeId}
-                onChange={(e) => setSelectedAdminScopeId(e.target.value)}
-                className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer font-semibold"
-              >
-                {ADMIN_SCOPE_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <AdminControlAccordion
+                scopingRules={adminScopingRules}
+                onScopingRulesChange={(newRules) => setAdminScopingRules(newRules)}
+                defaultAdminControlOpen={true}
+                defaultScopeOpen={true}
+                defaultPermissionsOpen={false}
+                scopeTooltip="Define which tenant organization categories, industries, and locations this administrative task applies to. Assigned roles below are filtered by this scope."
+              />
             </div>
           )}
-        </div>
 
-        {/* ── 2. Assignment & Stage Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Assignment &amp; Stage</span>
-              <InfoTooltip content="Set target organization/roles or team members/clients, followed by initial workflow stage" />
-            </h3>
-          </div>
-
-          {/* ADMIN ASSIGNMENT: Target Organization -> Organization Role */}
-          {isAdmin ? (
-            <div className="space-y-3">
-              {/* Target Organization (Filtered by selected Admin Scope) */}
-              <div className="space-y-1.5">
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                  <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Target Organization</span>
-                  <InfoTooltip content="Select the corporate tenant organization within the designated admin scope" />
-                </label>
-                <select
-                  value={selectedAdminOrgId}
-                  onChange={(e) => {
-                    const newOrgId = e.target.value;
-                    setSelectedAdminOrgId(newOrgId);
-                    const newRoles = ADMIN_ORG_ROLES[newOrgId] || [];
-                    if (newRoles.length > 0) setSelectedAdminRole(newRoles[0]);
-                  }}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-                >
-                  {filteredAdminOrganizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name} ({org.industry} · {org.country})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Organization Role (Filtered by selected Organization) */}
-              <div className="space-y-1.5">
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                  <Shield className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Organization Role</span>
-                  <InfoTooltip content="Target role within the selected tenant organization" />
-                </label>
-                <select
-                  value={selectedAdminRole}
-                  onChange={(e) => setSelectedAdminRole(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-                >
-                  {availableAdminRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Admin Delegation Note */}
-              <p className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-gray-200 leading-relaxed">
-                Corporate tasks are delegated directly to the <strong>{selectedAdminRole}</strong> role at <strong>{filteredAdminOrganizations.find((o) => o.id === selectedAdminOrgId)?.name || "the selected organization"}</strong> across all active tenant members with that role.
-              </p>
-            </div>
-          ) : (
-            /* CLIENT WORKSPACE ASSIGNMENT: Team Members vs Contact / Client */
-            <div className="space-y-3">
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <span>Assign To</span>
-                <InfoTooltip content="Choose whether to delegate this task to Team Members or an External Contact / Client" />
+          {/* 3. Task Responsible */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-slate-500" />
+                <span>Task Responsible</span>
               </label>
+              {!isAdmin && (
+                <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/70">
+                  <button
+                    type="button"
+                    onClick={() => setResponsibleType("team")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      responsibleType === "team"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Team Members
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResponsibleType("contact")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      responsibleType === "contact"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Contacts
+                  </button>
+                </div>
+              )}
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAssignmentType("team")}
-                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    assignmentType === "team"
-                      ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
-                      : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Team Members</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAssignmentType("contact");
-                    setVisibleInPortal(true);
-                  }}
-                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    assignmentType === "contact"
-                      ? "bg-[#1E293B] text-white border-slate-900 shadow-xs"
-                      : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Contact / Client</span>
-                </button>
-              </div>
-
-              {/* TEAM MEMBER ASSIGNMENT */}
-              {assignmentType === "team" && (
-                <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
-                  <div className="space-y-1.5">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <span>Select Role</span>
-                      <InfoTooltip content="Filter available team members by their designated organizational role" />
+            {/* Admin Responsible: Render Roles based on Admin Control scope, organizations removed */}
+            {isAdmin ? (
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Assign to Role(s)</span>
                     </label>
-                    <select
-                      value={selectedRoleFilter}
-                      onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                    >
-                      {availableRoles.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </select>
+                    {adminScopingRules.length > 0 && (
+                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        Filtered by Scope ({adminScopingRules.map((r) => r.industryCategory || "All").join(", ")})
+                      </span>
+                    )}
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <span>Select Team Member(s)</span>
-                      <InfoTooltip content="Add one or more team members who are responsible for this task" />
-                    </label>
+                  <div className="relative">
                     <select
                       onChange={(e) => {
-                        const id = e.target.value;
-                        if (id && !selectedTeamMemberIds.includes(id)) {
-                          setSelectedTeamMemberIds((prev) => [...prev, id]);
-                        }
+                        if (e.target.value) toggleAdminRoleSelection(e.target.value);
                         e.target.value = "";
                       }}
                       defaultValue=""
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
+                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 hover:bg-slate-100/60 transition-colors"
                     >
                       <option value="" disabled>
-                        + Click to add a team member...
+                        + Select role to assign...
                       </option>
-                      {filteredTeamMembers.map((m) => {
-                        const isAdded = selectedTeamMemberIds.includes(String(m.id));
-                        return (
-                          <option key={m.id} value={String(m.id)} disabled={isAdded}>
-                            {m.name} {m.role ? `(${m.role})` : ""} {isAdded ? "✓ Added" : ""}
-                          </option>
-                        );
-                      })}
+                      {availableAdminRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {role} {selectedAdminRoles.includes(role) ? "✓ (Selected)" : ""}
+                        </option>
+                      ))}
                     </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
 
-                    <div className="flex flex-wrap gap-1.5 pt-2">
-                      {selectedTeamMemberIds.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic py-1">
-                          No team member selected. Please choose from the dropdown above.
-                        </p>
-                      ) : (
-                        selectedTeamMemberIds.map((id) => {
-                          const member = teamMembers.find((m) => String(m.id) === String(id));
-                          if (!member) return null;
-                          return (
-                            <span
-                              key={id}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs"
-                            >
-                              <Users className="w-3 h-3 text-slate-500" />
-                              <span>{member.name}</span>
-                              {member.role && (
-                                <span className="text-[10px] text-slate-500 font-normal">
-                                  ({member.role})
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setSelectedTeamMemberIds((prev) => prev.filter((x) => x !== id))
-                                }
-                                className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer rounded hover:bg-slate-100"
-                                title="Remove team member"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          );
-                        })
-                      )}
+                {/* Selected Role Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedAdminRoles.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No roles selected. Select at least one role above.</p>
+                  ) : (
+                    selectedAdminRoles.map((role) => (
+                      <span
+                        key={role}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/80 shadow-2xs"
+                      >
+                        <Shield className="w-3 h-3 text-blue-600" />
+                        <span>{role}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeAdminRoleChip(role)}
+                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                          title={`Remove ${role}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : responsibleType === "team" ? (
+              /* Clinic Team Members: Role Selector -> Multi-select members */
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1/3">
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Filter Role</label>
+                    <div className="relative">
+                      <select
+                        value={selectedRoleFilter}
+                        onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
+                      >
+                        {availableRoles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="w-2/3">
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Select Members</label>
+                    <div className="relative">
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) toggleTeamMemberSelection(e.target.value);
+                          e.target.value = "";
+                        }}
+                        defaultValue=""
+                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
+                      >
+                        <option value="" disabled>
+                          + Click to add member
+                        </option>
+                        {filteredTeamMembers.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.role}) {selectedTeamMemberIds.includes(String(m.id)) ? "✓" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
                 </div>
-              )}
 
-              {/* CONTACT ASSIGNMENT */}
-              {assignmentType === "contact" && (
-                <div className="space-y-3 pt-2 bg-slate-50/70 p-3.5 rounded-xl border border-gray-200/80">
-                  <div className="space-y-1.5">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <span>Contact Category</span>
-                      <InfoTooltip content="Filter contacts by type: Lead, Client, Supplier, or Vendor" />
-                    </label>
-                    <select
-                      value={selectedContactCategory}
-                      onChange={(e) => setSelectedContactCategory(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer"
-                    >
-                      {CONTACT_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
+                {/* Selected People Removable Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedTeamMemberIds.map((id) => {
+                    const m = teamMembers.find((tm) => String(tm.id) === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/80"
+                      >
+                        <div className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center text-[9px] font-bold">
+                          {m?.name?.charAt(0) || "U"}
+                        </div>
+                        <span>{m?.name || "Member"}</span>
+                        {m?.role && <span className="text-[10px] text-slate-500">({m.role})</span>}
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMemberChip(id)}
+                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                          title="Remove person"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Clinic Contacts: Category Selector -> Multi-select contacts */
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1/3">
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Category</label>
+                    <div className="relative">
+                      <select
+                        value={selectedContactCategory}
+                        onChange={(e) => setSelectedContactCategory(e.target.value)}
+                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
+                      >
+                        {CONTACT_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <span>Select Contact</span>
-                      <InfoTooltip content="External contact or patient responsible for this task" />
-                    </label>
-                    <select
-                      value={selectedContactId}
-                      onChange={(e) => setSelectedContactId(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
-                    >
-                      {filteredContacts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.contactType || c.contact_type || "Client"}) - {c.location || c.email}
+                  <div className="w-2/3">
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Select Contacts</label>
+                    <div className="relative">
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) toggleContactSelection(e.target.value);
+                          e.target.value = "";
+                        }}
+                        defaultValue=""
+                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
+                      >
+                        <option value="" disabled>
+                          + Click to add contact
                         </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={visibleInPortal}
-                        onChange={(e) => setVisibleInPortal(e.target.checked)}
-                        className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
-                      />
-                      <span className="text-xs font-semibold text-slate-700">Visible in Client Portal</span>
-                    </label>
-                    <InfoTooltip content="Allow this client to view this task and checklist items in their portal" />
+                        {filteredContacts.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.contactType || c.contact_type || "Client"}) {selectedContactIds.includes(c.id) ? "✓" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Initial Stage: Positioned at the end of Assignment & Stage in client drawer (removed in admin) */}
-          {!isAdmin && (
-            <div className="space-y-1.5 pt-2 border-t border-gray-100">
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <span>Initial Stage</span>
-                <InfoTooltip content="Select the starting workflow stage for this task" />
+                {/* Selected Contacts Removable Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedContactIds.map((id) => {
+                    const c = initialClients.find((cl) => cl.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
+                      >
+                        <User className="w-3 h-3 text-emerald-600" />
+                        <span>{c?.name || "Contact"}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeContactChip(id)}
+                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                          title="Remove contact"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Workflow (Required, pipeline name only) */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
+                <span>Workflow Pipeline</span>
+                <span className="text-rose-500 font-bold">*</span>
               </label>
+              <InfoTooltip content="The task will automatically begin in the pipeline's starting stage" />
+            </div>
+            <div className="relative">
               <select
-                value={selectedStageName}
-                onChange={(e) => setSelectedStageName(e.target.value)}
-                className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 cursor-pointer font-semibold"
+                value={selectedPipelineId}
+                onChange={(e) => setSelectedPipelineId(e.target.value)}
+                className="w-full text-xs font-bold p-3 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0]"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                {(taskStages.length > 0 ? taskStages : [
-                  { id: "task-stg-created", name: "Task Created" },
-                  { id: "task-stg-completed", name: "Task Completed" },
-                  { id: "task-stg-overdue", name: "Task Overdue" },
-                ]).map((stg) => (
-                  <option key={stg.id} value={stg.name}>
-                    {stg.name}
+                {taskPipelines.map((pipe) => (
+                  <option key={pipe.id} value={pipe.id}>
+                    {pipe.name}
                   </option>
                 ))}
               </select>
+              <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* ── 3. Schedule & Priority Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <Calendar className="w-3.5 h-3.5 text-slate-700" />
-              <span>Schedule &amp; Priority</span>
-              <InfoTooltip content="Set completion deadline, priority importance, recurrence triggers, and duration planning" />
+          {/* 5. Settings Accordion Rows (Call Trigger Settings Visual Pattern) */}
+          <div className="space-y-3 pt-1">
+            <h3
+              className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Task Parameters & Schedule
             </h3>
-          </div>
 
-          {/* Deadline: Date & Time Picker */}
-          <div className="space-y-1.5">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Deadline (Date &amp; Time)</span>
-              <InfoTooltip content="Target calendar date and clock time for task completion" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="relative">
-                <input
-                  type="date"
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
-                />
-              </div>
-              <div className="relative">
-                <input
-                  type="time"
-                  value={deadlineTime}
-                  onChange={(e) => setDeadlineTime(e.target.value)}
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white text-slate-900 cursor-pointer"
-                />
-              </div>
-            </div>
-            {deadlineDate && (
-              <p className="text-[11px] text-slate-500 font-mono">
-                Formatted: {formatDeadlineDisplay(deadlineDate, deadlineTime)}
-              </p>
-            )}
-          </div>
-
-          {/* Mark as Important: Setting Toggle Switch */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 border border-gray-200/80 rounded-xl">
-            <div className="flex items-center gap-2.5">
-              <Star className={`w-4 h-4 ${isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
-              <div>
-                <span className="text-xs font-semibold text-slate-800 block">Mark as Important</span>
-                <span className="text-[11px] text-slate-500">Flags this task with high urgency priority</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isImportant}
-              onClick={() => setIsImportant((prev) => !prev)}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                isImportant ? "bg-[#1E293B]" : "bg-gray-200"
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                  isImportant ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Repeat Task & Time Planning (Moved up from bottom into Schedule & Priority) */}
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setShowRecurrenceDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Repeat className="w-4 h-4 text-slate-600" />
-                <span>Repeat Task</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {recurrenceConfig?.enabled ? "Configured" : "None"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowTimePlanningDrawer(true)}
-              className="p-3 rounded-xl border border-gray-200 hover:bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-800 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-600" />
-                <span>Time Planning</span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {timePlanningConfig?.durationDays ? `${timePlanningConfig.durationDays}d` : "None"}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── 4. Observers Section (Client workspace only, removed in admin) ── */}
-        {!isAdmin && (
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                <Eye className="w-3.5 h-3.5 text-slate-700" />
-                <span>Observers ({observers.length})</span>
-                <InfoTooltip content="Users who can monitor progress and receive updates without direct assignment" />
-              </h3>
+            {/* Row A: Schedule & Priority */}
+            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
               <button
                 type="button"
-                onClick={() => setShowAddObserver((prev) => !prev)}
-                className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
+                onClick={() => setOpenSettingsRow(openSettingsRow === "schedule" ? null : "schedule")}
+                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Observer</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                    <Calendar className="w-4 h-4 text-[#1456f0]" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Schedule & Priority
+                    </span>
+                    <Tooltip text="Set completion deadline, time target, and high-priority importance flag">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                    {scheduleChipSummary}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                      openSettingsRow === "schedule" ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
               </button>
+
+              {openSettingsRow === "schedule" && (
+                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">Deadline Date</label>
+                      <input
+                        type="date"
+                        value={deadlineDate}
+                        onChange={(e) => setDeadlineDate(e.target.value)}
+                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">Target Time</label>
+                      <input
+                        type="time"
+                        value={deadlineTime}
+                        onChange={(e) => setDeadlineTime(e.target.value)}
+                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mark as Important Inline Toggle */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
+                    <div className="flex items-center gap-2">
+                      <Star className={`w-4 h-4 ${isImportant ? "text-amber-500 fill-amber-500" : "text-slate-400"}`} />
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">Mark as Important</span>
+                        <span className="text-[11px] text-slate-500">Flags priority across clinical boards</span>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isImportant}
+                        onChange={(e) => setIsImportant(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {showAddObserver && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-700 block">
-                  Select Team Member to Observe:
-                </span>
-                <select
-                  onChange={(e) => {
-                    const m = teamMembers.find((tm) => String(tm.id) === e.target.value);
-                    if (m) handleAddObserver(m);
-                  }}
-                  defaultValue=""
-                  className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg cursor-pointer text-slate-900"
-                >
-                  <option value="" disabled>
-                    Choose observer...
-                  </option>
-                  {teamMembers.map((tm) => (
-                    <option key={tm.id} value={String(tm.id)}>
-                      {tm.name} {tm.role ? `(${tm.role})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {observers.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No observers assigned yet.</p>
-              ) : (
-                observers.map((obs) => (
-                  <span
-                    key={obs.id}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-gray-200 rounded-lg text-xs font-semibold text-slate-800"
-                  >
-                    <Eye className="w-3 h-3 text-slate-400" />
-                    <span>{obs.name}</span>
-                    {obs.role && (
-                      <span className="text-[10px] text-slate-400 font-normal">({obs.role})</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveObserver(obs.id)}
-                      className="text-slate-400 hover:text-red-500 ml-1 p-0.5 cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+            {/* Row B: Repeat (Inline recurrence settings) */}
+            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+              <button
+                type="button"
+                onClick={() => setOpenSettingsRow(openSettingsRow === "repeat" ? null : "repeat")}
+                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                    <Repeat className="w-4 h-4" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Repeat
+                    </span>
+                    <Tooltip text="Automated cadence for recurring task dispatch">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                    {repeatChipSummary}
                   </span>
-                ))
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                      openSettingsRow === "repeat" ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {openSettingsRow === "repeat" && (
+                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                  {/* Enable Repeat Toggle */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block">Enable Recurrence</span>
+                      <span className="text-[11px] text-slate-500">Auto-create new instances on schedule</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={repeatEnabled}
+                        onChange={(e) => setRepeatEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1E293B]"></div>
+                    </label>
+                  </div>
+
+                  {repeatEnabled && (
+                    <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">Every</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={repeatInterval}
+                            onChange={(e) => setRepeatInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono tabular-nums"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">Unit</label>
+                          <select
+                            value={repeatUnit}
+                            onChange={(e) => setRepeatUnit(e.target.value as any)}
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 cursor-pointer"
+                          >
+                            <option value="days">Days</option>
+                            <option value="weeks">Weeks</option>
+                            <option value="months">Months</option>
+                            <option value="years">Years</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Skip weekends toggle */}
+                      <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
+                        <span className="text-xs font-semibold text-slate-700">Skip Weekends (trigger on Monday)</span>
+                        <input
+                          type="checkbox"
+                          checked={repeatSkipWeekends}
+                          onChange={(e) => setRepeatSkipWeekends(e.target.checked)}
+                          className="w-4 h-4 rounded text-slate-900 cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Stop Conditions */}
+                      <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-2">
+                        <span className="text-xs font-semibold text-slate-700 block">End Recurrence</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["never", "count", "date"] as const).map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => setRepeatStopRule(r)}
+                              className={`py-1.5 rounded-lg text-xs font-semibold capitalize border transition-all cursor-pointer ${
+                                repeatStopRule === r
+                                  ? "bg-slate-900 text-white border-slate-900"
+                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+
+                        {repeatStopRule === "count" && (
+                          <div className="pt-2">
+                            <label className="text-[11px] text-slate-500 block mb-1">Stop after (occurrences)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={repeatStopCount}
+                              onChange={(e) => setRepeatStopCount(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                            />
+                          </div>
+                        )}
+
+                        {repeatStopRule === "date" && (
+                          <div className="pt-2">
+                            <label className="text-[11px] text-slate-500 block mb-1">Stop on date</label>
+                            <input
+                              type="date"
+                              value={repeatStopDate}
+                              onChange={(e) => setRepeatStopDate(e.target.value)}
+                              className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Row C: Observers */}
+            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+              <button
+                type="button"
+                onClick={() => setOpenSettingsRow(openSettingsRow === "observers" ? null : "observers")}
+                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                    <Eye className="w-4 h-4" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Observers
+                    </span>
+                    <Tooltip text="Observers receive notifications and progress updates without direct responsibility">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                    {observers.length} {observers.length === 1 ? "Observer" : "Observers"}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                      openSettingsRow === "observers" ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {openSettingsRow === "observers" && (
+                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+                  {/* Active Observers */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {observers.map((obs) => (
+                      <span
+                        key={obs.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                      >
+                        <Eye className="w-3 h-3 text-amber-500" />
+                        <span>{obs.name}</span>
+                        {obs.role && <span className="text-[10px] text-slate-400">({obs.role})</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveObserver(obs.id)}
+                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    {observers.length === 0 && (
+                      <span className="text-xs text-slate-400 italic">No observers added</span>
+                    )}
+                  </div>
+
+                  {/* Add Observer Dropdown */}
+                  <div className="relative pt-1">
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) handleAddObserver(e.target.value);
+                        e.target.value = "";
+                      }}
+                      defaultValue=""
+                      className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 cursor-pointer"
+                    >
+                      <option value="" disabled>
+                        + Add team member as observer...
+                      </option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── 5. Checklists Card with Item Hamburger Menu ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Checklists</span>
-              <InfoTooltip content="Granular deliverables and verification steps with action menus" />
-            </h3>
-            <button
-              type="button"
-              onClick={handleAddChecklist}
-              className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Checklist</span>
-            </button>
-          </div>
-
-          {checklists.map((chk) => (
-            <div key={chk.id} className="p-3.5 bg-slate-50 rounded-xl border border-gray-200/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800">{chk.title}</span>
-                {checklists.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteChecklist(chk.id)}
-                    className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
+      {/* ─────────────────────────────────────────────────────────────
+          STEP 2: TASK STUDIO (Items, Resources, HTML Blocks & Live Preview)
+      ───────────────────────────────────────────────────────────── */}
+      {step === 2 && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Studio Header: Title & Switcher (Builder vs Task Preview) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Task Studio
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                  {studioItems.length} {studioItems.length === 1 ? "deliverable" : "deliverables"}
+                </span>
               </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {studioTab === "builder"
+                  ? "Build and arrange sequential deliverables for your assignees."
+                  : "Live preview of how assignees will interact with this task."}
+              </p>
+            </div>
 
-              {/* Items List */}
-              <div className="space-y-1.5">
-                {chk.items.map((it) => (
-                  <div
-                    key={it.id}
-                    className="relative flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-gray-200/70 text-xs"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {it.isImportant && (
-                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
-                      )}
-
-                      {editingItemId === it.id ? (
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="text"
-                            value={editingItemText}
-                            onChange={(e) => setEditingItemText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleSaveEditItem(chk.id, it.id);
-                              if (e.key === "Escape") setEditingItemId(null);
-                            }}
-                            className="flex-1 text-xs p-1 bg-slate-50 border border-gray-200 rounded text-slate-900"
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleSaveEditItem(chk.id, it.id)}
-                            className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingItemId(null)}
-                            className="p-1 text-slate-400 hover:bg-slate-100 rounded"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-slate-800 font-medium truncate">{it.text}</span>
-                      )}
-                    </div>
-
-                    {/* Hamburger / Menu Action Button on each item */}
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveItemMenuId(activeItemMenuId === it.id ? null : it.id)
-                        }
-                        className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded cursor-pointer transition-colors"
-                        title="Item Actions"
-                      >
-                        <MoreVertical className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Hamburger Dropdown Popover */}
-                      {activeItemMenuId === it.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-30"
-                            onClick={() => setActiveItemMenuId(null)}
-                          />
-                          <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-40 py-1 text-xs animate-in fade-in duration-100">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleToggleItemImportance(chk.id, it.id);
-                                setActiveItemMenuId(null);
-                              }}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer"
-                            >
-                              <Star className={`w-3.5 h-3.5 ${it.isImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
-                              <span>{it.isImportant ? "Unmark Important" : "Mark as Important"}</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditItem(it)}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Edit Item Text</span>
-                            </button>
-
-                            <div className="my-1 border-t border-gray-100" />
-
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteItem(chk.id, it.id)}
-                              className="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                              <span>Delete Item</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Item Row */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  value={newItemText[chk.id] || ""}
-                  onChange={(e) => setNewItemText((prev) => ({ ...prev, [chk.id]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddItem(chk.id);
-                    }
-                  }}
-                  placeholder="Add item to checklist..."
-                  className="flex-1 text-xs p-2 bg-white border border-gray-200 rounded-lg text-slate-900"
-                />
+            <div className="flex items-center gap-2">
+              {/* Segmented Switcher: Builder vs Preview */}
+              <div className="inline-flex p-0.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => handleAddItem(chk.id)}
-                  className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer font-medium px-2 py-1"
+                  onClick={() => setStudioTab("builder")}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                    studioTab === "builder"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  + Add Item
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Builder</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioTab("preview")}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                    studioTab === "preview"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Task Preview</span>
+                </button>
+              </div>
+
+              {studioTab === "builder" && (
+                <button
+                  type="button"
+                  onClick={handleAddStudioItem}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Item</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── SUB-VIEW A: BUILDER ── */}
+          {studioTab === "builder" && (
+            <div className="space-y-3">
+              {studioItems.map((item, index) => (
+                <StudioItemCard
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  totalItems={studioItems.length}
+                  onUpdate={handleUpdateStudioItem}
+                  onMove={handleMoveStudioItem}
+                  onDelete={handleDeleteStudioItem}
+                  onFileUpload={handleItemFileUpload}
+                />
+              ))}
+
+              {/* Bottom Actions */}
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleAddStudioItem}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Another Deliverable</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioTab("preview")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-blue-600 hover:text-blue-700 hover:bg-blue-50 text-xs font-bold transition-all cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <span>See Task Preview</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
 
-        {/* ── 6. Files & Attachments Card ── */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <span>Files ({attachments.length})</span>
-              <InfoTooltip content="Supporting documentation, protocols, or reference sheets attached to this task" />
-            </h3>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs text-slate-500 hover:text-slate-800 hover:underline cursor-pointer flex items-center gap-1 font-medium"
-            >
-              <Paperclip className="w-3.5 h-3.5" />
-              <span>+ Add File</span>
-            </button>
-          </div>
-
-          {attachments.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No files attached to this task.</p>
-          ) : (
-            <div className="space-y-2">
-              {attachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="p-2.5 bg-slate-50 rounded-xl border border-gray-200 flex items-center justify-between text-xs"
+          {/* ── SUB-VIEW B: LIVE TASK PREVIEW ── */}
+          {studioTab === "preview" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              {/* Preview Mode Callout Banner */}
+              <div className="bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/80 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Live Assignee Preview
+                  </span>
+                  <span className="text-slate-500 truncate hidden sm:inline">
+                    &bull; Simulates how assignees interact with this task on their screen
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStudioTab("builder")}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 font-bold border border-slate-200 rounded-lg text-[11px] shrink-0 transition-colors shadow-2xs cursor-pointer"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-slate-600 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{att.name}</p>
-                      <p className="text-[10px] text-slate-400 font-mono tabular-nums">{att.size}</p>
+                  Back to Builder
+                </button>
+              </div>
+
+              {/* 1. Task Info Block (Single-Column) */}
+              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                        TSK-PREVIEW
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                        {selectedPipeline?.name || "Task Pipeline"}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                        {stageName}
+                      </span>
+                    </div>
+                    <h2
+                      className="text-base sm:text-lg font-bold text-slate-900 tracking-tight"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {title.trim() || "Untitled Task"}
+                    </h2>
+                    <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">
+                      {description.trim() || "No description provided."}
+                    </p>
+                  </div>
+
+                  {isImportant && (
+                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold shrink-0">
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>Important</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Metadata: Schedule & Progress */}
+                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-4 flex-wrap text-slate-600">
+                    {deadlineFormatted && (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="font-medium">Due {deadlineFormatted}</span>
+                      </div>
+                    )}
+                    {repeatEnabled && (
+                      <div className="flex items-center gap-1.5">
+                        <Repeat className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          Repeats every {repeatInterval} {repeatUnit}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress Ring */}
+                  <div className="flex items-center gap-2">
+                    <CircularProgressRing
+                      value={previewDoneCount}
+                      max={studioItems.length}
+                      size={24}
+                      strokeWidth={3}
+                      indicatorColor={
+                        previewDoneCount === studioItems.length && studioItems.length > 0
+                          ? "#10b981"
+                          : "#1456f0"
+                      }
+                    />
+                    <span className="font-mono text-xs font-bold text-slate-800 tabular-nums">
+                      {previewDoneCount}/{studioItems.length} items ({previewPercent}%)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Responsible Assignees & Observers */}
+                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Responsible:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {currentResponsiblePeople.length > 0 ? (
+                        currentResponsiblePeople.map((p, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200/80"
+                          >
+                            <User className="w-3 h-3 text-slate-400" />
+                            <span>{p.name}</span>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 italic">No assignees selected</span>
+                      )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAttachment(att.id)}
-                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+
+                  {observers.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Observers:
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {observers.map((o) => (
+                          <span
+                            key={o.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-100"
+                          >
+                            <Eye className="w-3 h-3 text-blue-500" />
+                            <span>{o.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
+              </div>
+
+              {/* 2. Deliverables List Preview */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <span
+                    className="text-xs font-bold uppercase tracking-wider text-slate-500"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Deliverables ({studioItems.length})
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Click &ldquo;Mark as done&rdquo; below to test completion
+                  </span>
+                </div>
+
+                {studioItems.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center text-slate-500 text-xs">
+                    No deliverables added yet. Switch to the Builder tab to add items.
+                  </div>
+                ) : (
+                  studioItems.map((item, idx) => {
+                    const isDone = Boolean(previewDoneItems[item.id]);
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`rounded-2xl border p-4 transition-all ${
+                          isDone
+                            ? "bg-emerald-50/40 border-emerald-200"
+                            : "bg-white border-slate-200/90 shadow-xs hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                            <span
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono text-[11px] font-bold shrink-0 mt-0.5 ${
+                                isDone
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-100 text-slate-700 border border-slate-200"
+                              }`}
+                            >
+                              {isDone ? "✓" : idx + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4
+                                  className={`text-xs font-bold transition-colors ${
+                                    isDone ? "line-through text-slate-400" : "text-slate-900"
+                                  }`}
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  {item.title || `Item ${idx + 1}`}
+                                </h4>
+                                {item.isImportant && (
+                                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                                )}
+                              </div>
+                              {item.description && (
+                                <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">
+                                  {item.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Toggle Done simulation button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewDoneItems((prev) => ({
+                                ...prev,
+                                [item.id]: !prev[item.id],
+                              }));
+                              if (!isDone) {
+                                toast.success(`Completed "${item.title || "Item"}" (Preview)`);
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0 ${
+                              isDone
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                : "bg-white hover:bg-emerald-50 text-slate-700 border border-slate-300 hover:border-emerald-300 hover:text-emerald-700"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {isDone ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Done</span>
+                                <span className="text-[10px] opacity-75 ml-0.5">(Undo)</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckSquare className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Mark as done</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Rendered resource in Preview */}
+                        {item.resourceType !== "none" && item.resourceValue && (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            {/* Image */}
+                            {item.resourceType === "image" && (
+                              <div className="rounded-xl overflow-hidden border border-slate-200 bg-white p-1 max-w-md">
+                                <img
+                                  src={item.resourceValue}
+                                  alt={item.title}
+                                  className="w-full max-h-56 object-cover rounded-lg"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = "none";
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Video */}
+                            {item.resourceType === "video" && (
+                              <div className="rounded-xl overflow-hidden border border-slate-200 bg-black max-w-md">
+                                <video
+                                  src={item.resourceValue}
+                                  controls
+                                  className="w-full max-h-56 object-contain"
+                                />
+                              </div>
+                            )}
+
+                            {/* External URL */}
+                            {item.resourceType === "url" && (
+                              <a
+                                href={item.resourceValue}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                              >
+                                <span>Open External Resource</span>
+                                <LinkIcon className="w-3 h-3" />
+                              </a>
+                            )}
+
+                            {/* File Attachment Tile */}
+                            {item.resourceType === "file" && (
+                              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800">
+                                <FileText className="w-4 h-4 text-slate-500" />
+                                <span className="font-mono">{item.resourceName || "Attachment"}</span>
+                                <span className="text-slate-400 font-mono text-[10px]">
+                                  ({item.resourceSize || "Document"})
+                                </span>
+                                <a
+                                  href={item.resourceValue}
+                                  download={item.resourceName || "deliverable-file"}
+                                  className="p-1 hover:bg-slate-200 rounded-md text-slate-600 ml-1"
+                                  title="Download File"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            )}
+
+                            {/* HTML Block Sandbox */}
+                            {item.resourceType === "html" && (
+                              <div className="border border-slate-300 rounded-xl overflow-hidden bg-white">
+                                <iframe
+                                  srcDoc={item.resourceValue}
+                                  sandbox="allow-same-origin"
+                                  title="Sandboxed HTML Preview"
+                                  className="w-full h-44 border-0 overflow-auto"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
-      </DrawerShell>
-
-      {/* Recurrence Sub-Drawer */}
-      <TaskRecurrenceDrawer
-        isOpen={showRecurrenceDrawer}
-        onClose={() => setShowRecurrenceDrawer(false)}
-        config={recurrenceConfig}
-        onSave={(cfg) => setRecurrenceConfig(cfg)}
-      />
-
-      {/* Time Planning Sub-Drawer */}
-      <TaskTimePlanningDrawer
-        isOpen={showTimePlanningDrawer}
-        onClose={() => setShowTimePlanningDrawer(false)}
-        config={timePlanningConfig}
-        onSave={(cfg) => setTimePlanningConfig(cfg)}
-      />
-    </>
+      )}
+    </DrawerShell>
   );
 }

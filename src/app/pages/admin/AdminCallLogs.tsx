@@ -37,6 +37,7 @@ import {
   ArrowUpRight,
   FileText,
   Radio,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportToCsv } from "../../../lib/productAnalyticsStore";
@@ -151,17 +152,22 @@ export default function AdminCallLogs() {
       ),
     },
     {
+      key: "orgCode",
+      header: "ORG ID",
+      width: "110px",
+      render: (row) => (
+        <span className="font-mono text-xs font-medium text-slate-600 tabular-nums">
+          {row.orgCode}
+        </span>
+      ),
+    },
+    {
       key: "orgName",
       header: "ORGANIZATION",
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-gray-900 truncate max-w-[150px]">
-            {row.orgName}
-          </span>
-          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 tabular-nums">
-            {row.orgCode}
-          </span>
-        </div>
+        <span className="text-xs font-medium text-gray-900 truncate max-w-[150px] block" title={row.orgName}>
+          {row.orgName}
+        </span>
       ),
     },
     {
@@ -281,16 +287,6 @@ export default function AdminCallLogs() {
       <PageHeader
         title="Cross-Org Call Logs"
         subtitle="Global inspection of clinical telephony sessions, AI outcome classification, and audio recordings"
-        actions={
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            Export CSV
-          </button>
-        }
       />
 
       <div className="p-6 space-y-5">
@@ -341,67 +337,78 @@ export default function AdminCallLogs() {
           </div>
         </div>
 
-        {/* Filters Toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search ID, phone, caller..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
-              />
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search ID, phone, caller..."
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap mr-1">
+              {/* Organization filter */}
+              <div className="relative">
+                <select
+                  value={orgFilter}
+                  onChange={(e) => setOrgFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[140px] transition-colors truncate"
+                >
+                  <option value="all">All Organizations</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {/* Provider filter */}
+              <div className="relative">
+                <select
+                  value={providerFilter}
+                  onChange={(e) => setProviderFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[130px] transition-colors"
+                >
+                  <option value="all">All Providers</option>
+                  <option value="Twilio">Twilio</option>
+                  <option value="Exotel">Exotel</option>
+                  <option value="Plivo">Plivo</option>
+                  <option value="Telnyx">Telnyx</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {/* Direction filter */}
+              <div className="relative">
+                <select
+                  value={directionFilter}
+                  onChange={(e) => setDirectionFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[120px] transition-colors"
+                >
+                  <option value="all">All Directions</option>
+                  <option value="Inbound">Inbound</option>
+                  <option value="Outbound">Outbound</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {/* Status filter */}
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[120px] transition-colors"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Answered">Answered</option>
+                  <option value="Missed">Missed</option>
+                  <option value="Voicemail">Voicemail</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-
-            <select
-              value={orgFilter}
-              onChange={(e) => setOrgFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Organizations</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} ({org.orgCode || "ORG-0001"})
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Providers</option>
-              <option value="Twilio">Twilio</option>
-              <option value="Exotel">Exotel</option>
-              <option value="Plivo">Plivo</option>
-              <option value="Telnyx">Telnyx</option>
-            </select>
-
-            <select
-              value={directionFilter}
-              onChange={(e) => setDirectionFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Directions</option>
-              <option value="Inbound">Inbound</option>
-              <option value="Outbound">Outbound</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Statuses</option>
-              <option value="Answered">Answered</option>
-              <option value="Missed">Missed</option>
-              <option value="Voicemail">Voicemail</option>
-            </select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Table */}
         <TableComponent

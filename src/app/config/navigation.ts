@@ -25,6 +25,7 @@ import {
   ScrollText,
   Lock,
   LogOut,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -227,10 +228,10 @@ export const navigationConfig: NavGroup[] = [
         roles: ["SystemAdmin"],
       },
       {
-        id: "settings-security",
-        label: "Security",
-        icon: Lock,
-        path: "/settings/security",
+        id: "settings-notifications",
+        label: "Notifications",
+        icon: Bell,
+        path: "/settings/notifications",
         roles: ["SystemAdmin"],
       },
     ],

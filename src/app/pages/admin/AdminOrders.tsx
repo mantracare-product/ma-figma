@@ -43,9 +43,11 @@ import {
   CreditCard,
   Building2,
   ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportToCsv } from "../../../lib/productAnalyticsStore";
+import MetricCapsuleRow from "../../components/ui/MetricCapsuleRow";
 
 export default function AdminOrders() {
   const { orders, refresh } = useAdminOrders();
@@ -196,17 +198,21 @@ export default function AdminOrders() {
       ),
     },
     {
+      key: "orgCode",
+      header: "ORG ID",
+      render: (row) => (
+        <span className="font-mono text-xs font-medium text-slate-600 tabular-nums">
+          {row.orgCode}
+        </span>
+      ),
+    },
+    {
       key: "orgName",
       header: "ORGANIZATION",
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-gray-900 truncate max-w-[150px]">
-            {row.orgName}
-          </span>
-          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 tabular-nums">
-            {row.orgCode}
-          </span>
-        </div>
+        <span className="text-xs font-medium text-gray-900 truncate max-w-[170px] block" title={row.orgName}>
+          {row.orgName}
+        </span>
       ),
     },
     {
@@ -217,7 +223,8 @@ export default function AdminOrders() {
         if (row.type === "New plan") badgeColor = "bg-emerald-50 text-emerald-800 border border-emerald-200/60";
         if (row.type === "Plan upgrade") badgeColor = "bg-indigo-50 text-indigo-800 border border-indigo-200/60";
         if (row.type === "Credits top-up") badgeColor = "bg-blue-50 text-blue-800 border border-blue-200/60";
-        if (row.type === "Phone number") badgeColor = "bg-purple-50 text-purple-800 border border-purple-200/60";
+        if (row.type === "Team member package") badgeColor = "bg-amber-50 text-amber-800 border border-amber-200/60";
+        if (row.type === "Add-on") badgeColor = "bg-purple-50 text-purple-800 border border-purple-200/60";
 
         return (
           <span className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeColor}`}>
@@ -320,116 +327,99 @@ export default function AdminOrders() {
       <PageHeader
         title="Orders"
         subtitle="Cross-tenant order tracking, payment settlements, top-ups, and reconciliation"
-        actions={
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            Export CSV
-          </button>
-        }
       />
 
       <div className="p-6 space-y-5">
-        {/* KPI Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Total Orders</span>
-              <ShoppingCart className="w-4 h-4 text-blue-600" />
-            </div>
-            <div className="text-2xl font-bold font-display text-gray-900 tabular-nums">
-              {metrics.totalCount}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">All platform transactions</div>
-          </div>
+        {/* KPI Summary Capsules (G4) */}
+        <MetricCapsuleRow
+          items={[
+            {
+              label: "TOTAL ORDERS",
+              value: metrics.totalCount,
+              subLabel: "all time",
+              icon: <ShoppingCart className="w-3.5 h-3.5" />,
+            },
+            {
+              label: "SETTLED AMOUNT",
+              value: `$${metrics.settledAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              subLabel: "paid",
+              icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+              valueColor: "#15803D",
+            },
+            {
+              label: "PENDING ORDERS",
+              value: metrics.pendingCount,
+              subLabel: "processing",
+              icon: <Clock className="w-3.5 h-3.5" />,
+              valueColor: metrics.pendingCount > 0 ? "#B45309" : undefined,
+            },
+            {
+              label: "REFUNDED",
+              value: `$${metrics.refundedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              subLabel: "settled back",
+              icon: <RotateCcw className="w-3.5 h-3.5" />,
+            },
+          ]}
+        />
 
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Settled Volume</span>
-              <DollarSign className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-bold font-display text-emerald-700 tabular-nums">
-              ${metrics.settledAmount.toFixed(2)}
-            </div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-1">Successfully collected</div>
-          </div>
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search order ID, org, or method..."
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap mr-1">
+              {/* Order Type filter */}
+              <div className="relative">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[140px] transition-colors"
+                >
+                  <option value="all">All Order Types</option>
+                  <option value="New plan">New plan</option>
+                  <option value="Plan upgrade">Plan upgrade</option>
+                  <option value="Credits top-up">Credits top-up</option>
+                  <option value="Team member package">Team member package</option>
+                  <option value="Add-on">Add-on</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Pending Settlement</span>
-              <Clock className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="text-2xl font-bold font-display text-amber-700 tabular-nums">
-              {metrics.pendingCount}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">Awaiting ACH / bank clearing</div>
-          </div>
+              {/* Payment Status filter */}
+              <div className="relative">
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[130px] transition-colors"
+                >
+                  <option value="all">All Payment Statuses</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Refunded">Refunded</option>
+                  <option value="Failed">Failed</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Total Refunded</span>
-              <RotateCcw className="w-4 h-4 text-slate-500" />
+              {/* Order Status filter */}
+              <div className="relative">
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[125px] transition-colors"
+                >
+                  <option value="all">All Order Statuses</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-            <div className="text-2xl font-bold font-display text-gray-800 tabular-nums">
-              ${metrics.refundedAmount.toFixed(2)}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">Reversals & administrative credits</div>
-          </div>
-        </div>
-
-        {/* Filters Toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search order ID, org, or method..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
-              />
-            </div>
-
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Order Types</option>
-              <option value="New plan">New plan</option>
-              <option value="Plan upgrade">Plan upgrade</option>
-              <option value="Credits top-up">Credits top-up</option>
-              <option value="Phone number">Phone number</option>
-            </select>
-
-            <select
-              value={paymentStatusFilter}
-              onChange={(e) => setPaymentStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Payment Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Pending">Pending</option>
-              <option value="Refunded">Refunded</option>
-              <option value="Failed">Failed</option>
-            </select>
-
-            <select
-              value={orderStatusFilter}
-              onChange={(e) => setOrderStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Order Statuses</option>
-              <option value="Completed">Completed</option>
-              <option value="Processing">Processing</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Orders Table */}
         <TableComponent

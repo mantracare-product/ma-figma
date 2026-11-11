@@ -9,14 +9,19 @@ import {
   Download,
   AlertTriangle,
   Lock,
-  User,
+  Calendar,
+  ExternalLink,
   FileCode,
+  Check,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useTasks } from "../../../lib/tasksStore";
+import {
+  useTasks,
+  getPersonTaskProgress,
+} from "../../../lib/tasksStore";
 import type { Client } from "../../../lib/clientsStore";
-import { TaskEntity } from "../../../types/task";
-import { Tooltip } from "../../components/ui/Tooltip";
+import { TaskEntity, TaskStudioItem } from "../../../types/task";
 import { CircularProgressRing } from "../../components/ui/CircularProgressRing";
 
 interface OutletContextType {
@@ -29,7 +34,7 @@ export default function PatientTaskDetailPage() {
   const context = useOutletContext<OutletContextType>();
   const activeClient = context?.activeClient;
 
-  const { tasks, toggleChecklistItem, toggleTaskStatus } = useTasks();
+  const { tasks, toggleStudioItemCompletion } = useTasks();
 
   const task = useMemo(() => {
     if (!taskId) return null;
@@ -73,16 +78,24 @@ export default function PatientTaskDetailPage() {
         return (aId && aId === clientId) || (aName && aName.includes(clientNameLower));
       });
 
+    const matchesResponsible =
+      task.responsiblePeople &&
+      task.responsiblePeople.some((p) => {
+        const pId = (p.id || "").toLowerCase().trim();
+        const pName = (p.name || "").toLowerCase().trim();
+        return (pId && pId === clientId) || (pName && pName.includes(clientNameLower));
+      });
+
     const isGenericPortal = task.scopeLevel === "portal" && !assigneeClientId && !assigneeClientName;
 
-    return matchesAssignee || matchesInList || isGenericPortal;
+    return matchesAssignee || matchesInList || matchesResponsible || isGenericPortal;
   }, [task, activeClient]);
 
   // Not Found State
   if (!task || !isAuthorized) {
     return (
-      <div className="max-w-3xl mx-auto py-12 px-4 sm:px-6">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 text-center shadow-xs space-y-4">
+      <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6">
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-8 text-center shadow-xs space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
             <Lock className="w-6 h-6" />
           </div>
@@ -97,7 +110,7 @@ export default function PatientTaskDetailPage() {
           <button
             type="button"
             onClick={() => navigate("/patient/tasks")}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to My Tasks</span>
@@ -108,242 +121,269 @@ export default function PatientTaskDetailPage() {
   }
 
   // Sanitize title: remove admin bracket tags, never display TSK-* codes
-  const cleanTitle = task.title.replace(/^\[[^\]]+\]\s*/, "");
-  const isCompleted = task.status === "completed";
+  const cleanTitle = task.title.replace(/^\[[^\]]+\]\s*/, "").replace(/^TSK-\d+:\s*/i, "");
+  const patientId = activeClient?.id || "CL-001";
+  const patientName = activeClient?.name || "Patient";
 
-  // Checklists calculations
-  const allItems = task.checklists?.flatMap((c) => c.items) || [];
-  const completedItems = allItems.filter((it) => it.isCompleted);
-  const totalCount = allItems.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedItems.length / totalCount) * 100) : 0;
+  // Person-specific progress
+  const progress = getPersonTaskProgress(task, patientId) || getPersonTaskProgress(task, patientName);
+  const items = task.studioItems || [];
 
-  // Mark complete blocked if unfinished checklist items exist
-  const hasChecklists = totalCount > 0;
-  const hasUncompleted = allItems.some((it) => !it.isCompleted);
-  const isCompleteBlocked = !isCompleted && hasChecklists && hasUncompleted;
-
-  const handleToggleItem = (checklistId: string, itemId: string, itemText: string, currentVal: boolean) => {
-    toggleChecklistItem(task.id, checklistId, itemId);
-    if (!currentVal) {
-      toast.success(`Completed "${itemText}"`);
+  const handleToggleItemDone = (item: TaskStudioItem) => {
+    toggleStudioItemCompletion(task.id, item.id, patientId, patientName);
+    const wasDone = !!(item.completion?.[patientId]?.done || item.completion?.[patientName]?.done);
+    if (!wasDone) {
+      toast.success(`Completed "${item.title}"`);
+    } else {
+      toast.info(`Marked "${item.title}" incomplete`);
     }
-  };
-
-  const handleToggleComplete = () => {
-    if (isCompleteBlocked) {
-      toast.error("Please complete all checklist items before marking this task complete.");
-      return;
-    }
-    const nextStatus = isCompleted ? "in_progress" : "completed";
-    toggleTaskStatus(task.id, nextStatus);
-    toast.success(isCompleted ? "Task reopened" : "Task marked completed! Great job!");
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* ── Navigation Strip ── */}
-      <div className="flex items-center justify-between">
+    <div className="max-w-2xl mx-auto space-y-5 pb-16 animate-in fade-in duration-150">
+      {/* ── Above the first block: Back button ── */}
+      <div className="flex items-center justify-between px-1">
         <button
           type="button"
           onClick={() => navigate("/patient/tasks")}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer group"
+          style={{ fontFamily: "Outfit, sans-serif" }}
         >
-          <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+          <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:-translate-x-0.5" />
           <span>Back to My Tasks</span>
         </button>
 
-        <span
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-            isCompleted
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
-              : "bg-blue-50 text-blue-700 border border-blue-200/80"
-          }`}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>{isCompleted ? "Completed" : "Action Required"}</span>
-        </span>
+        {task.isImportant && (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80">
+            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+            <span>Priority Care</span>
+          </span>
+        )}
       </div>
 
-      {/* ── Sandboxed HTML Content Container (if created as page) ── */}
-      {task.isPage && task.htmlContent ? (
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-[#E2E8F0] bg-slate-50/80 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileCode className="w-4 h-4 text-slate-600" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Care Instructions Document
-              </h3>
-            </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-              Interactive Guide
-            </span>
+      {/* ── 1. FIRST BLOCK: "TASK INFO" ── */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <h1
+              className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {cleanTitle}
+            </h1>
+            <p className="text-xs text-slate-500">
+              Assigned by your clinical care team • {task.createdAt}
+            </p>
           </div>
-          {/* Strict bounded container with internal scroll only */}
-          <div className="w-full h-[600px] relative overflow-hidden bg-white">
-            <iframe
-              srcDoc={task.htmlContent}
-              sandbox="allow-same-origin"
-              title="Patient Task Care Document"
-              className="w-full h-full border-0 overflow-auto"
-              style={{ display: "block" }}
+
+          <div className="shrink-0 flex items-center">
+            <CircularProgressRing
+              value={progress.completed}
+              max={progress.total}
+              size={36}
+              strokeWidth={3.5}
+              indicatorColor={progress.isFinished ? "#10b981" : "#1456f0"}
             />
           </div>
         </div>
-      ) : null}
 
-      {/* ── Main Task Card ── */}
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-xs space-y-6">
-        <div className="space-y-2">
-          <h1
-            className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {cleanTitle}
-          </h1>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
-            {task.deadline && (
-              <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Due: {task.deadline}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-slate-500" />
-              <span>Assigned by: {task.creator?.name || "Care Team"}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Task Description */}
+        {/* Description */}
         {task.description && (
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/70 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+          <div className="p-4 rounded-2xl bg-blue-50/40 border border-blue-100/70 text-xs sm:text-sm text-slate-700 leading-relaxed">
             {task.description}
           </div>
         )}
 
-        {/* ── Checklist Deliverables ── */}
-        {allItems.length > 0 && (
-          <div className="space-y-4 pt-2 border-t border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                  Deliverables &amp; Checklist Items
-                </h3>
-                <span className="text-xs font-mono tabular-nums text-slate-500">
-                  ({completedItems.length}/{totalCount})
-                </span>
-              </div>
-              <CircularProgressRing value={progressPercent} size={32} strokeWidth={3} />
+        {/* Task Details Strip */}
+        <div className="flex items-center gap-4 flex-wrap pt-1 border-t border-slate-100 text-xs text-slate-600">
+          {task.deadline && (
+            <div className="flex items-center gap-1.5 font-medium">
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span>Due: {task.deadline}</span>
             </div>
+          )}
 
-            <div className="space-y-2">
-              {(task.checklists || []).map((chk) => (
-                <div key={chk.id} className="space-y-2">
-                  {chk.items.map((it) => (
-                    <div
-                      key={it.id}
-                      onClick={() => handleToggleItem(chk.id, it.id, it.text, it.isCompleted)}
-                      className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
-                        it.isCompleted
-                          ? "bg-slate-50 border-slate-200/70 opacity-70"
-                          : "bg-white border-gray-200 hover:border-slate-400 shadow-2xs"
+          <div className="flex items-center gap-1.5 font-medium">
+            <Clock className="w-4 h-4 text-slate-400" />
+            <span>
+              {progress.completed}/{progress.total} items completed ({progress.percent}%)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2. BELOW IT: ITEMS LINE BY LINE ── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <h2
+            className="text-xs font-bold uppercase tracking-wider text-slate-500"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            Your Deliverables ({items.length})
+          </h2>
+          <span className="text-xs text-slate-400 font-medium">
+            Check off each item as completed
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {items.map((item, index) => {
+            const isDone = !!(
+              item.completion?.[patientId]?.done ||
+              item.completion?.[patientName]?.done
+            );
+
+            return (
+              <div
+                key={item.id}
+                className={`bg-white rounded-3xl border transition-all shadow-xs p-5 space-y-3.5 ${
+                  isDone
+                    ? "border-emerald-200/80 bg-emerald-50/20"
+                    : "border-slate-200/90 hover:border-slate-300"
+                }`}
+              >
+                {/* Item Row Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
+                        isDone
+                          ? "bg-emerald-600 text-white"
+                          : "bg-blue-50 text-blue-700 border border-blue-200/70"
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={it.isCompleted}
-                        onChange={() => {}}
-                        className="w-4 h-4 mt-0.5 rounded text-slate-900 cursor-pointer pointer-events-none"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span
-                          className={`font-semibold block ${
-                            it.isCompleted ? "line-through text-slate-400" : "text-slate-800"
+                      {isDone ? "✓" : index + 1}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {item.isImportant && (
+                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                        )}
+                        <h3
+                          className={`text-sm font-bold leading-snug ${
+                            isDone ? "line-through text-slate-400" : "text-slate-900"
                           }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          {it.text}
-                        </span>
+                          {item.title}
+                        </h3>
                       </div>
-                      {it.isImportant && (
-                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
+
+                      {item.description && (
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                          {item.description}
+                        </p>
                       )}
                     </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Attached Documents ── */}
-        {task.attachments && task.attachments.length > 0 && (
-          <div className="space-y-3 pt-2 border-t border-gray-100">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-              Attached Documents
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {task.attachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="p-3 bg-slate-50 rounded-xl border border-gray-200 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-slate-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{att.name}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{att.size}</p>
-                    </div>
                   </div>
+
+                  {/* Mark as Done Button (Patient Portal Styling) */}
                   <button
                     type="button"
-                    onClick={() => toast.info(`Downloading ${att.name}`)}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                    title="Download"
+                    onClick={() => handleToggleItemDone(item)}
+                    className={`px-3.5 py-1.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0 ${
+                      isDone
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 hover:border-blue-300"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    {isDone ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Completed</span>
+                        <span className="text-[10px] opacity-75 font-normal">(Undo)</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+                        <span>Mark as done</span>
+                      </>
+                    )}
                   </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* ── Footer Complete Action ── */}
-        <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-          <p className="text-[11px] text-slate-500">
-            {hasChecklists && hasUncompleted
-              ? "Complete all checklist items to mark this task complete."
-              : "All action items completed. You may finalize this task."}
-          </p>
+                {/* Resource Rendering */}
+                {item.resource && item.resource.value && (
+                  <div className="pt-2 border-t border-slate-100">
+                    {/* Image */}
+                    {item.resource.type === "image" && (
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-1.5 max-w-md">
+                        <img
+                          src={item.resource.value}
+                          alt={item.title}
+                          className="w-full max-h-72 object-contain rounded-xl"
+                        />
+                      </div>
+                    )}
 
-          {isCompleteBlocked ? (
-            <Tooltip content="Complete all checklist items to mark this task complete">
-              <span className="inline-block cursor-not-allowed">
-                <button
-                  type="button"
-                  disabled
-                  className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-[#1E293B] text-white opacity-40 cursor-not-allowed pointer-events-none"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Mark Complete</span>
-                </button>
-              </span>
-            </Tooltip>
-          ) : (
-            <button
-              type="button"
-              onClick={handleToggleComplete}
-              className={`px-5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                isCompleted
-                  ? "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
-                  : "bg-[#1E293B] text-white hover:bg-slate-800 shadow-2xs"
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{isCompleted ? "Reopen Task" : "Mark Complete"}</span>
-            </button>
-          )}
+                    {/* Video */}
+                    {item.resource.type === "video" && (
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 bg-black max-w-md">
+                        <video
+                          src={item.resource.value}
+                          controls
+                          className="w-full max-h-72 object-contain"
+                        />
+                      </div>
+                    )}
+
+                    {/* URL */}
+                    {item.resource.type === "url" && (
+                      <a
+                        href={item.resource.value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate max-w-sm">{item.resource.value}</span>
+                      </a>
+                    )}
+
+                    {/* File */}
+                    {item.resource.type === "file" && (
+                      <a
+                        href={item.resource.value}
+                        download={item.resource.name || "document"}
+                        className="inline-flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 transition-colors max-w-md cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="truncate">{item.resource.name || "Download Document"}</span>
+                          {item.resource.size && (
+                            <span className="text-[10px] text-slate-400 font-mono">({item.resource.size})</span>
+                          )}
+                        </div>
+                        <Download className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      </a>
+                    )}
+
+                    {/* HTML Block (Sandboxed in Bordered Container) */}
+                    {item.resource.type === "html" && (
+                      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
+                        <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <FileCode className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Clinical Instructions & Protocol</span>
+                          </span>
+                        </div>
+                        <div className="w-full max-h-60 overflow-y-auto bg-white p-1">
+                          <iframe
+                            srcDoc={item.resource.value}
+                            sandbox="allow-same-origin"
+                            title={`Protocol for ${item.title}`}
+                            className="w-full h-48 border-0 overflow-auto"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

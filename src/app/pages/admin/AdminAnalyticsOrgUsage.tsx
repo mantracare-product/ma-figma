@@ -32,6 +32,7 @@ import {
   Sparkles,
   Layers,
   ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -95,17 +96,22 @@ export default function AdminAnalyticsOrgUsage() {
   // Table Columns
   const columns: TableColumn<OrgUsageItem>[] = [
     {
+      key: "orgCode",
+      header: "ORG ID",
+      width: "110px",
+      render: (row) => (
+        <span className="font-mono text-xs font-medium text-slate-600 tabular-nums">
+          {row.orgCode}
+        </span>
+      ),
+    },
+    {
       key: "orgName",
       header: "ORGANIZATION",
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-900 truncate max-w-[170px]">
-            {row.orgName}
-          </span>
-          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 tabular-nums">
-            {row.orgCode}
-          </span>
-        </div>
+        <span className="text-xs font-semibold text-gray-900 truncate max-w-[170px] block" title={row.orgName}>
+          {row.orgName}
+        </span>
       ),
     },
     {
@@ -220,45 +226,33 @@ export default function AdminAnalyticsOrgUsage() {
       <PageHeader
         title="Organization Usage Matrix"
         subtitle="Multi-tenant utilization benchmarking, telephony traffic consumption, and storage metrics"
-        actions={
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            Export CSV
-          </button>
-        }
       />
 
       <div className="p-6 space-y-5">
-        {/* Filters Toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search organization, ID, or industry..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
-              />
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search organization, ID, or industry..."
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap mr-1">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[130px] transition-colors"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Trial">Trial</option>
+                  <option value="Past due">Past due</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Trial">Trial</option>
-              <option value="Past due">Past due</option>
-            </select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Data Table */}
         <TableComponent

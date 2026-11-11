@@ -91,7 +91,7 @@ export default function NotificationsSettingsTab() {
   const activeCount = modules.filter((m) => settings[m.id]).length;
 
   return (
-    <div className="space-y-6 max-w-4xl" style={{ fontFamily: "DM Sans, sans-serif" }}>
+    <div className="space-y-6 max-w-4xl mx-auto" style={{ fontFamily: "DM Sans, sans-serif" }}>
       {/* ── Page Header Strip ── */}
       <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

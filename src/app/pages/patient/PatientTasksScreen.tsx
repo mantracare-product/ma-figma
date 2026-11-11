@@ -6,12 +6,14 @@ import {
   Clock,
   Search,
   Star,
+  Calendar,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useTasks } from "../../../lib/tasksStore";
+import { useTasks, getPersonTaskProgress } from "../../../lib/tasksStore";
 import type { Client } from "../../../lib/clientsStore";
 import { TaskEntity } from "../../../types/task";
-import { Tooltip } from "../../components/ui/Tooltip";
+import { CircularProgressRing } from "../../components/ui/CircularProgressRing";
 
 interface OutletContextType {
   activeClient?: Client;
@@ -22,10 +24,13 @@ export default function PatientTasksScreen() {
   const activeClient = context?.activeClient;
   const navigate = useNavigate();
 
-  const { tasks, toggleChecklistItem, toggleTaskStatus } = useTasks();
+  const { tasks } = useTasks();
 
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "completed">("pending");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const patientId = activeClient?.id || "CL-001";
+  const patientName = activeClient?.name || "Patient";
 
   // Filter tasks that belong to this client or are scoped to the patient portal
   const clientTasks = useMemo(() => {
@@ -65,70 +70,58 @@ export default function PatientTasksScreen() {
           return (aId && aId === clientId) || (aName && aName.includes(clientNameLower));
         });
 
-      // 4. Portal-scoped task without specific patient assignee is visible to all portal clients
+      // 4. Matches responsible people
+      const matchesResponsible =
+        t.responsiblePeople &&
+        t.responsiblePeople.some((p) => {
+          const pId = (p.id || "").toLowerCase().trim();
+          const pName = (p.name || "").toLowerCase().trim();
+          return (pId && pId === clientId) || (pName && pName.includes(clientNameLower));
+        });
+
+      // 5. Portal-scoped task without specific patient assignee
       const isGenericPortal = t.scopeLevel === "portal" && !assigneeClientId && !assigneeClientName;
 
-      return matchesAssignee || matchesInList || isGenericPortal;
+      return matchesAssignee || matchesInList || matchesResponsible || isGenericPortal;
     });
   }, [tasks, activeClient]);
 
   // Tab & search filtering
   const filteredTasks = useMemo(() => {
     return clientTasks.filter((t) => {
-      // Status filter
-      if (activeTab === "pending" && t.status === "completed") return false;
-      if (activeTab === "completed" && t.status !== "completed") return false;
+      const prog = getPersonTaskProgress(t, patientId) || getPersonTaskProgress(t, patientName);
+      const isFinished = prog.isFinished || t.status === "completed";
 
-      // Search query (patients cannot see task ID, so search does not match on task code)
+      // Status filter
+      if (activeTab === "pending" && isFinished) return false;
+      if (activeTab === "completed" && !isFinished) return false;
+
+      // Search query
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
-      const matchTitle = t.title.toLowerCase().includes(q);
+      const cleanTitle = t.title.replace(/^\[[^\]]+\]\s*/, "").replace(/^TSK-\d+:\s*/i, "").toLowerCase();
+      const matchTitle = cleanTitle.includes(q);
       const matchDesc = (t.description || "").toLowerCase().includes(q);
-      const matchChecklist = t.checklists?.some((c) =>
-        c.items.some((it) => it.text.toLowerCase().includes(q))
-      );
+      const matchItems = t.studioItems?.some((si) => si.title.toLowerCase().includes(q));
 
-      return matchTitle || matchDesc || matchChecklist;
+      return matchTitle || matchDesc || matchItems;
     });
-  }, [clientTasks, activeTab, searchQuery]);
+  }, [clientTasks, activeTab, searchQuery, patientId, patientName]);
 
   // Stats calculation
   const stats = useMemo(() => {
     const total = clientTasks.length;
-    const completed = clientTasks.filter((t) => t.status === "completed").length;
+    let completed = 0;
+    clientTasks.forEach((t) => {
+      const prog = getPersonTaskProgress(t, patientId) || getPersonTaskProgress(t, patientName);
+      if (prog.isFinished || t.status === "completed") completed++;
+    });
     const pending = total - completed;
     return { total, completed, pending };
-  }, [clientTasks]);
-
-  const handleToggleItem = (taskId: string, checklistId: string, itemId: string, itemText: string, currentCompleted: boolean) => {
-    toggleChecklistItem(taskId, checklistId, itemId);
-    if (!currentCompleted) {
-      toast.success(`Completed: "${itemText}"`);
-    }
-  };
-
-  const handleMarkTaskComplete = (task: TaskEntity) => {
-    // 4. Mark Complete is blocked until every checklist item is checked
-    if (task.status !== "completed") {
-      const allItems = task.checklists?.flatMap((c) => c.items) || [];
-      const hasUnchecked = allItems.some((it) => !it.isCompleted);
-      if (allItems.length > 0 && hasUnchecked) {
-        toast.error("Complete all checklist items to mark this task complete");
-        return;
-      }
-    }
-
-    if (task.status === "completed") {
-      toggleTaskStatus(task.id, "in_progress");
-      toast.info("Task reopened");
-    } else {
-      toggleTaskStatus(task.id, "completed");
-      toast.success("Great job! Task marked as completed.");
-    }
-  };
+  }, [clientTasks, patientId, patientName]);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="max-w-2xl mx-auto space-y-6 pb-16 animate-in fade-in duration-200">
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -138,16 +131,19 @@ export default function PatientTasksScreen() {
           >
             My Tasks
           </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Clinical protocols, questionnaires, and deliverables assigned to your care journey
+          </p>
         </div>
 
         {/* Quick summary badges */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200/60 rounded-xl text-blue-800 text-xs font-semibold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200/60 rounded-2xl text-blue-800 text-xs font-semibold">
             <Clock className="w-3.5 h-3.5 text-blue-600" />
             <span className="font-mono tabular-nums">{stats.pending}</span>
             <span>Action Needed</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200/60 rounded-xl text-emerald-800 text-xs font-semibold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200/60 rounded-2xl text-emerald-800 text-xs font-semibold">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
             <span className="font-mono tabular-nums">{stats.completed}</span>
             <span>Done</span>
@@ -156,38 +152,41 @@ export default function PatientTasksScreen() {
       </div>
 
       {/* ── Tab Switcher & Search Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-3xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
           <button
             type="button"
             onClick={() => setActiveTab("pending")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "pending"
                 ? "bg-white text-slate-900 shadow-2xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Action Needed ({stats.pending})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("completed")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "completed"
                 ? "bg-white text-slate-900 shadow-2xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Completed ({stats.completed})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "all"
                 ? "bg-white text-slate-900 shadow-2xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             All Tasks ({stats.total})
           </button>
@@ -200,15 +199,15 @@ export default function PatientTasksScreen() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search tasks, items..."
-            className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 placeholder:text-slate-400"
+            placeholder="Search deliverables..."
+            className="w-full text-xs pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 placeholder:text-slate-400"
           />
         </div>
       </div>
 
-      {/* ── Task Cards List ── */}
+      {/* ── Tasks Rows List (Same style as 6a) ── */}
       {filteredTasks.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs space-y-3">
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-12 text-center shadow-xs space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200 text-slate-400 mx-auto flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6 text-slate-400" />
           </div>
@@ -218,139 +217,79 @@ export default function PatientTasksScreen() {
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {searchQuery
               ? `No tasks matched "${searchQuery}". Clear your search query to view all tasks.`
-              : "You have no outstanding tasks at this time. Your care team will assign protocols, questionnaires, or intake items here when needed."}
+              : "You have no outstanding tasks in this category. Your care team will assign protocols and intake items here when needed."}
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
           {filteredTasks.map((task) => {
-            const isCompleted = task.status === "completed";
-
-            // Total checklist items calculation
-            const allItems = task.checklists?.flatMap((c) => c.items) || [];
-            const completedItems = allItems.filter((it) => it.isCompleted);
+            const cleanTitle = task.title.replace(/^\[[^\]]+\]\s*/, "").replace(/^TSK-\d+:\s*/i, "");
+            const prog = getPersonTaskProgress(task, patientId) || getPersonTaskProgress(task, patientName);
+            const isDone = prog.isFinished || task.status === "completed";
 
             return (
               <div
                 key={task.id}
-                className="bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 p-4 sm:p-5 transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                onClick={() => navigate(`/patient/tasks/${task.id}`)}
+                className="py-4 px-4 sm:px-5 hover:bg-slate-50/80 transition-all cursor-pointer flex items-center justify-between gap-3 group"
               >
-                {/* ── Left: Task Icon + Title & Meta Line ── */}
-                <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                  {/* Left: Neutral task icon inside rounded surface */}
-                  <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                      isCompleted
-                        ? "bg-emerald-50 border-emerald-100 text-emerald-600"
-                        : "bg-slate-50 border-slate-200/80 text-slate-600"
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    ) : (
-                      <CheckSquare className="w-5 h-5 text-slate-600" />
-                    )}
+                {/* Left: Progress Ring + Star + Title & Due Date */}
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className="shrink-0 flex items-center">
+                    <CircularProgressRing
+                      value={prog.completed}
+                      max={prog.total}
+                      size={26}
+                      strokeWidth={3}
+                      indicatorColor={isDone ? "#10b981" : "#1456f0"}
+                    />
                   </div>
 
-                  <div className="space-y-1 min-w-0 flex-1">
-                    {/* Title + Important star */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h2
-                        onClick={() => navigate(`/patient/tasks/${task.id}`)}
-                        className={`text-sm font-bold truncate hover:text-blue-600 cursor-pointer transition-colors ${
-                          isCompleted ? "text-slate-400 line-through" : "text-slate-900"
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      {task.isImportant && (
+                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                      )}
+                      <span
+                        className={`text-sm font-bold truncate transition-colors ${
+                          isDone
+                            ? "line-through text-slate-400"
+                            : "text-slate-900 group-hover:text-blue-600"
                         }`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        {task.title}
-                      </h2>
-
-                      {task.isImportant && (
-                        <Tooltip content="Important">
-                          <span className="inline-flex items-center cursor-default">
-                            <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
-                          </span>
-                        </Tooltip>
-                      )}
+                        {cleanTitle}
+                      </span>
                     </div>
 
-                    {/* One meta line in plain text (no capsules): stage • due date • assigned by */}
-                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
-                      <span>{task.stageName || (isCompleted ? "Completed" : "Task Created")}</span>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 font-medium">
                       {task.deadline && (
-                        <>
-                          <span>•</span>
-                          <span className="font-mono tabular-nums">Due: {task.deadline}</span>
-                        </>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{task.deadline}</span>
+                        </span>
                       )}
-                      {task.creator?.name && (
-                        <>
-                          <span>•</span>
-                          <span>Assigned by: {task.creator.name}</span>
-                        </>
+                      {prog.total > 0 && (
+                        <span>
+                          · {prog.completed}/{prog.total} done
+                        </span>
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Right: Checklist Progress & Action Buttons ── */}
-                <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
-                  {/* Checklist progress as plain text with tooltip */}
-                  {allItems.length > 0 && (
-                    <Tooltip content="Checklist progress">
-                      <span className="text-xs font-mono tabular-nums font-semibold text-slate-600 cursor-default px-1">
-                        {completedItems.length}/{allItems.length}
-                      </span>
-                    </Tooltip>
-                  )}
-
-                  {/* View Details button (neutral secondary style) */}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/patient/tasks/${task.id}`)}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                {/* Right: Status chip & Arrow */}
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                      isDone
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                        : "bg-blue-50 text-blue-700 border border-blue-200/80"
+                    }`}
                   >
-                    View details
-                  </button>
-
-                  {/* Mark Complete action (primary #1E293B style, blocked until all checklist items completed) */}
-                  {(() => {
-                    const hasChecklists = allItems.length > 0;
-                    const hasUncompleted = allItems.some((it) => !it.isCompleted);
-                    const isBlocked = !isCompleted && hasChecklists && hasUncompleted;
-
-                    if (isBlocked) {
-                      return (
-                        <Tooltip content="Complete all checklist items to mark this task complete">
-                          <span className="inline-block cursor-not-allowed">
-                            <button
-                              type="button"
-                              disabled
-                              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 bg-[#1E293B] text-white border-slate-900 opacity-50 cursor-not-allowed pointer-events-none"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Mark Complete</span>
-                            </button>
-                          </span>
-                        </Tooltip>
-                      );
-                    }
-
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => handleMarkTaskComplete(task)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                          isCompleted
-                            ? "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
-                            : "bg-[#1E293B] text-white border-slate-900 hover:bg-slate-800 shadow-2xs"
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{isCompleted ? "Reopen" : "Mark Complete"}</span>
-                      </button>
-                    );
-                  })()}
+                    {isDone ? "Completed" : "Action Needed"}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
             );

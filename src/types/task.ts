@@ -17,6 +17,44 @@ export interface TaskAssigneeScope {
   assigneeAvatar?: string;
 }
 
+export type TaskStudioResourceType = "file" | "image" | "video" | "url" | "html";
+export type TaskStudioResourceSource = "upload" | "url";
+
+export interface TaskStudioItemResource {
+  type: TaskStudioResourceType;
+  source?: TaskStudioResourceSource;
+  value: string; // URL, data URL, or HTML block string
+  name?: string; // Filename or label
+  size?: string; // Human readable size (e.g. "240 KB")
+  mimeType?: string;
+}
+
+export interface TaskItemCompletion {
+  done: boolean;
+  doneAt?: string;
+}
+
+export interface TaskStudioItem {
+  id: string;
+  title: string;
+  description?: string;
+  resource?: TaskStudioItemResource;
+  isImportant: boolean;
+  order: number;
+  completion?: Record<string, TaskItemCompletion>; // personId / personName -> { done, doneAt }
+}
+
+export interface TaskResponsiblePerson {
+  id: string;
+  name: string;
+  role?: string;
+  category?: string;
+  type: "member" | "contact" | "org_role";
+  avatar?: string;
+  orgId?: string;
+  orgName?: string;
+}
+
 export interface TaskChecklistItem {
   id: string;
   text: string;
@@ -49,8 +87,8 @@ export interface TaskRecurrenceConfig {
   interval: number;
   unit: "days" | "weeks" | "months" | "years";
   startDate: string;
-  createAtTime: string;
-  deadlineOffsetDays: number;
+  createAtTime?: string;
+  deadlineOffsetDays?: number;
   stopRule: "never" | "count" | "date";
   stopCount?: number;
   stopDate?: string;
@@ -89,6 +127,13 @@ export interface TaskEntity {
   scopeLevel: TaskScopeLevel;
   assignee: TaskAssigneeScope;
   assignees?: TaskAssigneeScope[];
+  responsiblePeople?: TaskResponsiblePerson[];
+  responsibleType?: "team" | "contact" | "org_role";
+  targetRole?: string;
+  targetCategory?: string;
+  targetOrgId?: string;
+  targetOrgName?: string;
+  studioItems?: TaskStudioItem[];
   storytelling?: string;
   creator: {
     id: string;

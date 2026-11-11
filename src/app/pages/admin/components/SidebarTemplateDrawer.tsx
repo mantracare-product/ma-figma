@@ -145,7 +145,7 @@ const STANDARD_WORKSPACE_PAGES = [
   { label: "Sections & Fields", path: "/settings/sections-fields", iconName: "Layers", group: "Settings" },
   { label: "Integrations", path: "/settings/integrations", iconName: "Link", group: "Settings" },
   { label: "Audit Logs", path: "/settings/audit-logs", iconName: "ScrollText", group: "Settings" },
-  { label: "Security", path: "/settings/security", iconName: "Lock", group: "Settings" },
+  { label: "Notifications", path: "/settings/notifications", iconName: "Bell", group: "Settings" },
 ];
 
 const ENTITY_OPTIONS = [
@@ -267,7 +267,7 @@ const DEFAULT_SECTIONS: NavSectionConfig[] = [
       { id: "settings-sections", label: "Sections / Fields", iconName: "Layers", path: "/settings/sections-fields", visible: true },
       { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
       { id: "settings-audit", label: "Audit Logs", iconName: "ScrollText", path: "/settings/audit-logs", visible: true },
-      { id: "settings-security", label: "Security", iconName: "Lock", path: "/settings/security", visible: true },
+      { id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true },
     ],
   },
 ];

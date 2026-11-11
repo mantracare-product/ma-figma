@@ -3,6 +3,7 @@ import { Drawer } from "./ui/drawer";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Modal } from "./ui/Modal";
+import { Tooltip } from "./ui/Tooltip";
 import {
   Select,
   SelectContent,
@@ -58,6 +59,13 @@ import {
   GripVertical,
   Edit2,
   Edit3,
+  Camera,
+  ChevronsRight,
+  Briefcase,
+  RotateCcw,
+  Send,
+  Building2,
+  Copy,
 } from "lucide-react";
 
 export const OPEN_USER_PROFILE_DRAWER_EVENT = "mantra-open-user-profile-drawer";
@@ -650,7 +658,7 @@ export function TeamMemberDrawer({
       <Drawer
         isOpen={isOpen}
         onClose={onClose}
-        maxWidth="max-w-4xl w-[920px]"
+        maxWidth="max-w-[1020px] w-full"
         headerClassName="px-6 py-2"
         zIndex={zIndex}
         title={
@@ -761,103 +769,236 @@ export function TeamMemberDrawer({
                 </div>
               </div>
 
-              {/* Personal Info Tab (Two-Column Layout) */}
-              {activeTab === "personal-info" && (
-                <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
-                  {/* Left Column: Identity Card */}
-                  <div className="space-y-4 md:sticky md:top-0">
-                    <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs flex flex-col items-center text-center relative">
-                      {/* Actions dropdown trigger on identity card */}
-                      {canRemoveMember && (
-                        <div className="absolute top-3.5 right-3.5" ref={actionsDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setShowActionsDropdown((v) => !v)}
-                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
-                          >
-                            <span>Actions</span>
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
-                          </button>
-                          {showActionsDropdown && (
-                            <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl border border-gray-200 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-150 text-left">
-                              <button
-                                type="button"
-                                onClick={handleRemoveMember}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                <span>Remove team member</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
+              {/* Two-Column Layout (Left Column Fixed across ALL Tabs) */}
+              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
+                {/* Left Column: Identity Card (Sticky across all tabs) */}
+                <div className="space-y-4 md:sticky md:top-0 md:max-h-[calc(100vh-140px)] md:overflow-y-auto">
+                  {/* Mobile/Tablet Compact View */}
+                  <div className="md:hidden bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-xs flex items-center gap-4">
+                    <div
+                      onClick={() => profilePictureInputRef.current?.click()}
+                      className="w-14 h-14 rounded-full border border-slate-200 flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer shadow-2xs bg-[#1F2937] group"
+                    >
+                      {profilePicture ? (
+                        <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-white text-base font-bold select-none">
+                          {(personalInfo.fullName || member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                        </span>
                       )}
-
-                      {/* Large Avatar */}
-                      <div
-                        onClick={() => profilePictureInputRef.current?.click()}
-                        className="w-20 h-20 rounded-2xl flex items-center justify-center relative overflow-hidden transition-all hover:opacity-90 cursor-pointer shadow-sm mt-2 mb-3 bg-[#1F2937] group"
-                      >
-                        {profilePicture ? (
-                          <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-white text-xl font-bold select-none">
-                            {(member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                          </span>
-                        )}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-semibold">
-                          Change
-                        </div>
-                      </div>
-
-                      {/* Name & Role */}
-                      <h3 className="text-base font-bold text-slate-900 leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {member?.name || personalInfo.fullName}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {personalInfo.fullName || member?.name || "Team Member"}
                       </h3>
-                      <div className="mt-1.5 flex items-center justify-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-                          {member?.role || personalInfo.role || "Team Member"}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          {personalInfo.status ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-
-                      {/* Quick Contact Summary */}
-                      <div className="w-full mt-4 pt-4 border-t border-gray-100 space-y-2 text-left text-xs">
-                        <div className="flex items-center justify-between text-slate-600">
-                          <span className="text-slate-400 font-medium text-[11px]">Email</span>
-                          <span className="font-medium text-slate-800 truncate max-w-[170px]" title={member?.email}>
-                            {member?.email || personalInfo.email}
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-slate-500 font-medium">{personalInfo.department || "General"}</span>
+                        {(personalInfo.role || member?.role || "").toLowerCase().includes("admin") && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider">
+                            <ChevronsRight className="w-2.5 h-2.5 text-blue-400" />
+                            ADMIN
                           </span>
-                        </div>
-                        {personalInfo.phone && (
-                          <div className="flex items-center justify-between text-slate-600">
-                            <span className="text-slate-400 font-medium text-[11px]">Phone</span>
-                            <span className="font-mono text-slate-800 tabular-nums">
-                              {personalInfo.phone}
-                            </span>
-                          </div>
                         )}
-                        <div className="flex items-center justify-between text-slate-600">
-                          <span className="text-slate-400 font-medium text-[11px]">Department</span>
-                          <span className="font-medium text-slate-800">
-                            {member?.department || personalInfo.department}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-slate-600">
-                          <span className="text-slate-400 font-medium text-[11px]">Timezone</span>
-                          <span className="font-medium text-slate-800">
-                            {personalInfo.timezone}
-                          </span>
-                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right Column: Forms & Custom Sections */}
-                  <div className="space-y-4 min-w-0">
+                  {/* Desktop Full Structured Card */}
+                  <div className="hidden md:flex flex-col bg-white rounded-2xl border border-[#E2E8F0] shadow-xs divide-y divide-slate-100 overflow-hidden relative">
+                    {/* Admin Corner Chevron Ribbon (when admin) */}
+                    {(personalInfo.role || member?.role || "").toLowerCase().includes("admin") && (
+                      <div className="absolute top-0 right-0 overflow-hidden w-20 h-20 pointer-events-none rounded-tr-2xl z-10">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[8px] font-extrabold uppercase py-0.5 tracking-wider text-center rotate-45 transform translate-x-5 translate-y-3 shadow-xs flex items-center justify-center gap-0.5">
+                          <ChevronsRight className="w-2.5 h-2.5" />
+                          <span>ADMIN</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 1. Profile Section (Centered) */}
+                    <div className="p-5 flex flex-col items-center text-center">
+                      <div className="relative group">
+                        <div
+                          onClick={() => profilePictureInputRef.current?.click()}
+                          className="w-24 h-24 rounded-full border-2 border-slate-200 flex items-center justify-center relative overflow-hidden transition-all hover:opacity-95 cursor-pointer shadow-sm bg-[#1F2937]"
+                          title="Click to change profile picture"
+                        >
+                          {profilePicture ? (
+                            <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-white text-2xl font-bold select-none tracking-tight">
+                              {(personalInfo.fullName || member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                            </span>
+                          )}
+                          <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white text-[10px] font-semibold">
+                            <Camera className="w-5 h-5 mb-0.5" />
+                            <span>Change</span>
+                          </div>
+                        </div>
+
+                        {/* Dedicated visible Camera Icon button to upload image */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            profilePictureInputRef.current?.click();
+                          }}
+                          className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md border-2 border-white hover:bg-blue-700 cursor-pointer transition-transform hover:scale-105"
+                          title="Upload photo"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                        </div>
+
+                        {profilePicture && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfilePicture(null);
+                              toast.success("Profile photo removed");
+                            }}
+                            className="block mx-auto mt-2 text-[11px] font-medium text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                          >
+                            Remove photo
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Name */}
+                      <div className="mt-3 w-full px-2">
+                        <Tooltip content={personalInfo.fullName || member?.name || "Team Member"}>
+                          <h3 className="text-base font-bold text-slate-900 truncate leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            {personalInfo.fullName || member?.name || "Team Member"}
+                          </h3>
+                        </Tooltip>
+                      </div>
+
+                      {/* Admin Chevron Ribbon on the Profile */}
+                      {(personalInfo.role || member?.role || "").toLowerCase().includes("admin") && (
+                        <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-bold tracking-wider uppercase shadow-xs border border-slate-700">
+                          <ChevronsRight className="w-3.5 h-3.5 text-blue-400" />
+                          <span>ADMINISTRATOR</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Contact and Work Details (Department, Role, Phone, Email only) */}
+                    <div className="p-4 space-y-3 text-xs text-left">
+                      {/* Department */}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Building2 className="w-3 h-3" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Department</div>
+                          <div className="text-slate-800 font-medium truncate">
+                            {personalInfo.department || member?.department || "General"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Role */}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Briefcase className="w-3 h-3" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Role</div>
+                          <div className="text-slate-800 font-medium truncate">
+                            {personalInfo.role || member?.role || "Team Member"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Phone */}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Phone className="w-3 h-3" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Phone</div>
+                          <div className="text-slate-800 font-medium truncate font-mono text-[11px]">
+                            {personalInfo.phone || member?.phone || "+1 (555) 000-0000"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Email */}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Mail className="w-3 h-3" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Email</div>
+                          <div className="text-slate-800 font-medium truncate" title={personalInfo.email || member?.email}>
+                            {personalInfo.email || member?.email || "user@mantra.care"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Quick Actions */}
+                    <div className="p-4 space-y-2 bg-white">
+                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Quick Actions</p>
+
+                      {/* Reset Password */}
+                      <button
+                        type="button"
+                        onClick={() => toast.success(`Password reset link sent to ${personalInfo.email || member?.email}`)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Reset password</span>
+                      </button>
+
+                      {/* Resend Invite (if Invited) */}
+                      {((member as any)?.status === "Invited" || !personalInfo.status) && (
+                        <button
+                          type="button"
+                          onClick={() => toast.success(`Invitation email resent to ${personalInfo.email}`)}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 text-blue-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Send className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Resend invite</span>
+                        </button>
+                      )}
+
+                      {/* Suspend or Reactivate */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !personalInfo.status;
+                          updatePersonalInfo({ status: next });
+                          toast.success(next ? "Account reactivated" : "Account suspended");
+                        }}
+                        className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold shadow-2xs transition-colors cursor-pointer ${
+                          personalInfo.status
+                            ? "border-amber-200 bg-amber-50/40 hover:bg-amber-100/60 text-amber-800"
+                            : "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-100/60 text-emerald-800"
+                        }`}
+                      >
+                        <span>{personalInfo.status ? "Suspend account" : "Reactivate account"}</span>
+                      </button>
+
+                      {/* Remove Member */}
+                      {canRemoveMember && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveMember}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50/40 hover:bg-rose-100/60 text-rose-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Remove team member</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Dynamic Content per Active Tab */}
+                <div className="space-y-4 min-w-0">
+                  {/* Personal Info Tab */}
+                  {activeTab === "personal-info" && (
+                    <div className="space-y-4">
                     {/* SECTION 1: BASIC INFO */}
                     <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
                       <div className="flex items-center justify-between mb-4">
@@ -1366,8 +1507,7 @@ export function TeamMemberDrawer({
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* Security Tab */}
             {activeTab === "security" && (
@@ -2088,6 +2228,8 @@ export function TeamMemberDrawer({
                 </div>
               </div>
             )}
+                </div>
+              </div>
           </div>
         )}
 

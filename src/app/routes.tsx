@@ -92,7 +92,7 @@ const AdminProductsServices = withLazy(() => import("./pages/admin/AdminProducts
 const AdminKnowledgeBase = withLazy(() => import("./pages/admin/AdminKnowledgeBase"));
 const AdminRolesPermissions = withLazy(() => import("./pages/admin/AdminRolesPermissions"));
 const AdminSidebarConfig = withLazy(() => import("./pages/admin/AdminSidebarConfig"));
-const AdminSecurity = withLazy(() => import("./pages/admin/AdminSecurity"));
+const AdminTelephony = withLazy(() => import("./pages/admin/AdminTelephony"));
 const AdminAuditLogs = withLazy(() => import("./pages/admin/AdminAuditLogs"));
 const AdminPhoneNumbers = withLazy(() => import("./pages/admin/AdminPhoneNumbers"));
 const AdminCallLogs = withLazy(() => import("./pages/admin/AdminCallLogs"));
@@ -320,15 +320,16 @@ export const router = createBrowserRouter([
           { path: "billing/subscriptions", Component: AdminSubscriptions },
           { path: "subscriptions", Component: AdminSubscriptions },
           { path: "credits", Component: AdminPlans },
-          { path: "telephony/numbers", Component: AdminPhoneNumbers },
-          { path: "telephony/calls", Component: AdminCallLogs },
-          { path: "integrations/telephony-providers", Component: AdminTelephonyProviders },
+          { path: "telephony/numbers", element: <Navigate to="/admin/integrations/telephony?tab=numbers" replace /> },
+          { path: "telephony/calls", element: <Navigate to="/admin/integrations/telephony?tab=providers" replace /> },
+          { path: "telephony", element: <Navigate to="/admin/integrations/telephony" replace /> },
+          { path: "integrations/telephony-providers", element: <Navigate to="/admin/integrations/telephony?tab=providers" replace /> },
+          { path: "integrations/telephony", Component: AdminTelephony },
           { path: "product-analytics/overview", Component: AdminAnalyticsOverview },
           { path: "product-analytics/calls", Component: AdminAnalyticsCalls },
           { path: "product-analytics/process-movement", Component: AdminAnalyticsProcessMovement },
           { path: "product-analytics/organization-usage", Component: AdminAnalyticsOrgUsage },
           { path: "product-analytics/revenue-invoices", Component: AdminAnalyticsRevenueInvoices },
-          { path: "security", Component: AdminSecurity },
           { path: "settings", Component: Settings },
           { path: "settings/logs", Component: AdminAuditLogs },
           { path: "logs", Component: AdminAuditLogs },

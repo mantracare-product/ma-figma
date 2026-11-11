@@ -32,6 +32,7 @@ import {
   Clock,
   ArrowUpRight,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -62,32 +63,30 @@ export default function AdminAnalyticsOverview() {
       <PageHeader
         title="Product Analytics Overview"
         subtitle="Platform-wide clinical operations, agent concurrency, call throughput, and revenue telemetry"
-        actions={
-          <div className="flex items-center gap-2">
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer shadow-2xs"
-            >
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last Quarter</option>
-              <option value="1y">Last 12 Months</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              Export CSV
-            </button>
-          </div>
-        }
       />
 
       <div className="p-6 space-y-6">
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[140px] transition-colors"
+                >
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                  <option value="90d">Last Quarter</option>
+                  <option value="1y">Last 12 Months</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          }
+        />
         {/* KPI Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
@@ -315,6 +314,7 @@ export default function AdminAnalyticsOverview() {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] font-bold uppercase text-slate-500">
+                  <th className="py-2 px-3">ORG ID</th>
                   <th className="py-2 px-3">Organization</th>
                   <th className="py-2 px-3">Plan</th>
                   <th className="py-2 px-3 text-right">Calls (30d)</th>
@@ -326,13 +326,11 @@ export default function AdminAnalyticsOverview() {
               <tbody className="divide-y divide-slate-100 font-sans">
                 {INITIAL_ORG_USAGE.slice(0, 4).map((org) => (
                   <tr key={org.orgId} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-xs font-medium text-slate-600 tabular-nums">
+                      {org.orgCode}
+                    </td>
                     <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-slate-900">{org.orgName}</span>
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 tabular-nums">
-                          {org.orgCode}
-                        </span>
-                      </div>
+                      <span className="font-semibold text-slate-900">{org.orgName}</span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-700 font-medium">{org.planName}</td>
                     <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-900 tabular-nums">

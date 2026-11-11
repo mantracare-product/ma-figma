@@ -35,8 +35,11 @@ import {
   ArrowRight,
   PenTool,
   Eraser,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
 import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
@@ -279,6 +282,15 @@ export default function DraggableOverviewSections({
 
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
+  const { user } = useAuth();
+  const isUserAdmin = Boolean(
+    user?.role?.toLowerCase().includes("admin") ||
+    user?.role?.toLowerCase().includes("system") ||
+    (user as any)?.isAdmin
+  );
+
+  const [activeFieldMenu, setActiveFieldMenu] = useState<{ sectionId: string; fieldKey: string } | null>(null);
+  const [showConfigureSubmenu, setShowConfigureSubmenu] = useState(false);
 
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
 
@@ -871,15 +883,160 @@ export default function DraggableOverviewSections({
           </div>
 
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {regField && regField.permissions?.canEdit !== false && (
-              <button
-                type="button"
-                onClick={() => setEditingFieldDef(regField)}
-                className="p-0.5 text-slate-300 hover:text-blue-600 hover:rotate-45 rounded transition-all cursor-pointer"
-                title="Edit field configuration"
-              >
-                <SettingsIcon className="w-3 h-3" />
-              </button>
+            {regField && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (activeFieldMenu?.sectionId === sectionId && activeFieldMenu?.fieldKey === key) {
+                      setActiveFieldMenu(null);
+                      setShowConfigureSubmenu(false);
+                    } else {
+                      setActiveFieldMenu({ sectionId, fieldKey: key });
+                      setShowConfigureSubmenu(false);
+                    }
+                  }}
+                  className="p-0.5 text-slate-300 hover:text-blue-600 hover:rotate-45 rounded transition-all cursor-pointer"
+                  title="Field settings"
+                >
+                  <SettingsIcon className="w-3 h-3" />
+                </button>
+
+                {activeFieldMenu?.sectionId === sectionId && activeFieldMenu?.fieldKey === key && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveFieldMenu(null);
+                        setShowConfigureSubmenu(false);
+                      }}
+                    />
+                    <div
+                      className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-50 text-left animate-in fade-in zoom-in-95 duration-100"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* 1. Configure (Admin Only) */}
+                      {isUserAdmin && (
+                        <div className="border-b border-slate-100 pb-1 mb-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowConfigureSubmenu((v) => !v)}
+                            className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <SettingsIcon className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Configure</span>
+                            </div>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${
+                                showConfigureSubmenu ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+
+                          {/* Configure Submenu */}
+                          {showConfigureSubmenu && (
+                            <div className="px-2.5 py-2 mx-1.5 my-1 bg-slate-50/90 rounded-lg border border-slate-200/80 space-y-2 animate-in fade-in duration-100">
+                              {/* Marked as Required */}
+                              <label className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-700 cursor-pointer select-none">
+                                <span>Marked as required</span>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(regField?.required)}
+                                  onChange={(e) => {
+                                    if (regField) {
+                                      updateCustomField(customFieldsModule, regField.id, { required: e.target.checked });
+                                      toast.success(`Field marked as ${e.target.checked ? "required" : "optional"}`);
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                              </label>
+
+                              {/* Fill with AI Scribe (No sparkle icon) */}
+                              <label className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-700 cursor-pointer select-none">
+                                <span>Fill with AI Scribe</span>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean((regField as any)?.fillWithAIScribe)}
+                                  onChange={(e) => {
+                                    if (regField) {
+                                      updateCustomField(customFieldsModule, regField.id, { fillWithAIScribe: e.target.checked } as any);
+                                      toast.success(`AI Scribe auto-fill ${e.target.checked ? "enabled" : "disabled"}`);
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                              </label>
+
+                              {/* User Visibility */}
+                              <div className="pt-2 border-t border-slate-200/80">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  User Visibility
+                                </label>
+                                <select
+                                  value={(regField as any)?.visibility || "all"}
+                                  onChange={(e) => {
+                                    if (regField) {
+                                      updateCustomField(customFieldsModule, regField.id, { visibility: e.target.value } as any);
+                                      toast.success(`Field visibility updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                    }
+                                  }}
+                                  className="w-full h-7 px-2 bg-white border border-slate-200 rounded text-[11px] font-medium text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="all">All Users</option>
+                                  <option value="admin">Admins Only</option>
+                                  <option value="specialist">Clinical Staff & Admins</option>
+                                  <option value="custom">Restricted Roles</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 2. Hide (Available to all users) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveFieldMenu(null);
+                          setShowConfigureSubmenu(false);
+                          handleRemoveFieldFromSection(sectionId, key);
+                          toast.success(`Field "${regField?.label || key}" hidden`);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Hide</span>
+                      </button>
+
+                      {/* 3. Show Always (Available to all users) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveFieldMenu(null);
+                          setShowConfigureSubmenu(false);
+                          if (regField) {
+                            const nextVal = !Boolean(regField.showAlways);
+                            updateCustomField(customFieldsModule, regField.id, { showAlways: nextVal });
+                            toast.success(`Field "${regField.label || key}" ${nextVal ? "set to show always" : "will auto-hide when empty"}`);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Eye className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Show always</span>
+                        </div>
+                        {regField?.showAlways && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {regField?.permissions?.canHide !== false && (
               <button

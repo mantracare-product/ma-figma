@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { recordAuditLog } from "./auditLogsStore";
 
-export type OrderType = "New plan" | "Plan upgrade" | "Credits top-up" | "Phone number" | "Add-on";
+export type OrderType = "New plan" | "Plan upgrade" | "Credits top-up" | "Team member package" | "Add-on";
 export type OrderPaymentStatus = "Paid" | "Pending" | "Failed" | "Refunded";
 export type OrderStatus = "Completed" | "Processing" | "Cancelled";
 
@@ -185,11 +185,11 @@ export const INITIAL_ORDERS: AdminOrderItem[] = [
     orgId: "org-3",
     orgName: "Heart Care Clinic",
     orgCode: "ORG-0003",
-    type: "Phone number",
+    type: "Team member package",
     items: [
-      { id: "li-8", title: "New York DID Setup (+1 212 779 4321)", quantity: 1, unitPrice: 15.0, total: 15.0 },
+      { id: "li-8", title: "Additional Staff Seat (5x Team Expansion Pack)", quantity: 1, unitPrice: 75.0, total: 75.0 },
     ],
-    amount: 15.0,
+    amount: 75.0,
     currency: "USD",
     paymentStatus: "Paid",
     orderStatus: "Completed",
@@ -404,7 +404,11 @@ export function getStoredOrders(): AdminOrderItem[] {
       return INITIAL_ORDERS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ORDERS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_ORDERS;
+    return parsed.map((o: any) => ({
+      ...o,
+      type: (o.type === "Phone number" ? "Team member package" : o.type) as OrderType,
+    }));
   } catch {
     return INITIAL_ORDERS;
   }

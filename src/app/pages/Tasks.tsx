@@ -9,7 +9,7 @@ import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { Tooltip } from "../components/ui/Tooltip";
-import { useTasks } from "../../lib/tasksStore";
+import { useTasks, getPersonTaskProgress, getTaskOverallProgress } from "../../lib/tasksStore";
 import { TaskEntity } from "../../types/task";
 import { useProcessStore, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES } from "../../lib/useProcessStore";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
@@ -73,6 +73,19 @@ export default function Tasks() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState<TaskEntity | null>(null);
+
+  // Check if ?editTaskId= is in the search params
+  React.useEffect(() => {
+    const editTaskId = searchParams.get("editTaskId");
+    if (editTaskId) {
+      const match = tasks.find((t) => t.id === editTaskId);
+      if (match) {
+        setTaskToEdit(match);
+        setShowQuickCreate(true);
+      }
+    }
+  }, [searchParams, tasks]);
 
   // Auto-redirect legacy ?id= links to full task page
   React.useEffect(() => {
@@ -82,8 +95,25 @@ export default function Tasks() {
     }
   }, [searchParams, isAdmin, navigate]);
 
-  const handleOpenTaskPage = (taskId: string) => {
-    navigate(isAdmin ? `/admin/tasks/${taskId}` : `/tasks/${taskId}`);
+  // Main task click handler:
+  // "for the task that i created show the task edititng drawere only , for the task assigned to me show pages"
+  const handleOpenTask = (task: TaskEntity) => {
+    if (isAssignedToMe(task)) {
+      // Assigned to me: show pages
+      navigate(isAdmin ? `/admin/tasks/${task.id}` : `/tasks/${task.id}`);
+    } else {
+      // Created by me: show task editing drawer only
+      setTaskToEdit(task);
+      setShowQuickCreate(true);
+    }
+  };
+
+  const handleCloseDrawer = () => {
+    setShowQuickCreate(false);
+    setTaskToEdit(null);
+    if (searchParams.get("editTaskId")) {
+      navigate(isAdmin ? "/admin/tasks" : "/tasks", { replace: true });
+    }
   };
 
   // Current logged in username / persona
@@ -120,6 +150,21 @@ export default function Tasks() {
           u.includes(name) ||
           name.includes("alistair") ||
           name.includes("lead physician")
+        );
+      })
+    ) {
+      return true;
+    }
+    if (
+      t.responsiblePeople &&
+      t.responsiblePeople.some((p) => {
+        const pName = (p.name || "").toLowerCase();
+        const userName = (user?.name || "").toLowerCase();
+        return (
+          pName.includes(u) ||
+          u.includes(pName) ||
+          pName.includes("alistair") ||
+          (userName && (pName.includes(userName) || userName.includes(pName)))
         );
       })
     ) {
@@ -218,7 +263,7 @@ export default function Tasks() {
             <Tooltip content={task.title || "NA"}>
               <div className="min-w-0 pr-2">
                 <span
-                  onClick={() => handleOpenTaskPage(task.id)}
+                  onClick={() => handleOpenTask(task)}
                   className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
@@ -335,7 +380,7 @@ export default function Tasks() {
               <Tooltip content={task.title || "NA"}>
                 <div className="min-w-0 pr-2">
                   <span
-                    onClick={() => handleOpenTaskPage(task.id)}
+                    onClick={() => handleOpenTask(task)}
                     className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
@@ -387,7 +432,7 @@ export default function Tasks() {
               <Tooltip content={task.title || "NA"}>
                 <div className="min-w-0 pr-2">
                   <span
-                    onClick={() => handleOpenTaskPage(task.id)}
+                    onClick={() => handleOpenTask(task)}
                     className="font-bold text-xs text-slate-900 hover:text-[#1456f0] hover:underline cursor-pointer truncate block"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
@@ -457,21 +502,41 @@ export default function Tasks() {
       {
         key: "checklists",
         header: "CHECKLIST",
-        width: "110px",
-        minWidth: "110px",
+        width: "140px",
+        minWidth: "120px",
         align: "left",
         render: (task) => {
-          const totalItems = task.checklists ? task.checklists.reduce((acc, c) => acc + c.items.length, 0) : 0;
-          const completedItems = task.checklists ? task.checklists.reduce(
-            (acc, c) => acc + c.items.filter((it) => it.isCompleted).length,
-            0
-          ) : 0;
-          if (totalItems === 0) return <span className="font-mono text-xs text-slate-700 tabular-nums">NA</span>;
-          return (
-            <span className="font-mono text-xs text-slate-700 tabular-nums">
-              {completedItems}/{totalItems}
-            </span>
-          );
+          if (!isAdmin && clientTab === "my_tasks") {
+            const prog = getPersonTaskProgress(task, currentUserName);
+            if (prog.total === 0) return <span className="font-mono text-xs text-slate-700 tabular-nums">NA</span>;
+            return (
+              <span className="font-mono text-xs text-slate-700 tabular-nums">
+                {prog.completed}/{prog.total}
+              </span>
+            );
+          } else {
+            // "Tasks by me" or Admin workspace
+            const overall = getTaskOverallProgress(task);
+            if (overall.totalPeopleCount > 1) {
+              const tooltipContent = overall.breakdown
+                .map((b) => `${b.person.name}: ${b.completed}/${b.total}${b.isFinished ? " (done)" : ""}`)
+                .join(", ");
+              return (
+                <Tooltip content={tooltipContent}>
+                  <span className="font-mono text-xs text-slate-700 tabular-nums cursor-default">
+                    {overall.finishedPeopleCount}/{overall.totalPeopleCount} finished
+                  </span>
+                </Tooltip>
+              );
+            }
+            const prog = getPersonTaskProgress(task);
+            if (prog.total === 0) return <span className="font-mono text-xs text-slate-700 tabular-nums">NA</span>;
+            return (
+              <span className="font-mono text-xs text-slate-700 tabular-nums">
+                {prog.completed}/{prog.total}
+              </span>
+            );
+          }
         },
       }
     );
@@ -482,8 +547,8 @@ export default function Tasks() {
   const rowActions: TableRowAction<TaskEntity>[] = useMemo(() => {
     const actions: TableRowAction<TaskEntity>[] = [
       {
-        label: "View Details",
-        onClick: (task) => handleOpenTaskPage(task.id),
+        label: clientTab === "tasks_by_me" || isAdmin ? "Edit Task" : "View Details",
+        onClick: (task) => handleOpenTask(task),
       },
       {
         label: "Mark Completed",
@@ -622,7 +687,7 @@ export default function Tasks() {
           columns={columns}
           getRowId={(t) => t.id}
           rowActions={rowActions}
-          onRowClick={(task) => handleOpenTaskPage(task.id)}
+          onRowClick={(task) => handleOpenTask(task)}
           emptyMessage="No tasks found matching your filters."
         />
       </div>
@@ -630,8 +695,10 @@ export default function Tasks() {
       {/* ── Drawers ── */}
       <TaskQuickCreateDrawer
         isOpen={showQuickCreate}
-        onClose={() => setShowQuickCreate(false)}
+        onClose={handleCloseDrawer}
         onCreateTask={createTask}
+        onUpdateTask={updateTask}
+        taskToEdit={taskToEdit}
         isAdmin={isAdmin}
         taskStages={taskStages}
         defaultWorkflowName={activeTaskWorkflow.name}

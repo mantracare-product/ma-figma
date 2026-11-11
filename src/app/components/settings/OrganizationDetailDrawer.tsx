@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   X,
   Building2,
@@ -32,11 +32,21 @@ import {
   GripVertical,
   PhoneCall,
   Settings as SettingsIcon,
+  Camera,
+  PhoneOff,
+  Ban,
+  ShieldCheck,
+  Lock,
+  RotateCcw,
+  Info,
+  Copy,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { Tooltip } from "../ui/Tooltip";
+import { Switch } from "../ui/switch";
 import { toast } from "sonner";
 import {
   useFieldRegistry,
@@ -74,6 +84,7 @@ export interface CustomSectionItem {
 export interface OrganizationDetail {
   id: string;
   name: string;
+  logo?: string;
   flag?: string;
   email: string;
   phone?: string;
@@ -192,6 +203,85 @@ export default function OrganizationDetailDrawer({
     }
   }, [organization]);
 
+  // Active Tab: General | Availability | Security
+  const [activeTab, setActiveTab] = useState<"general" | "availability" | "security">("general");
+
+  // Logo upload ref & handlers
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File size must be under 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => (prev ? { ...prev, logo: reader.result as string } : prev));
+      toast.success("Organization logo uploaded");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData((prev) => (prev ? { ...prev, logo: undefined } : prev));
+    toast.success("Organization logo removed");
+  };
+
+  // Availability / Weekly Schedule State
+  const [scheduleTimezone, setScheduleTimezone] = useState(
+    organization?.timezone || "America/Los_Angeles (Pacific Time)"
+  );
+  const [weeklySchedule, setWeeklySchedule] = useState([
+    { day: "Monday", open: true, start: "09:00 AM", end: "05:00 PM" },
+    { day: "Tuesday", open: true, start: "09:00 AM", end: "05:00 PM" },
+    { day: "Wednesday", open: true, start: "09:00 AM", end: "05:00 PM" },
+    { day: "Thursday", open: true, start: "09:00 AM", end: "05:00 PM" },
+    { day: "Friday", open: true, start: "09:00 AM", end: "05:00 PM" },
+    { day: "Saturday", open: false, start: "10:00 AM", end: "02:00 PM" },
+    { day: "Sunday", open: false, start: "10:00 AM", end: "02:00 PM" },
+  ]);
+
+  const handleApplyMonFriToAll = () => {
+    const mon = weeklySchedule[0];
+    setWeeklySchedule((prev) =>
+      prev.map((item, idx) =>
+        idx >= 1 && idx <= 4
+          ? { ...item, open: mon.open, start: mon.start, end: mon.end }
+          : item
+      )
+    );
+    toast.success("Applied Monday hours to all weekdays");
+  };
+
+  // Security Settings State
+  const [roboCallEnabled, setRoboCallEnabled] = useState(true);
+  const [shieldingSensitivity, setShieldingSensitivity] = useState<"standard" | "strict" | "aggressive">("standard");
+  const [autoBlockSpam, setAutoBlockSpam] = useState(true);
+
+  const [enforce2FA, setEnforce2FA] = useState(false);
+  const [twoFaGracePeriod, setTwoFaGracePeriod] = useState("3 days");
+
+  const [sessionTimeout, setSessionTimeout] = useState("30m");
+  const [lockOnIdle, setLockOnIdle] = useState(true);
+
+  const [minPasswordLength, setMinPasswordLength] = useState(8);
+  const [requireSpecialChars, setRequireSpecialChars] = useState(true);
+  const [requireNumbers, setRequireNumbers] = useState(true);
+
+  const [blockedNumbers, setBlockedNumbers] = useState<Array<{ id: string; countryCode: string; phoneNumber: string; note: string }>>([
+    { id: "1", countryCode: "+1", phoneNumber: "(800) 555-0199", note: "Known spam telemarketer" },
+    { id: "2", countryCode: "+1", phoneNumber: "(888) 420-9912", note: "Aggressive robocall" },
+  ]);
+  const [newBlockedNumber, setNewBlockedNumber] = useState({ countryCode: "+1", phoneNumber: "", note: "" });
+
+  const [expandedSecurityRow, setExpandedSecurityRow] = useState<string | null>("robocall");
+
+  const toggleSecurityRow = (rowId: string) => {
+    setExpandedSecurityRow((prev) => (prev === rowId ? null : rowId));
+  };
+
   if (!isOpen || !formData) return null;
 
   const handleFieldChange = (field: keyof OrganizationDetail, value: any) => {
@@ -267,14 +357,20 @@ export default function OrganizationDetailDrawer({
 
       {/* Slide-out Drawer */}
       <div
-        className="fixed inset-y-0 right-0 z-50 w-full max-w-[700px] bg-[#fafafa] shadow-2xl flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300"
+        className="fixed inset-y-0 right-0 z-50 w-full max-w-[1020px] bg-[#fafafa] shadow-2xl flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300"
         style={{ fontFamily: "Outfit, sans-serif" }}
       >
         {/* Drawer Header */}
         <div className="bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 shadow-2xs">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1E293B] to-[#334155] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-              {formData.flag ? formData.flag : <Building2 className="w-5 h-5" />}
+            <div className="relative group w-11 h-11 rounded-xl bg-gradient-to-tr from-[#1E293B] to-[#334155] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0 overflow-hidden border border-slate-200">
+              {formData.logo ? (
+                <img src={formData.logo} alt={formData.name} className="w-full h-full object-cover" />
+              ) : formData.flag ? (
+                formData.flag
+              ) : (
+                <Building2 className="w-5 h-5 text-white" />
+              )}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -325,16 +421,238 @@ export default function OrganizationDetailDrawer({
           </div>
         </div>
 
+        {/* Tab Switcher */}
+        <div className="bg-white px-6 border-b border-gray-200 flex items-center gap-6 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab("general")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === "general"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            General
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("availability")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === "availability"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            Availability
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("security")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === "security"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            Security
+          </button>
+        </div>
+
         {/* Drawer Body (Scrollable Sections) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F8FAFC]">
-          {/* SECTION 1: BASIC INFO / ORGANIZATION DETAILS */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
-                  BASIC INFO
-                </h3>
+        <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC]">
+          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
+            {/* Left Column: Organization Sticky Identity Card */}
+            <div className="space-y-4 md:sticky md:top-0 md:max-h-[calc(100vh-140px)] md:overflow-y-auto">
+              {/* Mobile/Tablet Compact View */}
+              <div className="md:hidden bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-xs flex items-center gap-4">
+                <div
+                  onClick={() => logoInputRef.current?.click()}
+                  className="w-14 h-14 rounded-2xl border border-slate-200 flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer shadow-2xs bg-[#1F2937]"
+                >
+                  {formData.logo ? (
+                    <img src={formData.logo} alt="Organization Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Building2 className="w-6 h-6 text-white" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {formData.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {formData.industry || formData.industryCategory || "Healthcare"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Desktop Full Structured Identity Card */}
+              <div className="hidden md:flex flex-col bg-white rounded-2xl border border-[#E2E8F0] shadow-xs divide-y divide-slate-100 overflow-hidden relative">
+                {/* 1. Profile / Logo Section (Centered) */}
+                <div className="p-5 flex flex-col items-center text-center">
+                  <div className="relative group">
+                    <div
+                      onClick={() => logoInputRef.current?.click()}
+                      className="w-24 h-24 rounded-2xl border-2 border-slate-200 flex items-center justify-center relative overflow-hidden transition-all hover:opacity-95 cursor-pointer shadow-sm bg-gradient-to-tr from-[#1E293B] to-[#334155]"
+                      title="Click to change organization logo"
+                    >
+                      {formData.logo ? (
+                        <img src={formData.logo} alt="Organization Logo" className="w-full h-full object-cover" />
+                      ) : formData.flag ? (
+                        <span className="text-3xl select-none">{formData.flag}</span>
+                      ) : (
+                        <Building2 className="w-10 h-10 text-white/90" />
+                      )}
+                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white text-[10px] font-semibold">
+                        <Camera className="w-5 h-5 mb-0.5" />
+                        <span>Change</span>
+                      </div>
+                    </div>
+
+                    {/* Dedicated visible Camera Icon button to upload logo */}
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        logoInputRef.current?.click();
+                      }}
+                      className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md border-2 border-white hover:bg-blue-700 cursor-pointer transition-transform hover:scale-105"
+                      title="Upload logo"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                    </div>
+
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
+                  </div>
+
+                  {formData.logo && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="mt-2 text-[11px] font-medium text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                    >
+                      Remove logo
+                    </button>
+                  )}
+
+                  {/* Name */}
+                  <div className="mt-3 w-full px-2">
+                    <Tooltip content={formData.name}>
+                      <h3 className="text-base font-bold text-slate-900 truncate leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {formData.name}
+                      </h3>
+                    </Tooltip>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>{formData.status || "Active"}</span>
+                  </div>
+                </div>
+
+                {/* 2. Contact & Org Details */}
+                <div className="p-4 space-y-3 text-xs text-left">
+                  {/* Industry */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <Briefcase className="w-3 h-3" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Industry</div>
+                      <div className="text-slate-800 font-medium truncate">
+                        {formData.industry || formData.industryCategory || "Healthcare"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Org ID */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <Hash className="w-3 h-3" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Org ID</div>
+                      <div className="text-slate-800 font-mono text-[11px] font-semibold truncate">
+                        {formData.id || "ORG-0001"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <Phone className="w-3 h-3" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Phone</div>
+                      <div className="text-slate-800 font-medium truncate">
+                        {formData.phone || "+1 (800) 555-0199"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <Mail className="w-3 h-3" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Email</div>
+                      <div className="text-slate-800 font-medium truncate" title={formData.email}>
+                        {formData.email}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Location */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <MapPin className="w-3 h-3" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Location</div>
+                      <div className="text-slate-800 font-medium truncate">
+                        {formData.location || "California, US"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Quick Actions */}
+                <div className="p-4 space-y-2 bg-white">
+                  <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Quick Actions</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(formData.id || "ORG-0001");
+                      toast.success("Organization ID copied to clipboard");
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy Org ID</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Forms & Custom Sections */}
+            <div className="space-y-4 min-w-0">
+              {activeTab === "general" && (
+                <>
+                  {/* SECTION 1: BASIC INFO / ORGANIZATION DETAILS */}
+              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                      BASIC INFO
+                    </h3>
               </div>
             </div>
 
@@ -507,22 +825,7 @@ export default function OrganizationDetailDrawer({
             </div>
           </div>
 
-          {/* SECTION 2: ORGANIZATION LOCATIONS (Appointment module dependency) */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
-                  ORGANIZATION LOCATIONS
-                </h3>
-              </div>
-            </div>
-            <div>
-              <OrganizationLocationsSection organizationId={formData.id} isEditing={true} />
-            </div>
-          </div>
-
-          {/* SECTION 3: BILLING INFO */}
+          {/* SECTION 2: BILLING INFO */}
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -555,7 +858,7 @@ export default function OrganizationDetailDrawer({
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="space-y-3">
                   <div>
                     <label className="text-[10px] font-semibold text-slate-500 block mb-1">CITY</label>
                     <Input
@@ -565,7 +868,7 @@ export default function OrganizationDetailDrawer({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-slate-500 block mb-1">STATE</label>
+                    <label className="text-[10px] font-semibold text-slate-500 block mb-1">STATE / PROVINCE</label>
                     <Input
                       placeholder="CA"
                       defaultValue="CA"
@@ -812,6 +1115,522 @@ export default function OrganizationDetailDrawer({
               <Plus className="w-4 h-4" />
               Add Section
             </button>
+          </div>
+        </>
+      )}
+
+      {/* ── TAB 2: AVAILABILITY & OPERATING HOURS ─────────────────────────── */}
+      {activeTab === "availability" && (
+        <div className="space-y-4">
+          {/* Operating Hours Card */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                  OPERATING HOURS & AVAILABILITY
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyMonFriToAll}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Apply Mon-Fri Hours
+              </button>
+            </div>
+
+            {/* Timezone picker */}
+            <div className="mb-4 pb-4 border-b border-slate-100">
+              <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                ORGANIZATION TIMEZONE
+              </label>
+              <select
+                value={scheduleTimezone}
+                onChange={(e) => {
+                  setScheduleTimezone(e.target.value);
+                  handleFieldChange("timezone", e.target.value);
+                }}
+                className="w-full h-9 px-3 rounded-xl border border-[#E2E8F0] bg-white text-xs text-[#1E293B] font-medium outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="America/Los_Angeles (Pacific Time)">America/Los_Angeles (Pacific Time - UTC-08:00)</option>
+                <option value="America/New_York (Eastern Time)">America/New_York (Eastern Time - UTC-05:00)</option>
+                <option value="America/Chicago (Central Time)">America/Chicago (Central Time - UTC-06:00)</option>
+                <option value="America/Denver (Mountain Time)">America/Denver (Mountain Time - UTC-07:00)</option>
+                <option value="Europe/London (GMT)">Europe/London (GMT - UTC+00:00)</option>
+                <option value="Asia/Kolkata (IST)">Asia/Kolkata (IST - UTC+05:30)</option>
+              </select>
+            </div>
+
+            {/* Weekly schedule days */}
+            <div className="space-y-2.5">
+              {weeklySchedule.map((item, idx) => (
+                <div
+                  key={item.day}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
+                    item.open ? "bg-white border-slate-200" : "bg-slate-50/70 border-slate-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 w-36">
+                    <Switch
+                      checked={item.open}
+                      onCheckedChange={(checked) => {
+                        setWeeklySchedule((prev) =>
+                          prev.map((d, i) => (i === idx ? { ...d, open: checked } : d))
+                        );
+                      }}
+                    />
+                    <span
+                      className={`text-xs font-semibold ${
+                        item.open ? "text-slate-800" : "text-slate-400 line-through"
+                      }`}
+                    >
+                      {item.day}
+                    </span>
+                  </div>
+
+                  {item.open ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={item.start}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWeeklySchedule((prev) =>
+                            prev.map((d, i) => (i === idx ? { ...d, start: val } : d))
+                          );
+                        }}
+                        className="w-24 h-8 px-2 text-center text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-blue-500"
+                      />
+                      <span className="text-xs text-slate-400">to</span>
+                      <input
+                        type="text"
+                        value={item.end}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWeeklySchedule((prev) =>
+                            prev.map((d, i) => (i === idx ? { ...d, end: val } : d))
+                          );
+                        }}
+                        className="w-24 h-8 px-2 text-center text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 font-medium px-2">Closed all day</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Organization Clinic Locations */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                  ORGANIZATION CLINIC LOCATIONS
+                </h3>
+              </div>
+            </div>
+            <OrganizationLocationsSection organizationId={formData.id} isEditing={true} />
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 3: SECURITY & ACCESS SETTINGS ─────────────────────────────── */}
+      {activeTab === "security" && (
+        <div className="space-y-3">
+          {/* Card 1: Robo Call Detection & Shielding */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-xs transition-all">
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              onClick={() => toggleSecurityRow("robocall")}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <PhoneOff className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">Robo Call Detection & Shielding</span>
+                    <Tooltip text="Detects telemarketers, robocalls, and spoofed callers automatically before answering.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+                    </Tooltip>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Auto-filter malicious & automated inbound calls</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+                    roboCallEnabled
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {roboCallEnabled ? "Active" : "Disabled"}
+                </span>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Switch checked={roboCallEnabled} onCheckedChange={setRoboCallEnabled} />
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    expandedSecurityRow === "robocall" ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {expandedSecurityRow === "robocall" && (
+              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
+                <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Sensitivity Level</div>
+                    <div className="text-[11px] text-slate-500">Adjust the aggressiveness of AI spam call interception</div>
+                  </div>
+                  <select
+                    value={shieldingSensitivity}
+                    onChange={(e) => setShieldingSensitivity(e.target.value as any)}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                  >
+                    <option value="standard">Standard (Recommended)</option>
+                    <option value="strict">Strict (Blocks all unverified caller IDs)</option>
+                    <option value="aggressive">Aggressive (Challenge audio captcha)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Auto-Block Known Spam Numbers</div>
+                    <div className="text-[11px] text-slate-500">Automatically add recognized spam numbers to the blocklist</div>
+                  </div>
+                  <Switch checked={autoBlockSpam} onCheckedChange={setAutoBlockSpam} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Card 2: Blocked Numbers */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-xs transition-all">
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              onClick={() => toggleSecurityRow("blocked")}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <Ban className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">Blocked Phone Numbers</span>
+                    <Tooltip text="Inbound calls and SMS from these numbers are instantly disconnected.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+                    </Tooltip>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Manage blacklisted numbers for this organization</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-rose-50 text-rose-700 border border-rose-200/60">
+                  {blockedNumbers.length} Blocked
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    expandedSecurityRow === "blocked" ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {expandedSecurityRow === "blocked" && (
+              <div className="px-5 pb-5 pt-3 border-t border-slate-100 space-y-3 bg-slate-50/30">
+                {/* Add new number row */}
+                <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
+                  <select
+                    value={newBlockedNumber.countryCode}
+                    onChange={(e) => setNewBlockedNumber({ ...newBlockedNumber, countryCode: e.target.value })}
+                    className="h-8 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                  >
+                    <option value="+1">+1 (US/CA)</option>
+                    <option value="+44">+44 (UK)</option>
+                    <option value="+91">+91 (IN)</option>
+                    <option value="+61">+61 (AU)</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Phone number..."
+                    value={newBlockedNumber.phoneNumber}
+                    onChange={(e) => setNewBlockedNumber({ ...newBlockedNumber, phoneNumber: e.target.value })}
+                    className="flex-1 h-8 px-2.5 border border-slate-200 rounded-lg text-xs outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Reason (optional)..."
+                    value={newBlockedNumber.note}
+                    onChange={(e) => setNewBlockedNumber({ ...newBlockedNumber, note: e.target.value })}
+                    className="flex-1 h-8 px-2.5 border border-slate-200 rounded-lg text-xs outline-none"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (!newBlockedNumber.phoneNumber.trim()) {
+                        toast.error("Please enter a phone number");
+                        return;
+                      }
+                      setBlockedNumbers([
+                        ...blockedNumbers,
+                        {
+                          id: String(Date.now()),
+                          countryCode: newBlockedNumber.countryCode,
+                          phoneNumber: newBlockedNumber.phoneNumber.trim(),
+                          note: newBlockedNumber.note.trim() || "Manual block",
+                        },
+                      ]);
+                      setNewBlockedNumber({ countryCode: "+1", phoneNumber: "", note: "" });
+                      toast.success("Phone number added to blocklist");
+                    }}
+                    className="h-8 text-xs font-semibold px-3 bg-rose-600 hover:bg-rose-700 text-white shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Block
+                  </Button>
+                </div>
+
+                {/* Blocked numbers list */}
+                <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                  {blockedNumbers.map((bn) => (
+                    <div
+                      key={bn.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-800">
+                          {bn.countryCode} {bn.phoneNumber}
+                        </span>
+                        {bn.note && <span className="text-[11px] text-slate-400">· {bn.note}</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBlockedNumbers(blockedNumbers.filter((n) => n.id !== bn.id));
+                          toast.success("Number removed from blocklist");
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Card 3: Organization 2FA Policy */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-xs transition-all">
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              onClick={() => toggleSecurityRow("twoFa")}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">Two-Factor Authentication (2FA) Policy</span>
+                    <Tooltip text="Mandates two-factor authentication for all clinic and organization staff.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+                    </Tooltip>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Require multi-factor login for all team members</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+                    enforce2FA
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200/60"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {enforce2FA ? "Enforced" : "Optional"}
+                </span>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Switch checked={enforce2FA} onCheckedChange={setEnforce2FA} />
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    expandedSecurityRow === "twoFa" ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {expandedSecurityRow === "twoFa" && (
+              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">New Member Grace Period</div>
+                    <div className="text-[11px] text-slate-500">Days allowed to configure 2FA before account is locked</div>
+                  </div>
+                  <select
+                    value={twoFaGracePeriod}
+                    onChange={(e) => setTwoFaGracePeriod(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                  >
+                    <option value="Immediately">Immediate (No grace period)</option>
+                    <option value="3 days">3 days</option>
+                    <option value="7 days">7 days</option>
+                    <option value="14 days">14 days</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Card 4: Session Inactivity Timeout */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-xs transition-all">
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              onClick={() => toggleSecurityRow("session")}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">Session Inactivity Timeout</span>
+                    <Tooltip text="Automatically locks the workspace when inactive to protect patient HIPAA data.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+                    </Tooltip>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Auto-lock idle sessions across the organization</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-amber-50 text-amber-700 border border-amber-200/60">
+                  {sessionTimeout}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    expandedSecurityRow === "session" ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {expandedSecurityRow === "session" && (
+              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
+                <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Idle Duration</div>
+                    <div className="text-[11px] text-slate-500">Sign out or lock screen after this period of inactivity</div>
+                  </div>
+                  <select
+                    value={sessionTimeout}
+                    onChange={(e) => setSessionTimeout(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                  >
+                    <option value="15m">15 minutes</option>
+                    <option value="30m">30 minutes (Recommended)</option>
+                    <option value="1h">1 hour</option>
+                    <option value="4h">4 hours</option>
+                    <option value="8h">8 hours</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Lock Screen on Idle</div>
+                    <div className="text-[11px] text-slate-500">Require password entry to resume without losing unsubmitted data</div>
+                  </div>
+                  <Switch checked={lockOnIdle} onCheckedChange={setLockOnIdle} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Card 5: Password Complexity Policy */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-xs transition-all">
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              onClick={() => toggleSecurityRow("password")}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">Password Complexity Policy</span>
+                    <Tooltip text="Sets credential rules when creating or updating team member passwords.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+                    </Tooltip>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Enforce strong credentials across all accounts</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-purple-50 text-purple-700 border border-purple-200/60">
+                  Min {minPasswordLength} chars
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    expandedSecurityRow === "password" ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {expandedSecurityRow === "password" && (
+              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
+                <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Minimum Password Length</div>
+                    <div className="text-[11px] text-slate-500">At least this many characters</div>
+                  </div>
+                  <select
+                    value={minPasswordLength}
+                    onChange={(e) => setMinPasswordLength(Number(e.target.value))}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                  >
+                    <option value={8}>8 characters</option>
+                    <option value={10}>10 characters</option>
+                    <option value={12}>12 characters (Recommended)</option>
+                    <option value={16}>16 characters (High Security)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Require Special Characters</div>
+                    <div className="text-[11px] text-slate-500">Must include at least one symbol (!@#$%^&*)</div>
+                  </div>
+                  <Switch checked={requireSpecialChars} onCheckedChange={setRequireSpecialChars} />
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Require Numbers</div>
+                    <div className="text-[11px] text-slate-500">Must include at least one numerical digit (0-9)</div>
+                  </div>
+                  <Switch checked={requireNumbers} onCheckedChange={setRequireNumbers} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+            </div>
           </div>
         </div>
       </div>

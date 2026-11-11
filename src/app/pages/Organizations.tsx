@@ -59,6 +59,7 @@ import PageTopBar from "../components/layout/PageTopBar";
 import { TableComponent, TableColumn } from "../components/ui/TableComponent";
 import { Modal } from "../components/ui/Modal";
 import { Tooltip } from "../components/ui/Tooltip";
+
 import { WebsiteDetectedCapsule } from "./auth/Onboarding";
 import {
   getStoredPlans,
@@ -126,6 +127,7 @@ export interface OrganizationItem {
   operatingCountries?: string[];
   telephonyChoice?: string | null;
   primaryRequirements?: string[];
+  aiProvider?: "LiveKit" | "Dograh";
   uploadedDocuments?: Array<{ id: string; name: string; sizeLabel: string }>;
   status: OrganizationStatus;
   createdDate: string;
@@ -237,6 +239,7 @@ function sanitizeOrg(o: any, idx: number): OrganizationItem {
     internationalCalls: Boolean(o.internationalCalls),
     telephonyChoice: o.telephonyChoice || "default",
     primaryRequirements: o.primaryRequirements || ["24/7 AI Receptionist"],
+    aiProvider: (o.aiProvider === "Dograh" || o.aiProvider === "LiveKit" ? o.aiProvider : (idx % 2 === 0 ? "LiveKit" : "Dograh")) as "LiveKit" | "Dograh",
     uploadedDocuments: o.uploadedDocuments || [
       { id: "kb-1", name: "Eye_Mantra_Clinical_Overview_&_Hours.pdf", sizeLabel: "1.8 MB" },
       { id: "kb-2", name: "Eye_Care_Services_Pricing_&_Treatment_Guide.pdf", sizeLabel: "2.4 MB" },
@@ -652,6 +655,7 @@ export default function Organizations() {
 
   // ── PART 2: ADD ORGANIZATION DRAWER STATE ──
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
+  const [filterAiProvider, setFilterAiProvider] = useState<string>("all");
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [showDiscardPrompt, setShowDiscardPrompt] = useState(false);
 
@@ -667,6 +671,7 @@ export default function Organizations() {
   const [selectedIndustry, setSelectedIndustry] = useState("Healthcare & Clinic");
   const [selectedServiceCategory, setSelectedServiceCategory] = useState("Ophthalmologist");
   const [drawerLocations, setDrawerLocations] = useState<AdminDrawerLocation[]>(DEFAULT_DRAWER_LOCATIONS);
+  const [aiProvider, setAiProvider] = useState<"LiveKit" | "Dograh">("LiveKit");
 
   const [servicesList, setServicesList] = useState<Array<{ id: string | number; name: string; description?: string }>>([
     { id: "srv-1", name: "Comprehensive Eye Examination", description: "30 mins complete refraction & retina check" },
@@ -712,6 +717,7 @@ export default function Organizations() {
     setSelectedIndustry("Healthcare & Clinic");
     setSelectedServiceCategory("Ophthalmologist");
     setDrawerLocations(DEFAULT_DRAWER_LOCATIONS);
+    setAiProvider("LiveKit");
     setSelectedTeamSize("2–5");
     setSelectedCallVolume("25–100 a day");
     setSelectedRequirements(["24/7 AI Receptionist", "Appointment Scheduling & Reminders"]);
@@ -862,6 +868,7 @@ export default function Organizations() {
           internationalCalls: selectedOperatingCountries.length > 1,
           telephonyChoice: "default",
           primaryRequirements: selectedRequirements,
+          aiProvider,
           uploadedDocuments: uploadedDocs,
           status: "Invite sent",
           createdDate,
@@ -943,8 +950,12 @@ export default function Organizations() {
           org.orgCode.toLowerCase().includes(q)
       );
     }
+
+    if (filterAiProvider !== "all") {
+      list = list.filter((org) => (org.aiProvider || "LiveKit") === filterAiProvider);
+    }
     return list;
-  }, [organizations, searchQuery]);
+  }, [organizations, searchQuery, filterAiProvider]);
 
   // ─────────────────────────────────────────────────────────────
   // TABLE COLUMNS CONFIGURATION (PART 1, ITEMS 1-8)
@@ -1000,14 +1011,14 @@ export default function Organizations() {
       },
     },
 
-    // 2. Org ID: unique ID, shortest readable form (e.g. ORG-0001). Always visible, not truncated.
+    // 2. Org ID: unique ID, plain monospace text, no capsule, sortable
     {
       id: "orgId",
       header: "Org ID",
       width: "105px",
       minWidth: "95px",
       render: (org) => (
-        <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200/80 whitespace-nowrap">
+        <span className="font-mono text-xs font-medium text-slate-600 tabular-nums">
           {org.orgCode}
         </span>
       ),
@@ -1052,25 +1063,16 @@ export default function Organizations() {
       },
     },
 
-    // 6. Plan: plan name only (e.g. "AI Clinic Receptionist Pro"). Remove category after name. Show "No plan" if none.
+    // 6. AI Provider (Replaces Plan): LiveKit | Dograh neutral pill
     {
-      id: "plan",
-      header: "Plan",
+      id: "aiProvider",
+      header: "AI Provider",
+      width: "120px",
       render: (org) => {
-        const sub = subscriptions[org.id];
-        const rawPlanName =
-          sub?.planName && sub.planName !== "No Plan Assigned"
-            ? sub.planName
-            : org.assignedPlanName || "No plan";
-
+        const prov = org.aiProvider || "LiveKit";
         return (
-          <span
-            className={`text-xs font-medium truncate block ${
-              rawPlanName === "No plan" ? "text-gray-400 italic" : "text-gray-900"
-            }`}
-            title={rawPlanName}
-          >
-            {rawPlanName}
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 whitespace-nowrap">
+            {prov}
           </span>
         );
       },
@@ -1112,28 +1114,68 @@ export default function Organizations() {
     },
   ];
 
+  const handleExportCSV = () => {
+    const headers = ["Org ID", "Name", "Email", "Industry", "AI Provider", "Created Date", "Status"];
+    const rows = filteredOrganizations.map((o) => [
+      o.orgCode,
+      `"${o.name.replace(/"/g, '""')}"`,
+      `"${o.email}"`,
+      `"${(o.specialty || o.serviceCategory || o.industry || "").replace(/"/g, '""')}"`,
+      `"${o.aiProvider || "LiveKit"}"`,
+      `"${o.createdDate || ""}"`,
+      `"${o.status}"`,
+    ]);
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `mantra_organizations_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exported ${filteredOrganizations.length} organizations to CSV`);
+  };
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7 animate-in fade-in duration-200">
-        {/* Page Heading & Subtext */}
+        {/* Page Heading & Actions in Topbar (G1, G2) */}
         <PageHeader
           title="Organizations"
           subtitle="Manage your organization hierarchy and system settings with precision"
         />
 
-        {/* Top Bar matching AdminPlans: Search left, Add Organization right */}
+        {/* Toolbar matching standard: Search left (full width) + AI Provider filter + Export & Primary Action */}
         <PageTopBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search by organization name or email..."
+          searchPlaceholder="Search by organization name, email, or ORG ID..."
+          onExport={handleExportCSV}
           primaryAction={{
             label: "Add Organization",
-            icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
             onClick: () => {
               resetDrawerState();
               setIsAddDrawerOpen(true);
             },
           }}
+          leftElement={
+            <div className="flex items-center gap-1.5 mr-1">
+              <div className="relative">
+                <select
+                  value={filterAiProvider}
+                  onChange={(e) => setFilterAiProvider(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[140px] transition-colors"
+                >
+                  <option value="all">All AI Providers</option>
+                  <option value="LiveKit">LiveKit</option>
+                  <option value="Dograh">Dograh</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          }
         />
 
         {/* Organizations Table (Fits Page Width Without Horizontal Scroll) */}
@@ -1751,6 +1793,19 @@ export default function Organizations() {
                         ))}
                       </select>
                       <p className="text-[11px] text-gray-500 mt-1">Hold Ctrl / Cmd to select multiple countries.</p>
+                    </div>
+
+                    {/* Row 3: AI Provider */}
+                    <div>
+                      <DrawerFieldLabel label="AI Provider" required />
+                      <select
+                        value={aiProvider}
+                        onChange={(e) => setAiProvider(e.target.value as "LiveKit" | "Dograh")}
+                        className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                      >
+                        <option value="LiveKit">LiveKit</option>
+                        <option value="Dograh">Dograh</option>
+                      </select>
                     </div>
                   </div>
 

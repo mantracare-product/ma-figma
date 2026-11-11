@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, Sparkles, GripVertical } from "lucide-react";
+import { Mic, Sparkles, GripVertical, ChevronRight, ChevronLeft } from "lucide-react";
 import AIAssistantPopup from "./AIAssistantPopup";
 import AIScribePopup from "../scribe/AIScribePopup";
 import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
@@ -12,6 +12,21 @@ export default function AIAssistantCapsule() {
   const [isNewConsultationOpen, setIsNewConsultationOpen] = useState(false);
   const [selectedDetailSession, setSelectedDetailSession] = useState<ScribeSession | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+
+  // Collapsed / hidden state (persisted in localStorage)
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("mantra_ai_capsule_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const handleToggleCollapse = (collapsed: boolean) => {
+    setIsCollapsed(collapsed);
+    try {
+      localStorage.setItem("mantra_ai_capsule_collapsed", String(collapsed));
+    } catch {}
+  };
 
   // Capsule draggable position
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -77,71 +92,143 @@ export default function AIAssistantCapsule() {
 
   return (
     <>
-      {/* ── Single Unified Capsule Pill at Bottom (Draggable Anywhere) ── */}
-      <div
-        style={{
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          zIndex: 2147483646,
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        className="fixed flex items-center bg-[#0f172a] hover:bg-[#182230] text-white rounded-full p-1 pl-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.38)] border border-slate-700/60 backdrop-blur-xl select-none cursor-grab active:cursor-grabbing transition-shadow"
-        title="Drag anywhere to reposition"
-      >
-        {/* Drag handle grip */}
-        <div className="flex items-center text-slate-500 hover:text-slate-300 pr-1">
-          <GripVertical className="w-3.5 h-3.5" />
-        </div>
-
-        {/* ── 1. AI Scribe Section in Capsule ── */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (hasMovedRef.current) return;
-            setIsNewConsultationOpen(true);
+      {/* ── 1. Expanded Horizontal Capsule (Draggable Anywhere) ── */}
+      {!isCollapsed && (
+        <div
+          style={{
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            zIndex: 2147483646,
           }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full hover:bg-white/10 active:bg-white/15 transition-all cursor-pointer text-xs font-semibold text-white group"
-          title="Start AI Scribe Consultation"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          className="fixed flex items-center bg-[#0f172a] hover:bg-[#182230] text-white rounded-full p-1 pl-1.5 pr-1 shadow-[0_8px_30px_rgba(0,0,0,0.38)] border border-slate-700/60 backdrop-blur-xl select-none cursor-grab active:cursor-grabbing transition-shadow animate-in fade-in zoom-in-95 duration-150"
+          title="Drag anywhere to reposition"
         >
-          {/* Live pulsing green dot */}
-          <span className="relative flex h-2 w-2 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
+          {/* Drag handle grip */}
+          <div className="flex items-center text-slate-500 hover:text-slate-300 pr-1">
+            <GripVertical className="w-3.5 h-3.5" />
+          </div>
 
-          <Mic className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform shrink-0" />
-          <span className="tracking-wide whitespace-nowrap">AI Scribe</span>
-        </button>
+          {/* ── 1. AI Scribe Section in Capsule ── */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasMovedRef.current) return;
+              setIsNewConsultationOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full hover:bg-white/10 active:bg-white/15 transition-all cursor-pointer text-xs font-semibold text-white group"
+            title="Start AI Scribe Consultation"
+          >
+            <Mic className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform shrink-0" />
+            <span className="tracking-wide whitespace-nowrap">AI Scribe</span>
+          </button>
 
-        {/* ── Subtle Divider ── */}
-        <div className="w-px h-4 bg-slate-700/90 mx-0.5" />
+          {/* ── Subtle Divider ── */}
+          <div className="w-px h-4 bg-slate-700/90 mx-0.5" />
 
-        {/* ── 2. AI Assistant Section in Capsule ── */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (hasMovedRef.current) return;
-            setIsAssistantOpen((prev) => !prev);
-          }}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all cursor-pointer text-xs font-semibold group ${
-            isAssistantOpen
-              ? "bg-[#1456f0] text-white shadow-xs"
-              : "hover:bg-white/10 active:bg-white/15 text-white"
-          }`}
-          title="Open AI Clinical Assistant"
-        >
-          <Sparkles
-            className={`w-3.5 h-3.5 transition-transform group-hover:scale-110 shrink-0 ${
-              isAssistantOpen ? "text-white" : "text-blue-400"
+          {/* ── 2. AI Assistant Section in Capsule ── */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasMovedRef.current) return;
+              setIsAssistantOpen((prev) => !prev);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all cursor-pointer text-xs font-semibold group ${
+              isAssistantOpen
+                ? "bg-[#1456f0] text-white shadow-xs"
+                : "hover:bg-white/10 active:bg-white/15 text-white"
             }`}
-          />
-          <span className="tracking-wide whitespace-nowrap">AI Assistant</span>
-        </button>
-      </div>
+            title="Open AI Clinical Assistant"
+          >
+            <Sparkles
+              className={`w-3.5 h-3.5 transition-transform group-hover:scale-110 shrink-0 ${
+                isAssistantOpen ? "text-white" : "text-blue-400"
+              }`}
+            />
+            <span className="tracking-wide whitespace-nowrap">AI Assistant</span>
+          </button>
+
+          {/* ── Subtle Divider ── */}
+          <div className="w-px h-4 bg-slate-700/90 mx-0.5" />
+
+          {/* ── 3. Hide / Collapse to Right Corner Chevron Button ── */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasMovedRef.current) return;
+              handleToggleCollapse(true);
+            }}
+            className="flex items-center justify-center p-1.5 rounded-full hover:bg-white/10 active:bg-white/15 text-slate-400 hover:text-white transition-all cursor-pointer"
+            title="Hide capsule to right corner"
+            aria-label="Hide capsule"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ── 2. Collapsed Vertical Capsule in Right Corner (Icons Only) ── */}
+      {isCollapsed && (
+        <div
+          style={{
+            zIndex: 2147483646,
+          }}
+          className="fixed right-3 bottom-6 flex flex-col items-center bg-[#0f172a] hover:bg-[#182230] text-white rounded-full p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] border border-slate-700/60 backdrop-blur-xl select-none transition-all duration-200 animate-in fade-in slide-in-from-right-3"
+          title="AI Tools"
+        >
+          {/* Unhide / Expand Chevron Button */}
+          <button
+            type="button"
+            onClick={() => handleToggleCollapse(false)}
+            className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 active:bg-white/15 text-slate-400 hover:text-white transition-all cursor-pointer group"
+            title="Expand AI capsule"
+            aria-label="Expand AI capsule"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          </button>
+
+          {/* Divider */}
+          <div className="w-4 h-px bg-slate-700/90 my-1" />
+
+          {/* AI Scribe (Icon only) */}
+          <button
+            type="button"
+            onClick={() => setIsNewConsultationOpen(true)}
+            className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 active:bg-white/15 transition-all cursor-pointer text-white group"
+            title="Start AI Scribe Consultation"
+            aria-label="AI Scribe"
+          >
+            <Mic className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform" />
+          </button>
+
+          {/* Divider */}
+          <div className="w-4 h-px bg-slate-700/90 my-1" />
+
+          {/* AI Assistant (Icon only) */}
+          <button
+            type="button"
+            onClick={() => setIsAssistantOpen((prev) => !prev)}
+            className={`flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer group ${
+              isAssistantOpen
+                ? "bg-[#1456f0] text-white shadow-xs"
+                : "hover:bg-white/10 active:bg-white/15 text-white"
+            }`}
+            title="Open AI Clinical Assistant"
+            aria-label="AI Assistant"
+          >
+            <Sparkles
+              className={`w-3.5 h-3.5 transition-transform group-hover:scale-110 ${
+                isAssistantOpen ? "text-white" : "text-blue-400"
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {/* ── Draggable AI Assistant Popup Window ── */}
       <AIAssistantPopup

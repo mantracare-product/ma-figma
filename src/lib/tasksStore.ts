@@ -9,6 +9,10 @@ import {
   TaskFileAttachment,
   TaskRecurrenceConfig,
   TaskTimePlanningConfig,
+  TaskStudioItem,
+  TaskStudioItemResource,
+  TaskItemCompletion,
+  TaskResponsiblePerson,
 } from "../types/task";
 import { addNotification } from "./notificationsStore";
 
@@ -607,12 +611,217 @@ export const INITIAL_TASKS: TaskEntity[] = [
   },
 ];
 
+export function getPersonTaskProgress(task: TaskEntity, personIdOrName?: string) {
+  const items = task.studioItems || [];
+  if (items.length === 0) {
+    return { completed: 0, total: 0, percent: 100, isFinished: true };
+  }
+  const key = (personIdOrName || task.responsiblePeople?.[0]?.id || task.responsiblePeople?.[0]?.name || "").toLowerCase().trim();
+  const completed = items.filter((it) => {
+    if (!it.completion) return false;
+    if (!key) {
+      return Object.values(it.completion).some((v) => v?.done);
+    }
+    for (const [k, v] of Object.entries(it.completion)) {
+      if (k.toLowerCase().trim() === key && v?.done) return true;
+    }
+    return false;
+  }).length;
+  const total = items.length;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return {
+    completed,
+    total,
+    percent,
+    isFinished: total > 0 && completed === total,
+  };
+}
+
+export function getTaskOverallProgress(task: TaskEntity) {
+  const people = (task.responsiblePeople && task.responsiblePeople.length > 0)
+    ? task.responsiblePeople
+    : [{
+        id: task.assignee?.userId || task.assignee?.clientId || task.assignee?.assigneeName || "resp-1",
+        name: task.assignee?.assigneeName || "Assignee",
+        role: task.assignee?.roleName,
+        type: (task.assignee?.scopeLevel === "contact" ? "contact" : "member") as "member" | "contact",
+      }];
+  const items = task.studioItems || [];
+  const breakdown = people.map((p) => {
+    const progById = getPersonTaskProgress(task, p.id);
+    const progByName = p.name ? getPersonTaskProgress(task, p.name) : progById;
+    const effectiveProg = progById.completed >= progByName.completed ? progById : progByName;
+    return {
+      person: p,
+      completed: effectiveProg.completed,
+      total: effectiveProg.total,
+      percent: effectiveProg.percent,
+      isFinished: effectiveProg.isFinished,
+    };
+  });
+
+  const finishedCount = breakdown.filter((b) => b.isFinished).length;
+  const totalPeople = people.length;
+  const percent = totalPeople > 0 ? Math.round((finishedCount / totalPeople) * 100) : 0;
+  return {
+    finishedPeopleCount: finishedCount,
+    totalPeopleCount: totalPeople,
+    percent,
+    isAllDone: totalPeople > 0 && finishedCount === totalPeople,
+    breakdown,
+  };
+}
+
+export function migrateTaskEntity(t: any): TaskEntity {
+  let stageName = t.stageName;
+  let stageId = t.stageId;
+  if (!stageName) {
+    if (t.status === "completed") {
+      stageName = "Task Completed";
+      stageId = "task-stg-completed";
+    } else if (t.status === "deferred") {
+      stageName = "Task Overdue";
+      stageId = "task-stg-overdue";
+    } else {
+      stageName = "Task Created";
+      stageId = "task-stg-created";
+    }
+  }
+
+  // 1. Migrate / Resolve Responsible People
+  let responsiblePeople: TaskResponsiblePerson[] = t.responsiblePeople || [];
+  if (!responsiblePeople || responsiblePeople.length === 0) {
+    if (t.assignees && t.assignees.length > 0) {
+      responsiblePeople = t.assignees.map((a: any, idx: number) => ({
+        id: a.userId || a.clientId || `resp-${idx}-${(a.assigneeName || "").toLowerCase().replace(/\s+/g, "-")}`,
+        name: a.assigneeName || "Responsible Member",
+        role: a.roleName,
+        category: a.category,
+        type: (a.scopeLevel === "contact" ? "contact" : "member") as "member" | "contact",
+        avatar: a.assigneeAvatar,
+      }));
+    } else if (t.assignee) {
+      responsiblePeople = [{
+        id: t.assignee.userId || t.assignee.clientId || (t.assignee.assigneeName ? `resp-${t.assignee.assigneeName.toLowerCase().replace(/\s+/g, "-")}` : "resp-1"),
+        name: t.assignee.assigneeName || "Responsible Member",
+        role: t.assignee.roleName,
+        category: t.assignee.category,
+        type: (t.assignee.scopeLevel === "contact" ? "contact" : "member") as "member" | "contact",
+        avatar: t.assignee.assigneeAvatar,
+      }];
+    }
+  }
+
+  // 2. Migrate / Construct Studio Items (Checklists + HTML Page Content)
+  let studioItems: TaskStudioItem[] = t.studioItems || [];
+  if (!studioItems || studioItems.length === 0) {
+    studioItems = [];
+
+    // If task was configured with isPage & htmlContent, insert first item with HTML block resource
+    if (t.htmlContent) {
+      studioItems.push({
+        id: `item-page-${t.id}`,
+        title: "Clinical Document & Care Protocol",
+        description: "Interactive HTML patient document",
+        resource: {
+          type: "html",
+          value: t.htmlContent,
+          name: "Care Protocol Document",
+        },
+        isImportant: true,
+        order: 0,
+        completion: {},
+      });
+    }
+
+    // Convert existing checklists and their items into studio items
+    if (t.checklists && t.checklists.length > 0) {
+      t.checklists.forEach((chk: any, cIdx: number) => {
+        chk.items?.forEach((it: any, iIdx: number) => {
+          const compMap: Record<string, TaskItemCompletion> = {};
+          if (it.isCompleted) {
+            responsiblePeople.forEach((p) => {
+              compMap[p.id] = { done: true, doneAt: t.updatedAt };
+              if (p.name) compMap[p.name] = { done: true, doneAt: t.updatedAt };
+            });
+          }
+          studioItems.push({
+            id: it.id || `item-${cIdx}-${iIdx}`,
+            title: it.text || `Item ${iIdx + 1}`,
+            description: "",
+            isImportant: !!it.isImportant,
+            order: studioItems.length,
+            completion: compMap,
+          });
+        });
+      });
+    }
+
+    // If still empty, add a default studio item
+    if (studioItems.length === 0) {
+      const compMap: Record<string, TaskItemCompletion> = {};
+      if (t.status === "completed") {
+        responsiblePeople.forEach((p) => {
+          compMap[p.id] = { done: true, doneAt: t.updatedAt };
+          if (p.name) compMap[p.name] = { done: true, doneAt: t.updatedAt };
+        });
+      }
+      studioItems.push({
+        id: `item-base-${t.id}`,
+        title: t.title,
+        description: t.description || "",
+        isImportant: !!t.isImportant,
+        order: 0,
+        completion: compMap,
+      });
+    }
+  }
+
+  // Ensure all items have completion object & order
+  studioItems = studioItems.map((item, idx) => ({
+    ...item,
+    order: item.order !== undefined ? item.order : idx,
+    completion: item.completion || {},
+  }));
+
+  const initialMatching = INITIAL_TASKS.find((init) => init.id === t.id);
+  const observers = t.observers && t.observers.length > 0 ? t.observers : (initialMatching?.observers || []);
+  const workflowId = t.workflowId || initialMatching?.workflowId || "process-task-default";
+  const workflowName = t.workflowName || initialMatching?.workflowName || "Clinical & Operational Tasks";
+
+  const assignee = {
+    ...t.assignee,
+    clientId: t.assignee?.clientId || initialMatching?.assignee?.clientId,
+    clientName: t.assignee?.clientName || initialMatching?.assignee?.clientName,
+    orgName: t.assignee?.orgName || initialMatching?.assignee?.orgName || (t.scopeLevel === "admin" ? "Demo Mantra Care" : undefined),
+    adminScopeName: t.assignee?.adminScopeName || initialMatching?.assignee?.adminScopeName || (t.scopeLevel === "admin" ? "Healthcare Scope" : undefined),
+  };
+
+  const scopeLevel = t.scopeLevel || initialMatching?.scopeLevel || "client";
+
+  return {
+    ...t,
+    isPage: undefined, // Removed from active use per requirements
+    subtasks: [],
+    scopeLevel,
+    assignee,
+    workflowId,
+    workflowName,
+    observers,
+    responsiblePeople,
+    studioItems,
+    stageName,
+    stageId: stageId || (stageName === "Task Completed" ? "task-stg-completed" : stageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created"),
+  };
+}
+
 export function getStoredTasks(): TaskEntity[] {
   try {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));
-      return INITIAL_TASKS;
+      const migratedInit = INITIAL_TASKS.map((t) => migrateTaskEntity(t));
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(migratedInit));
+      return migratedInit;
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -621,52 +830,11 @@ export function getStoredTasks(): TaskEntity[] {
       const missingInitial = INITIAL_TASKS.filter((init) => !existingIds.has(init.id));
       const combined = [...parsed, ...missingInitial];
 
-      return combined.map((t: any) => {
-        let stageName = t.stageName;
-        let stageId = t.stageId;
-        if (!stageName) {
-          if (t.status === "completed") {
-            stageName = "Task Completed";
-            stageId = "task-stg-completed";
-          } else if (t.status === "deferred") {
-            stageName = "Task Overdue";
-            stageId = "task-stg-overdue";
-          } else {
-            stageName = "Task Created";
-            stageId = "task-stg-created";
-          }
-        }
-        const initialMatching = INITIAL_TASKS.find((init) => init.id === t.id);
-        const observers = t.observers && t.observers.length > 0 ? t.observers : (initialMatching?.observers || []);
-        const workflowId = t.workflowId || initialMatching?.workflowId || "process-task-default";
-        const workflowName = t.workflowName || initialMatching?.workflowName || "Clinical & Operational Tasks";
-
-        const assignee = {
-          ...t.assignee,
-          clientId: t.assignee?.clientId || initialMatching?.assignee?.clientId,
-          clientName: t.assignee?.clientName || initialMatching?.assignee?.clientName,
-          orgName: t.assignee?.orgName || initialMatching?.assignee?.orgName || (t.scopeLevel === "admin" ? "Demo Mantra Care" : undefined),
-          adminScopeName: t.assignee?.adminScopeName || initialMatching?.assignee?.adminScopeName || (t.scopeLevel === "admin" ? "Healthcare Scope" : undefined),
-        };
-
-        const scopeLevel = t.scopeLevel || initialMatching?.scopeLevel || "client";
-
-        return {
-          ...t,
-          subtasks: [],
-          scopeLevel,
-          assignee,
-          workflowId,
-          workflowName,
-          observers,
-          stageName,
-          stageId: stageId || (stageName === "Task Completed" ? "task-stg-completed" : stageName === "Task Overdue" ? "task-stg-overdue" : "task-stg-created"),
-        };
-      });
+      return combined.map((t: any) => migrateTaskEntity(t));
     }
-    return INITIAL_TASKS;
+    return INITIAL_TASKS.map((t) => migrateTaskEntity(t));
   } catch {
-    return INITIAL_TASKS;
+    return INITIAL_TASKS.map((t) => migrateTaskEntity(t));
   }
 }
 
@@ -771,8 +939,19 @@ export function useTasks() {
           stageName = "Task Overdue";
           stageId = "task-stg-overdue";
         }
+
+        const items = (t.studioItems || []).map((it) => {
+          const comp = { ...(it.completion || {}) };
+          (t.responsiblePeople || []).forEach((p) => {
+            comp[p.id] = { done: newStatus === "completed", doneAt: newStatus === "completed" ? new Date().toISOString() : undefined };
+            if (p.name) comp[p.name] = { done: newStatus === "completed", doneAt: newStatus === "completed" ? new Date().toISOString() : undefined };
+          });
+          return { ...it, completion: comp };
+        });
+
         affectedTask = {
           ...t,
+          studioItems: items,
           status: newStatus,
           stageName,
           stageId,
@@ -1047,6 +1226,84 @@ export function useTasks() {
     saveStoredTasks(updated);
   }, []);
 
+  const toggleStudioItemCompletion = useCallback((
+    taskId: string,
+    itemId: string,
+    personId: string,
+    personName?: string
+  ) => {
+    const current = getStoredTasks();
+    let affectedTask: TaskEntity | undefined;
+    let didCompleteNow = false;
+
+    const updated = current.map((t) => {
+      if (t.id === taskId) {
+        const items = (t.studioItems || []).map((it) => {
+          if (it.id === itemId) {
+            const comp = { ...(it.completion || {}) };
+            const currentDone = !!(comp[personId]?.done || (personName && comp[personName]?.done));
+            const nextDone = !currentDone;
+            const entry = { done: nextDone, doneAt: nextDone ? new Date().toISOString() : undefined };
+            comp[personId] = entry;
+            if (personName) {
+              comp[personName] = entry;
+            }
+            return {
+              ...it,
+              completion: comp,
+            };
+          }
+          return it;
+        });
+
+        // Compute overall task completion
+        const tempTask: TaskEntity = {
+          ...t,
+          studioItems: items,
+        };
+        const overall = getTaskOverallProgress(tempTask);
+        let nextStatus = t.status;
+        let nextStageName = t.stageName;
+        let nextStageId = t.stageId;
+
+        if (overall.isAllDone && t.status !== "completed") {
+          nextStatus = "completed";
+          nextStageName = "Task Completed";
+          nextStageId = "task-stg-completed";
+          didCompleteNow = true;
+        } else if (!overall.isAllDone && t.status === "completed") {
+          nextStatus = "in_progress";
+          nextStageName = "Task Created";
+          nextStageId = "task-stg-created";
+        }
+
+        affectedTask = {
+          ...t,
+          studioItems: items,
+          status: nextStatus,
+          stageName: nextStageName,
+          stageId: nextStageId,
+          updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
+        };
+        return affectedTask;
+      }
+      return t;
+    });
+
+    saveStoredTasks(updated);
+
+    if (affectedTask && didCompleteNow) {
+      addNotification({
+        type: "task",
+        title: "Task Completed",
+        message: `${affectedTask.code}: '${affectedTask.title}' completed by all responsible members!`,
+        link: `/${affectedTask.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${affectedTask.id}`,
+        module: "tasks",
+        meta: { taskId: affectedTask.id, module: "tasks" },
+      });
+    }
+  }, []);
+
   return {
     tasks,
     setTasks,
@@ -1065,6 +1322,7 @@ export function useTasks() {
     removeObserver,
     addSubtask,
     toggleSubtask,
+    toggleStudioItemCompletion,
   };
 }
 

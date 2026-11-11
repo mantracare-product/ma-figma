@@ -418,12 +418,21 @@ export default function Sidebar() {
   // Dynamic sections mapped from config
   const sections = React.useMemo(() => {
     return config.sections
-      .map((sec) => ({
-        id: sec.id,
-        title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.id === "automation" ? "CUSTOMIZATIONS" : sec.title,
-        items: sec.items
-          .filter((item) => item.visible)
-          .map((item) => ({
+      .map((sec) => {
+        let rawItems = sec.items.filter((item) => item.visible && item.id !== "settings-security");
+        if (sec.id === "settings" && !rawItems.some((it) => it.id === "settings-notifications")) {
+          rawItems.push({
+            id: "settings-notifications",
+            label: "Notifications",
+            iconName: "Bell",
+            path: "/settings/notifications",
+            visible: true,
+          });
+        }
+        return {
+          id: sec.id,
+          title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.id === "automation" ? "CUSTOMIZATIONS" : sec.title,
+          items: rawItems.map((item) => ({
             id: item.id,
             label: item.label,
             icon: getSidebarIcon(item.iconName),
@@ -431,7 +440,8 @@ export default function Sidebar() {
             badge: item.badge,
             isFeatured: item.isFeatured,
           })),
-      }))
+        };
+      })
       .filter((sec) => sec.items.length > 0);
   }, [config]);
 

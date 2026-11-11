@@ -25,6 +25,7 @@ export interface Organization {
   email: string;
   phone: string;
   status: "Active" | "Inactive";
+  aiProvider?: "LiveKit" | "Dograh";
   default_category?: string;
   recommended_tier?: string;
 }
@@ -56,6 +57,7 @@ const defaultOrganizations: Organization[] = [
     email: "care@eyemantra.com",
     phone: "+1 (555) 345-6789",
     status: "Active",
+    aiProvider: "LiveKit",
   },
   {
     id: "demo",
@@ -68,6 +70,7 @@ const defaultOrganizations: Organization[] = [
     email: "contact@mantraassist.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
+    aiProvider: "Dograh",
   },
   {
     id: "1",
@@ -80,6 +83,7 @@ const defaultOrganizations: Organization[] = [
     email: "contact@heartcare.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
+    aiProvider: "LiveKit",
   },
   {
     id: "2",
@@ -92,6 +96,7 @@ const defaultOrganizations: Organization[] = [
     email: "contact@zenithwellness.in",
     phone: "+91 98765 43210",
     status: "Active",
+    aiProvider: "Dograh",
   },
   {
     id: "3",

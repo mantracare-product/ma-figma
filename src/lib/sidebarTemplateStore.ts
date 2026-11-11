@@ -95,7 +95,7 @@ export const DEFAULT_INITIAL_SIDEBAR_TEMPLATES: AdminSidebarTemplate[] = [
           { id: "settings-sections", label: "Sections / Fields", iconName: "Layers", path: "/settings/sections-fields", visible: true },
           { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
           { id: "settings-audit", label: "Audit Logs", iconName: "ScrollText", path: "/settings/audit-logs", visible: true },
-          { id: "settings-security", label: "Security", iconName: "Lock", path: "/settings/security", visible: true },
+          { id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true },
         ],
       },
     ],
@@ -118,7 +118,7 @@ export function getStoredSidebarTemplates(): AdminSidebarTemplate[] {
         const hasDefault = cleaned.some((p: AdminSidebarTemplate) => p.id === "tpl-default-global");
         let finalTemplates = hasDefault ? cleaned : [...DEFAULT_INITIAL_SIDEBAR_TEMPLATES, ...cleaned];
 
-        // Ensure every template has tasks under workspace
+        // Ensure every template has tasks under workspace, and strip removed items like settings-security
         let templatesChanged = cleaned.length !== parsed.length || !hasDefault;
         finalTemplates = finalTemplates.map((t: AdminSidebarTemplate) => {
           let tChanged = false;
@@ -139,6 +139,17 @@ export function getStoredSidebarTemplates(): AdminSidebarTemplate[] {
                 items.splice(procIdx + 1, 0, taskItem);
               } else {
                 items.push(taskItem);
+              }
+              return { ...sec, items };
+            }
+            if (sec.id === "settings") {
+              let items = sec.items.filter((it) => it.id !== "settings-security" && it.id !== "settings-numbers");
+              if (!items.some((it) => it.id === "settings-notifications")) {
+                tChanged = true;
+                items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
+              }
+              if (items.length !== sec.items.length) {
+                tChanged = true;
               }
               return { ...sec, items };
             }

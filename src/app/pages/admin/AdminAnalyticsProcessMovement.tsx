@@ -28,6 +28,7 @@ import {
   ArrowRight,
   TrendingDown,
   Activity,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,44 +63,45 @@ export default function AdminAnalyticsProcessMovement() {
       <PageHeader
         title="Process Movement Analytics"
         subtitle="End-to-end clinical task progression, stage conversion rates, and operational bottleneck detection"
-        actions={
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedOrg}
-              onChange={(e) => setSelectedOrg(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer shadow-2xs"
-            >
-              <option value="all">All Organizations</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} ({org.orgCode || "ORG-0001"})
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer shadow-2xs"
-            >
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last Quarter</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              Export CSV
-            </button>
-          </div>
-        }
       />
 
       <div className="p-6 space-y-6">
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={selectedOrg}
+                  onChange={(e) => setSelectedOrg(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[150px] transition-colors truncate"
+                >
+                  <option value="all">All Organizations</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.orgCode || "ORG-0001"})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[130px] transition-colors"
+                >
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                  <option value="90d">Last Quarter</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          }
+        />
         {/* KPI Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">

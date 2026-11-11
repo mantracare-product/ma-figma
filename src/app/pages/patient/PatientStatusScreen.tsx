@@ -26,7 +26,11 @@ import {
   Check,
   RotateCcw,
   Bot,
+  CheckSquare,
+  Star,
 } from "lucide-react";
+import { useTasks, getPersonTaskProgress } from "../../../lib/tasksStore";
+import { CircularProgressRing } from "../../components/ui/CircularProgressRing";
 import { Client, getStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import { appointmentService, Appointment } from "../../../lib/appointmentService";
 import { invoiceService } from "../../../lib/invoiceService";
@@ -101,6 +105,64 @@ export default function PatientStatusScreen() {
   const { activeOrganization } = useOrganization();
   const orgName = activeOrganization?.name || "Mantra Care";
   const clientFirstName = (activeClient?.name || "Patient").split(" ")[0];
+
+  // Tasks integration (6a: Patient Home Tasks section)
+  const { tasks } = useTasks();
+  const patientId = activeClient?.id || "CL-001";
+  const patientName = activeClient?.name || "Patient";
+
+  const patientTasks = useMemo(() => {
+    if (!activeClient) return [];
+    const clientNameLower = (activeClient.name || "").toLowerCase().trim();
+    const clientId = (activeClient.id || "").toLowerCase().trim();
+
+    return tasks
+      .filter((t) => {
+        if (t.scopeLevel === "admin") return false;
+
+        const isClientTargeted =
+          t.scopeLevel === "portal" ||
+          t.assignee?.scopeLevel === "contact" ||
+          Boolean(t.assignee?.clientId) ||
+          Boolean(t.assignee?.clientName);
+
+        if (!isClientTargeted) return false;
+
+        const assigneeName = (t.assignee?.assigneeName || "").toLowerCase().trim();
+        const assigneeClientName = (t.assignee?.clientName || "").toLowerCase().trim();
+        const assigneeClientId = (t.assignee?.clientId || "").toLowerCase().trim();
+
+        const matchesAssignee =
+          (assigneeClientId && assigneeClientId === clientId) ||
+          (assigneeClientName && assigneeClientName.includes(clientNameLower)) ||
+          (assigneeName && (assigneeName === clientNameLower || assigneeName.includes(clientNameLower)));
+
+        const matchesInList =
+          t.assignees &&
+          t.assignees.some((a) => {
+            const aId = (a.clientId || "").toLowerCase().trim();
+            const aName = (a.clientName || a.assigneeName || "").toLowerCase().trim();
+            return (aId && aId === clientId) || (aName && aName.includes(clientNameLower));
+          });
+
+        const matchesResponsible =
+          t.responsiblePeople &&
+          t.responsiblePeople.some((p) => {
+            const pId = (p.id || "").toLowerCase().trim();
+            const pName = (p.name || "").toLowerCase().trim();
+            return (pId && pId === clientId) || (pName && pName.includes(clientNameLower));
+          });
+
+        const isGenericPortal = t.scopeLevel === "portal" && !assigneeClientId && !assigneeClientName;
+
+        return matchesAssignee || matchesInList || matchesResponsible || isGenericPortal;
+      })
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  }, [tasks, activeClient]);
+
+  const recentPatientTasks = useMemo(() => {
+    return patientTasks.slice(0, 3);
+  }, [patientTasks]);
 
   // Load appointments & invoices
   useEffect(() => {
@@ -514,6 +576,122 @@ export default function PatientStatusScreen() {
           </div>
         )}
       </div>
+
+      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ── 1.5 TASKS SECTION (Portal Clean Card - 6a) ───────────── */}
+      {/* ─────────────────────────────────────────────────────────── */}
+      {recentPatientTasks.length > 0 && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
+          {/* Header */}
+          <div className="p-5 sm:px-6 sm:py-5 border-b border-slate-100 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <CheckSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold uppercase tracking-wider text-slate-900"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Tasks
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100/80 text-blue-700">
+                    {patientTasks.length}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Active assigned tasks and clinical deliverables
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/patient/tasks"
+              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline shrink-0 group transition-all"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <span>View all</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
+
+          {/* Task Rows (Max 3 most recent) */}
+          <div className="divide-y divide-slate-100">
+            {recentPatientTasks.map((task) => {
+              const cleanTitle = task.title.replace(/^\[[^\]]+\]\s*/, "").replace(/^TSK-\d+:\s*/i, "");
+              const prog = getPersonTaskProgress(task, patientId) || getPersonTaskProgress(task, patientName);
+              const isDone = prog.isFinished || task.status === "completed";
+
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => navigate(`/patient/tasks/${task.id}`)}
+                  className="py-3.5 px-4 sm:px-6 hover:bg-slate-50/80 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                >
+                  {/* Left: Progress Ring + Star + Title & Due Date */}
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <div className="shrink-0 flex items-center">
+                      <CircularProgressRing
+                        value={prog.completed}
+                        max={prog.total}
+                        size={26}
+                        strokeWidth={3}
+                        indicatorColor={isDone ? "#10b981" : "#1456f0"}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {task.isImportant && (
+                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                        )}
+                        <span
+                          className={`text-sm font-bold truncate transition-colors ${
+                            isDone
+                              ? "line-through text-slate-400"
+                              : "text-slate-900 group-hover:text-blue-600"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {cleanTitle}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 font-medium">
+                        {task.deadline && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            <span>{task.deadline}</span>
+                          </span>
+                        )}
+                        {prog.total > 0 && (
+                          <span>
+                            {task.deadline ? "· " : ""}{prog.completed}/{prog.total} done
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Status chip & Arrow */}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                        isDone
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                          : "bg-blue-50 text-blue-700 border border-blue-200/80"
+                      }`}
+                    >
+                      {isDone ? "Completed" : "In Progress"}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────── */}
       {/* ── 2. HERO CARE STAGE CARD (Clean, Focused, Sketch-Aligned) ── */}

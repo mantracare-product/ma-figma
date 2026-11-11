@@ -40,6 +40,7 @@ export interface PhoneNumberItem {
   assignedTo?: string; // Department, Reception Desk or AI Scribe Agent
   status: PhoneNumberStatus;
   capabilities: PhoneNumberCapability[];
+  targetCountries?: string[];
   monthlyCost: number;
   purchasedDate: string;
   lastCallTime?: string;
@@ -82,6 +83,15 @@ export interface TelephonyProviderItem {
   lastSyncTime: string;
   supportedTypes: PhoneNumberType[];
   accountSid: string;
+  livekitCredentials?: {
+    username: string;
+    secret: string;
+  };
+  dograhCredentials?: {
+    username: string;
+    secret: string;
+  };
+  subscriptionDueDate?: string;
 }
 
 export const PHONE_NUMBERS_STORAGE_KEY = "mantra_admin_phone_numbers";
@@ -104,6 +114,7 @@ export const INITIAL_PHONE_NUMBERS: PhoneNumberItem[] = [
     assignedTo: "Ophthalmology AI Receptionist",
     status: "In Use",
     capabilities: ["voice", "sms", "whatsapp"],
+    targetCountries: ["US", "CA"],
     monthlyCost: 15.0,
     purchasedDate: "2024-01-15T09:00:00.000Z",
     lastCallTime: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
@@ -215,6 +226,7 @@ export const INITIAL_PHONE_NUMBERS: PhoneNumberItem[] = [
     assignedTo: "Cardiology Triage AI Agent",
     status: "In Use",
     capabilities: ["voice", "sms", "whatsapp"],
+    targetCountries: ["US", "CA"],
     monthlyCost: 15.0,
     purchasedDate: "2024-03-01T11:20:00.000Z",
     lastCallTime: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
@@ -443,6 +455,15 @@ export const INITIAL_TELEPHONY_PROVIDERS: TelephonyProviderItem[] = [
     uptime: "99.99%",
     lastSyncTime: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
     supportedTypes: ["Local", "Toll-free", "Mobile"],
+    livekitCredentials: {
+      username: "sip_livekit_twilio_trunk",
+      secret: "lk_sec_99a8182f091bc4",
+    },
+    dograhCredentials: {
+      username: "sip_dograh_twilio_prod",
+      secret: "dgr_sec_77b1029c33ef1",
+    },
+    subscriptionDueDate: "2026-11-15", // within 4 days (warning style)
   },
   {
     id: "prov-exotel",
@@ -457,6 +478,15 @@ export const INITIAL_TELEPHONY_PROVIDERS: TelephonyProviderItem[] = [
     uptime: "99.95%",
     lastSyncTime: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
     supportedTypes: ["Local", "Toll-free"],
+    livekitCredentials: {
+      username: "sip_livekit_exotel_asia",
+      secret: "lk_sec_exo_88192a01",
+    },
+    dograhCredentials: {
+      username: "sip_dograh_exotel_blr",
+      secret: "dgr_sec_exo_77341bb2",
+    },
+    subscriptionDueDate: "2026-12-01",
   },
   {
     id: "prov-plivo",
@@ -471,6 +501,15 @@ export const INITIAL_TELEPHONY_PROVIDERS: TelephonyProviderItem[] = [
     uptime: "99.98%",
     lastSyncTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
     supportedTypes: ["Local", "Toll-free"],
+    livekitCredentials: {
+      username: "sip_livekit_plivo_trunk",
+      secret: "lk_sec_plivo_661902a",
+    },
+    dograhCredentials: {
+      username: "sip_dograh_plivo_gw",
+      secret: "dgr_sec_plivo_554189e",
+    },
+    subscriptionDueDate: "2026-11-10", // overdue (warning style)
   },
   {
     id: "prov-telnyx",
@@ -485,6 +524,15 @@ export const INITIAL_TELEPHONY_PROVIDERS: TelephonyProviderItem[] = [
     uptime: "99.99%",
     lastSyncTime: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
     supportedTypes: ["Local", "Mobile"],
+    livekitCredentials: {
+      username: "sip_livekit_telnyx_global",
+      secret: "lk_sec_telnyx_11209b",
+    },
+    dograhCredentials: {
+      username: "sip_dograh_telnyx_core",
+      secret: "dgr_sec_telnyx_33491c",
+    },
+    subscriptionDueDate: "2026-12-15",
   },
 ];
 
@@ -550,7 +598,19 @@ export function getStoredTelephonyProviders(): TelephonyProviderItem[] {
       return INITIAL_TELEPHONY_PROVIDERS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TELEPHONY_PROVIDERS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_TELEPHONY_PROVIDERS;
+    return parsed.map((p: any) => {
+      const init = INITIAL_TELEPHONY_PROVIDERS.find((i) => i.id === p.id);
+      return {
+        ...p,
+        livekitCredentials: p.livekitCredentials?.username
+          ? p.livekitCredentials
+          : init?.livekitCredentials || { username: `sip_livekit_${p.name.toLowerCase()}_trunk`, secret: "lk_sec_masked_key" },
+        dograhCredentials: p.dograhCredentials?.username
+          ? p.dograhCredentials
+          : init?.dograhCredentials || { username: `sip_dograh_${p.name.toLowerCase()}_gw`, secret: "dgr_sec_masked_key" },
+      };
+    });
   } catch {
     return INITIAL_TELEPHONY_PROVIDERS;
   }
@@ -822,6 +882,146 @@ export function updateTelephonyProviderCredentials(
   });
 
   return updated;
+}
+
+export function configureTelephonyProvider(
+  providerId: string,
+  updates: {
+    name?: TelephonyProviderName;
+    livekitCredentials?: { username: string; secret: string };
+    dograhCredentials?: { username: string; secret: string };
+    subscriptionDueDate?: string;
+  }
+): TelephonyProviderItem | null {
+  const list = getStoredTelephonyProviders();
+  const idx = list.findIndex((p) => p.id === providerId);
+  if (idx === -1) return null;
+
+  const prev = list[idx];
+  const updated: TelephonyProviderItem = {
+    ...prev,
+    name: updates.name || prev.name,
+    livekitCredentials: updates.livekitCredentials || prev.livekitCredentials,
+    dograhCredentials: updates.dograhCredentials || prev.dograhCredentials,
+    subscriptionDueDate: updates.subscriptionDueDate || prev.subscriptionDueDate,
+    lastSyncTime: new Date().toISOString(),
+  };
+
+  list[idx] = updated;
+  saveStoredTelephonyProviders(list);
+
+  recordAuditLog({
+    actorId: "usr-admin-1",
+    actorName: "Alexander Vance",
+    actorEmail: "alexander.v@mantra.care",
+    actorRole: "SystemAdmin",
+    action: "updated",
+    module: "Telephony",
+    entityType: "TelephonyProvider",
+    entityId: updated.id,
+    targetName: updated.name,
+    summary: `Configured SIP credentials and subscription renewal for carrier ${updated.name}`,
+    before: { name: prev.name, subscriptionDueDate: prev.subscriptionDueDate },
+    after: { name: updated.name, subscriptionDueDate: updated.subscriptionDueDate },
+  });
+
+  return updated;
+}
+
+export function addTelephonyProvider(provider: {
+  name: TelephonyProviderName;
+  livekitCredentials: { username: string; secret: string };
+  dograhCredentials: { username: string; secret: string };
+  subscriptionDueDate: string;
+}): TelephonyProviderItem {
+  const list = getStoredTelephonyProviders();
+  const newId = `prov-${Date.now().toString(36)}`;
+  const newItem: TelephonyProviderItem = {
+    id: newId,
+    name: provider.name,
+    description: `Configured carrier integration for ${provider.name}`,
+    status: "Connected",
+    maskedKey: "SK••••••••••••••••••••••••" + newId.slice(-4),
+    maskedSecret: "••••••••••••••••••••••••" + newId.slice(-4),
+    accountSid: `AC_${provider.name.toLowerCase()}_${newId}`,
+    numbersCount: 0,
+    activeCalls: 0,
+    uptime: "100.0%",
+    lastSyncTime: new Date().toISOString(),
+    supportedTypes: ["Local", "Toll-free", "Mobile"],
+    livekitCredentials: provider.livekitCredentials,
+    dograhCredentials: provider.dograhCredentials,
+    subscriptionDueDate: provider.subscriptionDueDate,
+  };
+
+  list.push(newItem);
+  saveStoredTelephonyProviders(list);
+
+  recordAuditLog({
+    actorId: "usr-admin-1",
+    actorName: "Alexander Vance",
+    actorEmail: "alexander.v@mantra.care",
+    actorRole: "SystemAdmin",
+    action: "created",
+    module: "Telephony",
+    entityType: "TelephonyProvider",
+    entityId: newItem.id,
+    targetName: newItem.name,
+    summary: `Added new carrier provider ${newItem.name} with LiveKit and Dograh SIP trunks`,
+    before: null,
+    after: { name: newItem.name, subscriptionDueDate: newItem.subscriptionDueDate },
+  });
+
+  return newItem;
+}
+
+export function updateNumberTargetCountries(numberId: string, targetCountries: string[]): PhoneNumberItem | null {
+  const list = getStoredPhoneNumbers();
+  const idx = list.findIndex((p) => p.id === numberId);
+  if (idx === -1) return null;
+
+  const prev = list[idx];
+  const updated: PhoneNumberItem = {
+    ...prev,
+    targetCountries,
+  };
+
+  list[idx] = updated;
+  saveStoredPhoneNumbers(list);
+
+  recordAuditLog({
+    actorId: "usr-admin-1",
+    actorName: "Alexander Vance",
+    actorEmail: "alexander.v@mantra.care",
+    actorRole: "SystemAdmin",
+    action: "updated",
+    module: "Phone Numbers",
+    entityType: "PhoneNumber",
+    entityId: updated.id,
+    targetName: updated.number,
+    summary: `Updated target countries for ${updated.number} to [${targetCountries.join(", ")}]`,
+    before: { targetCountries: prev.targetCountries },
+    after: { targetCountries },
+  });
+
+  return updated;
+}
+
+export function recordRevealSecretAudit(providerName: string, aiProvider: "LiveKit" | "Dograh") {
+  recordAuditLog({
+    actorId: "usr-admin-1",
+    actorName: "Alexander Vance",
+    actorEmail: "alexander.v@mantra.care",
+    actorRole: "SystemAdmin",
+    action: "login",
+    module: "Telephony",
+    entityType: "TelephonyCredentials",
+    entityId: `${providerName}-${aiProvider}`,
+    targetName: `${providerName} (${aiProvider} SIP Secret)`,
+    summary: `Revealed plaintext SIP secret for ${providerName} on ${aiProvider}`,
+    before: { masked: true },
+    after: { masked: false },
+  });
 }
 
 // React Hooks

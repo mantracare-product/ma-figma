@@ -20,6 +20,7 @@ import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import NotificationsSettingsTab from "../components/settings/NotificationsSettingsTab";
+import AdminAuditLogs from "./admin/AdminAuditLogs";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
@@ -852,7 +853,7 @@ export default function Settings() {
     } else if (rawTab === "audit-logs" || rawTab === "audit") {
       setActiveTab("audit-logs");
     } else if (rawTab === "security") {
-      setActiveTab("security");
+      setActiveTab("organization");
     } else {
       setActiveTab(rawTab);
     }
@@ -964,87 +965,160 @@ export default function Settings() {
   const [pendingInvites, setPendingInvites] = useState<Array<{ id: number; email: string; role: string; sentAt: string }>>([]);
 
   // Audit Logs State
-  const [auditLogs, setAuditLogs] = useState([
+  // Client Audit Logs State
+  const [clientAuditLogs, setClientAuditLogs] = useState<Array<{
+    id: string;
+    timestamp: string;
+    actorName: string;
+    actorEmail: string;
+    actorRole: string;
+    action: "created" | "updated" | "deleted" | "assigned" | "login" | "export" | "reset_password" | "invite_sent";
+    module: "Contacts" | "Appointments" | "Documents" | "Billing" | "Tasks" | "Processes" | "Settings" | "Team";
+    targetName: string;
+    entityId: string;
+    summary: string;
+    ip: string;
+    userAgent: string;
+    before?: Record<string, any> | null;
+    after?: Record<string, any> | null;
+  }>>([
     {
-      id: 1,
-      time: "May 4, 2026 12:59:33",
-      event: "Updated agent testing number",
-      method: "PUT",
-      user: "user48eyemantra",
-      agent: "My First AI Agent",
-      requestBody: {
-        requestBody: {
-          testing_number: "+918700086169"
-        },
-        requestParams: {
-          agentId: "bd9ff90a-553a-4bc6-9f2f-367d65876478"
-        },
-        IPAddress: "122.176.106.103",
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        responseStatus: 200
-      }
+      id: "CAL-1092",
+      timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+      actorName: "Alexander Vance",
+      actorEmail: "alexander.v@mantra.care",
+      actorRole: "Admin",
+      action: "updated",
+      module: "Settings",
+      targetName: "Eye Mantra Super Specialty",
+      entityId: "ORG-0001",
+      summary: "Updated organization operating hours and primary telephony configuration",
+      ip: "192.168.1.145",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/147.0.0.0",
+      before: { timezone: "UTC-05:00", operatingHours: "09:00 - 17:00" },
+      after: { timezone: "America/Los_Angeles", operatingHours: "08:30 - 18:00" },
     },
     {
-      id: 2,
-      time: "May 4, 2026 12:59:09",
-      event: "Updated agent testing number",
-      method: "PUT",
-      user: "user48eyemantra",
-      agent: "My First AI Agent",
-      requestBody: {
-        requestBody: {
-          testing_number: "+918700086169"
-        },
-        requestParams: {
-          agentId: "bd9ff90a-553a-4bc6-9f2f-367d65876478"
-        },
-        IPAddress: "122.176.106.103",
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        responseStatus: 200
-      }
+      id: "CAL-1091",
+      timestamp: new Date(Date.now() - 52 * 60 * 1000).toISOString(),
+      actorName: "Elena Rostova",
+      actorEmail: "elena.r@mantra.care",
+      actorRole: "Manager",
+      action: "assigned",
+      module: "Appointments",
+      targetName: "Sarah Johnson",
+      entityId: "APT-8821",
+      summary: "Assigned follow-up consultation to Dr. Marcus Chen",
+      ip: "74.125.210.82",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) Safari/605.1.15",
+      before: { provider: "Unassigned", status: "Pending" },
+      after: { provider: "Dr. Marcus Chen", status: "Confirmed" },
     },
     {
-      id: 3,
-      time: "May 4, 2026 12:55:17",
-      event: "Updated knowledge base and workflows",
-      method: "PUT",
-      user: "user48eyemantra",
-      agent: "My First AI Agent",
-      requestBody: {
-        requestBody: {
-          knowledge_base: "updated content"
-        },
-        requestParams: {
-          agentId: "bd9ff90a-553a-4bc6-9f2f-367d65876478"
-        },
-        IPAddress: "122.176.106.103",
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        responseStatus: 200
-      }
+      id: "CAL-1090",
+      timestamp: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+      actorName: "Charu Arora",
+      actorEmail: "charu.a@mantra.care",
+      actorRole: "Member",
+      action: "created",
+      module: "Contacts",
+      targetName: "Robert Hayes",
+      entityId: "CL-0012",
+      summary: "Created new patient contact record and sent portal onboarding invite",
+      ip: "103.21.244.12",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.0.0",
+      before: null,
+      after: { name: "Robert Hayes", category: "Patient", phone: "+1 (555) 234-5678" },
+    },
+    {
+      id: "CAL-1089",
+      timestamp: new Date(Date.now() - 7 * 3600 * 1000).toISOString(),
+      actorName: "Alexander Vance",
+      actorEmail: "alexander.v@mantra.care",
+      actorRole: "Admin",
+      action: "invite_sent",
+      module: "Team",
+      targetName: "Dr. Marcus Chen",
+      entityId: "USR-104",
+      summary: "Issued staff login credentials with Clinical Specialist role",
+      ip: "192.168.1.145",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/147.0.0.0",
+      before: null,
+      after: { email: "marcus.c@eyemantra.org", role: "Specialist", invited: true },
+    },
+    {
+      id: "CAL-1088",
+      timestamp: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
+      actorName: "Finance System",
+      actorEmail: "billing@mantra.care",
+      actorRole: "System",
+      action: "created",
+      module: "Billing",
+      targetName: "ORD-8831 (Heart Care)",
+      entityId: "INV-4412",
+      summary: "Generated automated invoice settlement for Voice Credits top-up",
+      ip: "10.0.0.8",
+      userAgent: "MantraWorker/2.4 (Automated Billing Bot)",
+      before: { invoiceStatus: "Draft" },
+      after: { invoiceStatus: "Paid", amount: "$125.00" },
+    },
+    {
+      id: "CAL-1087",
+      timestamp: new Date(Date.now() - 26 * 3600 * 1000).toISOString(),
+      actorName: "Elena Rostova",
+      actorEmail: "elena.r@mantra.care",
+      actorRole: "Manager",
+      action: "updated",
+      module: "Tasks",
+      targetName: "Post-op Follow-up Call",
+      entityId: "TSK-302",
+      summary: "Updated priority to Important and assigned deadline for Nov 14",
+      ip: "74.125.210.82",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) Safari/605.1.15",
+      before: { priority: "Normal", deadline: null },
+      after: { priority: "Important", deadline: "2026-11-14T17:00:00Z" },
+    },
+    {
+      id: "CAL-1086",
+      timestamp: new Date(Date.now() - 34 * 3600 * 1000).toISOString(),
+      actorName: "Alexander Vance",
+      actorEmail: "alexander.v@mantra.care",
+      actorRole: "Admin",
+      action: "deleted",
+      module: "Documents",
+      targetName: "Old Intake Form v1.pdf",
+      entityId: "DOC-991",
+      summary: "Deleted superseded intake form from organization template library",
+      ip: "192.168.1.145",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/147.0.0.0",
+      before: { filename: "Old Intake Form v1.pdf", active: true },
+      after: null,
+    },
+    {
+      id: "CAL-1085",
+      timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+      actorName: "Akshita Sharma",
+      actorEmail: "akshita.s@mantra.care",
+      actorRole: "Member",
+      action: "login",
+      module: "Team",
+      targetName: "Web Portal Session",
+      entityId: "SES-7712",
+      summary: "Successful two-factor authentication sign-in via Chrome on Windows",
+      ip: "103.21.244.12",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/147.0.0.0",
+      before: null,
+      after: { loginSuccess: true, mfaVerified: true },
     },
   ]);
-  const [auditLogPage, setAuditLogPage] = useState(1);
-  const [auditLogSearchQuery, setAuditLogSearchQuery] = useState("");
-  const [showRequestBodyModal, setShowRequestBodyModal] = useState(false);
-  const [showAuditExportModal, setShowAuditExportModal] = useState(false);
-  const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
 
-  // Security State
-
-  const [roboCallDetectionEnabled, setRoboCallDetectionEnabled] = useState(true);
-  const [roboCallDetectionExpanded, setRoboCallDetectionExpanded] = useState(false);
-
-  const [securityBlockedNumbers, setSecurityBlockedNumbers] = useState<Array<{ id: number; countryCode: string; phoneNumber: string }>>([
-    { id: 1, countryCode: "+1", phoneNumber: "" }
-  ]);
-  const blockedNumbersCount = securityBlockedNumbers.filter(n => n.phoneNumber.trim() !== "").length;
-  const [blockedNumbersExpanded, setBlockedNumbersExpanded] = useState(false);
-
-  const [botBlockPhrases, setBotBlockPhrases] = useState<Array<{ id: number; phrase: string; enabled: boolean }>>([
-    { id: 1, phrase: "", enabled: true }
-  ]);
-  const [botBlockPhrasesEnabled, setBotBlockPhrasesEnabled] = useState(true);
-  const [botBlockPhrasesExpanded, setBotBlockPhrasesExpanded] = useState(false);
+  const [clientAuditSearchQuery, setClientAuditSearchQuery] = useState("");
+  const [clientAuditFilterModule, setClientAuditFilterModule] = useState<string>("all");
+  const [clientAuditFilterAction, setClientAuditFilterAction] = useState<string>("all");
+  const [clientAuditFilterActor, setClientAuditFilterActor] = useState<string>("all");
+  const [clientAuditDateRange, setClientAuditDateRange] = useState<"all" | "today" | "7d" | "30d">("all");
+  const [selectedClientAuditLog, setSelectedClientAuditLog] = useState<any | null>(null);
+  const [clientAuditDrawerOpen, setClientAuditDrawerOpen] = useState(false);
 
   // Organization Table & Drawer State (Synchronized with OrganizationContext & Sidebar)
   const orgList: OrganizationDetail[] = useMemo(() => {
@@ -3791,7 +3865,6 @@ export default function Settings() {
     { id: "integrations", label: "Integrations", icon: LinkIcon },
     { id: "reception", label: "AI Reception", icon: Sparkles },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
-    { id: "security", label: "Security", icon: ShieldCheck },
   ];
 
 
@@ -5095,6 +5168,43 @@ export default function Settings() {
                     },
                   ];
 
+                  const userRowActions: TableRowAction<User>[] = [
+                    {
+                      label: "Edit",
+                      onClick: (u) => {
+                        setSelectedTeamMember(u);
+                        setIsTeamDrawerOpen(true);
+                      },
+                    },
+                    {
+                      label: "Make Administrator",
+                      hidden: (u) => (u.role || "").toUpperCase() === "ADMIN",
+                      onClick: (u) => {
+                        setAllUsers((prev) =>
+                          prev.map((item) => (item.id === u.id ? { ...item, role: "Admin" } : item))
+                        );
+                        toast.success(`${u.name} is now an Administrator`);
+                      },
+                    },
+                    {
+                      label: "Remove Administrator",
+                      hidden: (u) => (u.role || "").toUpperCase() !== "ADMIN",
+                      onClick: (u) => {
+                        setAllUsers((prev) =>
+                          prev.map((item) => (item.id === u.id ? { ...item, role: "Member" } : item))
+                        );
+                        toast.success(`${u.name} is now a Member`);
+                      },
+                    },
+                    {
+                      label: "Remove",
+                      isDanger: true,
+                      onClick: (u) => {
+                        handleDeleteUser(u);
+                      },
+                    },
+                  ];
+
                   return (
                     <TableComponent
                       columns={userColumns}
@@ -5103,6 +5213,7 @@ export default function Settings() {
                       enableSelection={true}
                       selectedIds={selectedTeamRows}
                       onSelectionChange={setSelectedTeamRows}
+                      rowActions={userRowActions}
                       emptyMessage="No users found matching your filters."
                     />
                   );
@@ -7633,388 +7744,8 @@ export default function Settings() {
             )}
 
             {/* Audit Logs Tab */}
-
             {activeTab === "audit-logs" && (
-              <div className="space-y-4">
-                {/* Top Search Toolbar using standard PageTopBar */}
-                <PageTopBar
-                  searchQuery={auditLogSearchQuery}
-                  onSearchChange={setAuditLogSearchQuery}
-                  searchPlaceholder="Search audit logs..."
-                  showFilterToggle={true}
-                  onExport={() => setShowAuditExportModal(true)}
-                  primaryAction={{
-                    label: "Refresh",
-                    icon: (
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    ),
-                    onClick: () => toast.success("Audit logs refreshed"),
-                  }}
-                />
-
-                {/* Unified DataExportModal for Audit Logs */}
-                <DataExportModal
-                  isOpen={showAuditExportModal}
-                  onClose={() => setShowAuditExportModal(false)}
-                  title="Export Audit Logs"
-                  subtitle="Export user actions, security events, and system audit trail"
-                  data={auditLogs}
-                  filenamePrefix="audit_logs"
-                  dateFieldKey="time"
-                  dateLabel="Event Time"
-                  statusFieldKey="event"
-                  statusLabel="Event"
-                  allFields={[
-                    { key: "id", label: "ID", getValue: (l) => l.id },
-                    { key: "time", label: "Timestamp", getValue: (l) => l.time },
-                    { key: "event", label: "Event / Action", getValue: (l) => l.event },
-                    { key: "method", label: "Method", getValue: (l) => l.method },
-                    { key: "user", label: "User", getValue: (l) => l.user },
-                    { key: "agent", label: "Agent / Target", getValue: (l) => l.agent },
-                    { key: "ip", label: "IP Address", getValue: (l) => l.requestBody?.IPAddress || "" },
-                  ]}
-                />
-
-                {/* Audit Logs Table */}
-                {(() => {
-                  const filteredAuditLogs = auditLogs.filter((log) => {
-                    if (!auditLogSearchQuery.trim()) return true;
-                    const q = auditLogSearchQuery.toLowerCase();
-                    return (
-                      log.time.toLowerCase().includes(q) ||
-                      log.event.toLowerCase().includes(q) ||
-                      log.method.toLowerCase().includes(q) ||
-                      log.user.toLowerCase().includes(q) ||
-                      log.agent.toLowerCase().includes(q)
-                    );
-                  });
-
-                  const auditColumns: TableColumn<typeof auditLogs[0]>[] = [
-                    {
-                      key: "time",
-                      header: "Time",
-                      align: "left",
-                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.time}</p>,
-                    },
-                    {
-                      key: "event",
-                      header: "Event",
-                      align: "left",
-                      render: (log) => <p className="text-xs font-semibold text-[#111827]">{log.event}</p>,
-                    },
-                    {
-                      key: "method",
-                      header: "Method",
-                      align: "center",
-                      render: (log) => <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700">{log.method}</span>,
-                    },
-                    {
-                      key: "user",
-                      header: "User",
-                      align: "left",
-                      render: (log) => <p className="text-xs text-primary font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.user}</p>,
-                    },
-                    {
-                      key: "agent",
-                      header: "Agent",
-                      align: "left",
-                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.agent}</p>,
-                    },
-                    {
-                      key: "actions",
-                      header: "Action",
-                      align: "center",
-                      render: (log) => (
-                        <button
-                          onClick={() => {
-                            setSelectedAuditLog(log);
-                            setShowRequestBodyModal(true);
-                          }}
-                          className="flex items-center justify-center p-1 text-primary hover:text-primary/80 transition-colors cursor-pointer"
-                          title="View Request Body"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      ),
-                    },
-                  ];
-
-                  return (
-                    <TableComponent
-                      columns={auditColumns}
-                      data={filteredAuditLogs}
-                      getRowId={(log) => log.id}
-                      emptyMessage="No audit logs found"
-                    />
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Security Tab */}
-            {activeTab === "security" && (
-              <div className="space-y-6">
-                {/* Robo Call Detection Section */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div
-                    className="flex items-center justify-between p-4 hover:bg-muted/10 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (roboCallDetectionExpanded) {
-                        setRoboCallDetectionExpanded(false);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <PhoneOff className="w-5 h-5 text-primary" />
-                      <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Robo Call Detection</span>
-                      <Tooltip text="Automatically detect and filter robocalls before they reach your system.">
-                        <Info className="w-4 h-4 text-muted-foreground" />
-                      </Tooltip>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {roboCallDetectionEnabled ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">On</span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-500">Off</span>
-                      )}
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Switch checked={roboCallDetectionEnabled} onCheckedChange={setRoboCallDetectionEnabled} />
-                      </div>
-                      <ChevronDown
-                        className={`w-5 h-5 text-muted-foreground transition-transform cursor-pointer ${roboCallDetectionExpanded ? "rotate-180" : ""
-                          }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRoboCallDetectionExpanded(!roboCallDetectionExpanded);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {roboCallDetectionExpanded && (
-                    <div className="border-t border-border p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Enable Robo Call Detection</div>
-                          <div className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Automatically detect and filter robocalls</div>
-                        </div>
-                        <Switch checked={roboCallDetectionEnabled} onCheckedChange={setRoboCallDetectionEnabled} />
-                      </div>
-
-                      <div className="flex justify-end">
-                        <Button
-                          className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-4 py-2 text-sm"
-                          onClick={() => toast.success("Robo Call Detection settings saved")}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Blocked Numbers Section */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div
-                    className="flex items-center justify-between p-4 hover:bg-muted/10 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (blockedNumbersExpanded) {
-                        setBlockedNumbersExpanded(false);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Ban className="w-5 h-5 text-primary" />
-                      <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Blocked Numbers</span>
-                      <Tooltip text="Block specific phone numbers from contacting your system.">
-                        <Info className="w-4 h-4 text-muted-foreground" />
-                      </Tooltip>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {blockedNumbersCount > 0 && (
-                        <span className="flex items-center justify-center w-6 h-6 text-xs rounded-full bg-orange-500 text-white">
-                          {blockedNumbersCount}
-                        </span>
-                      )}
-                      <ChevronDown
-                        className={`w-5 h-5 text-muted-foreground transition-transform cursor-pointer ${blockedNumbersExpanded ? "rotate-180" : ""
-                          }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBlockedNumbersExpanded(!blockedNumbersExpanded);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {blockedNumbersExpanded && (
-                    <div className="border-t border-border p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Blocked Phone Numbers</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSecurityBlockedNumbers([
-                              ...securityBlockedNumbers,
-                              { id: Date.now(), countryCode: "+1", phoneNumber: "" }
-                            ]);
-                          }}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Number
-                        </Button>
-                      </div>
-
-                      {securityBlockedNumbers.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3">
-                          <select
-                            value={item.countryCode}
-                            onChange={(e) => {
-                              setSecurityBlockedNumbers(securityBlockedNumbers.map(n =>
-                                n.id === item.id ? { ...n, countryCode: e.target.value } : n
-                              ));
-                            }}
-                            className="px-3 py-2 bg-input-background border border-input rounded-lg text-sm"
-                          >
-                            <option value="+1">+1</option>
-                            <option value="+44">+44</option>
-                            <option value="+91">+91</option>
-                            <option value="+61">+61</option>
-                            <option value="+81">+81</option>
-                          </select>
-                          <Input
-                            type="tel"
-                            value={item.phoneNumber}
-                            onChange={(e) => {
-                              setSecurityBlockedNumbers(securityBlockedNumbers.map(n =>
-                                n.id === item.id ? { ...n, phoneNumber: e.target.value } : n
-                              ));
-                            }}
-                            placeholder="Phone number"
-                            className="flex-1"
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSecurityBlockedNumbers(securityBlockedNumbers.filter(n => n.id !== item.id));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex justify-end">
-                        <Button
-                          className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-4 py-2 text-sm"
-                          onClick={() => toast.success("Blocked numbers saved")}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bot Block Phrases Section */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div
-                    className="flex items-center justify-between p-4 hover:bg-muted/10 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (botBlockPhrasesExpanded) {
-                        setBotBlockPhrasesExpanded(false);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Shield className="w-5 h-5 text-primary" />
-                      <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Bot Block Phrases</span>
-                      <Tooltip text="Define phrases that identify and block bot callers automatically.">
-                        <Info className="w-4 h-4 text-muted-foreground" />
-                      </Tooltip>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Switch checked={botBlockPhrasesEnabled} onCheckedChange={setBotBlockPhrasesEnabled} />
-                      </div>
-                      <ChevronDown
-                        className={`w-5 h-5 text-muted-foreground transition-transform cursor-pointer ${botBlockPhrasesExpanded ? "rotate-180" : ""
-                          }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBotBlockPhrasesExpanded(!botBlockPhrasesExpanded);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {botBlockPhrasesExpanded && (
-                    <div className="border-t border-border p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>Block Phrases</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setBotBlockPhrases([
-                              ...botBlockPhrases,
-                              { id: Date.now(), phrase: "", enabled: true }
-                            ]);
-                          }}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Phrase
-                        </Button>
-                      </div>
-
-                      {botBlockPhrases.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3 p-3 border border-border rounded-lg">
-                          <Input
-                            value={item.phrase}
-                            onChange={(e) => {
-                              setBotBlockPhrases(botBlockPhrases.map(p =>
-                                p.id === item.id ? { ...p, phrase: e.target.value } : p
-                              ));
-                            }}
-                            placeholder="Enter phrase to block"
-                            className="flex-1"
-                          />
-                          <Switch
-                            checked={item.enabled}
-                            onCheckedChange={(checked) => {
-                              setBotBlockPhrases(botBlockPhrases.map(p =>
-                                p.id === item.id ? { ...p, enabled: checked } : p
-                              ));
-                            }}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setBotBlockPhrases(botBlockPhrases.filter(p => p.id !== item.id));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex justify-end">
-                        <Button
-                          className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-4 py-2 text-sm"
-                          onClick={() => toast.success("Bot Block Phrases saved")}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <AdminAuditLogs isSettingsTab={true} />
             )}
 
             {/* Notifications Tab */}
@@ -8997,31 +8728,6 @@ export default function Settings() {
                 />
               </div>
             </div>
-          </div>
-        </Modal>
-
-        {/* Request Body & Metadata Modal */}
-        <Modal
-          isOpen={showRequestBodyModal}
-          onClose={() => {
-            setShowRequestBodyModal(false);
-            setSelectedAuditLog(null);
-          }}
-          title="Request body & metadata"
-          maxWidth="lg"
-          footer={
-            <Button variant="primary" onClick={() => {
-              setShowRequestBodyModal(false);
-              setSelectedAuditLog(null);
-            }}>
-              Close
-            </Button>
-          }
-        >
-          <div className="bg-muted/30 rounded-xl p-4 border border-border">
-            <pre className="text-sm overflow-auto" style={{ fontFamily: 'monospace', color: '#020817' }}>
-              {selectedAuditLog && JSON.stringify(selectedAuditLog.requestBody, null, 2)}
-            </pre>
           </div>
         </Modal>
 

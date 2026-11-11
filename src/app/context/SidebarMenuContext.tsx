@@ -88,7 +88,6 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "settings-sections", label: "Sections / Fields", iconName: "Layers", path: "/settings/sections-fields", visible: true },
         { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
         { id: "settings-audit", label: "Audit Logs", iconName: "ScrollText", path: "/settings/audit-logs", visible: true },
-        { id: "settings-security", label: "Security", iconName: "Lock", path: "/settings/security", visible: true },
         { id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true },
       ],
     },
@@ -170,6 +169,16 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
                 items: sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers"),
               };
             }
+            if (sec.id === "settings") {
+              let items = sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers" && it.id !== "settings-security");
+              if (!items.some((it) => it.id === "settings-notifications")) {
+                items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
+              }
+              return {
+                ...sec,
+                items,
+              };
+            }
             return sec;
           });
           const migrated = { ...parsed, version: 7, sections: migratedSections };
@@ -241,6 +250,16 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
               }
               return { ...sec, title: "CUSTOMIZATIONS" };
             }
+            if (sec.id === "settings") {
+              let items = sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers" && it.id !== "settings-security");
+              if (!items.some((it) => it.id === "settings-notifications")) {
+                items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
+              }
+              return {
+                ...sec,
+                items,
+              };
+            }
             return sec;
           });
           try {
@@ -253,7 +272,15 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
   } catch {}
 
   // Apply resolved matching Admin Scoped Template for this organization
-  const templateSections: NavSectionConfig[] = JSON.parse(JSON.stringify(matchedTemplate.sections));
+  const templateSections: NavSectionConfig[] = JSON.parse(JSON.stringify(matchedTemplate.sections)).map((sec: NavSectionConfig) => {
+    if (sec.id === "settings") {
+      return {
+        ...sec,
+        items: sec.items.filter((it: NavItemConfig) => it.id !== "settings-security" && it.id !== "settings-numbers"),
+      };
+    }
+    return sec;
+  });
   const wsSec = templateSections.find((s) => s.id === "workspace");
   if (wsSec && !wsSec.items.some((it) => it.id === "tasks")) {
     const procIdx = wsSec.items.findIndex((it) => it.id === "processes");

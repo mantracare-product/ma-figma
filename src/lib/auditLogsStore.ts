@@ -32,7 +32,8 @@ export type AuditModule =
   | "Subscriptions"
   | "Telephony"
   | "Security"
-  | "Roles";
+  | "Roles"
+  | "Templates";
 
 export interface AuditLogEntry {
   id: string;
@@ -197,22 +198,66 @@ export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
     actorName: "Alexander Vance",
     actorEmail: "alexander.v@mantra.care",
     actorRole: "SystemAdmin",
-    action: "suspended",
+    action: "deleted",
     module: "Users",
     entityType: "User",
     entityId: "usr-098",
     targetName: "Robert Hayes",
-    summary: "Suspended staff login credentials due to pending security re-verification",
+    summary: "Deleted staff user account and revoked administrative access credentials",
     before: {
       status: "Active",
-      suspensionReason: null,
+      email: "robert.h@eyemantra.org",
     },
+    after: null,
+    ip: "192.168.1.145",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36",
+  },
+  {
+    id: "aud-007",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
+    actorId: "usr-admin-1",
+    actorName: "Alexander Vance",
+    actorEmail: "alexander.v@mantra.care",
+    actorRole: "SystemAdmin",
+    action: "created",
+    module: "Templates",
+    entityType: "DocumentTemplate",
+    entityId: "tmpl-doc-04",
+    targetName: "HIPAA Patient Consent & Telehealth Release v2",
+    summary: "Created clinical document template \"HIPAA Patient Consent & Telehealth Release v2\"",
+    before: null,
     after: {
-      status: "Suspended",
-      suspensionReason: "Administrative security re-verification",
+      templateName: "HIPAA Patient Consent & Telehealth Release v2",
+      fieldsCount: 12,
+      eSignatureRequired: true,
     },
     ip: "192.168.1.145",
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36",
+  },
+  {
+    id: "aud-008",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 60).toISOString(), // 2.5 days ago
+    actorId: "usr-admin-2",
+    actorName: "Elena Rostova",
+    actorEmail: "elena.r@mantra.care",
+    actorRole: "Admin",
+    action: "updated",
+    module: "Templates",
+    entityType: "WorkflowTemplate",
+    entityId: "tmpl-wf-12",
+    targetName: "Post-Op Physical Therapy Evaluation Workflow",
+    summary: "Updated clinical intake workflow template stages and automated task dispatch rules",
+    before: {
+      stagesCount: 4,
+      autoDispatch: false,
+    },
+    after: {
+      stagesCount: 5,
+      autoDispatch: true,
+      slaHours: 24,
+    },
+    ip: "74.125.210.82",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
   },
 ];
 
@@ -225,7 +270,26 @@ export function getStoredAuditLogs(): AuditLogEntry[] {
       return INITIAL_AUDIT_LOGS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_AUDIT_LOGS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_AUDIT_LOGS;
+
+    // Migrate any legacy "suspended" logs to "deleted" and ensure template examples exist
+    const sanitized: AuditLogEntry[] = parsed.map((l: any) =>
+      l.action === "suspended"
+        ? {
+            ...l,
+            action: "deleted" as AuditAction,
+            summary: "Deleted staff user account and revoked administrative access credentials",
+          }
+        : l
+    );
+
+    const hasTemplates = sanitized.some((l) => l.module === "Templates");
+    if (!hasTemplates) {
+      const templateEntries = INITIAL_AUDIT_LOGS.filter((l) => l.module === "Templates");
+      sanitized.push(...templateEntries);
+    }
+
+    return sanitized;
   } catch {
     return INITIAL_AUDIT_LOGS;
   }

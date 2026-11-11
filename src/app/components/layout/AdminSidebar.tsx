@@ -10,7 +10,7 @@
  * - 6 Group Restructure: CORPORATE, TELEPHONY, BILLING & ORDERS, PRODUCT ANALYTICS, TEMPLATES, INTEGRATIONS, SETTINGS.
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   ChevronDown,
@@ -45,6 +45,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
 import { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
+import { canAdminRoleView } from "../../../lib/adminRolesStore";
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -56,6 +57,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   path: string;
+  moduleId?: string;
 }
 
 interface NavSection {
@@ -72,7 +74,6 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
   // Accordion state - auto-expanded section containing active route
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     corporate: true,
-    telephony: true,
     billingOrders: true,
     productAnalytics: true,
     templates: false,
@@ -113,72 +114,78 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       id: "corporate",
       title: "CORPORATE",
       items: [
-        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations" },
-        { id: "tasks", label: "Tasks", icon: CheckSquare, path: "/admin/tasks" },
-        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
-      ],
-    },
-    {
-      id: "telephony",
-      title: "TELEPHONY",
-      items: [
-        { id: "phone-numbers", label: "Phone Numbers", icon: Phone, path: "/admin/telephony/numbers" },
-        { id: "call-logs", label: "Call Logs", icon: PhoneCall, path: "/admin/telephony/calls" },
+        { id: "organizations", label: "Organizations", icon: Building2, path: "/admin/organizations", moduleId: "organizations" },
+        { id: "tasks", label: "Tasks", icon: CheckSquare, path: "/admin/tasks", moduleId: "tasks" },
+        { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category", moduleId: "industries" },
       ],
     },
     {
       id: "billingOrders",
       title: "BILLING & ORDERS",
       items: [
-        { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/billing/orders" },
-        { id: "subscriptions", label: "Subscriptions", icon: CreditCard, path: "/admin/billing/subscriptions" },
-        { id: "plans", label: "Plans & Credits", icon: Coins, path: "/admin/plans" },
+        { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/billing/orders", moduleId: "orders" },
+        { id: "subscriptions", label: "Subscriptions", icon: CreditCard, path: "/admin/billing/subscriptions", moduleId: "subscriptions" },
+        { id: "plans", label: "Plans & Credits", icon: Coins, path: "/admin/plans", moduleId: "plans" },
       ],
     },
     {
       id: "productAnalytics",
       title: "PRODUCT ANALYTICS",
       items: [
-        { id: "overview", label: "Overview", icon: BarChart2, path: "/admin/product-analytics/overview" },
-        { id: "calls", label: "Calls", icon: PhoneCall, path: "/admin/product-analytics/calls" },
-        { id: "process-movement", label: "Process Movement", icon: Workflow, path: "/admin/product-analytics/process-movement" },
-        { id: "organization-usage", label: "Organization Usage", icon: Building2, path: "/admin/product-analytics/organization-usage" },
-        { id: "revenue-invoices", label: "Revenue & Invoices", icon: DollarSign, path: "/admin/product-analytics/revenue-invoices" },
+        { id: "calls", label: "Calls", icon: PhoneCall, path: "/admin/product-analytics/calls", moduleId: "productAnalyticsCalls" },
       ],
     },
     {
       id: "templates",
       title: "TEMPLATES",
       items: [
-        { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows" },
-        { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
-        { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
-        { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
-        { id: "services", label: "Product / Services", icon: Tag, path: "/admin/services" },
-        { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge-base" },
-        { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
-        { id: "sidebar-config", label: "Sidebar Navigation", icon: LayoutTemplate, path: "/admin/sidebar-config" },
-        { id: "roles", label: "Roles & Permissions", icon: Shield, path: "/admin/roles" },
+        { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows", moduleId: "workflows" },
+        { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations", moduleId: "automations" },
+        { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms", moduleId: "forms" },
+        { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates", moduleId: "documentTemplates" },
+        { id: "services", label: "Product / Services", icon: Tag, path: "/admin/services", moduleId: "services" },
+        { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge-base", moduleId: "knowledgeBase" },
+        { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields", moduleId: "customFields" },
+        { id: "sidebar-config", label: "Sidebar Navigation", icon: LayoutTemplate, path: "/admin/sidebar-config", moduleId: "sidebarNavigation" },
+        { id: "roles", label: "Roles & Permissions", icon: Shield, path: "/admin/roles", moduleId: "roles" },
       ],
     },
     {
       id: "integrations",
       title: "INTEGRATIONS",
       items: [
-        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
-        { id: "telephony-providers", label: "Telephony Providers", icon: Radio, path: "/admin/integrations/telephony-providers" },
+        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models", moduleId: "aiVoicesModels" },
+        { id: "telephony", label: "Telephony", icon: Radio, path: "/admin/integrations/telephony", moduleId: "telephonyProviders" },
       ],
     },
     {
       id: "settings",
       title: "SETTINGS",
       items: [
-        { id: "user-management", label: "User Management", icon: Users, path: "/admin/settings/users" },
-        { id: "security", label: "Security", icon: ShieldCheck, path: "/admin/security" },
-        { id: "logs", label: "Audit Logs", icon: FileText, path: "/admin/settings/logs" },
+        { id: "user-management", label: "User Management", icon: Users, path: "/admin/settings/users", moduleId: "userManagement" },
+        { id: "logs", label: "Audit Logs", icon: FileText, path: "/admin/settings/logs", moduleId: "auditLogs" },
       ],
     },
   ];
+
+  const roleName = user?.role || "SystemAdmin";
+  const visibleSections = useMemo(() => {
+    return sections
+      .map((sec) => ({
+        ...sec,
+        items: sec.items.filter((item) => {
+          if (!item.moduleId) return true;
+          if (item.id === "telephony") {
+            return (
+              canAdminRoleView(roleName, "telephonyProviders") ||
+              canAdminRoleView(roleName, "telephonyNumbers")
+            );
+          }
+          return canAdminRoleView(roleName, item.moduleId);
+        }),
+      }))
+      .filter((sec) => sec.items.length > 0);
+  }, [sections, roleName]);
 
   const isPathActive = (itemPath: string) => {
     if (itemPath === "/admin/custom-fields") {
@@ -252,6 +259,15 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         location.pathname === "/admin/users"
       );
     }
+    if (itemPath === "/admin/integrations/telephony") {
+      return (
+        location.pathname === "/admin/integrations/telephony" ||
+        location.pathname === "/admin/integrations/telephony-providers" ||
+        location.pathname === "/admin/telephony/numbers" ||
+        location.pathname === "/admin/telephony/calls" ||
+        location.pathname === "/admin/telephony"
+      );
+    }
     if (itemPath === "/admin/settings/logs") {
       return (
         location.pathname === "/admin/settings/logs" ||
@@ -270,7 +286,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
 
   // Auto-expand section containing current active path
   useEffect(() => {
-    sections.forEach((sec) => {
+    visibleSections.forEach((sec) => {
       const hasActive = sec.items.some((it) => isPathActive(it.path));
       if (hasActive) {
         setExpandedSections((prev) => ({
@@ -279,14 +295,14 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         }));
       }
     });
-  }, [location.pathname]);
+  }, [location.pathname, visibleSections]);
 
   return (
     <aside className="h-full w-64 min-w-[256px] max-w-[256px] bg-white flex flex-col shrink-0 select-none z-30 relative border-r border-gray-200/80">
       <div className="h-full w-full flex flex-col justify-between overflow-hidden">
         {/* ── Middle Scrollable Navigation List (Starts right below the topbar) ── */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-          {sections.map((section) => {
+          {visibleSections.map((section) => {
             const isExpanded = !!expandedSections[section.id];
             const hasActiveChild = section.items.some((it) => isPathActive(it.path));
 

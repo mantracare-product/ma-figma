@@ -9,7 +9,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
 import { FieldDef, Form, INITIAL_FORMS, getStoredForms, WEB_FORMS_EVENT } from "../../data/forms";
-import { FlowStep, IntakeFlow, INITIAL_FLOWS } from "../../data/intakeFlows";
+import { FlowStep, IntakeFlow, FormFlow, INITIAL_FLOWS, getStoredFlows, saveStoredFlows, FORM_FLOWS_EVENT } from "../../data/intakeFlows";
 import ClientProfile, { Client, initialClients } from "./ClientProfile";
 import ShareFormDrawer from "../components/webform/ShareFormDrawer";
 import { ShareClient, ShareLiteralRecipient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
@@ -21,6 +21,9 @@ import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import FormBuilderDrawer from "../components/form-builder/FormBuilderDrawer";
+import FormFlowDrawer from "../components/forms/FormFlowDrawer";
+import FormFlowCreateDrawer from "../components/forms/FormFlowCreateDrawer";
+import FormCreateDrawer from "../components/forms/FormCreateDrawer";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -773,244 +776,7 @@ function FormDetailDrawer({ form, onClose, onEdit, onShareClick, onSubmit }: { f
   );
 }
 
-function IntakeFlowDrawer({
-  flow,
-  forms,
-  onClose,
-  onEdit,
-  onOpenPreview,
-}: {
-  flow: IntakeFlow | null;
-  forms: Form[];
-  onClose: () => void;
-  onEdit: (fl: IntakeFlow) => void;
-  onOpenPreview?: (fl: IntakeFlow) => void;
-}) {
-  if (!flow) return null;
-
-  const flowUrl = `https://app.myaifrontdesk.com/flows/flow-${flow.id}`;
-  const flowEmbedCode = `<iframe src="${flowUrl}" width="100%" height="700px" style="border: none; border-radius: 8px;"></iframe>`;
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[680px] bg-white shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-wrap">
-          <h2 className="text-base font-bold mr-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
-            {flow.name}
-          </h2>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-            Intake Flow
-          </span>
-          <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-            Created {flow.createdAt}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            {onOpenPreview && (
-              <button
-                onClick={() => { onClose(); onOpenPreview(flow); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors"
-                style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
-              >
-                <Eye className="w-3.5 h-3.5" /> Preview
-              </button>
-            )}
-            <button
-              onClick={() => { onClose(); onEdit(flow); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
-            >
-              <Edit2 className="w-3 h-3" /> Edit
-            </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Block 1 — Forms in Flow count + step list combined */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide" 
-               style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-              FORMS IN FLOW
-            </p>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-lg text-sm font-medium mb-3"
-                 style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-              <FileText className="w-3.5 h-3.5" />
-              {flow.steps.length}
-            </div>
-
-            {flow.steps.length === 0 ? (
-              <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                No forms in this flow yet.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {flow.steps.map((step, idx) => {
-                  const sf = forms.find(f => f.id === step.formId);
-                  return (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 border border-border rounded-lg"
-                    >
-                      <div
-                        className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0"
-                        style={{ fontFamily: "DM Sans, sans-serif", color: "#64748B" }}
-                      >
-                        {idx + 1}
-                      </div>
-                      <span
-                        className="text-sm flex-1"
-                        style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                      >
-                        {sf?.name ?? `Form #${step.formId}`}
-                      </span>
-                      {step.required && (
-                        <span
-                          className="text-xs px-2 py-0.5 bg-red-50 text-red-500 rounded-full font-medium shrink-0"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          Required
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* Welcome message */}
-          {flow.showWelcomeStep !== false && (
-            <>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide"
-                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                  WELCOME MESSAGE
-                </p>
-                <p className="text-sm italic"
-                   style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                  "{flow.welcomeMessage}"
-                </p>
-              </div>
-              <div className="h-px bg-border" />
-            </>
-          )}
-
-          {/* Thank you message */}
-          {flow.showThankYouStep !== false && (
-            <>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide"
-                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                  THANK YOU MESSAGE
-                </p>
-                <p className="text-sm italic"
-                   style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                  "{flow.thankYouMessage}"
-                </p>
-              </div>
-              <div className="h-px bg-border" />
-            </>
-          )}
-
-          {/* Created By */}
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide"
-               style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-              CREATED BY
-            </p>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0"
-                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
-              >
-                {getInitials(flow.senderName)}
-              </div>
-              <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                {flow.senderName}
-              </span>
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* Created On */}
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide"
-               style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-              CREATED ON
-            </p>
-            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-              {flow.createdAt}
-            </p>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* Share Link */}
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide"
-               style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-              SHARE LINK
-            </p>
-            <div className="flex items-center gap-3 px-3 py-2.5 bg-white border border-border rounded-lg">
-              <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs font-mono truncate flex-1" style={{ color: "#64748B" }}>
-                {flowUrl}
-              </span>
-              <button
-                onClick={() => { navigator.clipboard.writeText(flowUrl); toast.success("Link copied to clipboard"); }}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg border border-border shrink-0 transition-colors"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Copy className="w-3 h-3" /> Copy link
-              </button>
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* Embed Code */}
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide"
-               style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-              EMBED CODE
-            </p>
-            <div className="bg-gray-50 border border-border rounded-lg p-3 space-y-3">
-              <code className="text-xs break-all leading-relaxed font-mono block"
-                    style={{ color: "#64748B" }}>
-                {flowEmbedCode}
-              </code>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => { navigator.clipboard.writeText(flowEmbedCode); toast.success("Embed code copied"); }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-black text-white rounded-lg hover:bg-black/90 transition-colors"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <Copy className="w-3 h-3" /> Copy embed code
-                </button>
-                <button
-                  disabled
-                  title="Coming soon"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-50 rounded-lg border border-gray-200 cursor-not-allowed"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Mail className="w-3.5 h-3.5" /> Email to developer (Coming soon)
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+const IntakeFlowDrawer = FormFlowDrawer;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -1054,23 +820,12 @@ export default function WebForms() {
     };
   }, []);
 
+  // Creation Drawer States
+  const [isCreateFormDrawerOpen, setIsCreateFormDrawerOpen] = useState(false);
+  const [isCreateFlowDrawerOpen, setIsCreateFlowDrawerOpen] = useState(false);
+
   const handleOpenNewFormBuilder = () => {
-    const newForm: Form = {
-      id: Date.now(),
-      name: "Untitled Form",
-      description: "",
-      formType: "standard",
-      createdBy: "Current User",
-      fieldCount: 0,
-      fields: [],
-      status: "draft",
-      submissions: 0,
-      enabled: false,
-      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      lastUpdated: new Date().toISOString(),
-    };
-    setActiveBuilderForm(newForm);
-    setIsBuilderDrawerOpen(true);
+    setIsCreateFormDrawerOpen(true);
   };
 
   // Forms sub-tab
@@ -1082,21 +837,30 @@ export default function WebForms() {
     return saved ? JSON.parse(saved) : DUMMY_SUBMISSIONS_SEED;
   });
 
-
   const [formSearch, setFormSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "standard" | "intake" | "meta-ads">("all");
   const [sortCol, setSortCol] = useState<"name" | "submissions" | "lastUpdated">("lastUpdated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   // Flows state
-  const [flows, setFlows] = useState<IntakeFlow[]>(() => {
-    const saved = sessionStorage.getItem("intakeFlows");
-    return saved ? JSON.parse(saved) : INITIAL_FLOWS;
-  });
+  const [flows, setFlows] = useState<FormFlow[]>(getStoredFlows);
+
+  // Sync flows with storage changes across tabs/admin
+  useEffect(() => {
+    const handleFlowsUpdate = () => {
+      setFlows(getStoredFlows());
+    };
+    window.addEventListener(FORM_FLOWS_EVENT, handleFlowsUpdate);
+    window.addEventListener("storage", handleFlowsUpdate);
+    return () => {
+      window.removeEventListener(FORM_FLOWS_EVENT, handleFlowsUpdate);
+      window.removeEventListener("storage", handleFlowsUpdate);
+    };
+  }, []);
+
   const [flowSearch, setFlowSearch] = useState("");
   const [selectedFlows, setSelectedFlows] = useState<Set<number>>(new Set());
   const [createFlowOpen, setCreateFlowOpen] = useState(false);
-  const [activeFlow, setActiveFlow] = useState<IntakeFlow | null>(null);
+  const [activeFlow, setActiveFlow] = useState<FormFlow | null>(null);
   const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
   const [flowDropdownId, setFlowDropdownId] = useState<number | null>(null);
 
@@ -1428,8 +1192,7 @@ export default function WebForms() {
   // Forms table filtered+sorted
   const displayForms = forms
     .filter(f =>
-      f.name.toLowerCase().includes(formSearch.toLowerCase()) &&
-      (typeFilter === "all" || f.formType === typeFilter)
+      f.name.toLowerCase().includes(formSearch.toLowerCase())
     )
     .sort((a, b) => {
       let aVal: any;
@@ -1469,7 +1232,7 @@ export default function WebForms() {
     const usedInFlows = flows.filter(fl => fl.steps.some(s => s.formId === formId));
     if (usedInFlows.length > 0) {
       const confirmed = window.confirm(
-        `This form is used in ${usedInFlows.length} intake flow(s). Deleting it will remove it from those flows too. Continue?`
+        `This form is used in ${usedInFlows.length} form flow(s). Deleting it will remove it from those flows too. Continue?`
       );
       if (!confirmed) return;
       setFlows(flows.map(fl => ({ ...fl, steps: fl.steps.filter(s => s.formId !== formId) })));
@@ -1672,39 +1435,6 @@ export default function WebForms() {
                   searchQuery={formSearch}
                   onSearchChange={setFormSearch}
                   searchPlaceholder="Search forms..."
-                  filterPresets={[
-                    {
-                      id: "all",
-                      label: "All Forms",
-                      count: forms.length,
-                      isActive: typeFilter === "all" && !formSearch,
-                      onClick: () => {
-                        setTypeFilter("all");
-                        setFormSearch("");
-                      },
-                    },
-                    {
-                      id: "standard",
-                      label: "Standard Forms",
-                      count: forms.filter((f) => f.formType === "standard").length,
-                      isActive: typeFilter === "standard",
-                      onClick: () => setTypeFilter("standard"),
-                    },
-                    {
-                      id: "intake",
-                      label: "Intake Flows",
-                      count: forms.filter((f) => f.formType === "intake").length,
-                      isActive: typeFilter === "intake",
-                      onClick: () => setTypeFilter("intake"),
-                    },
-                    {
-                      id: "meta-ads",
-                      label: "Meta Ads",
-                      count: forms.filter((f) => f.formType === "meta-ads").length,
-                      isActive: typeFilter === "meta-ads",
-                      onClick: () => setTypeFilter("meta-ads"),
-                    },
-                  ]}
                   filterFields={[
                     {
                       id: "title",
@@ -1713,19 +1443,6 @@ export default function WebForms() {
                       placeholder: "Filter by title...",
                       value: formSearch,
                       onChange: (val) => setFormSearch(val || ""),
-                    },
-                    {
-                      id: "type",
-                      label: "Form Type",
-                      type: "select",
-                      value: typeFilter,
-                      onChange: (val) => setTypeFilter(val as any),
-                      options: [
-                        { label: "All Types", value: "all" },
-                        { label: "Standard", value: "standard" },
-                        { label: "Intake", value: "intake" },
-                        { label: "Meta Ads", value: "meta-ads" },
-                      ],
                     },
                   ]}
                   leftElement={
@@ -1739,23 +1456,10 @@ export default function WebForms() {
                           }`}
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          {sub === "forms" ? "All Forms" : "Intake Flows"}
+                          {sub === "forms" ? "All Forms" : "Form Flows"}
                         </button>
                       ))}
                     </div>
-                  }
-                  secondaryActions={
-                    <select
-                      value={typeFilter}
-                      onChange={(e) => setTypeFilter(e.target.value as any)}
-                      className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All Types</option>
-                      <option value="standard">Standard</option>
-                      <option value="intake">Intake</option>
-                      <option value="meta-ads">Meta Ads</option>
-                    </select>
                   }
                   primaryAction={{
                     label: "New form",
@@ -1780,29 +1484,6 @@ export default function WebForms() {
                         >
                           {form.name}
                         </button>
-                      ),
-                    },
-                    {
-                      id: "type",
-                      header: "Type",
-                      align: "center",
-                      render: (form) => (
-                        form.formType === "intake" ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Intake
-                          </span>
-                        ) : form.formType === "meta-ads" ? (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="currentColor">
-                              <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z" />
-                            </svg>
-                            Meta Ads
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Standard
-                          </span>
-                        )
                       ),
                     },
                     {
@@ -1897,7 +1578,7 @@ export default function WebForms() {
               </div>
             )}
 
-            {/* ── Intake Flows sub-tab ── */}
+            {/* ── Form Flows sub-tab ── */}
             {formsSubTab === "flows" && (
               <div className="space-y-4">
                 {/* Flow detail view */}
@@ -1912,7 +1593,7 @@ export default function WebForms() {
                           style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
                         >
                           <ArrowLeft className="w-4 h-4" />
-                          Back to Intake Flows
+                          Back to Form Flows
                         </button>
                         <span style={{ color: "#94A3B8" }}>·</span>
                         {editingFlowName ? (
@@ -2136,7 +1817,7 @@ export default function WebForms() {
                           style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
                         >
                           <Plus className="w-4 h-4" />
-                          Add a Form to this Intake Flow
+                          Add a Form to this Form Flow
                         </button>
                       ) : (
                         <div className="border border-border rounded-xl p-4 space-y-3 bg-gray-50">
@@ -2297,7 +1978,7 @@ export default function WebForms() {
                     {addConfirmOpen && (
                       <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
                         <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-4">
-                          <h3 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Add New Form to Intake Flow</h3>
+                          <h3 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Add New Form to Form Flow</h3>
                           <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                             Clients who have already started or completed this flow won't automatically be prompted for the new form. You can send a completion request separately after adding.
                           </p>
@@ -2308,7 +1989,7 @@ export default function WebForms() {
                               className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 transition-colors"
                               style={{ fontFamily: "DM Sans, sans-serif" }}
                             >
-                              Add Form to Intake Flow
+                              Add Form to Form Flow
                             </button>
                           </div>
                         </div>
@@ -2318,7 +1999,7 @@ export default function WebForms() {
                 ) : (
                   /* ── Flows list view ── */
                   <div className="space-y-4">
-                    {/* Unified Filter bar for Intake flows */}
+                    {/* Unified Filter bar for Form Flows */}
                     <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         {/* Main Tab Switcher in search bar */}
@@ -2339,7 +2020,7 @@ export default function WebForms() {
                           ))}
                         </div>
 
-                        {/* Secondary sub-tab row (All Forms / Intake Flows) */}
+                        {/* Secondary sub-tab row (All Forms / Form Flows) */}
                         <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
                           {(["forms", "flows"] as const).map(sub => (
                             <button
@@ -2350,7 +2031,7 @@ export default function WebForms() {
                               }`}
                               style={{ fontFamily: "Outfit, sans-serif" }}
                             >
-                              {sub === "forms" ? "All Forms" : "Intake Flows"}
+                              {sub === "forms" ? "All Forms" : "Form Flows"}
                             </button>
                           ))}
                         </div>
@@ -2359,7 +2040,7 @@ export default function WebForms() {
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                           <input
                             type="text"
-                            placeholder="Search intake flows…"
+                            placeholder="Search form flows…"
                             value={flowSearch}
                             onChange={e => setFlowSearch(e.target.value)}
                             className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -2368,12 +2049,12 @@ export default function WebForms() {
                         </div>
 
                         <button
-                          onClick={() => setCreateFlowOpen(true)}
-                          className="flex items-center gap-1.5 bg-[#1E293B] hover:bg-black text-white rounded-lg px-3.5 h-[36px] text-xs font-semibold transition-colors shrink-0"
+                          onClick={() => setIsCreateFlowDrawerOpen(true)}
+                          className="flex items-center gap-1.5 bg-[#1E293B] hover:bg-black text-white rounded-lg px-3.5 h-[36px] text-xs font-semibold transition-colors shrink-0 cursor-pointer"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           <Plus className="w-4 h-4" />
-                          Create intake flow
+                          Create form flow
                         </button>
                       </div>
                     </div>
@@ -2385,15 +2066,15 @@ export default function WebForms() {
                           <FileText className="w-6 h-6 text-muted-foreground" />
                         </div>
                         <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                          No intake flows yet — create one to guide new contacts through a sequence of forms automatically
+                          No form flows yet — create one to guide new contacts through a sequence of forms automatically
                         </p>
                         <button
-                          onClick={() => setCreateFlowOpen(true)}
-                          className="inline-flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors"
+                          onClick={() => setIsCreateFlowDrawerOpen(true)}
+                          className="inline-flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors cursor-pointer"
                           style={{ fontFamily: "DM Sans, sans-serif" }}
                         >
                           <Plus className="w-4 h-4" />
-                          Create intake flow
+                          Create form flow
                         </button>
                       </div>
                     ) : (
@@ -2501,7 +2182,7 @@ export default function WebForms() {
                         {
                           label: "Edit",
                           icon: <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />,
-                          onClick: (flow) => setActiveFlow(flow),
+                          onClick: (flow) => setDrawerFlow(flow),
                         },
                         {
                           label: "Share",
@@ -2540,7 +2221,7 @@ export default function WebForms() {
                           onSelectionChange={(ids) => setSelectedFlows(new Set(Array.from(ids) as number[]))}
                           onRowClick={(flow) => setDrawerFlow(flow)}
                           defaultRowsPerPage={20}
-                          emptyMessage="No matching intake flows found."
+                          emptyMessage="No matching form flows found."
                         />
                       );
                     })()
@@ -2553,44 +2234,29 @@ export default function WebForms() {
         )}
       </div>
 
-      {/* Create Flow Modal */}
-      {createFlowOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-5">
-            <h3 className="text-lg font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Create Intake Flow</h3>
-            <div className="space-y-1">
-              <label className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                Name <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={newFlowName}
-                onChange={e => { setNewFlowName(e.target.value); setNewFlowNameError(false); }}
-                placeholder="e.g. New Patient Onboarding"
-                className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-              {newFlowNameError && <p className="text-xs text-red-500 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>Give this flow a name</p>}
-            </div>
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                onClick={() => { setCreateFlowOpen(false); setNewFlowName(""); setNewFlowNameError(false); }}
-                className="px-4 py-2 border border-border rounded-lg text-sm"
-                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateFlow}
-                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 transition-colors"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── Create Form Flow Side Drawer ─── */}
+      <FormFlowCreateDrawer
+        isOpen={isCreateFlowDrawerOpen}
+        onClose={() => setIsCreateFlowDrawerOpen(false)}
+        onCreated={(newFlow) => {
+          const updated = [newFlow, ...flows.filter((f) => f.id !== newFlow.id)];
+          setFlows(updated);
+          saveStoredFlows(updated);
+          setDrawerFlow(newFlow);
+        }}
+        availableForms={forms}
+      />
+
+      {/* ─── Create Form Side Drawer ─── */}
+      <FormCreateDrawer
+        isOpen={isCreateFormDrawerOpen}
+        onClose={() => setIsCreateFormDrawerOpen(false)}
+        onContinueToBuilder={(createdForm) => {
+          setForms(getStoredForms());
+          setActiveBuilderForm(createdForm);
+          setIsBuilderDrawerOpen(true);
+        }}
+      />
 
       {/* Form detail drawer */}
       <FormDetailDrawer
@@ -2609,7 +2275,7 @@ export default function WebForms() {
         onSend={handleShareSend}
       />
 
-      {/* Intake flow detail drawer */}
+      {/* Form flow detail drawer */}
       <IntakeFlowDrawer
         flow={drawerFlow}
         forms={forms}
@@ -2667,6 +2333,7 @@ export default function WebForms() {
                 onClick={() => {
                   if (previewStep >= previewScreens.length - 1) {
                     setPreviewOpen(false);
+                    setActiveFlow(null);
                   } else {
                     setPreviewStep(s => s + 1);
                   }
@@ -2677,8 +2344,11 @@ export default function WebForms() {
                 {previewStep >= previewScreens.length - 1 ? "Close Preview" : "Next"}
               </button>
               <button
-                onClick={() => setPreviewOpen(false)}
-                className="flex items-center gap-1.5 text-sm hover:text-foreground transition-colors"
+                onClick={() => {
+                  setPreviewOpen(false);
+                  setActiveFlow(null);
+                }}
+                className="flex items-center gap-1.5 text-sm hover:text-foreground transition-colors cursor-pointer"
                 style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
               >
                 Close Preview

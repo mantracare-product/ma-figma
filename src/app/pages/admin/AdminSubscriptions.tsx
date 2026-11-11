@@ -42,9 +42,11 @@ import {
   Pause,
   XCircle,
   Calendar,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportToCsv } from "../../../lib/productAnalyticsStore";
+import MetricCapsuleRow from "../../components/ui/MetricCapsuleRow";
 
 const AVAILABLE_PLANS = [
   { id: "plan-starter", name: "AI Receptionist Starter", mrr: 149.0, credits: 1500 },
@@ -194,17 +196,21 @@ export default function AdminSubscriptions() {
   // Table Columns
   const columns: TableColumn<AdminSubscriptionItem>[] = [
     {
+      key: "orgCode",
+      header: "ORG ID",
+      render: (row) => (
+        <span className="font-mono text-xs font-medium text-slate-600 tabular-nums">
+          {row.orgCode}
+        </span>
+      ),
+    },
+    {
       key: "orgName",
       header: "ORGANIZATION",
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-gray-900 truncate max-w-[170px]">
-            {row.orgName}
-          </span>
-          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 tabular-nums">
-            {row.orgCode}
-          </span>
-        </div>
+        <span className="text-xs font-medium text-gray-900 truncate max-w-[170px] block" title={row.orgName}>
+          {row.orgName}
+        </span>
       ),
     },
     {
@@ -332,104 +338,83 @@ export default function AdminSubscriptions() {
       <PageHeader
         title="Subscriptions"
         subtitle="Manage recurring workspace subscription plans, MRR expansion, and credit allotments"
-        actions={
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            Export CSV
-          </button>
-        }
       />
 
       <div className="p-6 space-y-5">
-        {/* KPI Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Active Subscriptions</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-bold font-display text-gray-900 tabular-nums">
-              {metrics.activeCount}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">Paying active workspaces</div>
-          </div>
+        {/* KPI Capsules (G4) */}
+        <MetricCapsuleRow
+          items={[
+            {
+              label: "ACTIVE SUBSCRIPTIONS",
+              value: metrics.activeCount,
+              subLabel: "active now",
+              icon: <CreditCard className="w-3.5 h-3.5" />,
+              valueColor: "#15803D",
+            },
+            {
+              label: "MONTHLY MRR",
+              value: `$${metrics.totalMrr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              subLabel: "recurring",
+              icon: <DollarSign className="w-3.5 h-3.5" />,
+            },
+            {
+              label: "TRIALS RUNNING",
+              value: metrics.trialsEnding,
+              subLabel: "onboarding",
+              icon: <Clock className="w-3.5 h-3.5" />,
+              valueColor: metrics.trialsEnding > 0 ? "#2563EB" : undefined,
+            },
+            {
+              label: "PAST DUE",
+              value: metrics.pastDueCount,
+              subLabel: metrics.pastDueCount === 0 ? "All healthy" : "action required",
+              icon: <AlertTriangle className="w-3.5 h-3.5" />,
+              valueColor: metrics.pastDueCount > 0 ? "#DC2626" : undefined,
+            },
+          ]}
+        />
 
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Total Monthly MRR</span>
-              <DollarSign className="w-4 h-4 text-blue-600" />
-            </div>
-            <div className="text-2xl font-bold font-display text-blue-700 tabular-nums">
-              ${metrics.totalMrr.toFixed(2)}
-            </div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-1">+14.2% MRR growth</div>
-          </div>
+        {/* Filters Toolbar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search org, plan..."
+          onExport={handleExportCsv}
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap mr-1">
+              {/* Status filter */}
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[130px] transition-colors"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Trial">Trial</option>
+                  <option value="Past due">Past due</option>
+                  <option value="Paused">Paused</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Trials Ending Soon</span>
-              <Clock className="w-4 h-4 text-indigo-600" />
+              {/* Cycle filter */}
+              <div className="relative">
+                <select
+                  value={cycleFilter}
+                  onChange={(e) => setCycleFilter(e.target.value)}
+                  className="h-[34px] px-2.5 pr-7 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none cursor-pointer appearance-none shadow-2xs max-w-[140px] transition-colors"
+                >
+                  <option value="all">All Billing Cycles</option>
+                  <option value="Monthly">Monthly</option>
+                  <option value="Yearly">Yearly</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-            <div className="text-2xl font-bold font-display text-indigo-700 tabular-nums">
-              {metrics.trialsEnding}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">Due for conversion this week</div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Past Due Accounts</span>
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
-            </div>
-            <div className="text-2xl font-bold font-display text-rose-700 tabular-nums">
-              {metrics.pastDueCount}
-            </div>
-            <div className="text-[11px] text-gray-500 mt-1">Payment retry in progress</div>
-          </div>
-        </div>
-
-        {/* Filters Toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search org, plan..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
-              />
-            </div>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Trial">Trial</option>
-              <option value="Past due">Past due</option>
-              <option value="Paused">Paused</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-
-            <select
-              value={cycleFilter}
-              onChange={(e) => setCycleFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-gray-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Billing Cycles</option>
-              <option value="Monthly">Monthly</option>
-              <option value="Yearly">Yearly</option>
-            </select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Subscriptions Table */}
         <TableComponent

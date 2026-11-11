@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import { Form, INITIAL_FORMS } from "../../data/forms";
 import { loadClientSubmissions } from "../../data/submissionsStore";
-import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
+import { INITIAL_FLOWS, IntakeFlow, FormFlow, FlowStep, getStoredFlows } from "../../data/intakeFlows";
 import {
   useFieldRegistry,
   FieldDefinition,
@@ -2128,7 +2128,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     requiredTotal: number;
   };
 
-  const clientFlowProgress: ClientFlowProgress[] = INITIAL_FLOWS.map(flow => {
+  const clientFlowProgress: ClientFlowProgress[] = getStoredFlows().map(flow => {
     const steps: FlowStepProgress[] = flow.steps.map(step => {
       const form = allForms.find(f => f.id === step.formId);
       const subsForStep = clientSubmissions.filter(s => s.formId === step.formId);
@@ -2879,13 +2879,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               <PageTopBar
                 modes={[
                   { id: "forms", label: "Forms", badge: formSubmissionRows.length },
-                  { id: "flows", label: "Intake Flows", badge: clientFlowProgress.length },
+                  { id: "flows", label: "Form Flows", badge: clientFlowProgress.length },
                 ]}
                 activeMode={formsTabMode}
                 onModeChange={(mode) => setFormsTabMode(mode as "forms" | "flows")}
                 searchQuery={formSearchQuery}
                 onSearchChange={setFormSearchQuery}
-                searchPlaceholder={formsTabMode === "forms" ? "Search forms..." : "Search intake flows..."}
+                searchPlaceholder={formsTabMode === "forms" ? "Search forms..." : "Search form flows..."}
               />
 
               {/* ── Forms mode ── */}
@@ -2906,12 +2906,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 </div>
               )}
 
-              {/* ── Intake Flows mode ── */}
+              {/* ── Form Flows mode ── */}
               {formsTabMode === "flows" && (
                 filteredClientFlowProgress.length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                      {formSearchQuery ? "No matching intake flows found." : "This client hasn't started any intake flow yet."}
+                      {formSearchQuery ? "No matching form flows found." : "This client hasn't started any form flow yet."}
                     </p>
                   </div>
                 ) : (
