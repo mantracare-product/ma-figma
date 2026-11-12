@@ -92,6 +92,7 @@ export default function TestWebsiteChatDrawer({
       phone: visitorPhone,
       entityType: chosenReq?.entityType || targetProc?.entityType,
       processId: targetProcId,
+      stageId: chosenReq?.stageId,
       firstMessage: initialVisitorMessage || "Hello",
       requirementLabel: reqLabel,
       contactCategory: widgetConfig.autoCreateClientEnabled
@@ -105,7 +106,9 @@ export default function TestWebsiteChatDrawer({
     }
 
     const proc = processes.find((p) => p.id === (result.processId || targetProcId)) || processes[0];
-    const initialStageObj = proc.stages.find((s) => s.name === result.stageName) || proc.stages[0];
+    const initialStageObj =
+      proc.stages.find((s) => s.id === (result.stageId || chosenReq?.stageId) || s.name === result.stageName) ||
+      proc.stages[0];
 
     setSelectedProcessId(proc.id);
     setActiveClientId(result.clientId);
@@ -117,7 +120,7 @@ export default function TestWebsiteChatDrawer({
       {
         role: "ai",
         text: result.botReply,
-        matchedReason: `Workflow Prompt: ${proc.name}`,
+        matchedReason: `Workflow Prompt: ${proc.name}${initialStageObj ? ` · ${initialStageObj.name}` : ""}`,
         header: result.header,
         footerText: result.footerText,
         buttons: result.buttons,
@@ -472,7 +475,9 @@ export default function TestWebsiteChatDrawer({
                   {/* Visitor Context Badge */}
                   <div className="p-2 bg-purple-50/70 border border-purple-100 rounded-xl flex items-center justify-between text-[11px]">
                     <span className="font-semibold text-purple-900 truncate">Visitor: {visitorName}</span>
-                    <span className="text-purple-700 font-medium shrink-0">Workflow: {targetProcessName}</span>
+                    <span className="text-purple-700 font-medium shrink-0">
+                      {targetProcessName}{currentStage?.name ? ` · ${currentStage.name}` : ""}
+                    </span>
                   </div>
 
                   {turns.map((turn, idx) => (

@@ -6,6 +6,7 @@ import {
   DEFAULT_ENTITY_PROCESSES,
   EntityType,
   Process,
+  Stage,
 } from "./useProcessStore";
 import { generateProcessStageReply } from "./processChatSimulator";
 
@@ -15,6 +16,7 @@ export interface WebsiteVisitorParams {
   phone?: string;
   entityType?: string;
   processId?: string;
+  stageId?: string;
   firstMessage: string;
   requirementLabel?: string;
   contactCategory?: string;
@@ -46,14 +48,17 @@ function resolveMappedWorkflow(processId?: string, entityType?: string): Process
   return undefined;
 }
 
-function resolveWorkflowPrompt(proc?: Process): string | undefined {
+function resolveWorkflowPrompt(proc?: Process, stage?: Stage): string | undefined {
   if (!proc) return undefined;
-  const firstStage: any = proc.stages?.[0];
-  if (firstStage?.callerPitchMode === "comprehensive" && firstStage?.greetingIntroMessage?.trim()) {
-    return firstStage.greetingIntroMessage.trim();
+  const targetStage: any = stage || proc.stages?.[0];
+  if (targetStage?.callerPitchMode === "comprehensive" && targetStage?.greetingIntroMessage?.trim()) {
+    return targetStage.greetingIntroMessage.trim();
   }
-  if (firstStage?.callerPitch?.trim()) {
-    return firstStage.callerPitch.trim();
+  if (targetStage?.callerPitch?.trim()) {
+    return targetStage.callerPitch.trim();
+  }
+  if (targetStage?.description?.trim()) {
+    return targetStage.description.trim();
   }
   if (proc.description?.trim()) {
     return proc.description.trim();
@@ -67,6 +72,7 @@ export function processWebsiteVisitorSubmission({
   phone = "",
   entityType,
   processId,
+  stageId,
   firstMessage,
   requirementLabel,
   contactCategory = "Lead",
@@ -100,10 +106,13 @@ export function processWebsiteVisitorSubmission({
     clientId = newClient ? newClient.id : `CL-SIM-${Date.now()}`;
   }
 
-  // 2. Resolve mapped workflow & prompt for the selected requirement (Process Entity + Workflow Name)
+  // 2. Resolve mapped workflow, stage & prompt for the selected requirement
   const mappedWorkflow = resolveMappedWorkflow(processId, entityType);
-  const workflowPrompt = resolveWorkflowPrompt(mappedWorkflow);
-  const initialStage = mappedWorkflow?.stages?.[0];
+  const mappedStage =
+    (stageId
+      ? mappedWorkflow?.stages?.find((s) => s.id === stageId || s.name === stageId)
+      : undefined) || mappedWorkflow?.stages?.[0];
+  const workflowPrompt = resolveWorkflowPrompt(mappedWorkflow, mappedStage);
 
   addActivityEntry({
     clientId,
@@ -117,22 +126,22 @@ export function processWebsiteVisitorSubmission({
       primary: `Received message: "${firstMessage}"`,
       secondary: `via Website Chat Widget${requirementLabel ? ` · Req: ${requirementLabel}` : ""}${
         mappedWorkflow ? ` · Workflow: ${mappedWorkflow.name}` : ""
-      }`,
+      }${mappedStage ? ` · Stage: ${mappedStage.name}` : ""}`,
     },
   });
 
   let replyText = mappedWorkflow
-    ? `Hello! Thank you for reaching out regarding ${requirementLabel || mappedWorkflow.name}. Using the "${mappedWorkflow.name}" workflow${
-        workflowPrompt ? ` — ${workflowPrompt}` : ", how can I assist you with your request?"
-      }`
+    ? `Hello! Thank you for reaching out regarding ${requirementLabel || mappedWorkflow.name}. Using "${mappedWorkflow.name}"${
+        mappedStage ? ` (${mappedStage.name})` : ""
+      }${workflowPrompt ? ` — ${workflowPrompt}` : ", how can I assist you with your request?"}`
     : "Hello! Thank you for reaching out to us. We have received your message and a team member will be with you shortly.";
   let header: any = undefined;
   let footerText: any = undefined;
   let buttons: any[] = [];
 
-  if (initialStage) {
-    const workflowSteps = (initialStage as any).workflowSteps ?? [];
-    const simReply = generateProcessStageReply(initialStage, workflowSteps, firstMessage, [], "website");
+  if (mappedStage) {
+    const workflowSteps = (mappedStage as any).workflowSteps ?? [];
+    const simReply = generateProcessStageReply(mappedStage, workflowSteps, firstMessage, [], "website");
     if (simReply?.firedAutomation && simReply.text) {
       replyText = simReply.text;
       header = simReply.header;
@@ -162,7 +171,8 @@ export function processWebsiteVisitorSubmission({
     clientId,
     clientName: name,
     contactCategory: contactCategory || "Lead",
-    stageName: initialStage?.name || stageName,
+    stageId: mappedStage?.id,
+    stageName: mappedStage?.name || stageName,
     entityType: mappedWorkflow?.entityType || entityType,
     processId: mappedWorkflow?.id,
     processName: mappedWorkflow?.name || "Website Chat",

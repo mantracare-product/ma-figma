@@ -232,6 +232,8 @@ export default function WebsiteWidgetSettingsTab({
       "process entity",
       "workflow",
       "workflow prompt",
+      "stage",
+      "stages",
       "greeting",
       "welcome",
       "auto create",
@@ -314,9 +316,9 @@ export default function WebsiteWidgetSettingsTab({
     if (
       config.enablePreChatForm &&
       (config.formFields.requirement ?? true) &&
-      (config.requirements || []).some((r) => !r.label.trim() || !r.entityType || !r.processId)
+      (config.requirements || []).some((r) => !r.label.trim() || !r.entityType || !r.processId || !r.stageId)
     ) {
-      toast.error("Please map each Requirement Option to a Process Entity and Workflow Name before saving.");
+      toast.error("Please map each Requirement Option to a Process Entity, Workflow Name, and Stage before saving.");
       return false;
     }
     if (config.autoCreateClientEnabled && !config.autoCreateContactCategory) {
@@ -344,12 +346,14 @@ export default function WebsiteWidgetSettingsTab({
   const handleAddRequirement = () => {
     const defaultEntity: EntityType = "client";
     const defaultWorkflow = getWorkflowsForEntity(defaultEntity)[0];
+    const defaultStageId = defaultWorkflow?.stages?.[0]?.id || "";
     const newReqId = `req-${Date.now()}`;
     const newReq = {
       id: newReqId,
       label: "New Requirement",
       entityType: defaultEntity,
       processId: defaultWorkflow?.id || "",
+      stageId: defaultStageId,
     };
     setConfig((prev) => ({
       ...prev,
@@ -369,7 +373,9 @@ export default function WebsiteWidgetSettingsTab({
 
   const handleUpdateRequirementEntity = (index: number, entityType: string) => {
     const entityWorkflows = getWorkflowsForEntity(entityType);
-    const firstWorkflowId = entityWorkflows[0]?.id || "";
+    const firstWorkflow = entityWorkflows[0];
+    const firstWorkflowId = firstWorkflow?.id || "";
+    const firstStageId = firstWorkflow?.stages?.[0]?.id || "";
     setConfig((prev) => {
       const updated = [...(prev.requirements || [])];
       if (updated[index]) {
@@ -377,6 +383,7 @@ export default function WebsiteWidgetSettingsTab({
           ...updated[index],
           entityType,
           processId: firstWorkflowId,
+          stageId: firstStageId,
         };
       }
       return { ...prev, requirements: updated };
@@ -387,7 +394,25 @@ export default function WebsiteWidgetSettingsTab({
     setConfig((prev) => {
       const updated = [...(prev.requirements || [])];
       if (updated[index]) {
-        updated[index] = { ...updated[index], processId };
+        const selectedEntity = updated[index].entityType || "client";
+        const selectedWorkflow =
+          getWorkflowsForEntity(selectedEntity).find((p) => p.id === processId) ||
+          processes.find((p) => p.id === processId);
+        updated[index] = {
+          ...updated[index],
+          processId,
+          stageId: selectedWorkflow?.stages?.[0]?.id || "",
+        };
+      }
+      return { ...prev, requirements: updated };
+    });
+  };
+
+  const handleUpdateRequirementStage = (index: number, stageId: string) => {
+    setConfig((prev) => {
+      const updated = [...(prev.requirements || [])];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], stageId };
       }
       return { ...prev, requirements: updated };
     });
@@ -494,6 +519,7 @@ export default function WebsiteWidgetSettingsTab({
       phone: simPhone,
       entityType: chosenReq?.entityType,
       processId: chosenReq?.processId,
+      stageId: chosenReq?.stageId,
       firstMessage: simMessage,
       requirementLabel: targetReqLabel,
       contactCategory: config.autoCreateClientEnabled
@@ -517,7 +543,7 @@ export default function WebsiteWidgetSettingsTab({
       toast.success(
         `Website visitor created! Contact "${simName}" saved${reqInfo}${
           result.processName ? ` · Workflow "${result.processName}"` : ""
-        }${
+        }${result.stageName ? ` (${result.stageName})` : ""}${
           config.autoCreateClientEnabled && config.autoCreateContactCategory
             ? ` under Category "${config.autoCreateContactCategory}"`
             : ""
@@ -1028,7 +1054,7 @@ export default function WebsiteWidgetSettingsTab({
                     </div>
                   </div>
 
-                  {/* Requirement Options List with Process Entity -> Workflow Name Mapping (No Stages) */}
+                  {/* Requirement Options List with Process Entity -> Workflow Name -> Stage Mapping */}
                   {(config.formFields.requirement ?? true) && (
                     <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
                       <div className="flex items-center justify-between">
@@ -1036,7 +1062,7 @@ export default function WebsiteWidgetSettingsTab({
                           <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                             Requirement Options &amp; Workflow Mapping
                           </span>
-                          <InfoTooltip text="Map each pre-chat requirement to a Process Entity and Workflow Name (no stage selection) so the AI maps the corresponding workflow prompt during conversations." />
+                          <InfoTooltip text="Map each pre-chat requirement to a Process Entity, Workflow Name, and Stage so the AI maps the corresponding stage workflow prompt during conversations." />
                         </div>
                         <button
                           type="button"
@@ -1051,6 +1077,10 @@ export default function WebsiteWidgetSettingsTab({
                         {(config.requirements || []).map((req, idx) => {
                           const selectedEntity = req.entityType || "client";
                           const entityWorkflows = getWorkflowsForEntity(selectedEntity);
+                          const selectedWorkflow =
+                            entityWorkflows.find((p) => p.id === req.processId) ||
+                            processes.find((p) => p.id === req.processId);
+                          const workflowStages = selectedWorkflow?.stages || [];
                           return (
                             <div
                               key={req.id || idx}
@@ -1076,7 +1106,7 @@ export default function WebsiteWidgetSettingsTab({
                                 )}
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div>
                                   <label
                                     className="block text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1"
@@ -1090,7 +1120,7 @@ export default function WebsiteWidgetSettingsTab({
                                     className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
                                     style={{ fontFamily: "DM Sans, sans-serif" }}
                                   >
-                                    <option value="">-- Select Process Entity --</option>
+                                    <option value="">-- Select Entity --</option>
                                     {processEntityOptions.map((ent) => (
                                       <option key={ent.id} value={ent.id}>
                                         {ent.label}
@@ -1113,10 +1143,33 @@ export default function WebsiteWidgetSettingsTab({
                                     className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
                                     style={{ fontFamily: "DM Sans, sans-serif" }}
                                   >
-                                    <option value="">-- Select Workflow Name --</option>
+                                    <option value="">-- Select Workflow --</option>
                                     {entityWorkflows.map((proc) => (
                                       <option key={proc.id} value={proc.id}>
                                         {proc.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label
+                                    className="block text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    Stage
+                                  </label>
+                                  <select
+                                    value={req.stageId || ""}
+                                    onChange={(e) => handleUpdateRequirementStage(idx, e.target.value)}
+                                    disabled={!req.processId}
+                                    className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    <option value="">-- Select Stage --</option>
+                                    {workflowStages.map((stg) => (
+                                      <option key={stg.id} value={stg.id}>
+                                        {stg.name}
                                       </option>
                                     ))}
                                   </select>

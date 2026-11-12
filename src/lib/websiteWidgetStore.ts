@@ -6,6 +6,7 @@ export interface RequirementItem {
   label: string;
   entityType?: string;
   processId?: string;
+  stageId?: string;
 }
 
 export interface WebsiteWidgetConfig {
@@ -65,24 +66,28 @@ export const DEFAULT_REQUIREMENTS: RequirementItem[] = [
     label: "Book an Appointment",
     entityType: "appointment",
     processId: "process-appointment-default",
+    stageId: "appt-1",
   },
   {
     id: "req-2",
     label: "Insurance & Coverage Inquiry",
     entityType: "insurance",
     processId: "process-insurance-default",
+    stageId: "ins-1",
   },
   {
     id: "req-3",
     label: "Billing & Invoices",
     entityType: "invoice",
     processId: "process-invoice-default",
+    stageId: "inv-inv-draft",
   },
   {
     id: "req-4",
     label: "General Health Consultation",
     entityType: "client",
     processId: "1",
+    stageId: "1-1",
   },
 ];
 
@@ -155,6 +160,7 @@ export function getWebsiteWidgetConfig(): WebsiteWidgetConfig {
               label: r.label || "",
               entityType: r.entityType ?? fallbackDefault?.entityType ?? "client",
               processId: r.processId ?? fallbackDefault?.processId ?? "",
+              stageId: r.stageId ?? fallbackDefault?.stageId ?? "",
             };
           })
         : DEFAULT_REQUIREMENTS,
