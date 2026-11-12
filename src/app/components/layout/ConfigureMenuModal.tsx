@@ -66,6 +66,7 @@ import {
   BookOpen,
   BadgeCheck,
   Bell,
+  Monitor,
 } from "lucide-react";
 import { useSidebarMenu, NavSectionConfig, NavItemConfig } from "../../context/SidebarMenuContext";
 import { toast } from "sonner";
@@ -127,6 +128,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   BookOpen,
   BadgeCheck,
   Bell,
+  Monitor,
 };
 
 export function getSidebarIcon(iconName: string): React.ComponentType<{ className?: string }> {

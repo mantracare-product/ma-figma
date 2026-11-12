@@ -843,6 +843,8 @@ export default function Settings() {
       } else if (sub === "models") {
         setVoiceConfigSubTab("models");
       }
+    } else if (rawTab === "reception" || rawTab === "ai-receptionist" || rawTab === "receptionist") {
+      setActiveTab("reception");
     } else if (rawTab === "numbers") {
       setActiveTab("integrations");
       setIntegrationTab("telephony");
@@ -3863,7 +3865,7 @@ export default function Settings() {
     { id: "numbers", label: "Numbers", icon: Phone },
     { id: "custom-fields", label: "Sections/Fields", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
-    { id: "reception", label: "AI Reception", icon: Sparkles },
+    { id: "reception", label: "AI Receptionist", icon: Sparkles },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
   ];
 
@@ -4085,6 +4087,8 @@ export default function Settings() {
         return "Billing";
       case "voice-config":
         return "AI Voices / Models";
+      case "reception":
+        return "AI Receptionist";
       case "numbers":
         return "Numbers";
       case "custom-fields":
@@ -4115,6 +4119,8 @@ export default function Settings() {
         return "Manage subscription plan, invoices, payment methods, and credit balance";
       case "voice-config":
         return "Configure AI receptionist voice, language models, and speech parameters";
+      case "reception":
+        return "Configure kiosk branding, persona, self-service toggles, and receptionist terminals";
       case "numbers":
         return "Manage virtual phone numbers, routing, and telephony configurations";
       case "custom-fields":

@@ -76,6 +76,7 @@ export interface PageTopBarProps {
   onModeChange?: (modeId: string) => void;
 
   // Middle Search Bar & Filter State
+  showSearch?: boolean;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   searchPlaceholder?: string;
@@ -121,6 +122,7 @@ export function PageTopBar({
   modes,
   activeMode,
   onModeChange,
+  showSearch = true,
   searchQuery = "",
   onSearchChange,
   searchPlaceholder = "Search...",
@@ -244,6 +246,7 @@ export function PageTopBar({
         )}
 
         {/* ── Middle Search Bar & Advanced Filter Modal Popup ── */}
+        {showSearch ? (
         <div className="flex-1 min-w-[240px] relative" ref={searchContainerRef}>
           <div className="relative search-bar-container">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
@@ -598,6 +601,9 @@ export function PageTopBar({
             </p>
           )}
         </div>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         {/* ── Right Dynamics (Views, Secondary Buttons, Primary Action) ── */}
         <div className="flex items-center gap-2 shrink-0">

@@ -91,6 +91,7 @@ export const DEFAULT_INITIAL_SIDEBAR_TEMPLATES: AdminSidebarTemplate[] = [
           { id: "settings-org", label: "Organization", iconName: "Building2", path: "/settings/organization", visible: true },
           { id: "settings-team", label: "Team", iconName: "UserCog", path: "/settings/team", visible: true },
           { id: "settings-billing", label: "Billing", iconName: "CreditCard", path: "/settings/billing", visible: true },
+          { id: "settings-reception", label: "AI Receptionist", iconName: "Monitor", path: "/settings/reception", visible: true },
           { id: "settings-voices", label: "AI Voices / Models", iconName: "Volume2", path: "/settings/voices", visible: true },
           { id: "settings-sections", label: "Sections / Fields", iconName: "Layers", path: "/settings/sections-fields", visible: true },
           { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
@@ -144,6 +145,22 @@ export function getStoredSidebarTemplates(): AdminSidebarTemplate[] {
             }
             if (sec.id === "settings") {
               let items = sec.items.filter((it) => it.id !== "settings-security" && it.id !== "settings-numbers");
+              if (!items.some((it) => it.id === "settings-reception")) {
+                tChanged = true;
+                const recItem: NavItemConfig = {
+                  id: "settings-reception",
+                  label: "AI Receptionist",
+                  iconName: "Monitor",
+                  path: "/settings/reception",
+                  visible: true,
+                };
+                const voicesIdx = items.findIndex((it) => it.id === "settings-voices");
+                if (voicesIdx !== -1) {
+                  items.splice(voicesIdx, 0, recItem);
+                } else {
+                  items.push(recItem);
+                }
+              }
               if (!items.some((it) => it.id === "settings-notifications")) {
                 tChanged = true;
                 items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });

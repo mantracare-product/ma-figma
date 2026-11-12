@@ -259,6 +259,7 @@ export const router = createBrowserRouter([
               { path: "settings/team/:id", Component: ManageTeamMember },
               { path: "billing", Component: Settings },
               { path: "billing/:subtab", Component: Settings },
+              { path: "receptionist", element: <Navigate to="/settings/reception" replace /> },
               { path: "account/notifications", element: <Navigate to="/settings/notifications" replace /> },
             ],
           },

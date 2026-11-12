@@ -74,6 +74,7 @@ import {
   type DirectionCategory,
   type DirectionRoom,
   type PatientInvoiceSummary,
+  type ReceptionConfig,
 } from '../types/reception';
 import { toast } from 'sonner';
 import { getStoredClients } from '../../lib/clientsStore';
@@ -82,6 +83,10 @@ import {
   isStageEnabledForAiReceptionist,
   type Stage,
 } from '../../lib/useProcessStore';
+import {
+  getActiveKioskReceptionConfig,
+  onReceptionConfigChanged,
+} from '../../lib/receptionSettingsStore';
 import '../styles/navodyaTokens.css';
 import '../styles/avatarStage.css';
 
@@ -452,6 +457,36 @@ export const AvatarReceptionView: React.FC = () => {
     const p = new URLSearchParams(window.location.search);
     return p.get('debug') === '1' || p.get('debug') === 'true';
   }, []);
+
+  // Synced AI Receptionist Settings + Launched Terminal metadata
+  const [receptionConfig, setReceptionConfig] = useState<Partial<ReceptionConfig> | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const orgParam = new URLSearchParams(window.location.search).get('org');
+    return getActiveKioskReceptionConfig(orgParam);
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const orgParam = new URLSearchParams(window.location.search).get('org');
+    return onReceptionConfigChanged(() => {
+      setReceptionConfig(getActiveKioskReceptionConfig(orgParam));
+    });
+  }, []);
+
+  const clinicBrandName = receptionConfig?.clinicName?.trim() || DEFAULT_ORGANIZATION_NAME;
+  const kioskFeatures = receptionConfig?.features;
+  const activeTerminalLabel = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const p = new URLSearchParams(window.location.search);
+    const termId = p.get('terminal');
+    const qName = p.get('terminalName');
+    const qLoc = p.get('location');
+    const matched = termId ? receptionConfig?.terminals?.find((t) => t.id === termId) : undefined;
+    const name = matched?.name || qName;
+    const loc = matched?.locationLabel || qLoc;
+    if (!name && !loc) return null;
+    return loc ? `${name || 'Terminal'} (${loc})` : name;
+  }, [receptionConfig?.terminals]);
 
   // Avatar & Voice State
   const [avatarState, setAvatarState] = useState<AvatarState>('idle');
@@ -1449,13 +1484,17 @@ export const AvatarReceptionView: React.FC = () => {
     greetingTimerRef.current = setTimeout(() => {
       if (screenRef.current !== 'AMBIENT') return;
 
-      // Step 2: Greeting (Speak welcome with white-label organization name)
+      // Step 2: Greeting (Speak configured or default welcome with white-label organization name)
       setAmbientPhase('greeting');
-      const orgName = currentLanguage === 'hi' ? DEFAULT_ORGANIZATION_NAME_HI : DEFAULT_ORGANIZATION_NAME;
+      const orgName =
+        currentLanguage === 'hi'
+          ? DEFAULT_ORGANIZATION_NAME_HI
+          : receptionConfig?.clinicName?.trim() || DEFAULT_ORGANIZATION_NAME;
+      const customGreeting = receptionConfig?.greetingPhrase?.trim();
       const greetingText =
         currentLanguage === 'hi'
           ? `नमस्ते, ${orgName} में आपका स्वागत है! मैं आज आपकी क्या सहायता कर सकती हूँ?`
-          : `Welcome to ${orgName}! How can I help you today?`;
+          : customGreeting || `Welcome to ${orgName}! How can I help you today?`;
 
       let hasChainedToListening = false;
       const onGreetingFinished = () => {
@@ -1466,7 +1505,9 @@ export const AvatarReceptionView: React.FC = () => {
           setTimeout(() => {
             if (screenRef.current === 'AMBIENT') {
               setAmbientPhase('listening');
-              startVoiceListening();
+              if (kioskFeatures?.voice !== false) {
+                startVoiceListening();
+              }
             }
           }, 200);
         }
@@ -1474,15 +1515,16 @@ export const AvatarReceptionView: React.FC = () => {
 
       speak(greetingText, 'speaking', undefined, onGreetingFinished);
     }, 300);
-  }, [currentLanguage, speak, startVoiceListening]);
+  }, [currentLanguage, speak, startVoiceListening, receptionConfig?.clinicName, receptionConfig?.greetingPhrase, kioskFeatures?.voice]);
 
   // Continuous Voice Listening Lifecycle across all screens
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (kioskFeatures?.voice === false) return;
     if (!isAriaSpeakingRef.current) {
       startVoiceListening();
     }
-  }, [screen, currentLanguage, startVoiceListening]);
+  }, [screen, currentLanguage, startVoiceListening, kioskFeatures?.voice]);
 
   // Presence Detection Loop: Only runs on AMBIENT (Throttled ~5 FPS / 200ms)
   // Bounding-box numbers stay strictly in memory and are discarded immediately after calculation.
@@ -3771,15 +3813,18 @@ export const AvatarReceptionView: React.FC = () => {
         {/* Top Header / Branding Bar */}
         <header className="w-full flex items-center justify-between z-20 shrink-0 max-w-6xl">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/30">
+            <div
+              className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/30"
+              style={receptionConfig?.primaryColor ? { background: receptionConfig.primaryColor } : undefined}
+            >
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
               <span className="text-xs sm:text-sm font-bold tracking-wider uppercase text-slate-200 font-display">
-                {DEFAULT_ORGANIZATION_NAME}
+                {clinicBrandName}
               </span>
               <span className="hidden sm:inline text-xs text-slate-400 ml-2 font-medium">
-                • AI Receptionist
+                • AI Receptionist{activeTerminalLabel ? ` • ${activeTerminalLabel}` : ''}
               </span>
             </div>
           </div>
@@ -3845,32 +3890,34 @@ export const AvatarReceptionView: React.FC = () => {
             </button>
 
             {/* 2. Billing */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUserActivity();
-                stopCameraStream();
-                setFlowType('PAYMENT');
-                setScreen('PHONE');
-                navigate('/reception/billing');
-                speak(
-                  currentLanguage === 'hi'
-                    ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
-                    : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
-                );
-              }}
-              className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
-                  <CreditCard className="w-5 h-5" />
+            {kioskFeatures?.payments !== false && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUserActivity();
+                  stopCameraStream();
+                  setFlowType('PAYMENT');
+                  setScreen('PHONE');
+                  navigate('/reception/billing');
+                  speak(
+                    currentLanguage === 'hi'
+                      ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+                      : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+                  );
+                }}
+                className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
-              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
-                {currentLanguage === 'hi' ? 'बिलिंग' : 'Billing'}
-              </span>
-            </button>
+                <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
+                  {currentLanguage === 'hi' ? 'बिलिंग' : 'Billing'}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Center: Enlarged, Visual Anchor Animated Avatar (55-65vh) */}
@@ -3891,7 +3938,7 @@ export const AvatarReceptionView: React.FC = () => {
               thinkingMessage={
                 ambientPhase === 'routing' || avatarState === 'thinking'
                   ? thinkingMessage || 'One moment, directing your visit...'
-                  : `Welcome to ${DEFAULT_ORGANIZATION_NAME}`
+                  : `Welcome to ${clinicBrandName}`
               }
               className="h-full w-auto"
             />
@@ -3960,32 +4007,34 @@ export const AvatarReceptionView: React.FC = () => {
             </button>
 
             {/* 2. Billing */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUserActivity();
-                stopCameraStream();
-                setFlowType('PAYMENT');
-                setScreen('PHONE');
-                navigate('/reception/billing');
-                speak(
-                  currentLanguage === 'hi'
-                    ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
-                    : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
-                );
-              }}
-              className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
-                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+            {kioskFeatures?.payments !== false && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUserActivity();
+                  stopCameraStream();
+                  setFlowType('PAYMENT');
+                  setScreen('PHONE');
+                  navigate('/reception/billing');
+                  speak(
+                    currentLanguage === 'hi'
+                      ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+                      : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+                  );
+                }}
+                className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
+                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
                 </div>
-              </div>
-              <span className="text-[11px] sm:text-xs font-bold text-slate-200">
-                {currentLanguage === 'hi' ? 'बिलिंग' : 'Billing'}
-              </span>
-            </button>
+                <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                  {currentLanguage === 'hi' ? 'बिलिंग' : 'Billing'}
+                </span>
+              </button>
+            )}
 
             {/* 3. Feedback */}
             <button

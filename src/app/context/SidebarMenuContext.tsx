@@ -36,7 +36,7 @@ export interface SidebarMenuConfig {
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
-  version: 8,
+  version: 9,
   defaultStartPage: "/",
   sections: [
     {
@@ -84,6 +84,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "settings-org", label: "Organization", iconName: "Building2", path: "/settings/organization", visible: true },
         { id: "settings-team", label: "Team", iconName: "UserCog", path: "/settings/team", visible: true },
         { id: "settings-billing", label: "Billing", iconName: "CreditCard", path: "/settings/billing", visible: true },
+        { id: "settings-reception", label: "AI Receptionist", iconName: "Monitor", path: "/settings/reception", visible: true },
         { id: "settings-voices", label: "AI Voices / Models", iconName: "Volume2", path: "/settings/voices", visible: true },
         { id: "settings-sections", label: "Sections / Fields", iconName: "Layers", path: "/settings/sections-fields", visible: true },
         { id: "settings-integrations", label: "Integrations", iconName: "Link", path: "/settings/integrations", visible: true },
@@ -118,6 +119,29 @@ const globalForSidebar = typeof window !== "undefined" ? (window as any) : (glob
 const SidebarMenuContext: React.Context<SidebarMenuContextType | undefined> =
   globalForSidebar.__MANTRA_SIDEBAR_MENU_CONTEXT__ ||
   (globalForSidebar.__MANTRA_SIDEBAR_MENU_CONTEXT__ = createContext<SidebarMenuContextType | undefined>(undefined));
+
+function ensureSettingsItems(items: NavItemConfig[]): NavItemConfig[] {
+  const cleaned = items.filter((it) => it.id !== "settings-numbers" && it.id !== "settings-security");
+  if (!cleaned.some((it) => it.id === "settings-reception")) {
+    const recItem: NavItemConfig = {
+      id: "settings-reception",
+      label: "AI Receptionist",
+      iconName: "Monitor",
+      path: "/settings/reception",
+      visible: true,
+    };
+    const voicesIdx = cleaned.findIndex((it) => it.id === "settings-voices");
+    if (voicesIdx !== -1) {
+      cleaned.splice(voicesIdx, 0, recItem);
+    } else {
+      cleaned.push(recItem);
+    }
+  }
+  if (!cleaned.some((it) => it.id === "settings-notifications")) {
+    cleaned.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
+  }
+  return cleaned;
+}
 
 function loadAndMigrateConfig(storageKey: string, org?: Organization | null): SidebarMenuConfig {
   const matchedTemplate = resolveSidebarTemplateForOrg(org);
@@ -166,22 +190,12 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
             if (sec.id === "settings") {
               return {
                 ...sec,
-                items: sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers"),
-              };
-            }
-            if (sec.id === "settings") {
-              let items = sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers" && it.id !== "settings-security");
-              if (!items.some((it) => it.id === "settings-notifications")) {
-                items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
-              }
-              return {
-                ...sec,
-                items,
+                items: ensureSettingsItems(sec.items),
               };
             }
             return sec;
           });
-          const migrated = { ...parsed, version: 7, sections: migratedSections };
+          const migrated = { ...parsed, version: 9, sections: migratedSections };
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
@@ -251,17 +265,14 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
               return { ...sec, title: "CUSTOMIZATIONS" };
             }
             if (sec.id === "settings") {
-              let items = sec.items.filter((it: NavItemConfig) => it.id !== "settings-numbers" && it.id !== "settings-security");
-              if (!items.some((it) => it.id === "settings-notifications")) {
-                items.push({ id: "settings-notifications", label: "Notifications", iconName: "Bell", path: "/settings/notifications", visible: true });
-              }
               return {
                 ...sec,
-                items,
+                items: ensureSettingsItems(sec.items),
               };
             }
             return sec;
           });
+          parsed.version = 9;
           try {
             localStorage.setItem(storageKey, JSON.stringify(parsed));
           } catch {}
@@ -276,7 +287,7 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
     if (sec.id === "settings") {
       return {
         ...sec,
-        items: sec.items.filter((it: NavItemConfig) => it.id !== "settings-security" && it.id !== "settings-numbers"),
+        items: ensureSettingsItems(sec.items),
       };
     }
     return sec;
@@ -300,7 +311,7 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
   }
 
   const newConfig: SidebarMenuConfig = {
-    version: 8,
+    version: 9,
     defaultStartPage: matchedTemplate.defaultStartPage || "/",
     templateId: matchedTemplate.id,
     templateName: matchedTemplate.name,
@@ -400,7 +411,7 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
   const resetToAdminTemplate = () => {
     const matched = resolveSidebarTemplateForOrg(activeOrganization);
     const resetConfig: SidebarMenuConfig = {
-      version: 7,
+      version: 9,
       defaultStartPage: matched.defaultStartPage || "/",
       templateId: matched.id,
       templateName: matched.name,

@@ -129,8 +129,31 @@ export const STATIC_DIRECTION_CATEGORIES: DirectionCategory[] = [
   },
 ];
 
+export interface ReceptionTerminal {
+  id: string;
+  name: string;
+  locationLabel: string;
+  createdAt?: string;
+}
+
+export interface ReceptionFeatureFlags {
+  walkIn: boolean;
+  faceCheckin: boolean;
+  qrCheckin: boolean;
+  voice: boolean;
+  payments: boolean;
+  printToken: boolean;
+}
+
 export interface ReceptionConfig {
   orgId: string;
+  clinicName?: string;
+  greetingPhrase?: string;
+  supportPhone?: string;
+  supportEmail?: string;
+  primaryColor?: string;
+  features?: ReceptionFeatureFlags;
+  terminals?: ReceptionTerminal[];
   tokenPrefixes: {
     doctor: string;
     pharmacy: string;
