@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { DataExportModal } from "../components/common/DataExportModal";
+import ImportIntegrationsTab from "../components/common/ImportIntegrationsTab";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
@@ -164,7 +165,7 @@ export default function Clients() {
   const [showImportModal, setShowImportModal] = useState(false);
   const entityType = "clients";
   const entityLabel = "clients";
-  const [importMethod, setImportMethod] = useState<"csv" | "webhook">("csv");
+  const [importMethod, setImportMethod] = useState<"csv" | "webhook" | "integration">("csv");
   const [showWebhookInfo, setShowWebhookInfo] = useState(false);
 
   const [webhookSearchQuery, setWebhookSearchQuery] = useState("");
@@ -3424,7 +3425,7 @@ export default function Clients() {
                     </div>
                     <div>
                       <h2 className="text-base font-bold text-gray-900 leading-tight">Import Clients</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Bulk CSV onboarding or real-time webhook endpoints</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Bulk CSV onboarding, webhooks, or integration sync</p>
                     </div>
                   </div>
                   <button
@@ -3467,6 +3468,18 @@ export default function Clients() {
                     >
                       <Webhook className="w-3.5 h-3.5" />
                       Webhook
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportMethod("integration")}
+                      className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all ${
+                        importMethod === "integration"
+                          ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                          : "text-slate-500 hover:text-slate-800 font-medium"
+                      }`}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Integration
                     </button>
                   </div>
 
@@ -3977,11 +3990,16 @@ export default function Clients() {
                       </button>
                     </div>
                   )}
+
+                  {/* Integration Content */}
+                  {importMethod === "integration" && (
+                    <ImportIntegrationsTab entityType="clients" />
+                  )}
                 </div>
 
                 {/* Footer */}
                 <div className="border-t border-gray-100 px-6 py-4 bg-slate-50/50 flex items-center justify-end gap-3">
-                  {importMethod === "webhook" ? (
+                  {importMethod === "webhook" || importMethod === "integration" ? (
                     <Button
                       variant="outline"
                       onClick={() => {

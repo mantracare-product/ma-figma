@@ -30,7 +30,12 @@ import WorkspaceBillingCreditUsageTab from "../components/billing/WorkspaceBilli
 import Transactions from "./Transactions";
 import { getWorkspaceSubscription } from "../../lib/plansBillingStore";
 import MailboxAccountsSection from "../components/settings/MailboxAccountsSection";
-import { INTEGRATIONS_REGISTRY, IntegrationDefinition } from "../../lib/integrationsRegistry";
+import {
+  INTEGRATIONS_REGISTRY,
+  IntegrationDefinition,
+  formatSyncSchedule,
+  getStoredIntegrationConfig,
+} from "../../lib/integrationsRegistry";
 import IntegrationConfigDrawer from "../components/settings/IntegrationConfigDrawer";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
@@ -3148,32 +3153,18 @@ export default function Settings() {
       name: "Cliniko",
       description: "Allied health practice management for patients, appointments & billing",
       category: "ehr",
-      connected: (() => {
-        try {
-          const cfg = localStorage.getItem("mantra_integration_config_cliniko");
-          return cfg ? JSON.parse(cfg).connected : false;
-        } catch {
-          return false;
-        }
-      })(),
+      connected: getStoredIntegrationConfig("cliniko").connected,
     },
     {
       id: "healthie",
       name: "Healthie",
       description: "Comprehensive EHR, telehealth, and coaching platform for dietetics & wellness",
       category: "ehr",
-      connected: (() => {
-        try {
-          const cfg = localStorage.getItem("mantra_integration_config_healthie");
-          return cfg ? JSON.parse(cfg).connected : false;
-        } catch {
-          return false;
-        }
-      })(),
+      connected: getStoredIntegrationConfig("healthie").connected,
     },
     { id: "mantracare", name: "MantraCare", description: "Electronic health records system", category: "ehr", connected: false },
-    { id: "epic", name: "Epic", description: "Enterprise healthcare software", category: "ehr", connected: false },
-    { id: "athena", name: "Athena Health", description: "Cloud-based EHR and practice management", category: "ehr", connected: false },
+    { id: "epic", name: "Epic", description: "Enterprise healthcare software", category: "ehr", connected: getStoredIntegrationConfig("epic").connected },
+    { id: "athena", name: "Athena Health", description: "Cloud-based EHR and practice management", category: "ehr", connected: getStoredIntegrationConfig("athena").connected },
 
     // CRM / Data Source
     {
@@ -3183,6 +3174,7 @@ export default function Settings() {
       category: "crm",
       connected: (() => {
         try {
+          if (getStoredIntegrationConfig("phorest").connected) return true;
           const saved = localStorage.getItem("phorestIntegration");
           return !!saved && JSON.parse(saved).connected;
         } catch {
@@ -3198,9 +3190,9 @@ export default function Settings() {
         }
       })(),
     },
-    { id: "bitrix24", name: "Bitrix 24", description: "Collaboration and CRM platform", category: "crm", connected: false },
-    { id: "hubspot", name: "HubSpot", description: "Marketing and sales CRM", category: "crm", connected: false },
-    { id: "salesforce", name: "Salesforce", description: "Cloud-based CRM solution", category: "crm", connected: true },
+    { id: "bitrix24", name: "Bitrix 24", description: "Collaboration and CRM platform", category: "crm", connected: getStoredIntegrationConfig("bitrix24").connected },
+    { id: "hubspot", name: "HubSpot", description: "Marketing and sales CRM", category: "crm", connected: getStoredIntegrationConfig("hubspot").connected },
+    { id: "salesforce", name: "Salesforce", description: "Cloud-based CRM solution", category: "crm", connected: localStorage.getItem("mantra_integration_config_salesforce") ? getStoredIntegrationConfig("salesforce").connected : true },
     { id: "custom-api", name: "Custom API", description: "Connect any REST API endpoint", category: "crm", connected: false },
     { id: "custom-webhook", name: "Custom Webhook", description: "Send event payloads to any webhook endpoint", category: "crm", connected: false },
 
@@ -3227,6 +3219,24 @@ export default function Settings() {
   const [integrationSearchQuery, setIntegrationSearchQuery] = useState("");
   const [selectedRegistryDef, setSelectedRegistryDef] = useState<IntegrationDefinition | null>(null);
   const [isRegistryDrawerOpen, setIsRegistryDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const syncRegistryStates = (e?: Event) => {
+      const customEvent = e as CustomEvent<{ integrationId?: string }> | undefined;
+      const targetId = customEvent?.detail?.integrationId;
+      setIntegrations((prev) =>
+        prev.map((item) => {
+          if (targetId && item.id !== targetId) return item;
+          const isInRegistry = INTEGRATIONS_REGISTRY.some((d) => d.id === item.id);
+          if (!isInRegistry) return item;
+          const stored = getStoredIntegrationConfig(item.id);
+          return { ...item, connected: stored.connected };
+        })
+      );
+    };
+    window.addEventListener("mantra:integration_updated", syncRegistryStates);
+    return () => window.removeEventListener("mantra:integration_updated", syncRegistryStates);
+  }, []);
   const [metaLeadFormsConnectionTested, setMetaLeadFormsConnectionTested] = useState(false);
   const [metaSelectedForms, setMetaSelectedForms] = useState<string[]>([]);
   const [metaMockForms] = useState([
@@ -7893,12 +7903,29 @@ export default function Settings() {
                         );
                       }
 
-                      return filteredList.map((integration) => (
+                      const customIconIds = new Set([
+                        "gmail",
+                        "outlook",
+                        "twilio-sms",
+                        "cliniko",
+                        "healthie",
+                        "epic",
+                        "athena",
+                        "phorest",
+                        "meta-leads",
+                        "whatsapp-business",
+                      ]);
+
+                      return filteredList.map((integration) => {
+                        const registryDef = INTEGRATIONS_REGISTRY.find((d) => d.id === integration.id);
+                        const storedConfig = registryDef ? getStoredIntegrationConfig(integration.id) : null;
+
+                        return (
                         <div
                           key={integration.id}
-                          className="flex items-center justify-between p-5 bg-card rounded-xl border border-border hover:border-primary/30 transition-colors"
+                          className="flex items-center justify-between gap-4 p-5 bg-card rounded-xl border border-border hover:border-primary/30 transition-colors"
                         >
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-center gap-3.5 min-w-0">
                             {/* Provider Logo */}
                             {integration.id === "gmail" && (
                               <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-white border border-border flex items-center justify-center shadow-sm">
@@ -7990,20 +8017,33 @@ export default function Settings() {
                                 </svg>
                               </div>
                             )}
-                            <div>
-                              <h3 className="font-semibold text-base">{integration.name}</h3>
-                              <p className="text-sm text-muted-foreground mt-1">{integration.description}</p>
-                              <div className="mt-2">
+                            {!customIconIds.has(integration.id) && (
+                              <div
+                                className="w-10 h-10 flex-shrink-0 rounded-lg flex items-center justify-center shadow-xs text-white font-extrabold text-lg tracking-tight font-display"
+                                style={{ backgroundColor: registryDef?.brandColor || "#475569" }}
+                              >
+                                {integration.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-sm text-foreground truncate">{integration.name}</h3>
                                 {integration.connected ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary/10 text-secondary">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
                                     Connected
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground">
                                     Not Connected
                                   </span>
                                 )}
                               </div>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{integration.description}</p>
+                              {integration.connected && storedConfig && (
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  Sync: {formatSyncSchedule(storedConfig)}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex-shrink-0">
@@ -8086,7 +8126,8 @@ export default function Settings() {
                             )}
                           </div>
                         </div>
-                      ));
+                        );
+                      });
                     })()}
                   </div>
                 </div>
