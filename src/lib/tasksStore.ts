@@ -46,7 +46,7 @@ export function checkAndNotifyOverdueTasks(): void {
   const now = new Date();
 
   tasks.forEach((task) => {
-    if (task.status === "completed" || notifiedIds.has(task.id)) {
+    if (task.status === "completed" || task.scopeLevel === "admin" || notifiedIds.has(task.id)) {
       return;
     }
 
@@ -83,7 +83,7 @@ export function checkAndNotifyOverdueTasks(): void {
         type: "task",
         title: "Task Overdue Alert",
         message: notifyMessage,
-        link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
+        link: `/tasks/${task.id}`,
         module: "tasks",
         meta: { taskId: task.id, module: "tasks" },
       });

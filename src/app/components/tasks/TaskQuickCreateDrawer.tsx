@@ -1047,9 +1047,9 @@ export default function TaskQuickCreateDrawer({
         : undefined,
     }));
 
-    // Recurrence config
+    // Recurrence config (omitted for Admin tasks)
     let recurrence: TaskRecurrenceConfig | undefined = undefined;
-    if (repeatEnabled) {
+    if (!isAdmin && repeatEnabled) {
       recurrence = {
         enabled: true,
         interval: Math.max(1, repeatInterval),
@@ -1076,10 +1076,10 @@ export default function TaskQuickCreateDrawer({
         responsiblePeople,
         responsibleType: isAdmin ? "org_role" : responsibleType,
         studioItems: finalStudioItems,
-        deadline: deadlineFormatted,
-        deadlineDate: deadlineDate || undefined,
-        deadlineTime: deadlineTime || undefined,
-        recurrence,
+        deadline: isAdmin ? undefined : deadlineFormatted,
+        deadlineDate: isAdmin ? undefined : deadlineDate || undefined,
+        deadlineTime: isAdmin ? undefined : deadlineTime || undefined,
+        recurrence: isAdmin ? undefined : recurrence,
         observers,
         targetRole: isAdmin ? selectedAdminRoles.join(", ") : selectedRoleFilter !== "All Roles" ? selectedRoleFilter : undefined,
         targetOrgId: undefined,
@@ -1113,9 +1113,9 @@ export default function TaskQuickCreateDrawer({
       targetRole: isAdmin ? selectedAdminRoles.join(", ") : undefined,
       scopingRules: isAdmin ? adminScopingRules : undefined,
       studioItems: finalStudioItems,
-      deadline: deadlineFormatted,
-      deadlineDate: deadlineDate || undefined,
-      deadlineTime: deadlineTime || undefined,
+      deadline: isAdmin ? undefined : deadlineFormatted,
+      deadlineDate: isAdmin ? undefined : deadlineDate || undefined,
+      deadlineTime: isAdmin ? undefined : deadlineTime || undefined,
       checklists: [
         {
           id: `chk-${Date.now()}`,
@@ -1577,16 +1577,40 @@ export default function TaskQuickCreateDrawer({
             </div>
           </div>
 
-          {/* 5. Settings Accordion Rows (Call Trigger Settings Visual Pattern) */}
+          {/* 5. Settings Accordion Rows (Scheduling omitted for Admin tasks) */}
           <div className="space-y-3 pt-1">
             <h3
               className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              Task Parameters & Schedule
+              {isAdmin ? "Task Parameters" : "Task Parameters & Schedule"}
             </h3>
 
-            {/* Row A: Schedule & Priority */}
+            {/* Row A: Schedule & Priority (Client) OR Priority Only (Admin) */}
+            {isAdmin ? (
+              <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
+                    <Star className={`w-4 h-4 ${isImportant ? "text-amber-500 fill-amber-500" : "text-slate-400"}`} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-[#222222] block" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Mark as Important
+                    </span>
+                    <span className="text-[11px] text-slate-500">Flags high priority across assigned organizations</span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isImportant}
+                    onChange={(e) => setIsImportant(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            ) : (
             <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
               <button
                 type="button"
@@ -1663,8 +1687,10 @@ export default function TaskQuickCreateDrawer({
                 </div>
               )}
             </div>
+            )}
 
-            {/* Row B: Repeat (Inline recurrence settings) */}
+            {/* Row B: Repeat (Inline recurrence settings — Client only; hidden for Admin) */}
+            {!isAdmin && (
             <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
               <button
                 type="button"
@@ -1804,6 +1830,7 @@ export default function TaskQuickCreateDrawer({
                 </div>
               )}
             </div>
+            )}
 
             {/* Row C: Observers */}
             <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
@@ -2058,13 +2085,13 @@ export default function TaskQuickCreateDrawer({
                 {/* Metadata: Schedule & Progress */}
                 <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-4 flex-wrap text-slate-600">
-                    {deadlineFormatted && (
+                    {!isAdmin && deadlineFormatted && (
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         <span className="font-medium">Due {deadlineFormatted}</span>
                       </div>
                     )}
-                    {repeatEnabled && (
+                    {!isAdmin && repeatEnabled && (
                       <div className="flex items-center gap-1.5">
                         <Repeat className="w-3.5 h-3.5 text-slate-400" />
                         <span>

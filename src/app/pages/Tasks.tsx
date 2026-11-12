@@ -485,9 +485,9 @@ export default function Tasks() {
       });
     }
 
-    // Common ending columns for both Admin and Client
-    baseCols.push(
-      {
+    // Common ending columns (DEADLINE omitted in Admin workspace)
+    if (!isAdmin) {
+      baseCols.push({
         key: "deadline",
         header: "DEADLINE",
         width: "160px",
@@ -498,9 +498,11 @@ export default function Tasks() {
             {task.deadline || "NA"}
           </span>
         ),
-      },
-      {
-        key: "checklists",
+      });
+    }
+
+    baseCols.push({
+      key: "checklists",
         header: "CHECKLIST",
         width: "140px",
         minWidth: "120px",
@@ -538,8 +540,7 @@ export default function Tasks() {
             );
           }
         },
-      }
-    );
+      });
 
     return baseCols;
   }, [isAdmin, clientTab, taskStages, updateTaskStage]);
@@ -583,7 +584,7 @@ export default function Tasks() {
           title="Tasks"
           subtitle={
             isAdmin
-              ? "Corporate operational assignments, cross-organization delegation, checklists, and deadline tracking"
+              ? "Corporate operational assignments, cross-organization delegation, and checklists"
               : "Clinical tasks, operational assignments, checklists, and deadline tracking"
           }
         />

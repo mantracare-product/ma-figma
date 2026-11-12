@@ -331,9 +331,10 @@ export default function TaskDetailPage() {
             </p>
           )}
 
-          {/* Metadata Row: Observers & Deadline */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 text-xs">
-            {/* Deadline */}
+          {/* Metadata Row: Observers (& Deadline for non-Admin tasks) */}
+          <div className={`grid grid-cols-1 ${isAdmin ? "" : "sm:grid-cols-2"} gap-4 pt-1 border-t border-slate-100 text-xs`}>
+            {/* Deadline (omitted for Admin tasks) */}
+            {!isAdmin && (
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1456f0] flex items-center justify-center shrink-0">
                 <Calendar className="w-3.5 h-3.5" />
@@ -347,6 +348,7 @@ export default function TaskDetailPage() {
                 </span>
               </div>
             </div>
+            )}
 
             {/* Observers */}
             <div className="flex items-center gap-2">
