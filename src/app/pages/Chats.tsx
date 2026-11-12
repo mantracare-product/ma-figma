@@ -1218,7 +1218,7 @@ export default function Chats() {
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
   const [showWebsiteSettingsDrawer, setShowWebsiteSettingsDrawer] = useState(false);
   const [showCompanionSettingsDrawer, setShowCompanionSettingsDrawer] = useState(false);
-  const widgetSettingsSaveRef = useRef<(() => void) | null>(null);
+  const widgetSettingsSaveRef = useRef<(() => boolean | void) | null>(null);
   const companionSaveRef = useRef<(() => void) | null>(null);
 
   const handleChannelChange = (channel: "whatsapp" | "sms" | "website" | "email" | "companion") => {
@@ -3572,7 +3572,10 @@ export default function Chats() {
             <button
               type="button"
               onClick={() => {
-                if (widgetSettingsSaveRef.current) widgetSettingsSaveRef.current();
+                if (widgetSettingsSaveRef.current) {
+                  const res = widgetSettingsSaveRef.current();
+                  if (res === false) return;
+                }
                 setShowWebsiteSettingsDrawer(false);
               }}
               className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"

@@ -4,6 +4,7 @@ const STORAGE_KEY = "websiteWidgetConfig";
 export interface RequirementItem {
   id: string;
   label: string;
+  entityType?: string;
   processId?: string;
 }
 
@@ -44,6 +45,7 @@ export interface WebsiteWidgetConfig {
 
   // Auto Create Contact
   autoCreateClientEnabled: boolean;
+  autoCreateContactCategory?: string;
   autoCreateEntity?: string;
   autoCreateProcessId?: string;
   autoCreateStage: string;
@@ -58,10 +60,30 @@ export interface WebsiteWidgetConfig {
 }
 
 export const DEFAULT_REQUIREMENTS: RequirementItem[] = [
-  { id: "req-1", label: "Book an Appointment" },
-  { id: "req-2", label: "Insurance & Coverage Inquiry" },
-  { id: "req-3", label: "Billing & Invoices" },
-  { id: "req-4", label: "General Health Consultation" },
+  {
+    id: "req-1",
+    label: "Book an Appointment",
+    entityType: "appointment",
+    processId: "process-appointment-default",
+  },
+  {
+    id: "req-2",
+    label: "Insurance & Coverage Inquiry",
+    entityType: "insurance",
+    processId: "process-insurance-default",
+  },
+  {
+    id: "req-3",
+    label: "Billing & Invoices",
+    entityType: "invoice",
+    processId: "process-invoice-default",
+  },
+  {
+    id: "req-4",
+    label: "General Health Consultation",
+    entityType: "client",
+    processId: "1",
+  },
 ];
 
 const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
@@ -98,6 +120,7 @@ const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
   aiTransferPhrases: "talk to human, agent, support, representative",
   agentQueue: [],
   autoCreateClientEnabled: false,
+  autoCreateContactCategory: "",
   autoCreateEntity: "",
   autoCreateProcessId: "",
   autoCreateStage: "",
@@ -124,13 +147,23 @@ export function getWebsiteWidgetConfig(): WebsiteWidgetConfig {
         requirement: parsed.formFields?.requirement !== undefined ? parsed.formFields.requirement : true,
       },
       requirements: Array.isArray(parsed.requirements) && parsed.requirements.length > 0
-        ? parsed.requirements.map((r: any) => ({ id: r.id || `req-${Math.random()}`, label: r.label || "" }))
+        ? parsed.requirements.map((r: any, idx: number) => {
+            const fallbackDefault =
+              DEFAULT_REQUIREMENTS.find((d) => d.id === r.id) || DEFAULT_REQUIREMENTS[idx];
+            return {
+              id: r.id || `req-${Math.random()}`,
+              label: r.label || "",
+              entityType: r.entityType ?? fallbackDefault?.entityType ?? "client",
+              processId: r.processId ?? fallbackDefault?.processId ?? "",
+            };
+          })
         : DEFAULT_REQUIREMENTS,
       workDays: parsed.workDays || DEFAULT_WIDGET_CONFIG.workDays,
       excludePages: parsed.excludePages || DEFAULT_WIDGET_CONFIG.excludePages,
       includePages: parsed.includePages || DEFAULT_WIDGET_CONFIG.includePages,
       agentQueue: Array.isArray(parsed.agentQueue) ? parsed.agentQueue : DEFAULT_WIDGET_CONFIG.agentQueue,
       customProfiles: parsed.customProfiles || DEFAULT_WIDGET_CONFIG.customProfiles,
+      autoCreateContactCategory: parsed.autoCreateContactCategory || "",
       autoCreateEntity: parsed.autoCreateEntity || "",
       autoCreateStage: parsed.autoCreateStage || "",
     };

@@ -42,8 +42,9 @@ import {
   isProcessMatchingOrg,
   DEFAULT_ENTITY_PROCESSES,
   EntityType,
-  getEntityProcess,
+  Process,
 } from "../../../lib/useProcessStore";
+import { useContactCategories } from "../../../lib/contactCategoriesStore";
 import { getStoredTeamMembers, TeamMember } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { processWebsiteVisitorSubmission } from "../../../lib/websiteChatSimulator";
@@ -170,17 +171,36 @@ export default function WebsiteWidgetSettingsTab({
     );
   };
 
-  // Entities configured for the organization
-  const configuredEntities = useMemo(() => {
-    const list = [
-      { id: "client", label: "Contact (Client)" },
+  // Process Entities aligned with Process & Workflows module (Processes, Appointment, Invoice, Insurance & Claims, Task)
+  const processEntityOptions = useMemo<Array<{ id: EntityType; label: string }>>(
+    () => [
+      { id: "client", label: "Processes" },
       { id: "appointment", label: "Appointment" },
       { id: "invoice", label: "Invoice" },
       { id: "insurance", label: "Insurance & Claims" },
       { id: "task", label: "Task" },
-    ];
-    return list;
-  }, []);
+    ],
+    []
+  );
+
+  // Contact Categories for Auto Create Contact (Lead, Client, Supplier, Vendor, plus custom categories)
+  const contactCategories = useContactCategories();
+
+  // Helper to list workflows (Process names, no stages) belonging to a selected Process Entity
+  const getWorkflowsForEntity = (entityType: string): Process[] => {
+    const normalized = entityType || "client";
+    const forEntity = processes.filter((p) => (p.entityType || "client") === normalized);
+    const orgMatched = forEntity.filter((p) => isProcessMatchingOrg(p, activeOrganization));
+    if (orgMatched.length > 0) return orgMatched;
+    if (forEntity.length > 0) return forEntity;
+    if (
+      normalized !== "client" &&
+      DEFAULT_ENTITY_PROCESSES[normalized as Exclude<EntityType, "client">]
+    ) {
+      return [DEFAULT_ENTITY_PROCESSES[normalized as Exclude<EntityType, "client">]];
+    }
+    return [];
+  };
 
   // Search filtering logic
   const q = (searchQuery || "").toLowerCase().trim();
@@ -208,11 +228,16 @@ export default function WebsiteWidgetSettingsTab({
       "pre-chat",
       "requirements",
       "requirement",
+      "process",
+      "process entity",
+      "workflow",
+      "workflow prompt",
       "greeting",
       "welcome",
       "auto create",
       "contact",
-      "entity",
+      "contact category",
+      "category",
     ].some((k) => k.includes(q) || q.includes(k));
   const matchesFirstResponder =
     !q || ["responder", "first responder", "ai", "bot", "human", "agent"].some((k) => k.includes(q) || q.includes(k));
@@ -268,7 +293,7 @@ export default function WebsiteWidgetSettingsTab({
 
   // Auto-save changes to localStorage (only if not in invalid auto-create state)
   useEffect(() => {
-    if (config.autoCreateClientEnabled && !config.autoCreateEntity) {
+    if (config.autoCreateClientEnabled && !config.autoCreateContactCategory) {
       return;
     }
     saveWebsiteWidgetConfig(config);
@@ -286,8 +311,16 @@ export default function WebsiteWidgetSettingsTab({
   }, []);
 
   const handleSave = () => {
-    if (config.autoCreateClientEnabled && !config.autoCreateEntity) {
-      toast.error("Please select an Entity for Auto Create Contact before saving.");
+    if (
+      config.enablePreChatForm &&
+      (config.formFields.requirement ?? true) &&
+      (config.requirements || []).some((r) => !r.label.trim() || !r.entityType || !r.processId)
+    ) {
+      toast.error("Please map each Requirement Option to a Process Entity and Workflow Name before saving.");
+      return false;
+    }
+    if (config.autoCreateClientEnabled && !config.autoCreateContactCategory) {
+      toast.error("Please select a Contact Category for Auto Create Contact before saving.");
       return false;
     }
     saveWebsiteWidgetConfig(config);
@@ -301,19 +334,22 @@ export default function WebsiteWidgetSettingsTab({
     }
   }, [registerSaveHandler, config]);
 
-  const handleEntityChange = (newEntity: string) => {
+  const handleContactCategoryChange = (newCategory: string) => {
     setConfig((prev) => ({
       ...prev,
-      autoCreateEntity: newEntity,
-      autoCreateStage: "", // Changing the entity resets the stage selection
+      autoCreateContactCategory: newCategory,
     }));
   };
 
   const handleAddRequirement = () => {
+    const defaultEntity: EntityType = "client";
+    const defaultWorkflow = getWorkflowsForEntity(defaultEntity)[0];
     const newReqId = `req-${Date.now()}`;
     const newReq = {
       id: newReqId,
       label: "New Requirement",
+      entityType: defaultEntity,
+      processId: defaultWorkflow?.id || "",
     };
     setConfig((prev) => ({
       ...prev,
@@ -326,6 +362,32 @@ export default function WebsiteWidgetSettingsTab({
       const updated = [...(prev.requirements || [])];
       if (updated[index]) {
         updated[index] = { ...updated[index], label: value };
+      }
+      return { ...prev, requirements: updated };
+    });
+  };
+
+  const handleUpdateRequirementEntity = (index: number, entityType: string) => {
+    const entityWorkflows = getWorkflowsForEntity(entityType);
+    const firstWorkflowId = entityWorkflows[0]?.id || "";
+    setConfig((prev) => {
+      const updated = [...(prev.requirements || [])];
+      if (updated[index]) {
+        updated[index] = {
+          ...updated[index],
+          entityType,
+          processId: firstWorkflowId,
+        };
+      }
+      return { ...prev, requirements: updated };
+    });
+  };
+
+  const handleUpdateRequirementProcess = (index: number, processId: string) => {
+    setConfig((prev) => {
+      const updated = [...(prev.requirements || [])];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], processId };
       }
       return { ...prev, requirements: updated };
     });
@@ -426,14 +488,17 @@ export default function WebsiteWidgetSettingsTab({
     const targetReqLabel = (config.formFields.requirement ?? true) && chosenReq ? chosenReq.label : undefined;
 
     setIsSubmitting(true);
-    // Auto-created contacts are not assigned to or trigger any Process
     const result = processWebsiteVisitorSubmission({
       name: simName,
       email: simEmail,
       phone: simPhone,
+      entityType: chosenReq?.entityType,
+      processId: chosenReq?.processId,
       firstMessage: simMessage,
       requirementLabel: targetReqLabel,
-      stageName: config.autoCreateClientEnabled ? config.autoCreateStage || "New Contact" : "New Contact",
+      contactCategory: config.autoCreateClientEnabled
+        ? config.autoCreateContactCategory || "Lead"
+        : "Lead",
     });
 
     setIsSubmitting(false);
@@ -444,12 +509,18 @@ export default function WebsiteWidgetSettingsTab({
         {
           sender: "bot",
           text: result.botReply,
+          header: result.header,
+          buttons: result.buttons,
         },
       ]);
       const reqInfo = targetReqLabel ? ` (${targetReqLabel})` : "";
       toast.success(
-        `Website visitor created! Contact: "${simName}" created${reqInfo}${
-          config.autoCreateClientEnabled && config.autoCreateStage ? ` at stage "${config.autoCreateStage}"` : ""
+        `Website visitor created! Contact "${simName}" saved${reqInfo}${
+          result.processName ? ` · Workflow "${result.processName}"` : ""
+        }${
+          config.autoCreateClientEnabled && config.autoCreateContactCategory
+            ? ` under Category "${config.autoCreateContactCategory}"`
+            : ""
         }.`,
         {
           action: onNavigateToInbox
@@ -957,15 +1028,15 @@ export default function WebsiteWidgetSettingsTab({
                     </div>
                   </div>
 
-                  {/* Requirement Options List (No Process Mapping Dropdown) */}
+                  {/* Requirement Options List with Process Entity -> Workflow Name Mapping (No Stages) */}
                   {(config.formFields.requirement ?? true) && (
                     <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Requirement Options
+                            Requirement Options &amp; Workflow Mapping
                           </span>
-                          <InfoTooltip text="Options presented to website visitors in the Pre-chat form" />
+                          <InfoTooltip text="Map each pre-chat requirement to a Process Entity and Workflow Name (no stage selection) so the AI maps the corresponding workflow prompt during conversations." />
                         </div>
                         <button
                           type="button"
@@ -976,28 +1047,84 @@ export default function WebsiteWidgetSettingsTab({
                         </button>
                       </div>
 
-                      <div className="space-y-2">
-                        {(config.requirements || []).map((req, idx) => (
-                          <div key={req.id || idx} className="flex items-center gap-2 min-w-0">
-                            <input
-                              type="text"
-                              value={req.label}
-                              onChange={(e) => handleUpdateRequirement(idx, e.target.value)}
-                              placeholder="Requirement Option (e.g. Book an Appointment)"
-                              className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                            />
-                            {(config.requirements || []).length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveRequirement(idx)}
-                                className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors shrink-0"
-                                title="Remove requirement"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                      <div className="space-y-2.5">
+                        {(config.requirements || []).map((req, idx) => {
+                          const selectedEntity = req.entityType || "client";
+                          const entityWorkflows = getWorkflowsForEntity(selectedEntity);
+                          return (
+                            <div
+                              key={req.id || idx}
+                              className="p-2.5 rounded-xl border border-[#E2E8F0] bg-white space-y-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="text"
+                                  value={req.label}
+                                  onChange={(e) => handleUpdateRequirement(idx, e.target.value)}
+                                  placeholder="Requirement Option (e.g. Book an Appointment)"
+                                  className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-slate-50/60 focus:bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                />
+                                {(config.requirements || []).length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveRequirement(idx)}
+                                    className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors shrink-0"
+                                    title="Remove requirement"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label
+                                    className="block text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    Process Entity
+                                  </label>
+                                  <select
+                                    value={req.entityType || ""}
+                                    onChange={(e) => handleUpdateRequirementEntity(idx, e.target.value)}
+                                    className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    <option value="">-- Select Process Entity --</option>
+                                    {processEntityOptions.map((ent) => (
+                                      <option key={ent.id} value={ent.id}>
+                                        {ent.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label
+                                    className="block text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    Workflow Name
+                                  </label>
+                                  <select
+                                    value={req.processId || ""}
+                                    onChange={(e) => handleUpdateRequirementProcess(idx, e.target.value)}
+                                    disabled={!req.entityType}
+                                    className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    <option value="">-- Select Workflow Name --</option>
+                                    {entityWorkflows.map((proc) => (
+                                      <option key={proc.id} value={proc.id}>
+                                        {proc.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1009,7 +1136,7 @@ export default function WebsiteWidgetSettingsTab({
                         <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                           Auto Create Contact
                         </span>
-                        <InfoTooltip text="Automatically create contact records for web visitors under a configured Entity" />
+                        <InfoTooltip text="Automatically create contact records for web visitors under a configured Contact Category" />
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -1025,18 +1152,18 @@ export default function WebsiteWidgetSettingsTab({
                     {config.autoCreateClientEnabled && (
                       <div className="pt-1">
                         <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Entity
+                          Contact Category
                         </label>
                         <select
-                          value={config.autoCreateEntity || ""}
-                          onChange={(e) => handleEntityChange(e.target.value)}
+                          value={config.autoCreateContactCategory || ""}
+                          onChange={(e) => handleContactCategoryChange(e.target.value)}
                           className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0] cursor-pointer"
                           style={{ fontFamily: "DM Sans, sans-serif" }}
                         >
-                          <option value="">-- Choose an Entity --</option>
-                          {configuredEntities.map((ent) => (
-                            <option key={ent.id} value={ent.id}>
-                              {ent.label}
+                          <option value="">-- Choose a Contact Category --</option>
+                          {contactCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
                             </option>
                           ))}
                         </select>

@@ -45,8 +45,12 @@ export default function TestWebsiteChatDrawer({
   const [visitorName, setVisitorName] = useState("");
   const [visitorEmail, setVisitorEmail] = useState("");
   const [visitorPhone, setVisitorPhone] = useState("");
+  const requirementOptions = widgetConfig.requirements || [];
+  const [selectedRequirementId, setSelectedRequirementId] = useState(
+    requirementOptions[0]?.id || ""
+  );
   const [selectedProcessId, setSelectedProcessId] = useState(
-    widgetConfig.defaultProcessId || (processes[0]?.id ?? "1")
+    requirementOptions[0]?.processId || widgetConfig.defaultProcessId || (processes[0]?.id ?? "1")
   );
 
   // Active Simulation State
@@ -77,14 +81,22 @@ export default function TestWebsiteChatDrawer({
       return;
     }
 
-    const reqLabel = widgetConfig.processLabelMap[selectedProcessId];
+    const chosenReq = requirementOptions.find((r) => r.id === selectedRequirementId) || requirementOptions[0];
+    const targetProcId = chosenReq?.processId || selectedProcessId;
+    const targetProc = processes.find((p) => p.id === targetProcId) || processes[0];
+    const reqLabel = chosenReq?.label || widgetConfig.processLabelMap?.[targetProcId] || targetProc?.name;
+
     const result = processWebsiteVisitorSubmission({
       name: visitorName,
       email: visitorEmail,
       phone: visitorPhone,
-      processId: selectedProcessId,
+      entityType: chosenReq?.entityType || targetProc?.entityType,
+      processId: targetProcId,
       firstMessage: initialVisitorMessage || "Hello",
       requirementLabel: reqLabel,
+      contactCategory: widgetConfig.autoCreateClientEnabled
+        ? widgetConfig.autoCreateContactCategory || "Lead"
+        : "Lead",
     });
 
     if (!result) {
@@ -92,9 +104,10 @@ export default function TestWebsiteChatDrawer({
       return;
     }
 
-    const proc = processes.find((p) => p.id === selectedProcessId) || processes[0];
+    const proc = processes.find((p) => p.id === (result.processId || targetProcId)) || processes[0];
     const initialStageObj = proc.stages.find((s) => s.name === result.stageName) || proc.stages[0];
 
+    setSelectedProcessId(proc.id);
     setActiveClientId(result.clientId);
     setTargetProcessName(proc.name);
     setCurrentStage(initialStageObj);
@@ -104,7 +117,7 @@ export default function TestWebsiteChatDrawer({
       {
         role: "ai",
         text: result.botReply,
-        matchedReason: "Initial Stage Welcome Automation",
+        matchedReason: `Workflow Prompt: ${proc.name}`,
         header: result.header,
         footerText: result.footerText,
         buttons: result.buttons,
@@ -406,18 +419,40 @@ export default function TestWebsiteChatDrawer({
                       <label className="block text-[11px] font-semibold text-gray-700 mb-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Requirement / Service Needed *
                       </label>
-                      <select
-                        value={selectedProcessId}
-                        onChange={(e) => setSelectedProcessId(e.target.value)}
-                        className="w-full text-xs border border-gray-200 rounded-lg p-2 bg-white focus:ring-2 focus:ring-purple-500 font-medium"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {processes.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {widgetConfig.processLabelMap[p.id] || p.name}
-                          </option>
-                        ))}
-                      </select>
+                      {requirementOptions.length > 0 ? (
+                        <select
+                          value={selectedRequirementId}
+                          onChange={(e) => {
+                            const reqId = e.target.value;
+                            setSelectedRequirementId(reqId);
+                            const matchedReq = requirementOptions.find((r) => r.id === reqId);
+                            if (matchedReq?.processId) {
+                              setSelectedProcessId(matchedReq.processId);
+                            }
+                          }}
+                          className="w-full text-xs border border-gray-200 rounded-lg p-2 bg-white focus:ring-2 focus:ring-purple-500 font-medium"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {requirementOptions.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <select
+                          value={selectedProcessId}
+                          onChange={(e) => setSelectedProcessId(e.target.value)}
+                          className="w-full text-xs border border-gray-200 rounded-lg p-2 bg-white focus:ring-2 focus:ring-purple-500 font-medium"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {processes.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     <button
@@ -437,7 +472,7 @@ export default function TestWebsiteChatDrawer({
                   {/* Visitor Context Badge */}
                   <div className="p-2 bg-purple-50/70 border border-purple-100 rounded-xl flex items-center justify-between text-[11px]">
                     <span className="font-semibold text-purple-900 truncate">Visitor: {visitorName}</span>
-                    <span className="text-purple-700 font-medium shrink-0">Stage: {currentStage?.name}</span>
+                    <span className="text-purple-700 font-medium shrink-0">Workflow: {targetProcessName}</span>
                   </div>
 
                   {turns.map((turn, idx) => (

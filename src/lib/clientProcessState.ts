@@ -88,11 +88,13 @@ export function createContactWithoutProcess(
   name: string,
   phone: string,
   email: string = "",
-  stage: string = ""
+  stage: string = "",
+  contactCategory: string = "Lead"
 ): any {
   try {
     const raw = sessionStorage.getItem("clients");
     const clients = raw ? JSON.parse(raw) : [];
+    const normalizedCategory = (contactCategory || "Lead").trim() || "Lead";
     const newClient = {
       id: `CL-SIM-${Date.now()}`,
       name,
@@ -102,6 +104,9 @@ export function createContactWithoutProcess(
       country: "US",
       countryCode: "+1",
       countryFlag: "🇺🇸",
+      contactType: normalizedCategory,
+      contact_type: normalizedCategory,
+      category: normalizedCategory,
       processes: [], // Contacts must not be assigned to or trigger any Process
       stage: stage || "New Contact",
       source: "website",
