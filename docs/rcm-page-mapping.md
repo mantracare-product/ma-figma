@@ -26,13 +26,13 @@ This document describes **architecture and capabilities**, not a fixed flow. The
 1. **Capabilities, not a flow.** RCM = generic pipelines, multi-instance processes, 18 configurable actions, field groups, Task-view queues and permission keys; everything named (stages, A1–A30, queues, roles) is a **Sample**.
 2. **Pages:** 15 existing screens touched; **0 new pages**; 1 shared component (stage Kanban board extracted from Invoices/Deals); RCM Home = Overview row.
 3. **Verification (V1–V4, §3.0.0):** (V1) there is **no process-instance concept** — a client-in-process is a `callLogs` row found by client + process **name**, the Deals card is a `deals` row matched by `clientName` only, and process rows **leak into call lists**; the audit lists ≈33 sites that need `instanceId` (≈4.5–7.5 wks). (V2) Only process rows have a plain field writer; appointment/claim/invoice values are drawer-local; the field registry has **no non-React reader**. (V3) `canDoAction`/`canAccess` have **zero callers**, roles live in **sessionStorage**, `SettingsGuard` is hard-coded to SystemAdmin, and the Roles drawer **silently drops** its `billings` row on save. (V4) No prior-auth rules, payer store, coverage store or `Service.requiresAuth` exist.
-4. **Gaps:** 35 gap rows (§3.0.2): 3 dropped/deleted (G1, G3, N3), 7 new (N17–N23: instance model, call-list leak, Deals name matching, cross-record writer + registry reader, permission gaps, prior-auth stores, field-group registration), the rest re-checked against D1–D7; the `start_process` executor is N5.
+4. **Gaps:** 37 gap rows (§3.0.2): 3 dropped/deleted (G1, G3, N3), 8 new (N17–N24: instance model, call-list leak, Deals name matching, cross-record writer + registry reader, permission gaps, prior-auth stores, field-group registration, rule run-order), the rest re-checked against D1–D7 (N9 is a one-line row folded into G8); the `start_process` executor is N5.
 5. **Actions (§3.0.5):** 18 generic actions each with parameters, minimum data, idempotency key and Retry behavior; `run_eligibility` has a write-target and dedupe-window spec; `create_task` carries `instanceId`; A10/A11 use the prior-auth node.
-6. **Effort (re-summed bottom-up, §5):** **41.5–55.0 front-end engineer-weeks** across 6 slices (Slice 1 = 8–10). Rev 3's 20–25 was a top-down figure that under-counted its own scope; of the +21.5–30.0 increase, ≈12–15 is new scope (D2/D5/D6) and ≈9.5–15 is the bottom-up recount.
+6. **Effort (re-summed bottom-up, §5):** **42.0–55.5 front-end engineer-weeks** across 6 slices (Slice 1 = 9.0–11.0). Rev 3's 20–25 was a top-down figure that under-counted its own scope; of the +22.0–30.5 increase, ≈12.5–15.5 is new scope (D2/D5/D6) and ≈9.5–15.0 is the bottom-up recount.
 7. **Biggest conflicts:** instance keying across 4 stores; Deals matches by `clientName`; process rows in call lists; drawer-local field values; roles unenforced; `moveClientToStage` writes the single `client.stage`.
 8. **Spec deltas:** 30 listed in §7 (spec not edited).
-9. **Closed questions:** Q-R1, Q-R2, Q-R6, Q-R9; **8 real questions remain** (§6).
-10. **Recommended start:** Slice 1 (instances, permission keys, event fixes, `start_process`), then Slice 3 (eligibility + prior-auth nodes) as the first RCM demo — Slice 2 (setup, tasks, templates) can run in parallel.
+9. **Closed questions:** Q-R1, Q-R2, Q-R6, Q-R9, and Q7 (roleId + email lookup adopted); **7 real questions remain** (§6).
+10. **Recommended start:** Slices 1–3 together are the **first RCM demo (23.5–31.0 weeks)**: Slice 1 (instances, permission keys + roleId, event fixes, call-list separation, `start_process`), Slice 2 (Billing setup, Coverages, tasks + queue views, `recordWriter`/`fieldRegistryCore`, template loading) and Slice 3 (eligibility + prior-auth nodes). Slice 3's demo depends on Slice 2 items, so the slices are sequential, not parallel.
 
 ---
 
@@ -142,6 +142,7 @@ Kiosk `/reception/*` → `AvatarReceptionView.tsx` (6736 lines). Patient portal 
 | N6 | Tasks: hook-bound mutators, no `entityRef`/`instanceId`, id collision, no task events, no saved-view store | New | Q5 |
 | N7 | `stage.exited` carries only TO process and only with `fromStageId` | Add FROM process + instance; supply `fromStageId` everywhere | Q4/Q5 |
 | N8 | Appointment has no coverage fields; no UI reads one | `Appointment.coverage {instanceId?, status, checkedAt, summary}` via `updateAppointment` | V2 |
+| N9 | `isPredefinedStage` name list also locks custom stages named Paid/Draft/Completed/… regardless of entity | Folded into G8 (per-process required categories; drop the name-based locks) | `useProcessStore.ts:869-920` |
 | N10 | Claims list: dropdown doesn't filter; presets keyed on `claim.status`; no claim report source; `processes` report rows mock | New | Q4 |
 | N11 | `validateRuleEntityTarget` entity-only/legacy-only; `checkRuleCycle` process-blind | Validate step-level moves; cross-workflow cycle check | Q4 |
 | N12 | Seed claims have no stage; migration id mismatches | New | Q4 |
@@ -153,9 +154,10 @@ Kiosk `/reception/*` → `AvatarReceptionView.tsx` (6736 lines). Patient portal 
 | **N18** | **Process rows leak into call lists** (`CallLogs`, `AppointmentDetailDrawer:660`, `CallDetailDrawer:347`, `Overview`) | `kind` discriminator + `getCallsOnly()` | V1 |
 | **N19** | **Deals matches by `clientName`** (no clientId on `Deal`; `getClientIdByName` → "CL-001"; `syncDealRecord` by name) | Deal gets `instanceId`/`clientId`; every `d.clientName ===` site rewritten | V1 |
 | **N20** | **No cross-record field writer; no non-React registry reader** | `recordWriter` + `fieldRegistryCore` | V2 |
-| **N21** | **Permission gaps:** fixed 10 keys; hard-coded drawer list; dead rows dropped on save; missing keys display read+write; roles in sessionStorage; user→role by name; no user id/permissions in AuthContext; zero `canDoAction` callers; `SettingsGuard` SystemAdmin-only per route group; settings `tabs` unfiltered | Permission keys + shared roles store + resolver + `PermissionGuard` | V3 |
+| **N21** | **Permission gaps:** fixed 10 keys; hard-coded drawer list; dead rows dropped on save; missing keys display read+write; roles in sessionStorage; user→role by name; no user id/permissions in AuthContext; zero `canDoAction` callers; `SettingsGuard` SystemAdmin-only per route group; settings `tabs` unfiltered | Permission keys + shared roles store + resolver (`TeamMember.roleId` + email lookup, Slice 1 e) + `PermissionGuard` | V3 |
 | **N22** | **Prior-auth rules/coverage/payer stores absent** | `priorAuthRulesStore`, client Coverages, payer store | V4 |
 | **N23** | Registry field groups are single-module; seeds not reusable; appointment drawer base layout differs from `SYSTEM_SECTIONS` | Register groups as **reusable custom fields** seeded at load (`ensure*Seeds` precedent) or per-module seeds | V2 |
+| **N24** | **No defined run order for rules on the same event** (no `order` field on `AutomationRule`; iteration order of matching rules in `executeRulesForEvent` not verified) — A10 depends on A1's instance | **NC.** Add `AutomationRule.order` (default 100, ties by creation) and run matching rules in that order, each chain awaited; sample A1 = 10, A10 = 20 (§3.0.5) | `useAutomationStore.ts:68-97`; `ruleEngine.ts:157-246` |
 
 #### 3.0.3 Entity / workflow map (capabilities; named processes are samples)
 
@@ -230,8 +232,8 @@ Required categories are **per process** and minimal (sample: Claim = `submitted`
 | # | Action | Configurable parameters | Minimum data | Idempotency key | Failure / Retry |
 |---|---|---|---|---|---|
 | 1 | `run_eligibility` | **write targets** (any of: *this record*, *linked appointment*, *a process instance* [current or one created by `start_process`]) with a **result→stage map** per target; scope (client \| coverage \| appointment); coverage selector (primary/secondary/all); service-type codes (default from the appointment's service); service-date source; **dedupe window** (default 30 d; **0 = always call**; a fresh verified result within the window is **copied** to the new target/instance instead of calling the payer); retries (variants ≤3, backoff 1/5/30 min); follow other-payer redirect (F2.7); adapter/scenario (mock); append **history row** to each target's check-history table | client legal name + DOB + sex; coverage member ID + payer; rendering provider NPI; service date | `clientId:coverageId:serviceDate:serviceTypeSet` inside the window (copy-fresh path) + `targetRef` for the write | Transport error → backoff → result "Inconclusive"; **Failed + Retry** on the Automation page; never undoes recorded facts |
-| 2 | `check_auth_required` | rule source (payer×service rules in Billing setup, or per-service default), payer source (coverage on the record/instance, or explicit), service source, outputs (`required?`, rule id, units, validity) → fields on chosen target(s) | payer + service (CPT/serviceId) | `recordId:ruleId:eventId` | Missing payer ⇒ "unknown" result + optional task; Retry |
-| 3 | `request_prior_auth` | targets and stage map (e.g. "after request → stage X"), channel (portal/fax/manual — mock), units/validity from the rule, referring provider source, renewal mode, auto-create task (queue) | auth **required** per action 2 (or explicit), payer, service, patient | `clientId:payerId:serviceId:validFrom` | Failed + Retry; request recorded as **Authorization** fields + history row |
+| 2 | `check_auth_required` | rule source (payer×service rules in Billing setup, or per-service default), payer source (coverage on the record/instance, or explicit), service source, outputs (`required?`, rule id, units, validity) → fields on chosen target(s). **Write targets:** *an existing process instance* and/or *the linked appointment*; **it never creates an instance** — if no instance exists for the source record (e.g. A1 not enabled), the write falls back to the **appointment only** (appointment summary fields), and the action reports `targetFallback: "appointment"` in its result | payer + service (CPT/serviceId) | `recordId:ruleId:eventId` | Missing payer ⇒ "unknown" result + optional task; Retry |
+| 3 | `request_prior_auth` | targets and stage map (e.g. "after request → stage X"; applied only when an instance target exists), channel (portal/fax/manual — mock), units/validity from the rule, referring provider source, renewal mode, auto-create task (queue). **Write targets:** same rule as action 2 — Authorization fields + the **history row** go to the existing instance **and** the appointment summary; with no instance they go to the appointment only; it does **not** create an instance | auth **required** per action 2 (or explicit), payer, service, patient | `clientId:payerId:serviceId:validFrom` | Failed + Retry; request recorded as **Authorization** fields + history row (on each target that has the check-history table; appointment-only fallback stores the summary fields and a note) |
 | 4 | `start_process` (alias `assign_process`) | process, **dedupe key** (default `clientId+processId+source{type,id}`), source record, entry stage, instance title template, end-current (n/a) | clientId, processId | **dedupe key** — re-save or reschedule of the same booking returns the existing instance (`alreadyExisted`) | Missing process ⇒ health "Needs attention"; Retry |
 | 5 | `move_to_workflow` | record type (claim \| process instance), target workflow, target stage (default initial), keep field values (yes), cause label | record id; target workflow/stage exist | `recordId:targetWorkflowId` (no-op if already there) | Invalid target ⇒ health; cycle guard (depth 10 + save-time cross-workflow check, N11); Retry |
 | 6 | `create_claim` | trigger/source record (appointment \| scribe session \| invoice \| client \| instance), **start workflow + stage**, lines source (service→CPT map \| scribe codes \| none), payer/coverage source (client primary on DOS \| a result target \| explicit), provider source, billing entity/POS (Billing setup), assignee rule, dedupe scope | clientId + date of service | `claim:{sourceType}:{sourceId}:{startWorkflowId}` → returns existing | Missing optional data ⇒ create with `missingData[]` (+ optional `create_task`); no clientId ⇒ Failed + Retry |
@@ -248,7 +250,16 @@ Required categories are **per process** and minimal (sample: Claim = `submitted`
 | 17 | `start_call` | purpose (payer benefits \| balance reminder), script, hours/retries (`CallTriggerSettings`), consent | payer phone / patient consent | `recordId:purpose:day` | Failed + Retry |
 | 18 | `notify` | recipients (permission key or member), message, link | – | `recordId:ruleId:eventId` | ignored on failure |
 
-**A1–A30 as SAMPLE rules.** All sample rules ship **disabled**. "Load sample templates" offers **"Enable demo set"** per capability group so demo scripts are reproducible: **Set E** = A1–A10, A13 (eligibility/prior-auth); **Set C** = A14–A20; **Set M** = A21–A30 (+ A11–A12 in Set E2). Every `create_task` auto-closes when the linked record/instance leaves the stage it was created for. "Instance" = a process instance created per appointment by `start_process`.
+**Run-order rule (rules on the same event).** Rules that match the **same event** run in a **defined order**: ascending `AutomationRule.order` (number, default 100; ties broken by creation time), each rule's action chain completing (awaited) before the next rule starts. Sample rules set it explicitly so dependent rules are safe: **A1 = 10** (creates the instance and runs eligibility), **A10 = 20** (needs the instance A1 created), **A13 = 10**. Whether the engine has any ordering today is **needs confirmation**: `eventBus.emit` awaits listeners sequentially, but the order in which `executeRulesForEvent` iterates matching rules (`ruleEngine.ts:157-246`) was not verified and there is no `order` field on `AutomationRule` (`useAutomationStore.ts:68-97`) — recorded as gap **N24**.
+
+**A1–A30 as SAMPLE rules.** All sample rules ship **disabled**. "Load sample templates" offers **"Enable demo set"** per capability group so demo scripts are reproducible:
+
+- **Set E** = A1–A10, A13 (eligibility and prior auth)
+- **Set E2** = A11–A12 (auth renewal and reminders)
+- **Set C** = A14–A20 (visit to claim)
+- **Set M** = A21–A30 (money back)
+
+Every `create_task` auto-closes when the linked record/instance leaves the stage it was created for. "Instance" = a process instance created per appointment by `start_process`.
 
 | A# | Trigger | Condition | Action chain (sample) | Set |
 |---|---|---|---|---|
@@ -261,7 +272,7 @@ Required categories are **per process** and minimal (sample: Claim = `submitted`
 | A7 | ST enter *Inconclusive* | voice enabled | `start_call` (payer benefits) | E |
 | A8 | ST enter *Inconclusive* | voice off / call failed | `create_task` queue Benefits to verify | E |
 | A9 | JOB | instance *Verified*, 2 d before visit | `send_message` (estimate) | E |
-| A10 | EV `appointment.booked` | has coverage | `check_auth_required` → if required `request_prior_auth` (writes Authorization fields + history; configured stage map) + `create_task` queue Prior auth | E |
+| A10 | EV `appointment.booked` (**order 20 — runs after A1 on the same event so the instance exists**) | has coverage | `check_auth_required` → if required `request_prior_auth`. **Write target:** Authorization fields + the history row go to the **instance** (created by A1) **and** the appointment summary; **if no instance exists (A1 not enabled) the write falls back to the appointment only and A10 does not create an instance**; stage map applies only when an instance exists. Then `create_task` queue Prior auth (`entityRef` = the instance if present, else the appointment) | E |
 | A11 | JOB | auth ≤14 d to expiry or 80% units | `check_auth_required` (renewal) → `request_prior_auth` (renew) + `create_task` (Prior auth) | E2 |
 | A12 | JOB daily | visit in 2 d, auth not approved | `notify` front desk + biller | E2 |
 | A13 | EV `appointment.checked_in` | last check > 1 d | `run_eligibility` (target: this appointment's instance) | E |
@@ -320,7 +331,7 @@ Auto-close = subscriber on `stage.exited` matching `entityRef.type/id/instanceId
 
 Add to the **existing** model (`types/permissions.ts:9-24`, optional keys, each with the existing actions): **`billingSetup`**, **`eligibility`**, **`priorAuth`**, **`claims`**, **`rcmPayments`** (not `payments`, which collides with the Settings billing sub-tab), **`denials`**, **`rcmReports`**. Edits (V3): type keys; `createDefaultPermissions` (`settings-constants.ts:36-47`, default deny); rows in `ROLE_PERMISSION_MODULES` (`RolesPermissionsDrawer.tsx:39-51`); fix the **missing-key fallback** to deny (L181-190); fix the **dropped keys** (`convertToItemPermissions` ~L289 — either implement or remove the dead `billings/dashboard/documentTemplates/integrations` rows); merge defaults on load (`Settings.tsx:1376-1383`); **move roles to a shared `rolesStore` in localStorage** (today sessionStorage `settings_roles`).
 
-**Minimal change so a permission (not SystemAdmin) opens Billing setup:** (1) `rolesStore` + `useCurrentPermissions()` that maps `AuthContext.user.role` (a name) → Role → `hasPermission(moduleKey, action)` (record-less, since scopes own/role mean nothing for setup screens); SystemAdmin = true. (2) A new `PermissionGuard` route for `settings/billing-setup` **outside** `SettingsGuard` (the guard is per route group, `routes.tsx:~253-264`); (3) in `Settings.tsx`, hide/lock the other tabs for non-admins when reached via that route (the `tabs` array is unfiltered; render site NC); (4) the deep link already works (`setActiveTab(rawTab)` L859; avoid the `billing` branch L788-794). Call points for `hasPermission`: Billing setup tab; "Verify now"/`run_eligibility` buttons (`eligibility`); prior-auth actions (`priorAuth`); Claims create/edit/export (`claims`); Post payments (`rcmPayments`); Denial & appeal moves/appeals (`denials`); Reports/Overview RCM row (`rcmReports`). Caveats: role→user mapping is by **name** (seed team roles match no Role) — consider `TeamMember.roleId` (Q); default dev user is SystemAdmin (non-admin behavior is testable only via `setRole`/`user_role`).
+**Minimal change so a permission (not SystemAdmin) opens Billing setup:** (1) `rolesStore` + `useCurrentPermissions()` that resolves the current user → **`TeamMember` by email → `TeamMember.roleId` → Role** → `hasPermission(moduleKey, action)` (adds `roleId` to `TeamMember`, `teamStore.ts:3-20`, and a role picker in the member drawer; matching `AuthContext.user.role` to a Role **by name** is acceptable only as a fallback for a throwaway prototype) (record-less, since scopes own/role mean nothing for setup screens); SystemAdmin = true. (2) A new `PermissionGuard` route for `settings/billing-setup` **outside** `SettingsGuard` (the guard is per route group, `routes.tsx:~253-264`); (3) in `Settings.tsx`, hide/lock the other tabs for non-admins when reached via that route (the `tabs` array is unfiltered; render site NC); (4) the deep link already works (`setActiveTab(rawTab)` L859; avoid the `billing` branch L788-794). Call points for `hasPermission`: Billing setup tab; "Verify now"/`run_eligibility` buttons (`eligibility`); prior-auth actions (`priorAuth`); Claims create/edit/export (`claims`); Post payments (`rcmPayments`); Denial & appeal moves/appeals (`denials`); Reports/Overview RCM row (`rcmReports`). Caveats: today's role→user mapping is by **name** and the seed team roles match no Role — resolved by `roleId` + email lookup (Slice 1 item e; Q7 closed); default dev user is SystemAdmin (non-admin behavior is testable only via `setRole`/`user_role`).
 
 **Sample roles** (Sample E, via "Add sample roles"): Front desk — `eligibility` r/add, `claims` r; Provider — `claims` r (own), `priorAuth` r; Coder — `claims` r/edit; Biller — `claims` all, `rcmPayments`, `denials`, `eligibility`, `rcmReports` r; Practice manager — all RCM including `billingSetup`.
 
@@ -533,7 +544,7 @@ Facts: table only; workflow switcher in `PageTopBar` leftElement (~L592-670); fi
 | C-8 | Drawer-local values (appointment/claim/invoice); stale drawer can clobber rule writes | V2 | Properties or `recordWriter` (merge + touch) |
 | C-9 | No non-React field-registry reader | V2 | `fieldRegistryCore.ts` (read-only, pure) |
 | C-10 | Field groups: single-module seeds; appointment drawer base layout ≠ `SYSTEM_SECTIONS.appointment` | V2 | Reusable custom-field seeds at load |
-| C-11 | Roles unenforced (zero callers), sessionStorage, user→role by name, dead rows dropped on save, missing keys = read+write | V3 | Permission keys + shared roles store + resolver + drawer fixes |
+| C-11 | Roles unenforced (zero callers), sessionStorage, user→role by name, dead rows dropped on save, missing keys = read+write | V3 | Permission keys + shared roles store + `roleId` + email resolver + drawer fixes |
 | C-12 | `SettingsGuard` SystemAdmin-only per route group; `/claims`/`/payments`/`/reports` unguarded | V3 | `PermissionGuard` + `hasPermission`; guard RCM pages when touched |
 | C-13 | Spec roles (Front desk/…) don't exist | spec §8 | Sample roles only; no names in code (D6) |
 | C-14 | Required-at-stage only for process fields; blank-row table passes; instance gating mixes client fields in | Q3, N16 | Generalize; instance-only values |
@@ -582,9 +593,9 @@ Six slices (spec had five). Estimates are front-end engineer-weeks and **inferen
 
 ### Reconciliation with Revision 3
 
-Rev 3 quoted 20–25 weeks top-down. Re-estimating every item bottom-up gives **41.5–55.0**. Increase: **+21.5 to +30.0** = new scope from D2/D5/D6 ≈ **12.0–15.0** (instances 6.0–8.0 [S1 a–d 5.0–6.5 + S2 2.1–2.2 1.0–1.5], permission keys 3.0–3.5 [S1e 2.0–2.5 + S6.5 1.0], `start_process` 1.0 [S1f], prior-auth node + field-group/recordWriter/fieldRegistryCore ≈ 2.0–2.5 [S2.3 part + S3.3]) + bottom-up recount of Rev 3 scope ≈ **9.5–15.0** (foundation items that Rev 3 had inside a 6–7-week Slice 1: multi-workflow claims, tasks + queues, Billing setup, coverages, template seeding, event fixes).
+Rev 3 quoted 20–25 weeks top-down. Re-estimating every item bottom-up gives **42.0–55.5**. Increase: **+22.0 to +30.5** = new scope from D2/D5/D6 ≈ **12.5–15.5** (instances 6.0–8.0 [S1 a–d 5.0–6.5 + S1 g 0.5 + S2.1 0.5–1.0], permission keys 3.5–4.0 [S1 e 2.5–3.0 incl. `roleId` + S6.5 1.0], `start_process` 1.0 [S1 f], prior-auth node + field-group/recordWriter/fieldRegistryCore ≈ 2.0–2.5 [S2.2 part + S3.3]) + bottom-up recount of Rev 3 scope ≈ **9.5–15.0** (foundation items that Rev 3 had inside a 6–7-week Slice 1: multi-workflow claims, tasks + queues, Billing setup, coverages, template seeding, event fixes). Check: 12.5 + 9.5 = 22.0 and 15.5 + 15.0 = 30.5. Slice 1 is **9.0–11.0**, i.e. the earlier 8.0–10.0 target plus 0.5 (call-list separation moved in) and 0.5 (`roleId` + email lookup).
 
-### Slice 1 — Instances, permissions, events, `start_process` (start here) — **8.0–10.0 wks**
+### Slice 1 — Instances, permissions, events, call-list separation, `start_process` (start here) — **9.0–11.0 wks**
 
 | # | Item | Weeks |
 |---|---|---|
@@ -592,35 +603,37 @@ Rev 3 quoted 20–25 weeks top-down. Re-estimating every item bottom-up gives **
 | b | Deals: card per instance (title from source), drops/list/gating by `instanceId`, every `clientName` rewrite site | 1.5–2.0 |
 | c | ProcessDetailDrawer + ClientProfile (Processes tab = instances, assign/stage clicks) | 1.5–1.5 |
 | d | Stage events: instance-aware `logStageMove`/`StageMove` (+ FROM process, `fromStageId` everywhere), client-process moves emit, single emission, record dispatch in ruleEngine, activity `instanceId` | 1.0–1.5 |
-| e | Permission keys + shared `rolesStore` (localStorage) + `useCurrentPermissions` + drawer/type/default fixes + `PermissionGuard` for `billing-setup` | 2.0–2.5 |
+| e | Permission keys + shared `rolesStore` (localStorage) + `useCurrentPermissions` with **`TeamMember.roleId` + email lookup** (member drawer role picker; was 2.0–2.5, **+0.5**) + drawer/type/default fixes + `PermissionGuard` for `billing-setup` | 2.5–3.0 |
 | f | `start_process` executor + action-registration core (pattern, idempotency util, Retry/health scaffolding) | 1.0–1.0 |
-| | **Slice 1 total** | **8.0–10.0** |
+| g | **Call-list separation** (moved from Slice 2): `kind` discriminator + `getCallsOnly()`; move `CallLogs.tsx`, `Overview.tsx`, `AppointmentDetailDrawer.tsx:660`, `CallDetailDrawer.tsx:347` off process rows; migration QA | 0.5–0.5 |
+| | **Slice 1 total** (1.0+1.5+1.5+1.0+2.5+1.0+0.5 = 9.0; 1.5+2.0+1.5+1.5+3.0+1.0+0.5 = 11.0) | **9.0–11.0** |
 
-- **Pages touched:** Deals, ProcessDetailDrawer, Client profile (Processes tab), Settings › Team (Roles drawer), routes (guard).
-- **Stores/types:** instance store over `callLogs`; `Deal`/`ActivityBase`/`StageMove` fields; `rolesStore`; `types/permissions.ts`.
+- **Pages touched:** Deals, ProcessDetailDrawer, Client profile (Processes tab), Call Logs / Overview / call drawers (stop showing process rows), Settings › Team (Roles drawer, member drawer role picker), routes (guard).
+- **Stores/types:** instance store over `callLogs` (`kind`, `getCallsOnly()`); `Deal`/`ActivityBase`/`StageMove` fields; `rolesStore`; `TeamMember.roleId`; `types/permissions.ts`.
 - **Mock data:** 2 clients, each with several instances of the sample process from different appointment sources; sample roles (via "Add sample roles").
-- **Ordered tasks:** (1) `kind` discriminator + `getCallsOnly()` (stop leaks); (2) instance store + migration + shims; (3) `logStageMove`/StageMove changes; (4) Deals; (5) drawer + profile; (6) `start_process`; (7) permission keys, roles store, resolver, guard.
-- **Demo script (no rule sets needed):** on one client, start the sample process twice from two different appointments → Deals shows **two cards** with different titles; start it again from the **same** appointment → no duplicate (dedupe); drag one card → the other does not move; call list shows no process rows. In Team › Roles add a role with only `billingSetup` read, set `user_role` to it → **Billing setup route opens**, other Settings tabs stay blocked.
+- **Ordered tasks:** (1) `kind` discriminator + `getCallsOnly()` and the call-list moves (item g — stops process rows leaking into the call lists before any instance is created); (2) instance store + migration + shims; (3) `logStageMove`/StageMove changes; (4) Deals; (5) drawer + profile; (6) `start_process`; (7) permission keys, roles store, `roleId` + email resolver, guard.
+- **Demo script (no rule sets needed):** on one client, start the sample process twice from two different appointments → Deals shows **two cards** with different titles; start it again from the **same** appointment → no duplicate (dedupe); drag one card → the other does not move; **the call list shows no process rows (item g)**. In Team › Roles add a role with only `billingSetup` read, assign it to a team member by `roleId`, log in as that member's email → **Billing setup route opens**, other Settings tabs stay blocked.
 
-### Slice 2 — Setup, tasks, templates, action plumbing — **8.0–11.0 wks**
+### Slice 2 — Setup, tasks, templates, action plumbing — **7.5–10.5 wks**
 
 | # | Item | Weeks |
 |---|---|---|
 | 2.1 | Instance leftovers: reception `mockMaClient`, patient portal, test drawers, `Clients.tsx` create flow | 0.5–1.0 |
-| 2.2 | Call-list separation (CallLogs/Overview/call drawers) + migration QA | 0.5–0.5 |
-| 2.3 | Action plumbing: `resolveRecordContext`, `recordWriter`, `fieldRegistryCore` (pure readers), per-action idempotency util, Retry/health UI | 1.0–1.5 |
-| 2.4 | Billing setup tab + reference stores (billing entity, locations/POS, payers, enrollment, fee schedule, claim defaults, scrub rules) + provider credentials | 2.0–2.5 |
-| 2.5 | Client typed fields + Coverages table + client Insurance tab | 1.5–2.0 |
-| 2.6 | Tasks core: extract mutators, `entityRef`+`instanceId`, auto-close subscriber, queue selector + saved-view store, linked-record card, `create_task` | 2.0–2.5 |
-| 2.7 | "Load sample templates" mechanism + "Enable demo set" + sample bundle plumbing | 0.5–1.0 |
-| | **Slice 2 total** | **8.0–11.0** |
+| 2.2 | Action plumbing: `resolveRecordContext`, `recordWriter`, `fieldRegistryCore` (pure readers), per-action idempotency util, Retry/health UI | 1.0–1.5 |
+| 2.3 | Billing setup tab + reference stores (billing entity, locations/POS, payers, enrollment, fee schedule, claim defaults, scrub rules) + provider credentials | 2.0–2.5 |
+| 2.4 | Client typed fields + Coverages table + client Insurance tab | 1.5–2.0 |
+| 2.5 | Tasks core: extract mutators, `entityRef`+`instanceId`, auto-close subscriber, queue selector + saved-view store, linked-record card, `create_task` | 2.0–2.5 |
+| 2.6 | "Load sample templates" mechanism + "Enable demo set" + sample bundle plumbing (also adds `AutomationRule.order`, N24) | 0.5–1.0 |
+| | **Slice 2 total** (0.5+1.0+2.0+1.5+2.0+0.5 = 7.5; 1.0+1.5+2.5+2.0+2.5+1.0 = 10.5) | **7.5–10.5** |
 
-- **Pages touched:** Settings (Billing setup), Client profile, Tasks, Process/Automation (template buttons, `create_task`), Integrations card, kiosk/portal (instance leftovers).
+- **Pages touched:** Settings (Billing setup), Client profile, Tasks, Process/Automation (template buttons, `create_task`, rule order), Integrations card, kiosk/portal (instance leftovers).
 - **Mock data (spec §9):** 15 payers; 3 providers with NPIs; 1 billing entity; 2 locations (POS 11); 40 patients with typed demographics + coverages (from `canonicalClients` where `contactType === "Client"`); default + one payer fee schedule; the 8 sample queue views.
 - **Demo script:** Billing setup → enter EIN/NPI/POS once; client Insurance tab → add primary + secondary coverage; Automation → "Load sample templates" (rules appear **disabled**); create a one-off rule (manual trigger) with `create_task` on an instance stage → a task appears in the **Insurance fixes** view with a linked-record card → drag the instance out of the stage on Deals → the task **auto-closes**.
-- **Effort:** 8.0–11.0.
+- **Effort:** 7.5–10.5.
 
 ### Slice 3 — Eligibility and prior-auth nodes — **7.0–9.5 wks**
+
+**Prerequisites from Slice 2 (this slice cannot start or demo without them):** Tasks core and queue views (2.5), client Insurance tab and Coverages (2.4), Billing setup incl. payers (2.3, needed for the prior-auth rules table 3.3), `recordWriter` + `fieldRegistryCore` (2.2), and "Load sample templates" + `AutomationRule.order` (2.6); from Slice 1: instances, `start_process`, roles/permissions, call-list separation. **Slices 1–3 are therefore sequential and together form the first RCM demo.**
 
 | # | Item | Weeks |
 |---|---|---|
@@ -633,7 +646,7 @@ Rev 3 quoted 20–25 weeks top-down. Re-estimating every item bottom-up gives **
 | 3.7 | Front-desk Check-in button + kiosk insurance/copay steps | 0.5–1.0 |
 | | **Slice 3 total** | **7.0–9.5** |
 
-- **Demo script:** Load sample templates → **Enable demo set E** → book an appointment for a "member not found" payer → an instance is created (card titled with the appointment) and lands in *Needs fix*; appointment chip amber; task in **Insurance fixes** → fix coverage on the client Insurance tab → re-run → *Verified*, chip green, task auto-closed → book a **second** appointment for the same client within 30 days → a **new instance** is created and the fresh verified result is **copied** (no new payer call; history row says "copied") → set the window to 0 → re-run calls the payer → book a service the rule table marks as needing auth → `request_prior_auth` records Authorization fields + a task in **Prior auth** → switch the mock scenario to inactive → red chip + task + message in Chats.
+- **Demo script:** Load sample templates → **Enable demo set E** (A1 runs first, A10 second via `order` 10 / 20, so A10 writes to the instance A1 created; disable A1 and re-book to show A10 falling back to the appointment only) → book an appointment for a "member not found" payer → an instance is created (card titled with the appointment) and lands in *Needs fix*; appointment chip amber; task in **Insurance fixes** → fix coverage on the client Insurance tab → re-run → *Verified*, chip green, task auto-closed → book a **second** appointment for the same client within 30 days → a **new instance** is created and the fresh verified result is **copied** (no new payer call; history row says "copied") → set the window to 0 → re-run calls the payer → book a service the rule table marks as needing auth → `request_prior_auth` records Authorization fields + a task in **Prior auth** → switch the mock scenario to inactive → red chip + task + message in Chats.
 - **Effort:** 7.0–9.5.
 
 ### Slice 4 — Visit to claim — **10.0–13.0 wks**
@@ -682,21 +695,23 @@ Rev 3 quoted 20–25 weeks top-down. Re-estimating every item bottom-up gives **
 
 | Slice | Low | High |
 |---|---|---|
-| 1 | 8.0 | 10.0 |
-| 2 | 8.0 | 11.0 |
+| 1 | 9.0 | 11.0 |
+| 2 | 7.5 | 10.5 |
 | 3 | 7.0 | 9.5 |
 | 4 | 10.0 | 13.0 |
 | 5 | 5.0 | 6.5 |
 | 6 | 3.5 | 5.0 |
-| **Total** | **41.5** | **55.0** |
+| **Total** | **42.0** | **55.5** |
 
-Slices 1 and 3 (15.0–19.5) deliver the first RCM demo (instances + eligibility/prior-auth nodes); Slice 2 can run alongside Slice 3 with a second engineer.
+Check: lows 9.0 + 7.5 + 7.0 + 10.0 + 5.0 + 3.5 = 42.0; highs 11.0 + 10.5 + 9.5 + 13.0 + 6.5 + 5.0 = 55.5.
+
+**First RCM demo = Slices 1–3: 23.5–31.0 weeks** (lows 9.0 + 7.5 + 7.0 = 23.5; highs 11.0 + 10.5 + 9.5 = 31.0). Slice 3's demo depends on Slice 2 items (tasks and queue views, client Insurance tab and Coverages, Billing setup, `recordWriter`, `fieldRegistryCore`, template loading), so the three slices are sequential; nothing runs in parallel with Slice 3.
 
 ---
 
 ## 6. Open questions (only the real remaining ones)
 
-**Closed by your decisions:** Q-R1 (RCM Home = Overview row), Q-R2 (instances, not one card per client), Q-R6 (Billing setup access via permission keys), Q-R9 (role names via Team Roles & Permissions).
+**Closed:** Q-R1 (RCM Home = Overview row), Q-R2 (instances, not one card per client), Q-R6 (Billing setup access via permission keys), Q-R9 (role names via Team Roles & Permissions), and **Q7 — user → role resolution: adopt `TeamMember.roleId` + email lookup** (in Slice 1 item e; name matching stays only as a fallback for a throwaway prototype).
 
 | # | Question | Options | Recommendation |
 |---|---|---|---|
@@ -705,8 +720,7 @@ Slices 1 and 3 (15.0–19.5) deliver the first RCM demo (instances + eligibility
 | Q3 | May instance moves ever write the single `client.stage`? | never / only for a client's primary process | Never; keep it non-authoritative |
 | Q4 | Task auto-close: mark **completed** with `closedBy:"auto"`, or a distinct status? | completed + flag / new status | Completed + `closedBy` |
 | Q5 | Per-workflow sections for claim drawers: add `workflowIds` to registry sections/fields? (scoping for the `claim` module is NC) | `workflowIds` / reuse `requiredStages`-style names | `workflowIds` |
-| Q6 | **Instance lifecycle:** when is an instance completed/cancelled/archived (appointment cancelled or rescheduled; instance in a final stage), and which instance does the patient portal show? | close on appointment cancel + archive after N days; portal shows the latest active / a clinic-configurable rule | Cancel closes the instance; reschedule updates the same instance (dedupe key unchanged); portal = latest active |
-| Q7 | **User → role resolution:** map `AuthContext.user.role` (a name) to a Team role by name, or add `TeamMember.roleId` and resolve user → member by email? | name (today) / `roleId` + email lookup | `roleId` + email lookup (seed team roles match no Role today) |
+| Q6 | **Instance lifecycle:** when is an instance completed/cancelled/archived (appointment cancelled or rescheduled; instance in a final stage), and which instance does the patient portal show? | close on appointment cancel + archive after N days; portal shows the latest active / a clinic-configurable rule | Cancel closes the instance; reschedule updates the same instance (dedupe key unchanged); **when several instances exist, the kiosk and the patient portal show the latest active instance** (this display rule is proposed; the lifecycle question itself stays open) |
 | Q8 | Sample roles: ship as an "Add sample roles" action (recommended) or seed into `DEFAULT_ROLES`? | action / seeds | Action (keeps D6: nothing hard-coded) |
 
 *Not questions (decided here):* roles move to a shared localStorage `rolesStore`; the Roles drawer's dead rows are removed or implemented; the six-slice structure replaces the spec's five (sizing); `recordType` stays `client` for client-process instances with `data.instanceId` (a separate `process_instance` record type is **NC**).
@@ -745,7 +759,7 @@ Slices 1 and 3 (15.0–19.5) deliver the first RCM demo (instances + eligibility
 | 26 | §7 / D5 | Eligibility check per appointment; a client has one stage per process | **Multi-instance processes** (`instanceId`, dedupe key); automations per instance |
 | 27 | §8 queues | "saved filtered view of Tasks" | Consistent; adds `entityRef` + `instanceId`, auto-close on stage exit, saved-view store (not on main) |
 | 28 | §8 roles | Fixed role columns; "add a Billing module to permissions.ts" | **Permission keys** (`billingSetup`, `eligibility`, `priorAuth`, `claims`, `rcmPayments`, `denials`, `rcmReports`) assigned in Team › Roles; sample roles only |
-| 29 | §9 decisions + slices | Build on `rcm-2`, port from `rcm`; five slices 3–4/3–4/4–5/4–5/2–3 (16–21 wks); A10–A12 unassigned | `main` only; **six slices, 41.5–55.0 wks**; A10 in Slice 3, A11–A12 in Slice 6 |
+| 29 | §9 decisions + slices | Build on `rcm-2`, port from `rcm`; five slices 3–4/3–4/4–5/4–5/2–3 (16–21 wks); A10–A12 unassigned | `main` only; **six slices, 42.0–55.5 wks** (Slice 1 = 9.0–11.0; first demo = Slices 1–3 = 23.5–31.0); A10 in Slice 3, A11–A12 in Slice 6 |
 | 30 | Spec file | named `rcm-flow-spec.md.md`, untracked | rename + commit |
 
 ---
