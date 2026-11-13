@@ -1161,14 +1161,20 @@ export default function Process() {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-    // For appointment and insurance entities, allow multiple processes matching the client organization's category, industry, and location
-    if (selectedEntity === "appointment" || selectedEntity === "insurance") {
+    // For appointment, insurance, and task entities, allow multiple processes matching the client organization's category, industry, and location
+    if (selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "task") {
       if (matching.length > 0) {
         return matching;
       }
       return entityFilteredProcesses.length > 0
         ? entityFilteredProcesses
-        : [selectedEntity === "appointment" ? DEFAULT_ENTITY_PROCESSES.appointment : DEFAULT_ENTITY_PROCESSES.insurance];
+        : [
+            selectedEntity === "appointment"
+              ? DEFAULT_ENTITY_PROCESSES.appointment
+              : selectedEntity === "insurance"
+              ? DEFAULT_ENTITY_PROCESSES.insurance
+              : DEFAULT_ENTITY_PROCESSES.task,
+          ];
     }
     // For other non-client entities (invoice, claim), display one process matching the organization's industry & category
     if (selectedEntity !== "client") {
@@ -3602,7 +3608,7 @@ export default function Process() {
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
           filterPresets={
-            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance"
+            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "task"
               ? [
                 {
                   id: "all",
@@ -3640,7 +3646,7 @@ export default function Process() {
           ]}
           onExport={() => setShowExportModal(true)}
           primaryAction={
-            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "invoice"
+            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "invoice" || selectedEntity === "task"
               ? {
                 label:
                   selectedEntity === "appointment"
@@ -3649,6 +3655,8 @@ export default function Process() {
                     ? "Add Insurance & Claim Workflow"
                     : selectedEntity === "invoice"
                     ? "Add Invoice Workflow"
+                    : selectedEntity === "task"
+                    ? "Add Task Workflow"
                     : "Add Workflow",
                 icon: <Plus className="w-3.5 h-3.5" />,
                 onClick: () => {
@@ -5727,6 +5735,8 @@ export default function Process() {
               ? "Add Appointment Workflow"
               : selectedEntity === "insurance"
               ? "Add Insurance & Claim Workflow"
+              : selectedEntity === "task"
+              ? "Add Task Workflow"
               : "Add Workflow"
           }
           footer={

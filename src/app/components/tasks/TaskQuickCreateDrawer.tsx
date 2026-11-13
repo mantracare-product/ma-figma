@@ -22,6 +22,7 @@ import {
   Shield,
   Globe,
   Calendar,
+  CalendarX2,
   FileCode,
   Link as LinkIcon,
   Image as ImageIcon,
@@ -31,6 +32,7 @@ import {
   Sparkles,
   Info,
   Download,
+  Search,
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { CircularProgressRing } from "../ui/CircularProgressRing";
@@ -135,6 +137,189 @@ export const CATEGORY_ROLES_CATALOG: Record<string, string[]> = {
 // Size limit for uploads stored in localStorage (1 MB)
 const MAX_UPLOAD_BYTES = 1024 * 1024; // 1 MB
 
+interface SearchablePickerOption {
+  id: string;
+  name: string;
+  subtitle?: string;
+  avatar?: string;
+  badge?: string;
+}
+
+interface SearchableMultiSelectPickerProps {
+  label: string;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  options: SearchablePickerOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  autoRoleText?: string | null;
+}
+
+function SearchableMultiSelectPicker({
+  label,
+  placeholder = "+ Click to select...",
+  searchPlaceholder = "Search...",
+  options,
+  selectedIds,
+  onChange,
+  autoRoleText,
+}: SearchableMultiSelectPickerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const q = search.toLowerCase();
+    return options.filter(
+      (opt) =>
+        opt.name.toLowerCase().includes(q) ||
+        (opt.subtitle && opt.subtitle.toLowerCase().includes(q))
+    );
+  }, [options, search]);
+
+  const handleToggle = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const handleSelectAllFiltered = () => {
+    const filteredIds = filteredOptions.map((o) => o.id);
+    const combined = Array.from(new Set([...selectedIds, ...filteredIds]));
+    onChange(combined);
+  };
+
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
+  return (
+    <div className="space-y-1.5" ref={dropdownRef}>
+      <label className="text-[11px] font-semibold text-slate-700 block">{label}</label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 flex items-center justify-between hover:bg-slate-100/70 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+        >
+          <span className={selectedIds.length > 0 ? "text-slate-900 font-bold" : "text-slate-500 font-normal truncate"}>
+            {selectedIds.length > 0
+              ? `${selectedIds.length} selected`
+              : autoRoleText || placeholder}
+          </span>
+          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 space-y-2 animate-in fade-in zoom-in-95 duration-100">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full text-xs pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
+                autoFocus
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 pt-0.5 border-b border-slate-100 pb-1.5">
+              <span>{filteredOptions.length} available</span>
+              <div className="flex items-center gap-2 font-semibold">
+                <button
+                  type="button"
+                  onClick={handleSelectAllFiltered}
+                  className="text-blue-600 hover:underline cursor-pointer"
+                >
+                  Select all
+                </button>
+                <span>&bull;</span>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="text-slate-500 hover:text-rose-600 cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Options List */}
+            <div className="max-h-52 overflow-y-auto space-y-0.5 pr-0.5">
+              {filteredOptions.length === 0 ? (
+                <div className="py-4 text-center text-xs text-slate-400 italic">
+                  No matching results found
+                </div>
+              ) : (
+                filteredOptions.map((opt) => {
+                  const isChecked = selectedIds.includes(opt.id);
+                  return (
+                    <div
+                      key={opt.id}
+                      onClick={() => handleToggle(opt.id)}
+                      className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                        isChecked ? "bg-blue-50/80 text-blue-900 font-medium" : "hover:bg-slate-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                          {opt.name.charAt(0)}
+                        </div>
+                        <div className="truncate">
+                          <span className="block truncate font-semibold text-slate-800">{opt.name}</span>
+                          {opt.subtitle && (
+                            <span className="block text-[10px] text-slate-500 truncate">{opt.subtitle}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ml-2 ${
+                          isChecked
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface StudioDraftItem {
   id: string;
   title: string;
@@ -179,7 +364,7 @@ function StudioItemCard({
           </span>
           <input
             type="text"
-            placeholder="Item title (required)..."
+            placeholder="Deliverable title (required)..."
             value={item.title}
             onChange={(e) => onUpdate(item.id, { title: e.target.value })}
             className="text-xs font-bold text-slate-900 w-full p-1.5 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-500 focus:bg-slate-50 rounded transition-all focus:outline-none"
@@ -257,6 +442,7 @@ function StudioItemCard({
               onUpdate(item.id, {
                 resourceType: rType,
                 resourceValue: rType === item.resourceType ? item.resourceValue : "",
+                resourceSource: rType === "url" ? "url" : "upload",
               });
             }}
             className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
@@ -276,87 +462,9 @@ function StudioItemCard({
 
       {/* Resource Input & Preview Area */}
       {item.resourceType !== "none" && (
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5 animate-in fade-in duration-100">
-          {/* Image / Video: Choose Upload vs URL */}
-          {(item.resourceType === "image" || item.resourceType === "video") && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdate(item.id, { resourceSource: "upload" })}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  item.resourceSource === "upload"
-                    ? "bg-white text-slate-900 border border-slate-300 shadow-2xs"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Direct Upload (max 1MB)
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdate(item.id, { resourceSource: "url" })}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  item.resourceSource === "url"
-                    ? "bg-white text-slate-900 border border-slate-300 shadow-2xs"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Online URL
-              </button>
-            </div>
-          )}
-
-          {/* File / Direct Upload */}
-          {(item.resourceType === "file" ||
-            ((item.resourceType === "image" || item.resourceType === "video") &&
-              item.resourceSource === "upload")) && (
-            <div>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onFileUpload(item.id, f);
-                }}
-                className="hidden"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Upload className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{item.resourceValue ? "Replace File" : "Choose File (Max 1MB)"}</span>
-                </button>
-                {item.resourceName && (
-                  <span className="text-xs font-mono text-slate-600 truncate max-w-[200px]">
-                    {item.resourceName} ({item.resourceSize})
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Online URL input */}
-          {(item.resourceType === "url" ||
-            ((item.resourceType === "image" || item.resourceType === "video") &&
-              item.resourceSource === "url")) && (
-            <div className="space-y-1">
-              <input
-                type="url"
-                placeholder="https://example.com/asset..."
-                value={item.resourceValue}
-                onChange={(e) => onUpdate(item.id, { resourceValue: e.target.value })}
-                className="w-full text-xs p-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <span className="text-[10px] text-slate-400 block">
-                Must begin with http:// or https:// (strict validation)
-              </span>
-            </div>
-          )}
-
-          {/* HTML Block Code Editor */}
-          {item.resourceType === "html" && (
+        <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/90 space-y-2.5 animate-in fade-in duration-100">
+          {item.resourceType === "html" ? (
+            /* HTML Block Code Editor */
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
                 <FileCode className="w-3.5 h-3.5" />
@@ -369,6 +477,98 @@ function StudioItemCard({
                 onChange={(e) => onUpdate(item.id, { resourceValue: e.target.value })}
                 className="w-full text-xs font-mono p-2.5 bg-slate-900 text-emerald-400 border border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
               />
+            </div>
+          ) : (
+            /* File, Image, Video, URL: Unified Upload Div with Direct Upload vs Online URL Toggle */
+            <div className="space-y-2.5">
+              {/* Segmented Toggle: Direct Upload vs Online URL */}
+              <div className="flex items-center gap-1 p-0.5 bg-slate-200/70 border border-slate-200 rounded-lg w-fit text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => onUpdate(item.id, { resourceSource: "upload" })}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    item.resourceSource === "upload" || !item.resourceSource
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Direct Upload (max 1MB)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(item.id, { resourceSource: "url" })}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    item.resourceSource === "url"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Online URL
+                </button>
+              </div>
+
+              {/* Direct Upload Section */}
+              {(item.resourceSource === "upload" || !item.resourceSource) ? (
+                <div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onFileUpload(item.id, f);
+                    }}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs hover:border-slate-300"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{item.resourceValue && item.resourceName ? "Replace File" : "Choose File (Max 1MB)"}</span>
+                    </button>
+                    {item.resourceName && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs">
+                        <span className="font-mono text-slate-600 truncate max-w-[200px]">
+                          {item.resourceName}
+                        </span>
+                        {item.resourceSize && (
+                          <span className="text-[10px] text-slate-400">({item.resourceSize})</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdate(item.id, {
+                              resourceValue: "",
+                              resourceName: "",
+                              resourceSize: "",
+                            })
+                          }
+                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5 text-slate-400"
+                          title="Remove file"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Online URL Input Section */
+                <div className="space-y-1">
+                  <input
+                    type="url"
+                    placeholder="https://example.com/asset..."
+                    value={item.resourceValue}
+                    onChange={(e) => onUpdate(item.id, { resourceValue: e.target.value })}
+                    className="w-full text-xs p-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-400 block">
+                    Must begin with http:// or https:// (strict validation)
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -588,11 +788,126 @@ export default function TaskQuickCreateDrawer({
   const [repeatStopCount, setRepeatStopCount] = useState(10);
   const [repeatStopDate, setRepeatStopDate] = useState("");
 
-  // Settings: Observers
-  const [observers, setObservers] = useState<TaskObserver[]>([
-    { id: "obs-1", name: "Elena Rostova", role: "Care Coordinator" },
-  ]);
-  const [newObserverName, setNewObserverName] = useState("");
+  // Settings: Skip Off Days (Custom rest days and blackout dates - not hardcoded to Sat/Sun)
+  const [skipOffDaysEnabled, setSkipOffDaysEnabled] = useState(false);
+  const [selectedWeeklyOffDays, setSelectedWeeklyOffDays] = useState<string[]>(["Sat", "Sun"]);
+  const [customOffDates, setCustomOffDates] = useState<Array<{ id: string; date: string; label?: string }>>([]);
+  const [newOffDate, setNewOffDate] = useState("");
+  const [newOffDateLabel, setNewOffDateLabel] = useState("");
+
+  const handleAddCustomOffDate = () => {
+    if (!newOffDate) {
+      toast.error("Please pick an off date");
+      return;
+    }
+    if (customOffDates.some((c) => c.date === newOffDate)) {
+      toast.error("This off date is already added");
+      return;
+    }
+    setCustomOffDates((prev) => [
+      ...prev,
+      {
+        id: `off-${Date.now()}`,
+        date: newOffDate,
+        label: newOffDateLabel.trim() || undefined,
+      },
+    ]);
+    setNewOffDate("");
+    setNewOffDateLabel("");
+    toast.success("Off day added");
+  };
+
+  // Settings: Observers (Role, Multi-select, All-role logic)
+  const [observerType, setObserverType] = useState<"team" | "contact">("team");
+  const [observerRoleFilter, setObserverRoleFilter] = useState("All Roles");
+  const [selectedObserverMemberIds, setSelectedObserverMemberIds] = useState<string[]>([]);
+  const [observerContactCategory, setObserverContactCategory] = useState("All Categories");
+  const [selectedObserverContactIds, setSelectedObserverContactIds] = useState<string[]>([]);
+
+  const filteredObserverTeamMembers = useMemo(() => {
+    if (observerRoleFilter === "All Roles") return teamMembers;
+    return teamMembers.filter((m) => m.role === observerRoleFilter);
+  }, [teamMembers, observerRoleFilter]);
+
+  const filteredObserverContacts = useMemo(() => {
+    if (observerContactCategory === "All Categories") return initialClients;
+    return initialClients.filter(
+      (c) => (c.contactType || c.contact_type || "Client").toLowerCase() === observerContactCategory.toLowerCase()
+    );
+  }, [observerContactCategory]);
+
+  const computedObservers = useMemo<TaskObserver[]>(() => {
+    if (observerType === "team") {
+      if (selectedObserverMemberIds.length > 0) {
+        return selectedObserverMemberIds.map((id) => {
+          const m = teamMembers.find((tm) => String(tm.id) === id);
+          return {
+            id: String(m?.id || id),
+            name: m?.name || "Team Member",
+            role: m?.role,
+            type: "member" as const,
+          };
+        });
+      } else if (observerRoleFilter !== "All Roles") {
+        const matching = teamMembers.filter((m) => m.role === observerRoleFilter);
+        if (matching.length > 0) {
+          return matching.map((m) => ({
+            id: String(m.id),
+            name: m.name,
+            role: m.role,
+            type: "member" as const,
+          }));
+        }
+        return [
+          {
+            id: `obs-role-${observerRoleFilter}`,
+            name: `All ${observerRoleFilter}s`,
+            role: observerRoleFilter,
+            type: "member" as const,
+          },
+        ];
+      }
+      return [];
+    } else {
+      if (selectedObserverContactIds.length > 0) {
+        return selectedObserverContactIds.map((id) => {
+          const c = initialClients.find((cl) => cl.id === id);
+          return {
+            id: c?.id || id,
+            name: c?.name || "Contact",
+            role: c?.contactType || c?.contact_type || "Client",
+            category: c?.contactType || c?.contact_type || "Client",
+            type: "contact" as const,
+          };
+        });
+      } else if (observerContactCategory !== "All Categories") {
+        const matching = initialClients.filter(
+          (c) => (c.contactType || c.contact_type || "Client").toLowerCase() === observerContactCategory.toLowerCase()
+        );
+        if (matching.length > 0) {
+          return matching.map((c) => ({
+            id: c.id,
+            name: c.name,
+            role: c.contactType || c.contact_type || "Client",
+            category: c.contactType || c.contact_type || "Client",
+            type: "contact" as const,
+          }));
+        }
+        return [
+          {
+            id: `obs-cat-${observerContactCategory}`,
+            name: `All ${observerContactCategory} Contacts`,
+            role: observerContactCategory,
+            category: observerContactCategory,
+            type: "contact" as const,
+          },
+        ];
+      }
+      return [];
+    }
+  }, [observerType, selectedObserverMemberIds, observerRoleFilter, teamMembers, selectedObserverContactIds, observerContactCategory]);
+
+  const observers = computedObservers;
 
   // ── Step 2: Task Studio State ──
   const [studioItems, setStudioItems] = useState<StudioDraftItem[]>([
@@ -700,9 +1015,33 @@ export default function TaskQuickCreateDrawer({
       }
 
       if (taskToEdit.observers && taskToEdit.observers.length > 0) {
-        setObservers(taskToEdit.observers);
+        const memberIds = taskToEdit.observers
+          .filter((o) => o.type !== "contact")
+          .map((o) => String(o.id));
+        const contactIds = taskToEdit.observers
+          .filter((o) => o.type === "contact")
+          .map((o) => String(o.id));
+        if (contactIds.length > 0) {
+          setObserverType("contact");
+          setSelectedObserverContactIds(contactIds);
+        } else {
+          setObserverType("team");
+          setSelectedObserverMemberIds(memberIds);
+        }
       } else {
-        setObservers([]);
+        setSelectedObserverMemberIds([]);
+        setSelectedObserverContactIds([]);
+      }
+
+      if (taskToEdit.recurrence?.skipOffDays !== undefined || taskToEdit.timePlanning?.skipOffDays !== undefined) {
+        setSkipOffDaysEnabled(Boolean(taskToEdit.recurrence?.skipOffDays || taskToEdit.timePlanning?.skipOffDays));
+      }
+      if (taskToEdit.recurrence?.weeklyOffDays || taskToEdit.timePlanning?.weeklyOffDays) {
+        setSelectedWeeklyOffDays(taskToEdit.recurrence?.weeklyOffDays || taskToEdit.timePlanning?.weeklyOffDays || ["Sat", "Sun"]);
+      }
+      if (taskToEdit.recurrence?.customOffDates || taskToEdit.timePlanning?.customOffDates) {
+        const dates = taskToEdit.recurrence?.customOffDates || taskToEdit.timePlanning?.customOffDates || [];
+        setCustomOffDates(dates.map((d, i) => ({ id: `off-${i}-${d}`, date: d })));
       }
 
       if (taskToEdit.studioItems && taskToEdit.studioItems.length > 0) {
@@ -727,7 +1066,11 @@ export default function TaskQuickCreateDrawer({
       setDescription("");
       setIsImportant(false);
       setRepeatEnabled(false);
-      setObservers([]);
+      setSelectedObserverMemberIds([]);
+      setSelectedObserverContactIds([]);
+      setSkipOffDaysEnabled(false);
+      setSelectedWeeklyOffDays(["Sat", "Sun"]);
+      setCustomOffDates([]);
       setAdminScopingRules([]);
       setSelectedAdminRoles(["Lead Physician"]);
       setStudioItems([
@@ -786,29 +1129,108 @@ export default function TaskQuickCreateDrawer({
         category: activeCats || "Global",
       }));
     } else if (responsibleType === "team") {
-      return selectedTeamMemberIds.map((id) => {
-        const m = teamMembers.find((tm) => String(tm.id) === id);
-        return {
-          id: String(m?.id || id),
-          name: m?.name || "Team Member",
-          role: m?.role,
-          type: "member",
-          avatar: (m as any)?.avatar,
-        };
-      });
+      if (selectedTeamMemberIds.length > 0) {
+        return selectedTeamMemberIds.map((id) => {
+          const m = teamMembers.find((tm) => String(tm.id) === id);
+          return {
+            id: String(m?.id || id),
+            name: m?.name || "Team Member",
+            role: m?.role,
+            type: "member" as const,
+            avatar: (m as any)?.avatar,
+          };
+        });
+      } else if (selectedRoleFilter !== "All Roles") {
+        const matching = teamMembers.filter((m) => m.role === selectedRoleFilter);
+        if (matching.length > 0) {
+          return matching.map((m) => ({
+            id: String(m.id),
+            name: m.name,
+            role: m.role,
+            type: "member" as const,
+            avatar: (m as any)?.avatar,
+          }));
+        }
+        return [
+          {
+            id: `role-all-${selectedRoleFilter}`,
+            name: `All ${selectedRoleFilter}s`,
+            role: selectedRoleFilter,
+            type: "member" as const,
+          },
+        ];
+      } else {
+        return teamMembers[0]
+          ? [
+              {
+                id: String(teamMembers[0].id),
+                name: teamMembers[0].name,
+                role: teamMembers[0].role,
+                type: "member" as const,
+                avatar: (teamMembers[0] as any)?.avatar,
+              },
+            ]
+          : [];
+      }
     } else {
-      return selectedContactIds.map((id) => {
-        const c = initialClients.find((cl) => cl.id === id);
-        return {
-          id: c?.id || id,
-          name: c?.name || "Patient / Contact",
-          role: c?.contactType || c?.contact_type || "Client",
-          category: c?.contactType || c?.contact_type || "Client",
-          type: "contact",
-        };
-      });
+      if (selectedContactIds.length > 0) {
+        return selectedContactIds.map((id) => {
+          const c = initialClients.find((cl) => cl.id === id);
+          return {
+            id: c?.id || id,
+            name: c?.name || "Patient / Contact",
+            role: c?.contactType || c?.contact_type || "Client",
+            category: c?.contactType || c?.contact_type || "Client",
+            type: "contact" as const,
+          };
+        });
+      } else if (selectedContactCategory !== "All Categories") {
+        const matching = initialClients.filter(
+          (c) => (c.contactType || c.contact_type || "Client").toLowerCase() === selectedContactCategory.toLowerCase()
+        );
+        if (matching.length > 0) {
+          return matching.map((c) => ({
+            id: c.id,
+            name: c.name,
+            role: c.contactType || c.contact_type || "Client",
+            category: c.contactType || c.contact_type || "Client",
+            type: "contact" as const,
+          }));
+        }
+        return [
+          {
+            id: `cat-all-${selectedContactCategory}`,
+            name: `All ${selectedContactCategory} Contacts`,
+            role: selectedContactCategory,
+            category: selectedContactCategory,
+            type: "contact" as const,
+          },
+        ];
+      } else {
+        return initialClients[0]
+          ? [
+              {
+                id: initialClients[0].id,
+                name: initialClients[0].name,
+                role: initialClients[0].contactType || initialClients[0].contact_type || "Client",
+                category: initialClients[0].contactType || initialClients[0].contact_type || "Client",
+                type: "contact" as const,
+              },
+            ]
+          : [];
+      }
     }
-  }, [isAdmin, adminScopingRules, selectedAdminRoles, responsibleType, selectedTeamMemberIds, teamMembers, selectedContactIds]);
+  }, [
+    isAdmin,
+    adminScopingRules,
+    selectedAdminRoles,
+    responsibleType,
+    selectedTeamMemberIds,
+    selectedRoleFilter,
+    teamMembers,
+    selectedContactIds,
+    selectedContactCategory,
+  ]);
 
   const selectedPipeline = useMemo(() => {
     return taskPipelines.find((p) => p.id === selectedPipelineId) || taskPipelines[0];
@@ -835,22 +1257,22 @@ export default function TaskQuickCreateDrawer({
   // ── Handlers for Selection & Chips ──
   const toggleTeamMemberSelection = (id: string) => {
     setSelectedTeamMemberIds((prev) =>
-      prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
   const removeTeamMemberChip = (id: string) => {
-    setSelectedTeamMemberIds((prev) => (prev.length > 1 ? prev.filter((x) => x !== id) : prev));
+    setSelectedTeamMemberIds((prev) => prev.filter((x) => x !== id));
   };
 
   const toggleContactSelection = (id: string) => {
     setSelectedContactIds((prev) =>
-      prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
   const removeContactChip = (id: string) => {
-    setSelectedContactIds((prev) => (prev.length > 1 ? prev.filter((x) => x !== id) : prev));
+    setSelectedContactIds((prev) => prev.filter((x) => x !== id));
   };
 
   const toggleAdminRoleSelection = (role: string) => {
@@ -864,14 +1286,20 @@ export default function TaskQuickCreateDrawer({
   };
 
   const handleAddObserver = (memberId: string) => {
-    const member = teamMembers.find((m) => String(m.id) === memberId);
-    if (member && !observers.some((o) => o.id === String(member.id) || o.name === member.name)) {
-      setObservers((prev) => [...prev, { id: String(member.id), name: member.name, role: member.role }]);
+    if (observerType === "team") {
+      if (!selectedObserverMemberIds.includes(memberId)) {
+        setSelectedObserverMemberIds((prev) => [...prev, memberId]);
+      }
+    } else {
+      if (!selectedObserverContactIds.includes(memberId)) {
+        setSelectedObserverContactIds((prev) => [...prev, memberId]);
+      }
     }
   };
 
   const handleRemoveObserver = (id: string) => {
-    setObservers((prev) => prev.filter((o) => o.id !== id));
+    setSelectedObserverMemberIds((prev) => prev.filter((x) => x !== id));
+    setSelectedObserverContactIds((prev) => prev.filter((x) => x !== id));
   };
 
   // ── File Upload Helper (Base64 + 1MB limit) ──
@@ -1055,12 +1483,26 @@ export default function TaskQuickCreateDrawer({
         interval: Math.max(1, repeatInterval),
         unit: repeatUnit,
         startDate: deadlineDate || new Date().toISOString().split("T")[0],
-        skipWeekends: repeatSkipWeekends,
+        skipWeekends: selectedWeeklyOffDays.includes("Sat") || selectedWeeklyOffDays.includes("Sun"),
+        skipOffDays: skipOffDaysEnabled,
+        weeklyOffDays: selectedWeeklyOffDays,
+        customOffDates: customOffDates.map((c) => c.date),
         stopRule: repeatStopRule,
         stopCount: repeatStopRule === "count" ? repeatStopCount : undefined,
         stopDate: repeatStopRule === "date" ? repeatStopDate : undefined,
       };
     }
+
+    const timePlanning: TaskTimePlanningConfig | undefined = isAdmin ? undefined : {
+      startDate: deadlineDate,
+      dueDate: deadlineDate,
+      assigneeCanEditDates: false,
+      skipWeekends: selectedWeeklyOffDays.includes("Sat") || selectedWeeklyOffDays.includes("Sun"),
+      skipOffDays: skipOffDaysEnabled,
+      weeklyOffDays: selectedWeeklyOffDays,
+      customOffDates: customOffDates.map((c) => c.date),
+      useSubtaskDates: false,
+    };
 
     // If editing existing task, update and return
     if (taskToEdit && onUpdateTask) {
@@ -1080,8 +1522,10 @@ export default function TaskQuickCreateDrawer({
         deadlineDate: isAdmin ? undefined : deadlineDate || undefined,
         deadlineTime: isAdmin ? undefined : deadlineTime || undefined,
         recurrence: isAdmin ? undefined : recurrence,
+        timePlanning,
         observers,
         targetRole: isAdmin ? selectedAdminRoles.join(", ") : selectedRoleFilter !== "All Roles" ? selectedRoleFilter : undefined,
+        targetCategory: responsibleType === "contact" && selectedContactCategory !== "All Categories" ? selectedContactCategory : undefined,
         targetOrgId: undefined,
         targetOrgName: undefined,
         scopingRules: isAdmin ? adminScopingRules : taskToEdit.scopingRules,
@@ -1110,7 +1554,8 @@ export default function TaskQuickCreateDrawer({
       assignees: allAssignees,
       responsiblePeople,
       responsibleType: isAdmin ? "org_role" : responsibleType,
-      targetRole: isAdmin ? selectedAdminRoles.join(", ") : undefined,
+      targetRole: isAdmin ? selectedAdminRoles.join(", ") : selectedRoleFilter !== "All Roles" ? selectedRoleFilter : undefined,
+      targetCategory: responsibleType === "contact" && selectedContactCategory !== "All Categories" ? selectedContactCategory : undefined,
       scopingRules: isAdmin ? adminScopingRules : undefined,
       studioItems: finalStudioItems,
       deadline: isAdmin ? undefined : deadlineFormatted,
@@ -1131,6 +1576,7 @@ export default function TaskQuickCreateDrawer({
       observers,
       subtasks: [],
       recurrence,
+      timePlanning,
       attachments: [],
     };
 
@@ -1404,149 +1850,169 @@ export default function TaskQuickCreateDrawer({
                 </div>
               </div>
             ) : responsibleType === "team" ? (
-              /* Clinic Team Members: Role Selector -> Multi-select members */
+              /* Clinic Team Members: Vertically aligned Role -> Searchable Multi-select members */
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1/3">
-                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Filter Role</label>
-                    <div className="relative">
-                      <select
-                        value={selectedRoleFilter}
-                        onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
-                      >
-                        {availableRoles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  <div className="w-2/3">
-                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Select Members</label>
-                    <div className="relative">
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) toggleTeamMemberSelection(e.target.value);
-                          e.target.value = "";
-                        }}
-                        defaultValue=""
-                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
-                      >
-                        <option value="" disabled>
-                          + Click to add member
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRoleFilter}
+                      onChange={(e) => {
+                        setSelectedRoleFilter(e.target.value);
+                        setSelectedTeamMemberIds([]);
+                      }}
+                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                    >
+                      {availableRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
                         </option>
-                        {filteredTeamMembers.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.role}) {selectedTeamMemberIds.includes(String(m.id)) ? "✓" : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
+
+                <div>
+                  <SearchableMultiSelectPicker
+                    label="Select Members"
+                    placeholder="+ Click to select team members..."
+                    searchPlaceholder="Search team members by name or role..."
+                    options={filteredTeamMembers.map((m) => ({
+                      id: String(m.id),
+                      name: m.name,
+                      subtitle: m.role,
+                    }))}
+                    selectedIds={selectedTeamMemberIds}
+                    onChange={setSelectedTeamMemberIds}
+                    autoRoleText={
+                      selectedRoleFilter !== "All Roles" && selectedTeamMemberIds.length === 0
+                        ? `All ${selectedRoleFilter} members (${filteredTeamMembers.length} members)`
+                        : undefined
+                    }
+                  />
+                </div>
+
+                {/* If Role is selected and no individual members are picked: show role-wide assignment banner */}
+                {selectedRoleFilter !== "All Roles" && selectedTeamMemberIds.length === 0 && (
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50/90 border border-blue-200/90 text-xs text-blue-900">
+                    <Users className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold">Role-wide Assignment:</span> Task is assigned to all{" "}
+                      <span className="font-semibold underline">{filteredTeamMembers.length} {selectedRoleFilter}</span> members.
+                    </div>
+                  </div>
+                )}
 
                 {/* Selected People Removable Chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {selectedTeamMemberIds.map((id) => {
-                    const m = teamMembers.find((tm) => String(tm.id) === id);
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/80"
-                      >
-                        <div className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center text-[9px] font-bold">
-                          {m?.name?.charAt(0) || "U"}
-                        </div>
-                        <span>{m?.name || "Member"}</span>
-                        {m?.role && <span className="text-[10px] text-slate-500">({m.role})</span>}
-                        <button
-                          type="button"
-                          onClick={() => removeTeamMemberChip(id)}
-                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
-                          title="Remove person"
+                {selectedTeamMemberIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {selectedTeamMemberIds.map((id) => {
+                      const m = teamMembers.find((tm) => String(tm.id) === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/80"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
+                          <div className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center text-[9px] font-bold">
+                            {m?.name?.charAt(0) || "U"}
+                          </div>
+                          <span>{m?.name || "Member"}</span>
+                          {m?.role && <span className="text-[10px] text-slate-500">({m.role})</span>}
+                          <button
+                            type="button"
+                            onClick={() => removeTeamMemberChip(id)}
+                            className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                            title="Remove person"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
-              /* Clinic Contacts: Category Selector -> Multi-select contacts */
+              /* Clinic Contacts: Vertically aligned Category -> Searchable Multi-select contacts */
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1/3">
-                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Category</label>
-                    <div className="relative">
-                      <select
-                        value={selectedContactCategory}
-                        onChange={(e) => setSelectedContactCategory(e.target.value)}
-                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
-                      >
-                        {CONTACT_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  <div className="w-2/3">
-                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Select Contacts</label>
-                    <div className="relative">
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) toggleContactSelection(e.target.value);
-                          e.target.value = "";
-                        }}
-                        defaultValue=""
-                        className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-7"
-                      >
-                        <option value="" disabled>
-                          + Click to add contact
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700 block mb-1">Category</label>
+                  <div className="relative">
+                    <select
+                      value={selectedContactCategory}
+                      onChange={(e) => {
+                        setSelectedContactCategory(e.target.value);
+                        setSelectedContactIds([]);
+                      }}
+                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                    >
+                      {CONTACT_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
                         </option>
-                        {filteredContacts.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.contactType || c.contact_type || "Client"}) {selectedContactIds.includes(c.id) ? "✓" : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
+
+                <div>
+                  <SearchableMultiSelectPicker
+                    label="Select Contacts"
+                    placeholder="+ Click to select contacts..."
+                    searchPlaceholder="Search contacts by name or category..."
+                    options={filteredContacts.map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      subtitle: c.contactType || c.contact_type || "Client",
+                    }))}
+                    selectedIds={selectedContactIds}
+                    onChange={setSelectedContactIds}
+                    autoRoleText={
+                      selectedContactCategory !== "All Categories" && selectedContactIds.length === 0
+                        ? `All ${selectedContactCategory} contacts (${filteredContacts.length} contacts)`
+                        : undefined
+                    }
+                  />
+                </div>
+
+                {/* If Category is selected and no individual contacts are picked */}
+                {selectedContactCategory !== "All Categories" && selectedContactIds.length === 0 && (
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/90 text-xs text-emerald-900">
+                    <Users className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold">Category-wide Assignment:</span> Task is assigned to all{" "}
+                      <span className="font-semibold underline">{filteredContacts.length} {selectedContactCategory}</span> contacts.
+                    </div>
+                  </div>
+                )}
 
                 {/* Selected Contacts Removable Chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {selectedContactIds.map((id) => {
-                    const c = initialClients.find((cl) => cl.id === id);
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
-                      >
-                        <User className="w-3 h-3 text-emerald-600" />
-                        <span>{c?.name || "Contact"}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeContactChip(id)}
-                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
-                          title="Remove contact"
+                {selectedContactIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {selectedContactIds.map((id) => {
+                      const c = initialClients.find((cl) => cl.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
+                          <User className="w-3 h-3 text-emerald-600" />
+                          <span>{c?.name || "Contact"}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeContactChip(id)}
+                            className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                            title="Remove contact"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1684,6 +2150,121 @@ export default function TaskQuickCreateDrawer({
                       <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
                     </label>
                   </div>
+
+                  {/* Skip Off Days (Custom rest days and blackout dates - not hardcoded to Sat/Sun) */}
+                  <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CalendarX2 className="w-4 h-4 text-slate-600" />
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Skip Off Days</span>
+                          <span className="text-[11px] text-slate-500">
+                            Reschedule triggers that fall on selected rest days or holidays
+                          </span>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={skipOffDaysEnabled}
+                          onChange={(e) => setSkipOffDaysEnabled(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    {skipOffDaysEnabled && (
+                      <div className="space-y-3 pt-2 border-t border-slate-100 animate-in fade-in duration-150">
+                        {/* Weekly Off Days selection - user can pick any days, not limited to Sat/Sun */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-[11px] font-semibold text-slate-700">Weekly Rest Days</label>
+                            <span className="text-[10px] text-slate-400">Choose any off days (not just Sat/Sun)</span>
+                          </div>
+                          <div className="grid grid-cols-7 gap-1.5">
+                            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
+                              const isSelected = selectedWeeklyOffDays.includes(day);
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setSelectedWeeklyOffDays(selectedWeeklyOffDays.filter((d) => d !== day));
+                                    } else {
+                                      setSelectedWeeklyOffDays([...selectedWeeklyOffDays, day]);
+                                    }
+                                  }}
+                                  className={`py-1.5 text-xs font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {day}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Custom Off Dates & Holidays */}
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-semibold text-slate-700 block">
+                            Add Custom Off Days & Holidays
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={newOffDate}
+                              onChange={(e) => setNewOffDate(e.target.value)}
+                              className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Holiday label (optional)"
+                              value={newOffDateLabel}
+                              onChange={(e) => setNewOffDateLabel(e.target.value)}
+                              className="flex-1 text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomOffDate}
+                              disabled={!newOffDate}
+                              className="px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 border border-blue-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              + Add
+                            </button>
+                          </div>
+
+                          {/* List of custom off days chips */}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {customOffDates.map((off) => (
+                              <span
+                                key={off.id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                              >
+                                <span>{off.date}</span>
+                                {off.label && <span className="text-[10px] text-slate-500">({off.label})</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomOffDates(customOffDates.filter((x) => x.id !== off.id))}
+                                  className="hover:text-rose-600 p-0.5 ml-0.5 cursor-pointer text-slate-400"
+                                  title="Remove off date"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            {customOffDates.length === 0 && (
+                              <span className="text-[11px] text-slate-400 italic">No custom blackout dates added</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1769,13 +2350,20 @@ export default function TaskQuickCreateDrawer({
                         </div>
                       </div>
 
-                      {/* Skip weekends toggle */}
+                      {/* Skip Off Days status in recurrence */}
                       <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
-                        <span className="text-xs font-semibold text-slate-700">Skip Weekends (trigger on Monday)</span>
+                        <div>
+                          <span className="text-xs font-semibold text-slate-700 block">Skip Off Days</span>
+                          <span className="text-[11px] text-slate-500">
+                            {skipOffDaysEnabled
+                              ? `Active: ${selectedWeeklyOffDays.join(", ") || "None"}${customOffDates.length > 0 ? ` + ${customOffDates.length} custom dates` : ""}`
+                              : "Off (triggers on any scheduled day)"}
+                          </span>
+                        </div>
                         <input
                           type="checkbox"
-                          checked={repeatSkipWeekends}
-                          onChange={(e) => setRepeatSkipWeekends(e.target.checked)}
+                          checked={skipOffDaysEnabled}
+                          onChange={(e) => setSkipOffDaysEnabled(e.target.checked)}
                           className="w-4 h-4 rounded text-slate-900 cursor-pointer"
                         />
                       </div>
@@ -1854,7 +2442,7 @@ export default function TaskQuickCreateDrawer({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
-                    {observers.length} {observers.length === 1 ? "Observer" : "Observers"}
+                    {computedObservers.length} {computedObservers.length === 1 ? "Observer" : "Observers"}
                   </span>
                   <ChevronDown
                     className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
@@ -1865,51 +2453,198 @@ export default function TaskQuickCreateDrawer({
               </button>
 
               {openSettingsRow === "observers" && (
-                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-                  {/* Active Observers */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {observers.map((obs) => (
-                      <span
-                        key={obs.id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                  {/* Mode switcher: Team Members vs Contacts */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Observer Target
+                    </label>
+                    <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/70">
+                      <button
+                        type="button"
+                        onClick={() => setObserverType("team")}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          observerType === "team"
+                            ? "bg-white text-slate-900 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
                       >
-                        <Eye className="w-3 h-3 text-amber-500" />
-                        <span>{obs.name}</span>
-                        {obs.role && <span className="text-[10px] text-slate-400">({obs.role})</span>}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveObserver(obs.id)}
-                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                    {observers.length === 0 && (
-                      <span className="text-xs text-slate-400 italic">No observers added</span>
-                    )}
+                        Team Members
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setObserverType("contact")}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          observerType === "contact"
+                            ? "bg-white text-slate-900 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Contacts
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Add Observer Dropdown */}
-                  <div className="relative pt-1">
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) handleAddObserver(e.target.value);
-                        e.target.value = "";
-                      }}
-                      defaultValue=""
-                      className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 cursor-pointer"
-                    >
-                      <option value="" disabled>
-                        + Add team member as observer...
-                      </option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.role})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {observerType === "team" ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
+                        <div className="relative">
+                          <select
+                            value={observerRoleFilter}
+                            onChange={(e) => {
+                              setObserverRoleFilter(e.target.value);
+                              setSelectedObserverMemberIds([]);
+                            }}
+                            className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                          >
+                            {availableRoles.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <SearchableMultiSelectPicker
+                          label="Select Observer Members"
+                          placeholder="+ Click to select observers..."
+                          searchPlaceholder="Search team members by name or role..."
+                          options={filteredObserverTeamMembers.map((m) => ({
+                            id: String(m.id),
+                            name: m.name,
+                            subtitle: m.role,
+                          }))}
+                          selectedIds={selectedObserverMemberIds}
+                          onChange={setSelectedObserverMemberIds}
+                          autoRoleText={
+                            observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0
+                              ? `All ${observerRoleFilter} members (${filteredObserverTeamMembers.length} observers)`
+                              : undefined
+                          }
+                        />
+                      </div>
+
+                      {/* If role is selected and no members picked: show role-wide banner */}
+                      {observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0 && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
+                          <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-bold">Role-wide Observers:</span> All{" "}
+                            <span className="font-semibold underline">{filteredObserverTeamMembers.length} {observerRoleFilter}</span> members will observe this task.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Active observer chips */}
+                      {selectedObserverMemberIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {selectedObserverMemberIds.map((id) => {
+                            const m = teamMembers.find((tm) => String(tm.id) === id);
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                              >
+                                <Eye className="w-3 h-3 text-amber-500" />
+                                <span>{m?.name || "Member"}</span>
+                                {m?.role && <span className="text-[10px] text-slate-400">({m.role})</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveObserver(id)}
+                                  className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Contact Category</label>
+                        <div className="relative">
+                          <select
+                            value={observerContactCategory}
+                            onChange={(e) => {
+                              setObserverContactCategory(e.target.value);
+                              setSelectedObserverContactIds([]);
+                            }}
+                            className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                          >
+                            {CONTACT_CATEGORIES.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <SearchableMultiSelectPicker
+                          label="Select Observer Contacts"
+                          placeholder="+ Click to select observer contacts..."
+                          searchPlaceholder="Search contacts..."
+                          options={filteredObserverContacts.map((c) => ({
+                            id: c.id,
+                            name: c.name,
+                            subtitle: c.contactType || c.contact_type || "Client",
+                          }))}
+                          selectedIds={selectedObserverContactIds}
+                          onChange={setSelectedObserverContactIds}
+                          autoRoleText={
+                            observerContactCategory !== "All Categories" && selectedObserverContactIds.length === 0
+                              ? `All ${observerContactCategory} contacts (${filteredObserverContacts.length} observers)`
+                              : undefined
+                          }
+                        />
+                      </div>
+
+                      {/* If category selected with 0 contacts picked: show category-wide banner */}
+                      {observerContactCategory !== "All Categories" && selectedObserverContactIds.length === 0 && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
+                          <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-bold">Category-wide Observers:</span> All{" "}
+                            <span className="font-semibold underline">{filteredObserverContacts.length} {observerContactCategory}</span> contacts will observe this task.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Active observer contact chips */}
+                      {selectedObserverContactIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {selectedObserverContactIds.map((id) => {
+                            const c = initialClients.find((cl) => cl.id === id);
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                              >
+                                <Eye className="w-3 h-3 text-amber-500" />
+                                <span>{c?.name || "Contact"}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveObserver(id)}
+                                  className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1970,18 +2705,6 @@ export default function TaskQuickCreateDrawer({
                   <span>Task Preview</span>
                 </button>
               </div>
-
-              {studioTab === "builder" && (
-                <button
-                  type="button"
-                  onClick={handleAddStudioItem}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Item</span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -2001,25 +2724,16 @@ export default function TaskQuickCreateDrawer({
                 />
               ))}
 
-              {/* Bottom Actions */}
-              <div className="pt-2 flex items-center justify-between">
+              {/* Bottom Actions: Add Deliverable at bottom right, styled like Add Section */}
+              <div className="flex justify-end pt-2 pb-1">
                 <button
                   type="button"
                   onClick={handleAddStudioItem}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Another Deliverable</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStudioTab("preview")}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-blue-600 hover:text-blue-700 hover:bg-blue-50 text-xs font-bold transition-all cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <span>See Task Preview</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
+                  <span>Add Deliverable</span>
                 </button>
               </div>
             </div>

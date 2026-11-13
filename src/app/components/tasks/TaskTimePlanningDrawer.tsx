@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Clock, Calendar, Check, X } from "lucide-react";
+import { Clock, Calendar, Check, X, CalendarX2, Plus } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
@@ -22,7 +22,11 @@ export default function TaskTimePlanningDrawer({
   const [dueDate, setDueDate] = useState(config?.dueDate ?? "");
   const [durationDays, setDurationDays] = useState(config?.durationDays ?? 3);
   const [assigneeCanEditDates, setAssigneeCanEditDates] = useState(config?.assigneeCanEditDates ?? true);
-  const [skipWeekends, setSkipWeekends] = useState(config?.skipWeekends ?? true);
+  const [skipOffDays, setSkipOffDays] = useState(config?.skipOffDays ?? config?.skipWeekends ?? true);
+  const [weeklyOffDays, setWeeklyOffDays] = useState<string[]>(config?.weeklyOffDays ?? ["sat", "sun"]);
+  const [customOffDates, setCustomOffDates] = useState<string[]>(config?.customOffDates ?? []);
+  const [newCustomDate, setNewCustomDate] = useState("");
+  const [newCustomLabel, setNewCustomLabel] = useState("");
   const [useSubtaskDates, setUseSubtaskDates] = useState(config?.useSubtaskDates ?? false);
 
   // Auto-calculate due date or duration when dates change
@@ -61,7 +65,10 @@ export default function TaskTimePlanningDrawer({
       dueDate,
       durationDays,
       assigneeCanEditDates,
-      skipWeekends,
+      skipWeekends: skipOffDays,
+      skipOffDays,
+      weeklyOffDays,
+      customOffDates,
       useSubtaskDates,
     });
     onClose();
@@ -171,18 +178,117 @@ export default function TaskTimePlanningDrawer({
           />
         </div>
 
-        {/* Skip weekends */}
-        <div className="flex items-center justify-between py-1 border-b border-gray-50">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-800">Skip Weekends</span>
-            <InfoTooltip content="Do not count Saturdays and Sundays when calculating task duration" />
+        {/* Skip Off Days Config (Weekly + Custom Off Dates) */}
+        <div className="py-2 border-b border-gray-100 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <CalendarX2 className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-semibold text-slate-800">Skip Off Days</span>
+              <InfoTooltip content="Do not count configured weekly rest days or custom holidays when calculating task duration" />
+            </div>
+            <input
+              type="checkbox"
+              checked={skipOffDays}
+              onChange={(e) => setSkipOffDays(e.target.checked)}
+              className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 cursor-pointer"
+            />
           </div>
-          <input
-            type="checkbox"
-            checked={skipWeekends}
-            onChange={(e) => setSkipWeekends(e.target.checked)}
-            className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 cursor-pointer"
-          />
+
+          {skipOffDays && (
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Weekly Off Days</label>
+                <div className="grid grid-cols-7 gap-1">
+                  {[
+                    { id: "mon", label: "M" },
+                    { id: "tue", label: "T" },
+                    { id: "wed", label: "W" },
+                    { id: "thu", label: "T" },
+                    { id: "fri", label: "F" },
+                    { id: "sat", label: "S" },
+                    { id: "sun", label: "S" },
+                  ].map((day) => {
+                    const active = weeklyOffDays.includes(day.id);
+                    return (
+                      <button
+                        key={day.id}
+                        type="button"
+                        onClick={() => {
+                          if (active) {
+                            setWeeklyOffDays(weeklyOffDays.filter((d) => d !== day.id));
+                          } else {
+                            setWeeklyOffDays([...weeklyOffDays, day.id]);
+                          }
+                        }}
+                        className={`py-1 rounded text-xs font-semibold border transition-all cursor-pointer ${
+                          active
+                            ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Custom Holidays / Blackout Dates</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={newCustomDate}
+                    onChange={(e) => setNewCustomDate(e.target.value)}
+                    className="text-xs p-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 font-mono flex-1"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Label (e.g. Labor Day)"
+                    value={newCustomLabel}
+                    onChange={(e) => setNewCustomLabel(e.target.value)}
+                    className="text-xs p-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newCustomDate) {
+                        const entry = newCustomLabel ? `${newCustomDate} (${newCustomLabel})` : newCustomDate;
+                        if (!customOffDates.includes(entry)) {
+                          setCustomOffDates([...customOffDates, entry]);
+                        }
+                        setNewCustomDate("");
+                        setNewCustomLabel("");
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {customOffDates.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-2">
+                    {customOffDates.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] text-slate-700 font-medium"
+                      >
+                        <span>{item}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCustomOffDates(customOffDates.filter((c) => c !== item))}
+                          className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Use subtask dates */}

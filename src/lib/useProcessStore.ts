@@ -798,8 +798,8 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
   },
   task: {
     id: "process-task-default",
-    name: "Clinical & Operational Tasks",
-    description: "Daily clinical tasks, lab orders, and provider coordination",
+    name: "Task Workflow",
+    description: "Task assignment, execution, and review lifecycle",
     assignedToUserId: 1,
     entityType: "task",
     aiSettings: {
@@ -1371,7 +1371,7 @@ export function getStoredProcesses(): Process[] {
         changed = true;
         return {
           ...p,
-          name: "Task Workflow",
+          name: p.name || "Task Workflow",
           stages: DEFAULT_ENTITY_PROCESSES.task.stages,
         };
       }

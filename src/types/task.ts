@@ -72,6 +72,9 @@ export interface TaskObserver {
   id: string;
   name: string;
   role?: string;
+  type?: "member" | "contact" | "org_role";
+  avatar?: string;
+  category?: string;
 }
 
 export interface TaskSubtask {
@@ -93,6 +96,9 @@ export interface TaskRecurrenceConfig {
   stopCount?: number;
   stopDate?: string;
   skipWeekends: boolean;
+  skipOffDays?: boolean;
+  weeklyOffDays?: string[];
+  customOffDates?: string[];
 }
 
 export interface TaskTimePlanningConfig {
@@ -101,6 +107,9 @@ export interface TaskTimePlanningConfig {
   durationDays?: number;
   assigneeCanEditDates: boolean;
   skipWeekends: boolean;
+  skipOffDays?: boolean;
+  weeklyOffDays?: string[];
+  customOffDates?: string[];
   useSubtaskDates: boolean;
 }
 
