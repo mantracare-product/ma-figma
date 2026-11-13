@@ -31,6 +31,13 @@ import {
   Settings,
   Mic,
   UserX,
+  Upload,
+  Download,
+  FileText,
+  Webhook,
+  RefreshCw,
+  X,
+  Copy,
 } from "lucide-react";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
@@ -44,6 +51,7 @@ import { logStageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { DataExportModal } from "../components/common/DataExportModal";
+import ImportIntegrationsTab from "../components/common/ImportIntegrationsTab";
 
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
@@ -430,6 +438,72 @@ export default function Appointments() {
   const [providerSpecialtyFilter, setProviderSpecialtyFilter] = useState<string>("all");
   const [providerLocationFilter, setProviderLocationFilter] = useState<string>("all");
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importMethod, setImportMethod] = useState<"csv" | "webhook" | "integration">("csv");
+  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
+  const [isDraggingImport, setIsDraggingImport] = useState(false);
+  const [copiedAptWebhook, setCopiedAptWebhook] = useState(false);
+  const aptWebhookEndpoint = `https://api.mantraassist.com/v1/webhooks/appointments/${activeOrganization?.id || "default"}`;
+
+  const handleDownloadAppointmentTemplate = () => {
+    const csvHeader = "clientName,clientPhone,clientEmail,service,date,time,duration,notes\n";
+    const sampleRow = "John Doe,+15551234567,john@example.com,Initial Consultation,2026-11-15,10:00 AM,60,Imported appointment\n";
+    const blob = new Blob([csvHeader + sampleRow], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "appointments_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Template downloaded");
+  };
+
+  const handleImportAppointmentsCSV = async () => {
+    if (!selectedImportFile) {
+      toast.error("Please select a CSV file first");
+      return;
+    }
+    try {
+      const text = await selectedImportFile.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) {
+        toast.error("CSV file has no data rows");
+        return;
+      }
+      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      let importedCount = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",").map((c) => c.trim());
+        const getCol = (key: string) => {
+          const idx = headers.indexOf(key.toLowerCase());
+          return idx >= 0 ? cols[idx] || "" : "";
+        };
+        const clientName = getCol("clientname") || cols[0];
+        if (!clientName) continue;
+        appointmentService.createAppointment({
+          clientName,
+          clientPhone: getCol("clientphone") || getCol("phone") || "",
+          clientEmail: getCol("clientemail") || getCol("email") || "",
+          employeeId: String(employees[0]?.id || 1),
+          serviceId: services[0]?.id || 1,
+          date: getCol("date") || new Date().toISOString().split("T")[0],
+          time: getCol("time") || "10:00 AM",
+          notes: getCol("notes") || "Imported via CSV",
+          processId: appointmentProcess.id,
+        });
+        importedCount++;
+      }
+      setAppointments(appointmentService.getAppointments() as any);
+      toast.success(`Imported ${importedCount} appointment(s)`);
+      setShowImportModal(false);
+      setSelectedImportFile(null);
+      setImportMethod("csv");
+    } catch {
+      toast.error("Failed to parse CSV file");
+    }
+  };
 
   const { clients: liveClients } = useClients();
 
@@ -1179,6 +1253,7 @@ export default function Appointments() {
                 ]
               : []),
           ]}
+          onImport={() => setShowImportModal(true)}
           onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Book Appointment",
@@ -1201,6 +1276,263 @@ export default function Appointments() {
             />
           }
         />
+
+        {/* Import Appointments Drawer */}
+        {showImportModal && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/30 z-40 animate-fade-in"
+              onClick={() => {
+                setShowImportModal(false);
+                setSelectedImportFile(null);
+                setImportMethod("csv");
+              }}
+            />
+
+            <div className="fixed right-0 top-0 h-full w-[540px] max-w-full bg-white z-50 shadow-2xl flex flex-col animate-slide-in-right">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900 leading-tight">Import Appointments</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Bulk CSV onboarding, webhooks, or integration sync</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setSelectedImportFile(null);
+                    setImportMethod("csv");
+                  }}
+                  className="w-7 h-7 rounded-full bg-[#EF4444] hover:bg-[#DC2626] flex items-center justify-center text-white transition-colors shadow-xs cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* CSV / Webhook / Integration Pill Switcher */}
+                <div className="inline-flex items-center p-1 bg-slate-100 rounded-full">
+                  <button
+                    type="button"
+                    onClick={() => setImportMethod("csv")}
+                    className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                      importMethod === "csv"
+                        ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                        : "text-slate-500 hover:text-slate-800 font-medium"
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMethod("webhook")}
+                    className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                      importMethod === "webhook"
+                        ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                        : "text-slate-500 hover:text-slate-800 font-medium"
+                    }`}
+                  >
+                    <Webhook className="w-3.5 h-3.5" />
+                    Webhook
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMethod("integration")}
+                    className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                      importMethod === "integration"
+                        ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                        : "text-slate-500 hover:text-slate-800 font-medium"
+                    }`}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Integration
+                  </button>
+                </div>
+
+                {/* CSV Tab */}
+                {importMethod === "csv" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Upload a CSV file to import appointments. Make sure your file follows the correct format.
+                    </p>
+
+                    <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Need a template?</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Download our sample CSV file</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={handleDownloadAppointmentTemplate} className="gap-1.5 bg-white shadow-xs">
+                        <Download className="w-3.5 h-3.5" />
+                        Template
+                      </Button>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                        Upload CSV File
+                      </label>
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingImport(true);
+                        }}
+                        onDragLeave={() => setIsDraggingImport(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingImport(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && file.name.endsWith(".csv")) {
+                            setSelectedImportFile(file);
+                          } else {
+                            toast.error("Please drop a .csv file");
+                          }
+                        }}
+                        className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+                          isDraggingImport
+                            ? "border-blue-500 bg-blue-50/20"
+                            : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) setSelectedImportFile(file);
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          id="apt-csv-upload"
+                        />
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-700">
+                              <label htmlFor="apt-csv-upload" className="text-blue-600 font-semibold cursor-pointer hover:underline">
+                                Click to upload
+                              </label>{" "}
+                              or drag and drop
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">CSV files only</p>
+                          </div>
+                        </div>
+                      </div>
+                      {selectedImportFile && (
+                        <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-600" />
+                            <span className="text-xs font-medium text-slate-800">{selectedImportFile.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedImportFile(null)}
+                            className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                            title="Remove file"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Webhook Tab */}
+                {importMethod === "webhook" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Send POST requests with booking details to this endpoint to automatically create appointments.
+                    </p>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-800">Endpoint URL</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(aptWebhookEndpoint);
+                            setCopiedAptWebhook(true);
+                            setTimeout(() => setCopiedAptWebhook(false), 2000);
+                            toast.success("Copied webhook URL");
+                          }}
+                          className="text-xs font-medium text-slate-700 hover:text-slate-900 flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white cursor-pointer"
+                        >
+                          {copiedAptWebhook ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedAptWebhook ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-700 break-all select-all">
+                        {aptWebhookEndpoint}
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
+                      <span className="text-xs font-semibold text-slate-700">Sample Payload</span>
+                      <pre className="p-3 bg-slate-900 text-slate-200 rounded-lg text-[11px] font-mono overflow-x-auto">
+{`{
+  "clientName": "Jane Doe",
+  "clientPhone": "+447911123456",
+  "service": "Initial Consultation",
+  "date": "2026-11-15",
+  "time": "10:00 AM"
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Integration Tab */}
+                {importMethod === "integration" && (
+                  <ImportIntegrationsTab
+                    entityType="appointments"
+                    onSynced={() => setAppointments(appointmentService.getAppointments() as any)}
+                  />
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-gray-100 px-6 py-4 bg-slate-50/50 flex items-center justify-end gap-3">
+                {importMethod === "csv" ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setSelectedImportFile(null);
+                        setImportMethod("csv");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button variant="primary" onClick={handleImportAppointmentsCSV}>
+                      Import
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setSelectedImportFile(null);
+                      setImportMethod("csv");
+                    }}
+                  >
+                    Close
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Unified DataExportModal */}
         <DataExportModal
