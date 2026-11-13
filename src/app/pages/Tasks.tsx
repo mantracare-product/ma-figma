@@ -49,14 +49,25 @@ export default function Tasks() {
     return DEFAULT_TASK_PROCESSES;
   }, [processes]);
 
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("all");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(() => {
+    return taskWorkflows[0]?.id || "process-task-default";
+  });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
 
+  // Keep selectedWorkflowId pointing to a valid specific workflow
+  useEffect(() => {
+    if (taskWorkflows.length > 0) {
+      const exists = taskWorkflows.some((w) => w.id === selectedWorkflowId);
+      if (!exists || selectedWorkflowId === "all") {
+        setSelectedWorkflowId(taskWorkflows[0].id);
+      }
+    }
+  }, [taskWorkflows, selectedWorkflowId]);
+
   const activeTaskWorkflow = useMemo(() => {
-    if (selectedWorkflowId === "all") return taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
     return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
   }, [taskWorkflows, selectedWorkflowId]);
 
@@ -221,10 +232,10 @@ export default function Tasks() {
         (t.workflowName && t.workflowName.toLowerCase().includes(q)) ||
         (t.project && t.project.toLowerCase().includes(q));
 
-      // 4. Workflow filter (only applies in Tasks by me or Admin; in My Tasks all assigned tasks are shown)
+      // 4. Workflow filter (only applies in Tasks by me for clients; in My Tasks and Admin all tasks are shown)
       const matchesWorkflow =
-        (!isAdmin && clientTab === "my_tasks") ||
-        selectedWorkflowId === "all" ||
+        isAdmin ||
+        clientTab === "my_tasks" ||
         t.workflowId === selectedWorkflowId ||
         t.workflowName === activeTaskWorkflow.name ||
         t.project === activeTaskWorkflow.name ||
@@ -602,8 +613,8 @@ export default function Tasks() {
           activeMode={clientTab}
           onModeChange={(id) => setClientTab(id as "my_tasks" | "tasks_by_me")}
           leftElement={
-            // Workflow switcher only in "Tasks by me" or Admin; hidden in "My Tasks"
-            (isAdmin || clientTab === "tasks_by_me") ? (
+            // Workflow switcher only in "Tasks by me" for clients; hidden in "My Tasks" and Admin
+            (!isAdmin && clientTab === "tasks_by_me") ? (
               <div className="flex items-center gap-3">
                 {/* Task Workflow Switcher Dropdown */}
                 <div className="relative shrink-0">
@@ -615,7 +626,7 @@ export default function Tasks() {
                     title="Switch Task Workflow"
                   >
                     <span className="truncate max-w-[200px] font-semibold text-gray-800">
-                      {selectedWorkflowId === "all" ? "All Workflows" : activeTaskWorkflow.name}
+                      {activeTaskWorkflow.name}
                     </span>
                     <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showWorkflowDropdown ? "rotate-180" : ""}`} />
                   </button>
@@ -627,20 +638,6 @@ export default function Tasks() {
                         onClick={() => setShowWorkflowDropdown(false)}
                       />
                       <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedWorkflowId("all");
-                            setShowWorkflowDropdown(false);
-                          }}
-                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                            selectedWorkflowId === "all" ? "bg-primary/10 text-primary font-semibold" : "text-gray-700 hover:bg-slate-50"
-                          }`}
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          <span className="truncate">All Workflows</span>
-                          {selectedWorkflowId === "all" && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-                        </button>
                         {taskWorkflows.map((wf) => {
                           const isSelected = selectedWorkflowId === wf.id;
                           return (
