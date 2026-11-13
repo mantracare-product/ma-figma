@@ -46,6 +46,7 @@ import {
   TaskChecklistItem,
   TaskObserver,
   TaskRecurrenceConfig,
+  TaskTimePlanningConfig,
   TaskFileAttachment,
   TaskAssigneeScope,
   TaskStudioItem,
@@ -1387,7 +1388,7 @@ export default function TaskQuickCreateDrawer({
       toast.error("Please enter a Task Title");
       return;
     }
-    if (!selectedPipelineId) {
+    if (!isAdmin && !selectedPipelineId) {
       toast.error("Please select a Workflow Pipeline");
       return;
     }
@@ -2017,31 +2018,33 @@ export default function TaskQuickCreateDrawer({
             )}
           </div>
 
-          {/* 4. Workflow (Required, pipeline name only) */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
-                <span>Workflow Pipeline</span>
-                <span className="text-rose-500 font-bold">*</span>
-              </label>
-              <InfoTooltip content="The task will automatically begin in the pipeline's starting stage" />
+          {/* 4. Workflow (Required, pipeline name only; omitted for Admin tasks) */}
+          {!isAdmin && (
+            <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
+                  <span>Workflow Pipeline</span>
+                  <span className="text-rose-500 font-bold">*</span>
+                </label>
+                <InfoTooltip content="The task will automatically begin in the pipeline's starting stage" />
+              </div>
+              <div className="relative">
+                <select
+                  value={selectedPipelineId}
+                  onChange={(e) => setSelectedPipelineId(e.target.value)}
+                  className="w-full text-xs font-bold p-3 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0]"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {taskPipelines.map((pipe) => (
+                    <option key={pipe.id} value={pipe.id}>
+                      {pipe.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-            <div className="relative">
-              <select
-                value={selectedPipelineId}
-                onChange={(e) => setSelectedPipelineId(e.target.value)}
-                className="w-full text-xs font-bold p-3 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0]"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {taskPipelines.map((pipe) => (
-                  <option key={pipe.id} value={pipe.id}>
-                    {pipe.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-          </div>
+          )}
 
           {/* 5. Settings Accordion Rows (Scheduling omitted for Admin tasks) */}
           <div className="space-y-3 pt-1">
@@ -2770,12 +2773,16 @@ export default function TaskQuickCreateDrawer({
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
                         TSK-PREVIEW
                       </span>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                        {selectedPipeline?.name || "Task Pipeline"}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        {stageName}
-                      </span>
+                      {!isAdmin && (
+                        <>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                            {selectedPipeline?.name || "Task Pipeline"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            {stageName}
+                          </span>
+                        </>
+                      )}
                     </div>
                     <h2
                       className="text-base sm:text-lg font-bold text-slate-900 tracking-tight"
