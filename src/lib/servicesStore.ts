@@ -14,6 +14,8 @@ export interface Service {
   description: string;
   category?: string;
   cptCode?: string;
+  /** Default when no payer rule applies: does this service normally need prior authorization? */
+  requiresAuthDefault?: boolean;
   duration: number;
   slotDuration?: number;
   price: number;

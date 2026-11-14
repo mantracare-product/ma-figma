@@ -4036,6 +4036,15 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "check_auth_required" || stepKey === "request_prior_auth") && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600">Uses the payer x service rules in Billing setup &gt; Payers. Writes to the existing instance and the appointment; it never creates an instance.</p>
+                {renderField("Payer id (blank = the client's primary coverage)", <input value={params.payerId || ""} onChange={(e) => onChange({ payerId: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {stepKey === "request_prior_auth" && renderField("Channel (mock)", <input value={params.channel || ""} onChange={(e) => onChange({ channel: e.target.value })} placeholder="portal / fax / manual" className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField(stepKey === "check_auth_required" ? "Result to stage map as JSON (keys: required, not_required, unknown)" : "Stage map as JSON (key: requested)", <textarea defaultValue={JSON.stringify(params.stageMap || {}, null, 1)} onBlur={(e) => { try { onChange({ stageMap: JSON.parse(e.target.value || "{}") }); } catch { /* keep previous */ } }} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm font-mono" rows={4} />)}
+              </div>
+            )}
+
             {(stepKey === "run_eligibility" || stepKey === "run-eligibility") && (
               <div className="space-y-4">
                 <p className="text-xs text-amber-700">Mock data: results come from the mock payer adapter.</p>

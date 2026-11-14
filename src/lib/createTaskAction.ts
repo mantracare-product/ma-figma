@@ -10,6 +10,7 @@ import { createTaskRecord, findOpenTasksForRecord } from "./tasksStore";
 import { queueIdFromName } from "./taskViewsStore";
 import { renderTemplate } from "./updateFieldsAction";
 import { resolveRecordContext } from "./recordContext";
+import { getStoredProcesses } from "./useProcessStore";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 
 export const CREATE_TASK_STEP_KEYS = ["create_task", "create-task"];
@@ -97,7 +98,23 @@ export function executeCreateTaskStep(args: {
   const { rule, stepId, params, event } = args;
   const ctx = resolveRecordContext(event);
   const scope = { ...(event.data || {}), client: ctx.client, appointment: ctx.appointment, instance: ctx.instance };
-  const entityRef = entityRefFromEvent(event, rule.id);
+  let entityRef = entityRefFromEvent(event, rule.id);
+  // linkTo "instance_if_present": tie the task to the process instance of the triggering record when one exists
+  // (stage = the instance's current stage, so the task closes when it leaves), else keep the event's own record.
+  if (params.linkTo === "instance_if_present" && ctx.instance) {
+    const inst = ctx.instance;
+    const proc = getStoredProcesses().find((p) => p.id === inst.processId);
+    const stage = proc?.stages?.find((s) => (s.name || "").trim().toLowerCase() === (inst.currentStage || "").trim().toLowerCase());
+    entityRef = {
+      type: "process_instance",
+      id: inst.instanceId || inst.id,
+      instanceId: inst.instanceId || inst.id,
+      processId: inst.processId,
+      stageId: stage?.id || inst.currentStage,
+      stageName: inst.currentStage,
+      ruleId: rule.id,
+    };
+  }
   entityRef.autoCloseOnStageExit = params.autoCloseOnStageExit !== false;
 
   const queueName = String(params.queue || params.queueId || "").trim();

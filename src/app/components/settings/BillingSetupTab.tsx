@@ -19,6 +19,8 @@ import {
   type ScrubRule,
 } from "../../../lib/billingSetupStore";
 import { newId } from "../../../lib/refStore";
+import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
+import { ELIGIBILITY_SETTINGS_EVENT, getMockScenario, setMockScenario, type MockScenario } from "../../../lib/eligibility";
 
 type Section = "entity" | "locations" | "payers" | "fees" | "defaults" | "scrub" | "providers";
 
@@ -113,7 +115,63 @@ function PayersSection({ canEdit }: { canEdit: boolean }) {
         </div>
       ))}
       <button className={btnCls} disabled={!canEdit} onClick={() => payersStore.upsert({ id: newId("payer"), name: "New payer", payerIdCode: "", enrollment: { status: "not_started" } })}>Add payer</button>
-      {/* TODO(rcm): prior-auth rules table (S3.3) is added to this section. */}
+      <PriorAuthRulesTable canEdit={canEdit} payers={rows} />
+      <MockScenarioPicker canEdit={canEdit} />
+    </div>
+  );
+}
+
+function PriorAuthRulesTable({ canEdit, payers }: { canEdit: boolean; payers: Payer[] }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener(PRIOR_AUTH_RULES_EVENT, bump);
+    return () => window.removeEventListener(PRIOR_AUTH_RULES_EVENT, bump);
+  }, []);
+  const rules = priorAuthRulesStore.get();
+  const upd = (r: PriorAuthRule, patch: Partial<PriorAuthRule>) => priorAuthRulesStore.upsert({ ...r, ...patch, sample: false });
+  return (
+    <div className="mt-6 space-y-2">
+      <h3 className="text-sm font-semibold">Prior-auth rules (payer x service)</h3>
+      {rules.some((r) => r.sample) && <p className="text-xs text-amber-700">Mock data: sample rules. Editing a row marks it as yours.</p>}
+      {rules.map((r) => (
+        <div key={r.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.7fr_0.8fr_1.5fr_auto] gap-2 items-center">
+          <select className={inputCls} disabled={!canEdit} value={r.payerId} onChange={(e) => upd(r, { payerId: e.target.value })}>
+            <option value="">Payer</option>
+            {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input className={inputCls} disabled={!canEdit} value={r.cptCode || ""} placeholder="CPT" onChange={(e) => upd(r, { cptCode: e.target.value })} />
+          <select className={inputCls} disabled={!canEdit} value={r.required ? "yes" : "no"} onChange={(e) => upd(r, { required: e.target.value === "yes" })}>
+            <option value="yes">Auth: Y</option>
+            <option value="no">Auth: N</option>
+          </select>
+          <input className={inputCls} disabled={!canEdit} type="number" value={r.units ?? ""} placeholder="Units" onChange={(e) => upd(r, { units: e.target.value === "" ? undefined : Number(e.target.value) })} />
+          <input className={inputCls} disabled={!canEdit} type="number" value={r.validityDays ?? ""} placeholder="Days" onChange={(e) => upd(r, { validityDays: e.target.value === "" ? undefined : Number(e.target.value) })} />
+          <input className={inputCls} disabled={!canEdit} value={r.notes || ""} placeholder="Notes" onChange={(e) => upd(r, { notes: e.target.value })} />
+          <button className={btnCls} disabled={!canEdit} onClick={() => priorAuthRulesStore.remove(r.id)}>Remove</button>
+        </div>
+      ))}
+      <button className={btnCls} disabled={!canEdit} onClick={() => priorAuthRulesStore.upsert({ id: newId("pa"), payerId: "", required: true })}>Add rule</button>
+    </div>
+  );
+}
+
+const SCENARIOS: MockScenario[] = ["auto", "active", "inactive", "not_found", "provider_not_enrolled", "payer_down", "timeout"];
+
+function MockScenarioPicker({ canEdit }: { canEdit: boolean }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener(ELIGIBILITY_SETTINGS_EVENT, bump);
+    return () => window.removeEventListener(ELIGIBILITY_SETTINGS_EVENT, bump);
+  }, []);
+  return (
+    <div className="mt-6 space-y-1">
+      <h3 className="text-sm font-semibold">Mock eligibility scenario</h3>
+      <p className="text-xs text-amber-700">Mock data: the payer adapter is simulated. Pick what it answers (auto = derived from the member ID and enrollment).</p>
+      <select className={inputCls + " max-w-xs"} disabled={!canEdit} value={getMockScenario()} onChange={(e) => setMockScenario(e.target.value as MockScenario)}>
+        {SCENARIOS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+      </select>
     </div>
   );
 }

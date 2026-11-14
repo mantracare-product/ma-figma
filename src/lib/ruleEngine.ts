@@ -31,6 +31,7 @@ import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsActio
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
+import { executeAuthStep, isCheckAuthStep, isRequestAuthStep } from "./authActions";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -704,6 +705,12 @@ export async function executeRulesForEvent(
             }
           }
         }
+      }
+
+      // Actions: Check Auth Required / Request Prior Auth (write to an existing instance + the appointment; never create an instance)
+      if (isCheckAuthStep(stepKey) || isRequestAuthStep(stepKey)) {
+        const run = executeAuthStep({ kind: isCheckAuthStep(stepKey) ? "check" : "request", rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] ${stepKey} failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Run Eligibility (mock payer adapter; copy-fresh window; writes instance + appointment)
