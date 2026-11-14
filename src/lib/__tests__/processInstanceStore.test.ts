@@ -152,6 +152,43 @@ describe("legacy name-based shims", () => {
   });
 });
 
+describe("legacy call rows that carry a process (demo data)", () => {
+  const callRow = {
+    id: "CALL-001", client: "Test Patient", clientId: "CL-TEST", type: "Outbound", status: "Completed",
+    process: "Client Intake", currentStage: "Contacted", duration: "4:32", date: "2026-01-02 09:00",
+    hasRecording: true, hasTranscript: true, hasScheduledCall: false, kind: "call",
+  };
+
+  it("name shims update the legacy call row in place instead of fabricating a duplicate instance", () => {
+    localStorage.setItem("callLogs", JSON.stringify([callRow]));
+    store.updateProcessCallLogStage(CLIENT.id, "Client Intake", "Interested");
+    const rows = JSON.parse(localStorage.getItem("callLogs")!);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("CALL-001");
+    expect(rows[0].currentStage).toBe("Interested");
+    expect(store.getProcessInstances().filter((r) => r.process === "Client Intake")).toHaveLength(0);
+    expect(store.getCallsOnly().some((c) => c.id === "CALL-001")).toBe(true);
+  });
+
+  it("updateProcessRowStage moves exactly one row by id (instance or legacy) and never writes client.stage", () => {
+    localStorage.setItem("callLogs", JSON.stringify([callRow]));
+    const a = start("101");
+    store.updateProcessRowStage(a.instance.id, "Needs fix");
+    store.updateProcessRowStage("CALL-001", "Interested");
+    expect(store.getProcessInstanceById(a.instance.instanceId!)!.currentStage).toBe("Needs fix");
+    const call = store.getCallsOnly().find((c) => c.id === "CALL-001")!;
+    expect(call.currentStage).toBe("Interested");
+    expect(JSON.parse(localStorage.getItem("clients")!)[0].stage).toBe("Initial Contact");
+  });
+
+  it("a legacy deal card only follows its row when unambiguous", () => {
+    localStorage.setItem("callLogs", JSON.stringify([callRow]));
+    localStorage.setItem("deals", JSON.stringify([{ id: "D-OLD", clientName: "Test Patient", clientId: "CL-TEST", stage: "Client Intake: Contacted" }]));
+    store.updateProcessRowStage("CALL-001", "Interested");
+    expect(JSON.parse(localStorage.getItem("deals")!)[0].stage).toBe("Client Intake: Interested");
+  });
+});
+
 describe("migration (callLogs_schema_v2)", () => {
   const legacy = [
     { id: "PRC-CL-TEST-1111", client: "Test Patient", clientId: "CL-TEST", type: "WhatsApp", status: "In Progress", process: "Old Flow", currentStage: "Older", duration: "0:00", date: "2026-01-01 09:00", hasRecording: false, hasTranscript: true, hasScheduledCall: false },

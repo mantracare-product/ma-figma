@@ -29,13 +29,14 @@ import { Mic } from "lucide-react";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { getActivityForProcess } from "../../lib/activityLog";
-import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessCallLogStage } from "../../lib/processLogsStore";
+import { getStoredCallLogs, getProcessInstances, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessRowStage, isProcessInstanceRow } from "../../lib/processLogsStore";
+import { reconcileDealCards } from "../../lib/dealCards";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
-import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
+import { getStoredClients } from "../../lib/clientsStore";
 import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { logStageMove } from "../../lib/useAutomationStore";
@@ -90,6 +91,12 @@ interface Deal {
   status: "In Progress" | "Won" | "Lost";
   responsible: string;
   stage: string;
+  /** The process instance this card represents (one card per instance). */
+  instanceId?: string;
+  clientId?: string;
+  /** Source-derived title, e.g. "Eye exam — 2026-11-20 10:30 (Appt #123)". */
+  title?: string;
+  source?: { type: string; id: string; title?: string };
 }
 
 const initialPatientCareDeals: Deal[] = [
@@ -123,10 +130,50 @@ const initialDeals: Deal[] = [
 ];
 
 
-const getClientIdByName = (name: string): string => {
+/** Real client id for a name, or undefined. (It used to fall back to "CL-001", silently attaching actions to the wrong client.) */
+const getClientIdByName = (name: string): string | undefined => {
   const cs = getStoredClients();
-  const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
-  return found ? found.id : "CL-001";
+  const found = cs.find((c: any) => c.name?.toLowerCase() === (name || "").toLowerCase());
+  return found ? found.id : undefined;
+};
+
+/** A deal card's client id: stored on the card, else looked up by name. Undefined when it cannot be resolved. */
+const resolveDealClientId = (deal: { clientId?: string; clientName: string }): string | undefined =>
+  deal.clientId || getClientIdByName(deal.clientName);
+
+/**
+ * Required-field checks use ONLY the instance's own values (its row) plus its client name under the registry key
+ * `client_name`. Client record fields and made-up defaults (the old hard-coded phone/email) are not mixed in.
+ */
+const instanceFieldValues = (log: CallLog): Record<string, any> => ({ client_name: log.client, ...(log || {}) });
+
+/** Convenience prefill for the required-fields modal only (never used to decide what is missing). */
+const requiredFieldsPrefill = (log: CallLog, clientObj?: Client): Record<string, any> => ({
+  ...(clientObj?.phone ? { phone: clientObj.phone } : {}),
+  ...(clientObj?.email ? { email: clientObj.email } : {}),
+  ...instanceFieldValues(log),
+});
+
+const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
+
+/** Does this deal card belong to this row? Linked cards match by instanceId only; legacy cards only when unambiguous. */
+const dealBelongsToLog = (d: Deal, log: CallLog, allRows: CallLog[]): boolean => {
+  const logInstanceId = (log as any).instanceId as string | undefined;
+  if (d.instanceId) return !!logInstanceId && d.instanceId === logInstanceId;
+  const sameClient = (d.clientId && d.clientId === log.clientId) || norm(d.clientName) === norm(log.client);
+  const sameProcess = norm(d.stage).startsWith(`${norm(log.process)}:`);
+  if (!sameClient || !sameProcess) return false;
+  const rowsForPair = allRows.filter((l) => (l.clientId === log.clientId || norm(l.client) === norm(log.client)) && norm(l.process) === norm(log.process));
+  return rowsForPair.length === 1;
+};
+
+/** The row a deal card stands for: by instanceId, else the single row of that client + process; never a guess. */
+const findLogForDeal = (deal: Deal, procName: string, allRows: CallLog[]): CallLog | undefined => {
+  if (deal.instanceId) return allRows.find((l) => (l as any).instanceId === deal.instanceId || l.id === deal.instanceId);
+  const rows = allRows.filter(
+    (l) => ((deal.clientId && l.clientId === deal.clientId) || norm(l.client) === norm(deal.clientName)) && norm(l.process) === norm(procName)
+  );
+  return rows.length === 1 ? rows[0] : undefined;
 };
 
 const getClientObj = (clientId?: string, clientName?: string): Client | undefined => {
@@ -562,14 +609,25 @@ export default function Deals() {
   }, [selectedProcessFilter]);
   const [stageDropdownCallId, setStageDropdownCallId] = useState<string | null>(null);
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
+  // One deal card per process instance: adopt/create/sync cards from the instance rows (see lib/dealCards.ts).
+  const reconcileWithInstances = (list: Deal[]): Deal[] => {
+    try {
+      return reconcileDealCards(list, getProcessInstances(), {
+        responsibleOf: (cid, cname) => getClientObj(cid, cname)?.responsible,
+      }).deals;
+    } catch {
+      return list;
+    }
+  };
+
   const getDealsForActiveOrg = (): Deal[] => {
     try {
       if (isFreshWorkspace()) {
         const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
         const raw = localStorage.getItem(`deals_${signupOrgId}`) || sessionStorage.getItem(`deals_${signupOrgId}`);
-        if (!raw) return [];
+        if (!raw) return reconcileWithInstances([]);
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        return reconcileWithInstances(Array.isArray(parsed) ? parsed : []);
       }
 
       const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
@@ -586,7 +644,7 @@ export default function Deals() {
         localStorage.setItem("deals", JSON.stringify(list));
         sessionStorage.setItem("deals", JSON.stringify(list));
       }
-      return list;
+      return reconcileWithInstances(list);
     } catch {
       return [];
     }
@@ -611,6 +669,14 @@ export default function Deals() {
     const handler = () => {
       setDeals(getDealsForActiveOrg());
     };
+    // A process instance created/moved elsewhere (kiosk, portal, rules) must show up as its card here too.
+    const handleProcessRows = () => {
+      setDeals((prev) => {
+        const next = reconcileWithInstances(prev);
+        return next === prev ? prev : next;
+      });
+    };
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleProcessRows);
 
     const handleVisibility = () => {
       if (typeof document !== "undefined" && !document.hidden) {
@@ -636,6 +702,7 @@ export default function Deals() {
     }
 
     return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleProcessRows);
       window.removeEventListener("deals_updated", handler);
       window.removeEventListener("organizationChanged", handler);
       window.removeEventListener("mantra_organization_changed", handler);
@@ -1712,22 +1779,58 @@ export default function Deals() {
     }
   };
 
+  /**
+   * Move ONE client-in-process row (a process instance, or a legacy call row that carries a process) to a stage.
+   *  - updates exactly that row (by id) and saves any required-field values onto it
+   *  - mirrors the new stage to that row's deal card(s) only (never "every deal of this client")
+   *  - emits ONE stage move (recordId = instanceId)
+   *  - never writes client.stage
+   * `dealId` is the dragged kanban card (always moved, even if it has no linked row).
+   */
+  const moveRowToStage = (opts: {
+    log: CallLog;
+    stageName: string;
+    filledValues?: Record<string, any>;
+    dealId?: string;
+    fromStageName?: string;
+  }): CallLog => {
+    const { log, stageName, filledValues, dealId } = opts;
+    const oldStage = opts.fromStageName ?? log.currentStage;
+    const stageFull = `${log.process}: ${stageName}`;
+    const updatedLog = { ...log, ...(filledValues || {}), currentStage: stageName } as CallLog;
+
+    setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+    saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+    updateProcessRowStage(log.id, stageName); // mirrors to the client's name map + deal storage; emits nothing
+
+    const allRows = getStoredCallLogs();
+    setDeals((prev) =>
+      prev.map((d) => (d.id === dealId || dealBelongsToLog(d, log, allRows) ? { ...d, stage: stageFull } : d))
+    );
+    if (selectedLogForView && selectedLogForView.id === log.id) {
+      setSelectedLogForView(updatedLog);
+    }
+    triggerStageMoveAutomation({
+      clientId: log.clientId,
+      clientName: log.client,
+      processName: log.process,
+      fromStageName: oldStage,
+      toStageName: stageName,
+      instanceId: (log as any).instanceId,
+      source: (log as any).source,
+    });
+    return updatedLog;
+  };
+
   const handleUpdateLogStage = (log: CallLog, stageName: string) => {
     const clientObj = getClientObj(log.clientId, log.client);
-    const currentValues = {
-      client_name: log.client,
-      phone: clientObj?.phone || "9667283405",
-      email: clientObj?.email || "anshul@mantracare.com",
-      ...(clientObj || {}),
-      ...(log || {}),
-    };
     const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
     const missing = getMissingRequiredProcessFields({
       processId: (log as any)?.processId,
       processName: log.process,
       currentStageName: stageName,
       allFields: procFields,
-      fieldValues: currentValues,
+      fieldValues: instanceFieldValues(log), // the instance's own values only
     });
 
     if (missing.length > 0) {
@@ -1739,38 +1842,9 @@ export default function Deals() {
         processId: (log as any)?.processId,
         targetStageName: stageName,
         missingFields: missing,
-        initialValues: currentValues,
+        initialValues: requiredFieldsPrefill(log, clientObj),
         onConfirm: (filledValues) => {
-          const oldStage = log.currentStage;
-          const updatedLog = { ...log, ...filledValues, currentStage: stageName };
-          setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-          saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-          updateProcessCallLogStage(log.clientId, log.process, stageName);
-          try {
-            const allClients = getStoredClients();
-            const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
-            if (targetIdx >= 0) {
-              allClients[targetIdx] = {
-                ...allClients[targetIdx],
-                stage: stageName,
-                processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
-              };
-              saveStoredClients([...allClients]);
-            }
-          } catch {}
-          setDeals((prev) =>
-            prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-          );
-          if (selectedLogForView && selectedLogForView.id === log.id) {
-            setSelectedLogForView(updatedLog);
-          }
-          triggerStageMoveAutomation({
-            clientId: log.clientId,
-            clientName: log.client,
-            processName: log.process,
-            fromStageName: oldStage,
-            toStageName: stageName,
-          });
+          moveRowToStage({ log, stageName, filledValues });
           setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
           toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
         },
@@ -1778,36 +1852,7 @@ export default function Deals() {
       return;
     }
 
-    const oldStage = log.currentStage;
-    const updatedLog = { ...log, currentStage: stageName };
-    setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-    saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-    updateProcessCallLogStage(log.clientId, log.process, stageName);
-    try {
-      const allClients = getStoredClients();
-      const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
-      if (targetIdx >= 0) {
-        allClients[targetIdx] = {
-          ...allClients[targetIdx],
-          stage: stageName,
-          processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
-        };
-        saveStoredClients([...allClients]);
-      }
-    } catch {}
-    setDeals((prev) =>
-      prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-    );
-    if (selectedLogForView && selectedLogForView.id === log.id) {
-      setSelectedLogForView(updatedLog);
-    }
-    triggerStageMoveAutomation({
-      clientId: log.clientId,
-      clientName: log.client,
-      processName: log.process,
-      fromStageName: oldStage,
-      toStageName: stageName,
-    });
+    moveRowToStage({ log, stageName });
     toast.success(`Stage moved to ${stageName} ✓`);
   };
 
@@ -1875,19 +1920,32 @@ export default function Deals() {
     {
       key: "client",
       header: "Client",
-      render: (log) => (
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/clients/${log.clientId || getClientIdByName(log.client)}`);
-          }}
-          className="cursor-pointer hover:underline hover:text-blue-700 transition-colors font-semibold"
-          style={{ color: '#1A73E8', fontFamily: 'DM Sans, sans-serif' }}
-          title="Click to view Client Profile"
-        >
-          {log.client}
-        </span>
-      )
+      render: (log) => {
+        // Several instances of one process can exist per client; the source title tells them apart.
+        const instanceTitle = (log as any).title || (log as any).source?.title;
+        return (
+          <div className="flex flex-col min-w-0">
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                const cid = log.clientId || getClientIdByName(log.client);
+                if (cid) navigate(`/clients/${cid}`);
+                else toast.error("Client record not found");
+              }}
+              className="cursor-pointer hover:underline hover:text-blue-700 transition-colors font-semibold"
+              style={{ color: '#1A73E8', fontFamily: 'DM Sans, sans-serif' }}
+              title="Click to view Client Profile"
+            >
+              {log.client}
+            </span>
+            {instanceTitle && (
+              <span className="text-[11px] text-slate-400 truncate max-w-[240px]" title={instanceTitle}>
+                {instanceTitle}
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: "date",
@@ -1925,13 +1983,6 @@ export default function Deals() {
       header: "Alert",
       render: (log) => {
         const clientObj = getClientObj(log.clientId, log.client);
-        const currentValues = {
-          client_name: log.client,
-          phone: clientObj?.phone || "9667283405",
-          email: clientObj?.email || "anshul@mantracare.com",
-          ...(clientObj || {}),
-          ...(log || {}),
-        };
         const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
 
         const missing = getMissingRequiredProcessFields({
@@ -1939,7 +1990,7 @@ export default function Deals() {
           processName: log.process,
           currentStageName: log.currentStage,
           allFields: procFields,
-          fieldValues: currentValues,
+          fieldValues: instanceFieldValues(log), // the instance's own values only
         });
 
         if (missing.length === 0) {
@@ -1958,7 +2009,7 @@ export default function Deals() {
                 processId: (log as any)?.processId,
                 targetStageName: log.currentStage,
                 missingFields: missing,
-                initialValues: currentValues,
+                initialValues: requiredFieldsPrefill(log, clientObj),
                 onConfirm: (filledValues) => {
                   const updatedLog = { ...log, ...filledValues };
                   setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
@@ -2816,69 +2867,62 @@ export default function Deals() {
                         if (targetDeal) {
                           const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Client Intake";
                           const stageClean = stage.label || stage.fullLabel.split(":")[1]?.trim() || stage.fullLabel;
-                          const clientId = getClientIdByName(targetDeal.clientName);
+                          const clientId = resolveDealClientId(targetDeal);
                           const clientObj = getClientObj(clientId, targetDeal.clientName);
-                          const matchingLog = callLogs.find((l) => l.client === targetDeal.clientName && l.process === procName);
-                          const currentValues = {
-                            client_name: targetDeal.clientName,
-                            phone: clientObj?.phone || "9667283405",
-                            email: clientObj?.email || "anshul@mantracare.com",
-                            ...(clientObj || {}),
-                            ...(matchingLog || {}),
-                          };
+                          // The row this card stands for: by instanceId, else the single row of that client + process. Never a guess.
+                          const matchingLog = findLogForDeal(targetDeal, procName, getStoredCallLogs());
+                          const fromStageName = targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage;
                           const procFields = getFieldsForOrg("process", activeOrganization, (matchingLog as any)?.processId || procName);
                           const missing = getMissingRequiredProcessFields({
                             processId: (matchingLog as any)?.processId,
                             processName: procName,
                             currentStageName: stageClean,
                             allFields: procFields,
-                            fieldValues: currentValues,
+                            // the instance's own values only
+                            fieldValues: matchingLog ? instanceFieldValues(matchingLog) : { client_name: targetDeal.clientName },
                           });
+
+                          // One move whatever the path: the row (if any) + this card, one stage event, no client.stage write.
+                          const applyMove = (filledValues?: Record<string, any>) => {
+                            if (matchingLog) {
+                              moveRowToStage({
+                                log: matchingLog,
+                                stageName: stageClean,
+                                filledValues,
+                                dealId: targetDeal.id,
+                                fromStageName,
+                              });
+                            } else {
+                              // A card with no linked row: move the card itself and still emit the move.
+                              setDeals((prev) =>
+                                prev.map((d) => (d.id === targetDeal.id ? { ...d, stage: stage.fullLabel } : d))
+                              );
+                              triggerStageMoveAutomation({
+                                clientId: clientId || "",
+                                clientName: targetDeal.clientName,
+                                processName: procName,
+                                fromStageName,
+                                toStageName: stageClean,
+                                instanceId: targetDeal.instanceId,
+                                source: targetDeal.source,
+                              });
+                            }
+                          };
 
                           if (missing.length > 0) {
                             setRequiredFieldsModalState({
                               isOpen: true,
                               clientName: targetDeal.clientName,
-                              clientId: clientId,
+                              clientId: clientId || "",
                               processName: procName,
                               processId: (matchingLog as any)?.processId,
                               targetStageName: stageClean,
                               missingFields: missing,
-                              initialValues: currentValues,
+                              initialValues: matchingLog
+                                ? requiredFieldsPrefill(matchingLog, clientObj)
+                                : { client_name: targetDeal.clientName },
                               onConfirm: (filledValues) => {
-                                setDeals((prev) =>
-                                  prev.map((d) =>
-                                    d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
-                                  )
-                                );
-                                if (matchingLog) {
-                                  const updatedLog = { ...matchingLog, ...filledValues, currentStage: stageClean };
-                                  setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
-                                  saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
-                                  if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
-                                    setSelectedLogForView(updatedLog);
-                                  }
-                                }
-                                updateProcessCallLogStage(clientId, procName, stageClean);
-                                try {
-                                  const allClients = getStoredClients();
-                                  const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
-                                  if (targetIdx >= 0) {
-                                    allClients[targetIdx] = {
-                                      ...allClients[targetIdx],
-                                      stage: stageClean,
-                                      processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
-                                    };
-                                    saveStoredClients([...allClients]);
-                                  }
-                                } catch {}
-                                triggerStageMoveAutomation({
-                                  clientId,
-                                  clientName: targetDeal.clientName,
-                                  processName: procName,
-                                  fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
-                                  toStageName: stageClean,
-                                });
+                                applyMove(filledValues);
                                 setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
                                 toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓`);
                               },
@@ -2887,40 +2931,8 @@ export default function Deals() {
                             return;
                           }
 
-                          // No missing fields -> update directly
-                          setDeals((prev) =>
-                            prev.map((d) =>
-                              d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
-                            )
-                          );
-                          updateProcessCallLogStage(clientId, procName, stageClean);
-                          try {
-                            const allClients = getStoredClients();
-                            const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
-                            if (targetIdx >= 0) {
-                              allClients[targetIdx] = {
-                                ...allClients[targetIdx],
-                                stage: stageClean,
-                                processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
-                              };
-                              saveStoredClients([...allClients]);
-                            }
-                          } catch {}
-                          if (matchingLog) {
-                            const updatedLog = { ...matchingLog, currentStage: stageClean };
-                            setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
-                            saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
-                            if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
-                              setSelectedLogForView(updatedLog);
-                            }
-                          }
-                          triggerStageMoveAutomation({
-                            clientId,
-                            clientName: targetDeal.clientName,
-                            processName: procName,
-                            fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
-                            toStageName: stageClean,
-                          });
+                          // No missing fields -> move directly
+                          applyMove();
                           toast.success(`Deal moved to ${stage.fullLabel} ✓`);
                         }
                         setDraggedDealId(null);
@@ -2980,7 +2992,9 @@ export default function Deals() {
                                 <span
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate(`/clients/${getClientIdByName(deal.clientName)}`);
+                                    const cid = resolveDealClientId(deal);
+                                    if (cid) navigate(`/clients/${cid}`);
+                                    else toast.error("Client record not found");
                                   }}
                                   className="font-bold leading-tight flex-1 pr-1 text-left cursor-pointer hover:underline hover:text-blue-700 transition-colors"
                                   style={{ fontSize: '13px', color: '#1A73E8', fontFamily: 'Outfit, sans-serif', padding: 0 }}
@@ -3031,6 +3045,17 @@ export default function Deals() {
                                   )}
                                 </div>
                               </div>
+
+                              {/* Instance title (source appointment/service) so cards of the same client + process are distinguishable */}
+                              {deal.instanceId && (deal.title || deal.dealName) && (
+                                <div
+                                  className="mb-1.5 truncate"
+                                  title={deal.title || deal.dealName}
+                                  style={{ fontSize: '11px', color: '#64748B', fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {deal.title || deal.dealName}
+                                </div>
+                              )}
 
                               {/* Row 2: Process */}
                               <div className="flex items-center gap-1.5 mb-1.5">
@@ -4029,26 +4054,10 @@ export default function Deals() {
         onStageChange={(idx) => {
           if (!selectedLogForView) return;
           const newStage = getDealStageFromIndex(idx, selectedLogForView.process);
-          const oldStage = selectedLogForView.currentStage;
           setDrawerStageIdx(idx);
           toast.success(`Stage updated to ${newStage} ✓`);
-          const updatedLog = { ...selectedLogForView, currentStage: newStage };
-          setSelectedLogForView(updatedLog);
-          setCallLogs((prev) =>
-            prev.map((l) => (l.id === selectedLogForView.id ? updatedLog : l))
-          );
-          saveCallLogs(getStoredCallLogs().map((l) => (l.id === selectedLogForView.id ? updatedLog : l)));
-          updateProcessCallLogStage(selectedLogForView.clientId, selectedLogForView.process, newStage);
-          setDeals((allDeals) =>
-            allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: `${selectedLogForView.process}: ${newStage}` } : d))
-          );
-          triggerStageMoveAutomation({
-            clientId: selectedLogForView.clientId,
-            clientName: selectedLogForView.client,
-            processName: selectedLogForView.process,
-            fromStageName: oldStage,
-            toStageName: newStage,
-          });
+          // Same single move path as the list and the kanban: this row, its own card(s), one stage event, no client.stage write.
+          moveRowToStage({ log: selectedLogForView, stageName: newStage });
         }}
         visibleFieldKeys={drawerVisibleFields}
         onVisibleFieldKeysChange={(keys) => {

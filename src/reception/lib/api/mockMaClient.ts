@@ -1022,13 +1022,20 @@ export class MockMaClient implements IMaClient {
     });
   }
 
+  /**
+   * Keep the deal card of ONE process instance in sync. It no longer grabs "the first deal of this client by name"
+   * (which let a second booking overwrite the first card, even one from a different process):
+   *  - with an instanceId it updates/creates exactly that instance's card;
+   *  - without one it only touches the single card of the SAME process for that client, otherwise it creates a new card.
+   */
   private syncDealRecord(
     clientName: string,
     doctorName: string,
     processName: string,
     stageName: string,
     serviceName: string = 'Consultation',
-    amount: number = 150
+    amount: number = 150,
+    link?: { clientId?: string; instanceId?: string; title?: string; source?: { type: string; id: string; title?: string } }
   ) {
     try {
       if (typeof window === 'undefined') return;
@@ -1036,29 +1043,45 @@ export class MockMaClient implements IMaClient {
       const deals: any[] = raw ? JSON.parse(raw) : [];
       const cleanDoctor = doctorName.replace(/^Dr\.\s*/i, '');
       const fullStage = `${processName}: ${stageName}`;
-      const existingIdx = deals.findIndex((d) => d.clientName?.toLowerCase() === clientName.toLowerCase());
+      const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
+      const sameClient = (d: any) =>
+        (!!link?.clientId && d.clientId === link.clientId) || lc(d.clientName) === lc(clientName);
+
+      let existingIdx = -1;
+      if (link?.instanceId) {
+        existingIdx = deals.findIndex((d) => d.instanceId === link.instanceId);
+      } else {
+        const sameProcessCards = deals.filter((d) => sameClient(d) && lc(d.stage).startsWith(`${lc(processName)}:`));
+        if (sameProcessCards.length === 1) existingIdx = deals.indexOf(sameProcessCards[0]);
+      }
       const todayStr = new Date().toISOString().split('T')[0];
+      const dealName = link?.title || `${serviceName} — ${clientName}`;
 
       if (existingIdx !== -1) {
         deals[existingIdx] = {
           ...deals[existingIdx],
-          dealName: `${serviceName} — ${clientName}`,
+          dealName,
           responsible: cleanDoctor,
           stage: fullStage,
           status: 'In Progress',
+          ...(link?.instanceId ? { instanceId: link.instanceId, clientId: link.clientId, title: link.title, source: link.source } : {}),
         };
       } else {
-        const dealId = `DEAL-${String(deals.length + 1).padStart(3, '0')}`;
+        let dealId = link?.instanceId ? `DEAL-${link.instanceId}` : `DEAL-${String(deals.length + 1).padStart(3, '0')}`;
+        let n = deals.length + 1;
+        while (deals.some((d) => d.id === dealId)) dealId = `DEAL-${String(++n).padStart(3, '0')}`;
         deals.unshift({
           id: dealId,
-          dealName: `${serviceName} — ${clientName}`,
+          dealName,
           clientName: clientName,
+          ...(link?.clientId ? { clientId: link.clientId } : {}),
           amount,
           currency: '₹',
           createdDate: todayStr,
           status: 'In Progress',
           responsible: cleanDoctor,
           stage: fullStage,
+          ...(link?.instanceId ? { instanceId: link.instanceId, title: link.title, source: link.source } : {}),
         });
       }
       sessionStorage.setItem('deals', JSON.stringify(deals));

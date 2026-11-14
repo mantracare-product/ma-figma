@@ -457,10 +457,21 @@ function syncInstanceToClient(row: CallLog): void {
  * without an instanceId is only adopted when the client has exactly ONE active instance of the
  * process, so one move can never drag another instance's card along.
  */
+/** Storage key of the deal cards for the active workspace (fresh workspaces keep their own list). */
+export function dealsStorageKey(): string {
+  try {
+    if (isFreshWorkspace()) return `deals_${localStorage.getItem("signup_org_id") || "signup"}`;
+  } catch {
+    /* fall through */
+  }
+  return "deals";
+}
+
 function syncInstanceToDeals(row: CallLog): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
+    const dealsKey = dealsStorageKey();
+    const raw = localStorage.getItem(dealsKey) || sessionStorage.getItem(dealsKey);
     if (!raw) return;
     const deals = JSON.parse(raw);
     if (!Array.isArray(deals)) return;
@@ -484,12 +495,68 @@ function syncInstanceToDeals(row: CallLog): void {
     });
     if (changed) {
       const serialized = JSON.stringify(updated);
-      localStorage.setItem("deals", serialized);
-      sessionStorage.setItem("deals", serialized);
+      localStorage.setItem(dealsKey, serialized);
+      sessionStorage.setItem(dealsKey, serialized);
       window.dispatchEvent(new CustomEvent("deals_updated"));
     }
   } catch (e) {
     console.warn("Failed to sync instance stage to deals:", e);
+  }
+}
+
+/**
+ * Legacy rows: demo "call" rows that also carry a process + stage (e.g. CALL-001 in "Client Intake"). They are not
+ * instances, but the name-based APIs used to update them, and Deals still lists them, so by-row updates keep working.
+ * Mirrors the stage to the client's name-keyed map and to an UNAMBIGUOUS legacy deal card; never writes client.stage.
+ */
+function syncLegacyRowToClientAndDeals(row: CallLog): void {
+  if (typeof window === "undefined") return;
+  try {
+    const clients = readClientsRaw();
+    let clientsChanged = false;
+    const nextClients = clients.map((c: any) => {
+      const isThisClient = c.id === row.clientId || (c.name && norm(c.name) === norm(row.clientId));
+      if (!isThisClient) return c;
+      clientsChanged = true;
+      return {
+        ...c,
+        processStagesMap: { ...(c.processStagesMap || {}), [row.process]: row.currentStage },
+        lastUpdatedProcess: row.process,
+      };
+    });
+    if (clientsChanged) writeClientsRaw(nextClients);
+  } catch (e) {
+    console.warn("Failed to sync legacy row stage to clients store:", e);
+  }
+  try {
+    const dealsKey = dealsStorageKey();
+    const raw = localStorage.getItem(dealsKey) || sessionStorage.getItem(dealsKey);
+    if (!raw) return;
+    const deals = JSON.parse(raw);
+    if (!Array.isArray(deals)) return;
+    const sameRows = getStoredCallLogs().filter(
+      (l) => rowMatchesClient(l, row.clientId) && norm(l.process) === norm(row.process)
+    ).length;
+    if (sameRows !== 1) return; // ambiguous: do not guess which card belongs to this row
+    let changed = false;
+    const updated = deals.map((d: any) => {
+      const mine =
+        !d.instanceId &&
+        (d.clientId === row.clientId || (d.clientName && norm(d.clientName) === norm(row.client))) &&
+        d.stage &&
+        norm(d.stage).startsWith(`${norm(row.process)}:`);
+      if (!mine) return d;
+      changed = true;
+      return { ...d, stage: `${row.process}: ${row.currentStage}` };
+    });
+    if (changed) {
+      const serialized = JSON.stringify(updated);
+      localStorage.setItem(dealsKey, serialized);
+      sessionStorage.setItem(dealsKey, serialized);
+      window.dispatchEvent(new CustomEvent("deals_updated"));
+    }
+  } catch (e) {
+    console.warn("Failed to sync legacy row stage to deals:", e);
   }
 }
 
@@ -593,6 +660,48 @@ function resolveClientForShim(clientKey: string): { id: string; name: string } {
   return { id: clientKey, name: clientKey };
 }
 
+/** The legacy "call row that also carries a process" (not an instance) for a client + process, most recent first. */
+function findLegacyProcessRow(clientKey: string, processName: string): CallLog | undefined {
+  const rows = getStoredCallLogs().filter(
+    (l) => !isProcessInstanceRow(l) && rowMatchesClient(l, clientKey) && norm(l.process) === norm(processName)
+  );
+  return [...rows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+}
+
+/**
+ * Move ONE exact row (by id) to a stage. Instance rows go through updateProcessInstanceStage; legacy call rows that
+ * carry a process are updated in place and mirrored. Never writes client.stage. Returns the updated row or null.
+ */
+export function updateProcessRowStage(rowId: string, newStageName: string): CallLog | null {
+  const logs = getStoredCallLogs();
+  const row = logs.find((l) => l.id === rowId || (l.instanceId && l.instanceId === rowId));
+  if (!row) return null;
+  if (isProcessInstanceRow(row)) return updateProcessInstanceStage(row.instanceId || row.id, newStageName);
+  const updatedRow: CallLog = { ...row, currentStage: newStageName, date: nowLogDate() };
+  saveCallLogs(logs.map((l) => (l.id === row.id ? updatedRow : l)));
+  syncLegacyRowToClientAndDeals(updatedRow);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: updatedRow.clientId }));
+  }
+  return updatedRow;
+}
+
+/** Merge field values onto ONE exact row (by id). Instance identity keys are protected. */
+export function updateProcessRowFields(rowId: string, fieldValues: Record<string, any>): CallLog | null {
+  const logs = getStoredCallLogs();
+  const row = logs.find((l) => l.id === rowId || (l.instanceId && l.instanceId === rowId));
+  if (!row) return null;
+  if (isProcessInstanceRow(row)) return updateProcessInstanceFields(row.instanceId || row.id, fieldValues);
+  const updatedRow = { ...row, ...fieldValues, id: row.id } as CallLog;
+  saveCallLogs(logs.map((l) => (l.id === row.id ? updatedRow : l)));
+  return updatedRow;
+}
+
+/** Primary instance, else the legacy call row for this client + process (what the old name-based API updated). */
+function resolveShimRow(clientKey: string, processName: string): CallLog | undefined {
+  return getPrimaryInstance(clientKey, processName) || findLegacyProcessRow(clientKey, processName);
+}
+
 export function addProcessCallLog(entry: {
   clientId: string;
   clientName: string;
@@ -600,9 +709,9 @@ export function addProcessCallLog(entry: {
   stageName: string;
   channel?: string;
 }): CallLog {
-  const primary = getPrimaryInstance(entry.clientId, entry.processName);
-  if (primary) {
-    return updateProcessInstanceStage(primary.instanceId || primary.id, entry.stageName) || primary;
+  const existing = resolveShimRow(entry.clientId, entry.processName);
+  if (existing) {
+    return updateProcessRowStage(existing.id, entry.stageName) || existing;
   }
   return startProcessInstance({
     clientId: entry.clientId,
@@ -615,10 +724,10 @@ export function addProcessCallLog(entry: {
 }
 
 export function updateProcessCallLogStage(clientId: string, processName: string, newStageName: string): void {
-  let primary = getPrimaryInstance(clientId, processName);
-  if (!primary) {
+  let row = resolveShimRow(clientId, processName);
+  if (!row) {
     const client = resolveClientForShim(clientId);
-    primary = startProcessInstance({
+    row = startProcessInstance({
       clientId: client.id,
       clientName: client.name,
       processName,
@@ -626,7 +735,7 @@ export function updateProcessCallLogStage(clientId: string, processName: string,
       source: LEGACY_SOURCE,
     }).instance;
   }
-  updateProcessInstanceStage(primary.instanceId || primary.id, newStageName);
+  updateProcessRowStage(row.id, newStageName);
 }
 
 export function updateProcessCallLogFields(
@@ -634,10 +743,10 @@ export function updateProcessCallLogFields(
   processName: string,
   fieldValues: Record<string, any>
 ): void {
-  let primary = getPrimaryInstance(clientId, processName);
-  if (!primary) {
+  let row = resolveShimRow(clientId, processName);
+  if (!row) {
     const client = resolveClientForShim(clientId);
-    primary = startProcessInstance({
+    row = startProcessInstance({
       clientId: client.id,
       clientName: client.name,
       processName,
@@ -645,7 +754,7 @@ export function updateProcessCallLogFields(
       source: LEGACY_SOURCE,
     }).instance;
   }
-  updateProcessInstanceFields(primary.instanceId || primary.id, fieldValues);
+  updateProcessRowFields(row.id, fieldValues);
 }
 
 // ─── One-time migration to the instance model ─────────────────────────────────
