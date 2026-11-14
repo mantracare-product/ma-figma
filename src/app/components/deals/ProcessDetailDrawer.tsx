@@ -78,7 +78,20 @@ import {
 } from "../../../lib/activityEngine";
 import { logStageMove } from "../../../lib/useAutomationStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
-import { updateProcessCallLogFields, updateProcessCallLogStage, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
+import {
+  updateProcessCallLogFields,
+  updateProcessCallLogStage,
+  getStoredCallLogs,
+  getPrimaryInstance,
+  getInstancesForClient,
+  startProcessInstance,
+  updateProcessInstanceStage,
+  updateProcessRowFields,
+  updateProcessRowStage,
+  logInstanceStageMove,
+  PROCESS_LOGS_STORE_EVENT,
+  type CallLog as StoredCallLog,
+} from "../../../lib/processLogsStore";
 import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
@@ -510,32 +523,35 @@ export default function ProcessDetailDrawer({
 
   const [localEditedValues, setLocalEditedValues] = useState<Record<string, any>>({});
 
+  // The row this drawer shows is found by its own id / instanceId, NEVER by client + process name (a client can be in the
+  // same process many times; a name lookup would show and edit another instance's values).
+  const rowInstanceId: string | undefined = (log as any)?.instanceId;
+  const findStoredRow = (): StoredCallLog | undefined => {
+    const rows = getStoredCallLogs();
+    if (log?.id) {
+      const byId = rows.find((l) => l.id === log.id || (rowInstanceId && l.instanceId === rowInstanceId));
+      if (byId) return byId;
+    }
+    if (rowInstanceId) return undefined; // an instance that no longer exists: never fall back to a different one
+    // Unsaved/virtual row (e.g. synthesized on the client profile): the client's primary instance of this process.
+    return clientId && log?.process ? getPrimaryInstance(clientId, log.process, { warn: false }) : undefined;
+  };
+
   useEffect(() => {
     if (clientId && log?.process) {
       try {
-        const currentLogs = getStoredCallLogs();
-        const found = currentLogs.find(
-          (l) =>
-            (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
-            l.process.toLowerCase() === log.process.toLowerCase()
-        );
-        if (found) {
-          setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
-        }
+        const found = findStoredRow();
+        // Replace (not merge): a drawer reused for another instance must not keep the previous instance's values.
+        setLocalEditedValues(found ? { ...(found as any) } : {});
       } catch {}
     }
-  }, [clientId, log?.process]);
+  }, [clientId, log?.id, rowInstanceId, log?.process]);
 
   useEffect(() => {
     const handleLogsUpdate = () => {
       if (clientId && log?.process) {
         try {
-          const currentLogs = getStoredCallLogs();
-          const found = currentLogs.find(
-            (l) =>
-              (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
-              l.process.toLowerCase() === log.process.toLowerCase()
-          );
+          const found = findStoredRow();
           if (found) {
             setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
           }
@@ -551,12 +567,14 @@ export default function ProcessDetailDrawer({
       window.removeEventListener("ma_record_data_changed", handleLogsUpdate);
       window.removeEventListener("storage", handleLogsUpdate);
     };
-  }, [clientId, log?.process]);
+  }, [clientId, log?.id, rowInstanceId, log?.process]);
 
   const handleFieldChangeInternal = (key: string, value: any) => {
     setLocalEditedValues((prev) => ({ ...prev, [key]: value }));
     if (clientId && log?.process) {
-      updateProcessCallLogFields(clientId, log.process, { [key]: value });
+      const stored = findStoredRow();
+      if (stored) updateProcessRowFields(stored.id, { [key]: value });
+      else updateProcessCallLogFields(clientId, log.process, { [key]: value });
     }
     onFieldSave?.(key, value);
     try {
@@ -731,12 +749,31 @@ export default function ProcessDetailDrawer({
 
   const handleExecuteHandoff = (targetProcessName: string, targetStageName: string) => {
     if (!log || !clientId) return;
-    updateProcessCallLogStage(clientId, targetProcessName, targetStageName);
+    // A handoff creates a NEW instance in the target process (linked to this one), idempotent per source instance:
+    // handing off the same instance twice does not duplicate. It does not overwrite the client's other instances.
+    const sourceInstanceId = rowInstanceId || log.id;
+    const handoffCause = { type: "manual" as const, ruleName: `Handoff from ${log.process}` };
+    const handoff = startProcessInstance({
+      clientId,
+      clientName: clientName || log.client,
+      processName: targetProcessName,
+      stageName: targetStageName,
+      source: { type: "process", id: sourceInstanceId, title: `Handed off from ${log.process}` },
+      parentInstanceId: sourceInstanceId,
+    });
+    if (handoff.alreadyExisted) {
+      const before = handoff.instance.currentStage;
+      const moved = updateProcessInstanceStage(handoff.instance.instanceId || handoff.instance.id, targetStageName);
+      if (moved && before !== targetStageName) logInstanceStageMove(moved, before, handoffCause);
+    } else {
+      logInstanceStageMove(handoff.instance, undefined, handoffCause);
+    }
 
     appendActivity({
       clientId,
       processId: targetProcessName,
       processName: targetProcessName,
+      instanceId: handoff.instance.instanceId,
       type: "process_entry",
       createdBy: "system",
       details: {
@@ -822,6 +859,7 @@ export default function ProcessDetailDrawer({
       clientId: clientId || log.id,
       processId: procObj?.id || log.process,
       processName: procObj?.name || log.process,
+      instanceId: rowInstanceId,
       type: "stage_change",
       fromStage: currentStageName || "Initial",
       toStage: targetStageName,
@@ -854,7 +892,9 @@ export default function ProcessDetailDrawer({
     }
 
     if (clientId && log?.process) {
-      updateProcessCallLogStage(clientId, log.process, targetStageName);
+      const stored = findStoredRow();
+      if (stored) updateProcessRowStage(stored.id, targetStageName);
+      else updateProcessCallLogStage(clientId, log.process, targetStageName);
     }
     runStageAutomation(targetStageName);
     onStageChange(newStageIdx);
@@ -864,14 +904,21 @@ export default function ProcessDetailDrawer({
   useEffect(() => {
     if (clientId) {
       const load = () => {
-        const entries = getActivity(clientId, log?.process);
+        // Only this instance's activity. Older entries have no instanceId: they are attributed to the instance only
+        // when the client has a single instance of this process.
+        const multiple = rowInstanceId && log?.process ? getInstancesForClient(clientId, log.process).length > 1 : false;
+        const entries = getActivity(clientId, log?.process).filter((e) => {
+          const eid = (e as any).instanceId as string | undefined;
+          if (!rowInstanceId) return true;
+          return eid ? eid === rowInstanceId : !multiple;
+        });
         setLiveActivities(entries);
       };
       load();
       const unsub = subscribeToActivity(clientId, () => load());
       return unsub;
     }
-  }, [clientId, log?.process]);
+  }, [clientId, log?.process, rowInstanceId]);
 
   const handleCopy = (text: string, label: string) => {
     if (!text || text === "—") return;
@@ -891,6 +938,7 @@ export default function ProcessDetailDrawer({
       clientId,
       processId: log?.process || "general",
       processName: log?.process || "General Process",
+      instanceId: rowInstanceId,
       type: "process_entry",
       createdBy: "user",
       details: {
@@ -1433,8 +1481,14 @@ export default function ProcessDetailDrawer({
         onConfirm={(filledValues) => {
           setLocalEditedValues((prev) => ({ ...prev, ...filledValues }));
           if (clientId && log?.process) {
-            updateProcessCallLogFields(clientId, log.process, filledValues);
-            updateProcessCallLogStage(clientId, log.process, requiredFieldsModalState.targetStageName);
+            const stored = findStoredRow();
+            if (stored) {
+              updateProcessRowFields(stored.id, filledValues);
+              updateProcessRowStage(stored.id, requiredFieldsModalState.targetStageName);
+            } else {
+              updateProcessCallLogFields(clientId, log.process, filledValues);
+              updateProcessCallLogStage(clientId, log.process, requiredFieldsModalState.targetStageName);
+            }
           }
           Object.entries(filledValues).forEach(([k, v]) => {
             onFieldSave?.(k, v);

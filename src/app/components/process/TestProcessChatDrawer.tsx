@@ -14,7 +14,7 @@ import { Process, Stage } from "../../pages/Process";
 import { WorkflowStep } from "../../types/workflow";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { addActivityEntry } from "../../../lib/activityLog";
-import { addProcessCallLog, updateProcessCallLogStage } from "../../../lib/processLogsStore";
+import { startProcessInstance, updateProcessCallLogStage } from "../../../lib/processLogsStore";
 import { useInvoices } from "../../context/InvoiceContext";
 
 interface TestProcessChatDrawerProps {
@@ -107,12 +107,14 @@ export default function TestProcessChatDrawer({
         details: { primary: `Entered ${stageCtx.processName} via ${source}`, secondary: stageCtx.stageName },
       });
 
-      addProcessCallLog({
+      startProcessInstance({
         clientId,
         clientName: contactName,
         processName: stageCtx.processName,
+        processId: stageCtx.processId,
         stageName: stageCtx.stageName,
         channel: source,
+        source: { type: "chat", id: `chat-${clientId}-${Date.now()}`, title: `${stageCtx.processName} — ${source} chat` },
       });
     }
 

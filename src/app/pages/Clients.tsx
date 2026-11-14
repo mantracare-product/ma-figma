@@ -28,7 +28,7 @@ import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../compone
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import { Mic } from "lucide-react";
 import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
-import { addProcessCallLog } from "../../lib/processLogsStore";
+import { startProcessInstance } from "../../lib/processLogsStore";
 export type { Client } from "../../lib/clientsStore";
 export { initialClients } from "../../data/canonicalClients";
 import { type Client, useClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_EVENT } from "../../lib/clientsStore";
@@ -929,11 +929,12 @@ export default function Clients() {
       const pName = parts[0]?.trim() || "Client Intake";
       const sName = parts[1]?.trim() || parts[0]?.trim() || "Initial Contact";
 
-      addProcessCallLog({
+      const createdInst = startProcessInstance({
         clientId: client.id,
         clientName: client.name,
         processName: pName,
         stageName: sName,
+        source: { type: "registration", id: `${client.id}-${pName}`, title: `${pName} — ${client.name}` },
       });
 
       // Also create a Deal entry so it shows up in Kanban/Deals view
@@ -950,6 +951,10 @@ export default function Clients() {
           status: "In Progress" as const,
           responsible: client.responsible || "Unassigned",
           stage: `${pName}: ${sName}`,
+          instanceId: createdInst.instance.instanceId,
+          clientId: client.id,
+          title: createdInst.instance.title,
+          source: createdInst.instance.source,
         };
         sessionStorage.setItem("deals", JSON.stringify([newDeal, ...existingDeals]));
         window.dispatchEvent(new Event("deals_updated"));

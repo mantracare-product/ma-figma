@@ -1861,7 +1861,10 @@ export default function Deals() {
       key: "id",
       header: "Process ID",
       render: (log) => {
-        const formattedId = (log as any).processId
+        // A process instance shows its own instance id (processId is the shared process id, identical for every instance).
+        const formattedId = isProcessInstanceRow(log)
+          ? ((log as any).instanceId || log.id)
+          : (log as any).processId
           ? (log as any).processId
           : log.id.startsWith("CALL-")
             ? `PRC-${log.id.replace("CALL-", "")}`

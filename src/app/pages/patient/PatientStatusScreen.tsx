@@ -43,7 +43,7 @@ import {
   isProcessConnectedToPortal,
   PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
-import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
+import { getStoredCallLogs, getProcessInstances, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { findRoomForAppointment } from "../../../lib/roomsStore";
 import StageTrack, { StageStep } from "./components/StageTrack";
@@ -265,7 +265,13 @@ export default function PatientStatusScreen() {
 
   // Read latest Call Logs for stage tracking
   const callLogs = useMemo(() => {
-    return getStoredCallLogs();
+    // Portal shows the latest ACTIVE instance per process (newest first); legacy call rows stay as fallback.
+    const rank = (l: any) => new Date(String(l.createdAt || l.date || "").replace(" ", "T")).getTime() || 0;
+    const instances = getProcessInstances()
+      .filter((l) => (l.instanceStatus || "active") === "active")
+      .sort((a, b) => rank(b) - rank(a));
+    const instanceIds = new Set(instances.map((l) => l.id));
+    return [...instances, ...getStoredCallLogs().filter((l) => !instanceIds.has(l.id) && !(l.kind === "process_instance"))];
   }, [storeTick]);
 
   // Resolve all assigned processes that have patient portal visibility

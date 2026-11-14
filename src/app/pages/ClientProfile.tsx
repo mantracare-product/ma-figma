@@ -32,7 +32,7 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import { getStoredCallLogs, getCallsOnly, getPrimaryInstance, logInstanceStageMove, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { getStoredCallLogs, getCallsOnly, getPrimaryInstance, getInstancesForClient, logInstanceStageMove, isProcessInstanceRow, startProcessInstance, updateProcessRowStage, appointmentInstanceTitle, CallLog, type ProcessInstanceSource, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
@@ -936,6 +936,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
   const [selectedAssignProcess, setSelectedAssignProcess] = useState("");
   const [selectedAssignStage, setSelectedAssignStage] = useState("");
+  /** Optional source appointment for the new process instance ("" = standalone). Drives the dedupe key. */
+  const [selectedAssignSource, setSelectedAssignSource] = useState("");
   const [selectedMultiProcesses, setSelectedMultiProcesses] = useState<Record<string, string>>({});
   const [processSearchFilter, setProcessSearchFilter] = useState("");
   const [processLogsVersion, setProcessLogsVersion] = useState(0);
@@ -1035,12 +1037,38 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     if (!selectedAssignProcess || !client) return;
     const procName = selectedAssignProcess;
     const stageName = selectedAssignStage || getStagesForProcess(procName)[0]?.label || "Initial Contact";
+    const clientIdStr = String(client.id);
 
-    // 1. Update client processes list (ensuring no duplicates)
+    // 1. Start a process INSTANCE. The dedupe key is clientId + process + source: assigning again from the SAME
+    //    appointment returns the existing instance; any other source (or none) starts a NEW instance, so the same
+    //    process can appear many times for one client.
+    let source: ProcessInstanceSource | undefined;
+    if (selectedAssignSource) {
+      const appt = appointmentService.getAppointments().find((a) => String(a.id) === String(selectedAssignSource));
+      source = {
+        type: "appointment",
+        id: String(selectedAssignSource),
+        title: appt ? appointmentInstanceTitle(appt) : `Appt #${selectedAssignSource}`,
+      };
+    }
+    const started = startProcessInstance({
+      clientId: clientIdStr,
+      clientName: client.name,
+      processName: procName,
+      stageName,
+      source,
+    });
+    if (!started.alreadyExisted) {
+      // 2. ONE stage move for the new instance (assign-process now emits like every other move).
+      logInstanceStageMove(started.instance, undefined, {
+        type: "manual",
+        ruleName: `Process "${procName}" assigned`,
+      });
+    }
+
+    // 3. Local UI state + the client's derived process-name list. client.stage is NOT written (instances never write it).
     const currentProcs = Array.isArray(client.processes) ? [...client.processes] : [];
     const updatedProcs = Array.from(new Set([...currentProcs, procName]));
-
-    // 2. Update local state
     setSelectedProcesses(updatedProcs);
     setDrawerProcessStages((prev) => ({
       ...prev,
@@ -1048,78 +1076,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     }));
     setSelectedDealProcessFilter("All Processes");
 
-    const clientIdStr = String(client.id);
-
-    // 3. Create/update the process instance in processLogsStore, and emit ONE stage move for it
-    const instanceBefore = getPrimaryInstance(clientIdStr, procName, { warn: false });
-    addProcessCallLog({
-      clientId: clientIdStr,
-      clientName: client.name,
-      processName: procName,
-      stageName: stageName,
-    });
-    updateProcessCallLogStage(clientIdStr, procName, stageName);
-    const instanceAfter = getPrimaryInstance(clientIdStr, procName, { warn: false });
-    if (instanceAfter && (!instanceBefore || instanceBefore.currentStage !== instanceAfter.currentStage)) {
-      logInstanceStageMove(instanceAfter, instanceBefore?.currentStage, {
-        type: "manual",
-        ruleName: `Process "${procName}" assigned`,
-      });
-    }
-
-    // 4. Update Client in global Clients store and persistent storage
-    const stored = getStoredClients();
-    const nextClients = stored.map((c) => {
-      if (String(c.id).toLowerCase() !== clientIdStr.toLowerCase()) return c;
-      const existingStages = (c as any).processStagesMap || {};
-      return {
-        ...c,
-        processes: updatedProcs,
-        stage: stageName,
-        processStagesMap: { ...existingStages, [procName]: stageName },
-      };
-    });
+    const stored = getStoredClients(); // read AFTER startProcessInstance, which already mirrored the instance onto the client
+    const nextClients = stored.map((c) =>
+      String(c.id).toLowerCase() !== clientIdStr.toLowerCase() ? c : { ...c, processes: updatedProcs }
+    );
     saveStoredClients(nextClients);
     setClients(nextClients);
 
-    // 5. Save to Deals store for Kanban view
-    try {
-      const rawDeals = localStorage.getItem("deals") || sessionStorage.getItem("deals");
-      const existingDeals: any[] = rawDeals ? JSON.parse(rawDeals) : [];
-      const dealStageStr = `${procName}: ${stageName}`;
-      const existingDealIndex = existingDeals.findIndex(
-        (d) =>
-          (d.clientName?.toLowerCase() === client.name.toLowerCase() || d.clientId === clientIdStr) &&
-          (d.stage?.toLowerCase().startsWith(`${procName.toLowerCase()}:`) || d.dealName?.toLowerCase().includes(procName.toLowerCase()))
-      );
-
-      if (existingDealIndex >= 0) {
-        existingDeals[existingDealIndex] = {
-          ...existingDeals[existingDealIndex],
-          stage: dealStageStr,
-        };
-      } else {
-        const newDeal = {
-          id: `DEAL-${clientIdStr}-${Date.now().toString().slice(-4)}`,
-          dealName: `${client.name} - ${procName}`,
-          clientName: client.name,
-          clientId: clientIdStr,
-          amount: 0,
-          currency: "₹",
-          createdDate: new Date().toISOString().split("T")[0],
-          status: "In Progress" as const,
-          responsible: (client as any).responsible || "Unassigned",
-          stage: dealStageStr,
-        };
-        existingDeals.unshift(newDeal);
-      }
-
-      localStorage.setItem("deals", JSON.stringify(existingDeals));
-      sessionStorage.setItem("deals", JSON.stringify(existingDeals));
-      window.dispatchEvent(new Event("deals_updated"));
-    } catch (e) {
-      console.warn("Could not save to deals store:", e);
-    }
+    // The Deals card for this instance is created by Deals' reconcileDealCards (one card per instance).
 
     try {
       localStorage.setItem("patient_portal_active_client_id", clientIdStr);
@@ -1133,7 +1097,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     setIsAssignProcessOpen(false);
     setSelectedAssignProcess("");
     setSelectedAssignStage("");
-    toast.success(`Process ${procName} assigned successfully!`);
+    setSelectedAssignSource("");
+    if (started.alreadyExisted) {
+      toast.info(`"${procName}" is already assigned for this appointment`);
+    } else {
+      toast.success(`Process ${procName} assigned successfully!`);
+    }
   };
 
   // ── Transcripts Tab State ──
@@ -1405,26 +1374,30 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     if (!client) return;
     const cid = String(client.id);
     const procName = log.process;
+    const oldStage = log.currentStage;
 
     setDrawerProcessStages((prev) => ({ ...prev, [procName]: stageName }));
 
-    // 1. Update Client in global Clients store and persistent storage
-    const stored = getStoredClients();
-    const nextClients = stored.map((c) => {
-      if (String(c.id).toLowerCase() !== cid.toLowerCase() && c.name?.toLowerCase() !== client.name.toLowerCase()) return c;
-      const existingStages = (c as any).processStagesMap || {};
-      return {
-        ...c,
-        stage: stageName,
-        lastUpdatedProcess: procName,
-        processStagesMap: { ...existingStages, [procName]: stageName },
-      };
-    });
-    saveStoredClients(nextClients);
-    setClients(nextClients);
+    // 1. Move exactly THIS row (an instance, or a legacy call row) by id. The store mirrors the stage to the client's
+    //    per-instance map and to this instance's deal card, and never writes client.stage. An unsaved placeholder row
+    //    (no stored id) resolves to the client's primary instance of the process.
+    let movedRow = log.id ? updateProcessRowStage(log.id, stageName) : null;
+    if (!movedRow) {
+      updateProcessCallLogStage(cid, procName, stageName);
+      movedRow = getPrimaryInstance(cid, procName, { warn: false }) || null;
+    }
 
-    // 2. Update call logs in processLogsStore & deals
-    updateProcessCallLogStage(cid, procName, stageName);
+    // 2. Emit ONE stage move for it.
+    if (movedRow) {
+      logInstanceStageMove(movedRow, oldStage, {
+        type: "manual",
+        ruleName: `Stage changed to ${stageName} from the client profile`,
+      });
+    }
+
+    // 3. Refresh local client state from the store (the store already wrote the mirror).
+    const nextClients = getStoredClients();
+    setClients(nextClients);
 
     // 3. Ensure patient portal active client is set
     try {
@@ -1659,7 +1632,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const clientDeals = initialDeals.filter((d) => d.clientName === client.name);
     const emailDomain = client.email ? client.email.split("@")[1] || "—" : "—";
 
-    return Array.from(headings).map((heading, idx): {
+    const baseEntries = Array.from(headings).map((heading, idx): {
       id: string;
       name: string;
       currentStage: string;
@@ -1670,9 +1643,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       dealType: string;
       source: string;
     } => {
-      const matchingStoredLog = storedCallLogs.find(
-        (l) => l.process === heading || l.process.toLowerCase() === heading.toLowerCase()
-      );
+      // Prefer a process INSTANCE row over a legacy call row that merely carries the process name.
+      const matchingStoredLog =
+        storedCallLogs.find((l) => isProcessInstanceRow(l) && l.process.toLowerCase() === heading.toLowerCase()) ||
+        storedCallLogs.find((l) => l.process === heading || l.process.toLowerCase() === heading.toLowerCase());
       const matchingRealStage = realStages.find(
         (s) => s.processName === heading || s.processName.toLowerCase() === heading.toLowerCase()
       );
@@ -1735,6 +1709,30 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         dealType: "Organic",
         source: (client as any).source ?? emailDomain,
       };
+    });
+
+    // One entry per INSTANCE when the client has several instances of the same process (the same process may appear many times).
+    return baseEntries.flatMap((entry) => {
+      const instances = storedCallLogs.filter(
+        (l) => isProcessInstanceRow(l) && l.process.toLowerCase() === entry.name.toLowerCase()
+      );
+      if (instances.length <= 1) return [entry];
+      return instances.map((l) => ({
+        ...entry,
+        id: l.id,
+        currentStage: l.currentStage,
+        lastActivity: l.date ? `Last contact - ${l.date.split(" ")[0]}` : "—",
+        created: l.date || "—",
+        status: (l.status === "Completed"
+          ? "Completed"
+          : l.status === "Failed"
+            ? "On Hold"
+            : l.status === "Pending"
+              ? "Pending"
+              : "In Progress") as "Completed" | "In Progress" | "Pending" | "On Hold",
+        instanceId: l.instanceId || l.id,
+        title: l.title || l.source?.title,
+      }));
     });
   }, [client, selectedProcesses, drawerProcessStages, processLogsVersion]);
 
@@ -2481,11 +2479,19 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   ])
                 );
 
-                // Map of process name -> existing CallLog
-                const processLogsMap = new Map<string, any>();
+                // The same process can appear MANY times for one client: every process INSTANCE is its own row.
+                // A legacy call row that merely carries a process name stands in only when there is no instance of that process.
+                const instanceRowsByProcess = new Map<string, any[]>();
+                const legacyRowByProcess = new Map<string, any>();
                 storedLogs.forEach((l) => {
-                  if (l.process) {
-                    processLogsMap.set(l.process.trim().toLowerCase(), l);
+                  if (!l.process) return;
+                  const key = l.process.trim().toLowerCase();
+                  if (isProcessInstanceRow(l)) {
+                    const list = instanceRowsByProcess.get(key) || [];
+                    list.push(l);
+                    instanceRowsByProcess.set(key, list);
+                  } else if (!legacyRowByProcess.has(key)) {
+                    legacyRowByProcess.set(key, l); // the store is newest-first: keep the most recent
                   }
                 });
 
@@ -2497,8 +2503,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   if (!pName) return;
                   const key = pName.trim().toLowerCase();
                   seenProcesses.add(key);
-                  const existing = processLogsMap.get(key);
-                  if (existing) {
+                  const instances = instanceRowsByProcess.get(key);
+                  const existing = instances && instances.length > 0 ? undefined : legacyRowByProcess.get(key);
+                  if (instances && instances.length > 0) {
+                    allClientLogs.push(...instances);
+                  } else if (existing) {
                     allClientLogs.push(existing);
                   } else {
                     const fallbackStage =
@@ -2528,10 +2537,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 });
 
                 // Include any other stored logs for this client not already processed
-                storedLogs.forEach((l) => {
-                  if (l.process && !seenProcesses.has(l.process.trim().toLowerCase())) {
-                    seenProcesses.add(l.process.trim().toLowerCase());
-                    allClientLogs.push(l);
+                instanceRowsByProcess.forEach((rows, key) => {
+                  if (!seenProcesses.has(key)) {
+                    seenProcesses.add(key);
+                    allClientLogs.push(...rows);
+                  }
+                });
+                legacyRowByProcess.forEach((row, key) => {
+                  if (!seenProcesses.has(key)) {
+                    seenProcesses.add(key);
+                    allClientLogs.push(row);
                   }
                 });
 
@@ -2559,7 +2574,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     key: "id",
                     header: "Process ID",
                     render: (log) => {
-                      const formattedId = (log as any).processId
+                      // A process instance shows its own instance id (processId is the shared process id).
+                      const formattedId = isProcessInstanceRow(log as any)
+                        ? ((log as any).instanceId || log.id)
+                        : (log as any).processId
                         ? (log as any).processId
                         : log.id.startsWith("CALL-")
                           ? `PRC-${log.id.replace("CALL-", "")}`
@@ -2588,7 +2606,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     render: (log) => {
                       const clientName = log.client || client.name || "Client";
                       const dateStr = log.date || (log as any).timestamp?.slice(0, 10) || "2026-10-15";
-                      const titleStr = `${clientName}_Process_${dateStr}`;
+                      const titleStr = (log as any).title || (log as any).source?.title || `${clientName}_Process_${dateStr}`;
                       return (
                         <span
                           className="font-medium text-xs text-slate-800"
@@ -2813,6 +2831,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 {getStagesForProcess(selectedAssignProcess).map((s) => (
                                   <option key={s.id || s.label} value={s.label}>{s.label}</option>
                                 ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                Source appointment <span className="font-normal text-gray-400">(optional)</span>
+                              </label>
+                              <select
+                                value={selectedAssignSource}
+                                onChange={(e) => setSelectedAssignSource(e.target.value)}
+                                disabled={!selectedAssignProcess}
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer"
+                              >
+                                <option value="">Standalone (no appointment)</option>
+                                {appointmentService
+                                  .getAppointments()
+                                  .filter(
+                                    (a) =>
+                                      String(a.clientId) === String(client.id) ||
+                                      (a.clientName || "").toLowerCase() === (client.name || "").toLowerCase()
+                                  )
+                                  .map((a) => (
+                                    <option key={String(a.id)} value={String(a.id)}>
+                                      {appointmentInstanceTitle(a)}
+                                    </option>
+                                  ))}
                               </select>
                             </div>
                             <div className="pt-2 flex justify-end gap-2 border-t border-gray-100">
@@ -4225,7 +4268,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             onTabChange={(tab) => setProcessDetailTab(tab)}
             activity={(() => {
               if (!selectedProcessLog || !client) return [];
-              const realEntries = getActivityForProcess(client.id, selectedProcessLog.process).map((r) => ({
+              // Only THIS instance's activity (older entries without an instanceId only when the client has a single instance).
+              const activityInstanceId = (selectedProcessLog as any).instanceId as string | undefined;
+              const hasSeveralInstances =
+                !!activityInstanceId && getInstancesForClient(String(client.id), selectedProcessLog.process).length > 1;
+              const realEntries = getActivityForProcess(client.id, selectedProcessLog.process)
+                .filter((r: any) => {
+                  if (!activityInstanceId) return true;
+                  return r.instanceId ? r.instanceId === activityInstanceId : !hasSeveralInstances;
+                })
+                .map((r) => ({
                 id: r.id,
                 type: r.type,
                 timestamp: new Date(r.timestamp).toLocaleString(),

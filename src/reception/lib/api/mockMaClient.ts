@@ -10,7 +10,7 @@
 import type { IMaClient } from './maClient';
 import { initialClients as canonicalMaClients } from '../../../data/canonicalClients';
 import { getStoredClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_EVENT } from '../../../lib/clientsStore';
-import { addProcessCallLog } from '../../../lib/processLogsStore';
+import { startProcessInstance, appointmentInstanceTitle } from '../../../lib/processLogsStore';
 import { getStoredServices } from '../../../lib/servicesStore';
 import { getStoredTeamMembers } from '../../../lib/teamStore';
 import { appointmentService } from '../../../lib/appointmentService';
@@ -791,13 +791,21 @@ export class MockMaClient implements IMaClient {
     };
 
     // Sync deal into Deals / Process pipeline in sessionStorage & localStorage
-    this.syncDealRecord(newClientRecord.name, assignedDoctor, defaultProcess, 'Initial Contact', 'Consultation', 150);
-    addProcessCallLog({
-      clientId: newClientRecord.id,
-      clientName: newClientRecord.name,
-      processName: defaultProcess,
-      stageName: 'Initial Contact',
-    });
+    {
+      const inst = startProcessInstance({
+        clientId: newClientRecord.id,
+        clientName: newClientRecord.name,
+        processName: defaultProcess,
+        stageName: 'Initial Contact',
+        source: { type: 'registration', id: newClientRecord.id, title: `Registration — ${newClientRecord.name}` },
+      });
+      this.syncDealRecord(newClientRecord.name, assignedDoctor, defaultProcess, 'Initial Contact', 'Consultation', 150, {
+        clientId: newClientRecord.id,
+        instanceId: inst.instance.instanceId,
+        title: inst.instance.title,
+        source: inst.instance.source,
+      });
+    }
 
     const patientSummary = this.mantraClientToPatientSummary(newClientRecord);
 
@@ -1138,12 +1146,23 @@ export class MockMaClient implements IMaClient {
       });
 
       // Sync Deal in Process Pipeline
-      this.syncDealRecord(clientName, cleanDoctorRaw, defaultProcess, 'Confirmed', srv?.name || 'Consultation', srv?.basePrice || 150);
-      addProcessCallLog({
+      const bookedAptId = `apt_${Date.now()}`;
+      const bookedInst = startProcessInstance({
         clientId: data.clientId,
         clientName,
         processName: defaultProcess,
         stageName: 'Confirmed',
+        source: {
+          type: 'appointment',
+          id: bookedAptId,
+          title: appointmentInstanceTitle({ id: bookedAptId, serviceName: srv?.name, date: data.date, time: data.time }),
+        },
+      });
+      this.syncDealRecord(clientName, cleanDoctorRaw, defaultProcess, 'Confirmed', srv?.name || 'Consultation', srv?.basePrice || 150, {
+        clientId: data.clientId,
+        instanceId: bookedInst.instance.instanceId,
+        title: bookedInst.instance.title,
+        source: bookedInst.instance.source,
       });
 
       // Resolve valid time
@@ -1166,7 +1185,7 @@ export class MockMaClient implements IMaClient {
       });
 
       const newApt: AppointmentSummary = {
-        id: `apt_${Date.now()}`,
+        id: bookedAptId,
         clientId: data.clientId,
         clientName,
         clientPhone,
@@ -1503,20 +1522,31 @@ export class MockMaClient implements IMaClient {
       this.setStorage(STORAGE_KEYS.APPOINTMENTS, existingReceptionApts);
 
       // Sync Deal & Process Log
+      const walkInInst = startProcessInstance({
+        clientId: patient.id,
+        clientName: patient.name,
+        processName: defaultProcess,
+        stageName: 'Initial Contact',
+        source: {
+          type: 'appointment',
+          id: newApt.id,
+          title: appointmentInstanceTitle({ id: newApt.id, serviceName: newApt.serviceName, date: todayStr, time: validTime }),
+        },
+      });
       this.syncDealRecord(
         patient.name,
         doctorDisplayName.replace(/^Dr\.\s*/i, ''),
         defaultProcess,
         'Initial Contact',
         chosenService?.name || 'Walk-in Consultation',
-        (chosenService as any)?.basePrice || 150
+        (chosenService as any)?.basePrice || 150,
+        {
+          clientId: patient.id,
+          instanceId: walkInInst.instance.instanceId,
+          title: walkInInst.instance.title,
+          source: walkInInst.instance.source,
+        }
       );
-      addProcessCallLog({
-        clientId: patient.id,
-        clientName: patient.name,
-        processName: defaultProcess,
-        stageName: 'Initial Contact',
-      });
 
       // Sync to Appointments.tsx storage & dispatch event
       try {

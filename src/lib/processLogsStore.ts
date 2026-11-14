@@ -595,11 +595,13 @@ export function logInstanceStageMove(
   extra?: { fromProcessId?: string; fromProcessName?: string; recordData?: Record<string, any> }
 ): StageMove {
   const processId = row.processId || resolveProcessId(row.process) || row.process;
+  // Only real instances have an instanceId. A legacy call row that carries a process is logged against the client.
+  const instanceId = isProcessInstanceRow(row) ? row.instanceId || row.id : undefined;
   return logStageMove(
     {
       orgId: "default",
       recordType: "client",
-      recordId: row.instanceId || row.id,
+      recordId: instanceId || row.clientId || row.id,
       fromStageName,
       toStageId: "", // resolved from the stage name by logStageMove
       toStageName: row.currentStage,
@@ -607,13 +609,26 @@ export function logInstanceStageMove(
       processName: row.process,
       fromProcessId: extra?.fromProcessId,
       fromProcessName: extra?.fromProcessName,
-      instanceId: row.instanceId || row.id,
+      instanceId,
       clientId: row.clientId,
       source: row.source,
       cause,
     },
     { recordData: extra?.recordData }
   );
+}
+
+/** Display title for an instance created from an appointment, e.g. "Eye exam — 2026-11-20 10:30 (Appt #123)". */
+export function appointmentInstanceTitle(a: {
+  id: number | string;
+  serviceName?: string;
+  title?: string;
+  date?: string;
+  time?: string;
+}): string {
+  const what = a.serviceName || a.title || "Appointment";
+  const when = [a.date, a.time].filter(Boolean).join(" ");
+  return `${what}${when ? ` — ${when}` : ""} (Appt #${a.id})`;
 }
 
 const PROTECTED_INSTANCE_KEYS = ["id", "instanceId", "kind", "dedupeKey", "source"];
