@@ -62,7 +62,7 @@ import {
   getIndustriesForCategory,
 } from "../../../data/industryReferenceData";
 import { COUNTRIES, TIMEZONES } from "../../pages/settings-constants";
-import OrganizationLocationsSection from "./OrganizationLocationsSection";
+import ClockTimePicker from "../ui/ClockTimePicker";
 
 export interface CustomFieldItem {
   id: string;
@@ -107,6 +107,101 @@ export interface OrganizationDetail {
   users?: number;
   createdDate?: string;
   customSections?: CustomSectionItem[];
+}
+
+export interface LocationDayTimeSlot {
+  start: string;
+  end: string;
+  durationMinutes?: number;
+}
+
+export interface LocationDayAvailability {
+  enabled: boolean;
+  slots: LocationDayTimeSlot[];
+}
+
+export type LocationWeeklySlots = Record<string, LocationDayAvailability>;
+
+export interface OrganizationLocationItem {
+  id: string;
+  name: string;
+  type?: "physical" | "online";
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+  timezone?: string;
+  isPrimary: boolean;
+  workingHours?: any;
+  weeklySlots?: LocationWeeklySlots;
+  daysOff?: any[];
+}
+
+const WEEKDAYS = [
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
+function createDefaultLocationWeeklySlots(): LocationWeeklySlots {
+  const result: LocationWeeklySlots = {};
+  WEEKDAYS.forEach(({ key }) => {
+    const isWeekend = key === "saturday" || key === "sunday";
+    result[key] = {
+      enabled: !isWeekend,
+      slots: isWeekend ? [] : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+    };
+  });
+  return result;
+}
+
+function convertWorkingHoursToWeeklySlots(workingHours?: any): LocationWeeklySlots {
+  if (!workingHours) return createDefaultLocationWeeklySlots();
+  const result: LocationWeeklySlots = {};
+  WEEKDAYS.forEach(({ key }) => {
+    const wh = workingHours[key];
+    if (wh && wh.enabled) {
+      result[key] = {
+        enabled: true,
+        slots: [
+          {
+            start: wh.start || "09:00",
+            end: wh.end || "17:00",
+            durationMinutes: 30,
+          },
+        ],
+      };
+    } else if (wh && !wh.enabled) {
+      result[key] = { enabled: false, slots: [] };
+    } else {
+      const isWeekend = key === "saturday" || key === "sunday";
+      result[key] = {
+        enabled: !isWeekend,
+        slots: isWeekend ? [] : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+      };
+    }
+  });
+  return result;
+}
+
+function convertWeeklySlotsToWorkingHours(slots: LocationWeeklySlots): any {
+  const wh: any = {};
+  WEEKDAYS.forEach(({ key }) => {
+    const day = slots[key];
+    const first = day?.slots?.[0];
+    const last = day?.slots?.[day.slots.length - 1];
+    wh[key] = {
+      enabled: !!day?.enabled && (day.slots?.length || 0) > 0,
+      start: first?.start || "09:00",
+      end: last?.end || "17:00",
+    };
+  });
+  return wh;
 }
 
 interface OrganizationDetailDrawerProps {
@@ -229,30 +324,391 @@ export default function OrganizationDetailDrawer({
     toast.success("Organization logo removed");
   };
 
-  // Availability / Weekly Schedule State
-  const [scheduleTimezone, setScheduleTimezone] = useState(
-    organization?.timezone || "America/Los_Angeles (Pacific Time)"
-  );
-  const [weeklySchedule, setWeeklySchedule] = useState([
-    { day: "Monday", open: true, start: "09:00 AM", end: "05:00 PM" },
-    { day: "Tuesday", open: true, start: "09:00 AM", end: "05:00 PM" },
-    { day: "Wednesday", open: true, start: "09:00 AM", end: "05:00 PM" },
-    { day: "Thursday", open: true, start: "09:00 AM", end: "05:00 PM" },
-    { day: "Friday", open: true, start: "09:00 AM", end: "05:00 PM" },
-    { day: "Saturday", open: false, start: "10:00 AM", end: "02:00 PM" },
-    { day: "Sunday", open: false, start: "10:00 AM", end: "02:00 PM" },
-  ]);
+  // Availability / Weekly Schedule State (Location-wise with Multi-slot Support)
+  const initialOrgId = organization?.id || "eye-mantra";
 
-  const handleApplyMonFriToAll = () => {
-    const mon = weeklySchedule[0];
-    setWeeklySchedule((prev) =>
-      prev.map((item, idx) =>
-        idx >= 1 && idx <= 4
-          ? { ...item, open: mon.open, start: mon.start, end: mon.end }
-          : item
-      )
+  const [locations, setLocations] = useState<OrganizationLocationItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${initialOrgId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((loc: any, idx: number) => ({
+            ...loc,
+            id: loc.id || `loc-${idx + 1}`,
+            name: loc.name || `Location ${idx + 1}`,
+            type: loc.type || (loc.name?.toLowerCase().includes("online") ? "online" : "physical"),
+            address: loc.address || "",
+            city: loc.city || "",
+            state: loc.state || "",
+            zip: loc.zip || "",
+            timezone: loc.timezone || organization?.timezone || "America/Los_Angeles (Pacific Time - UTC-08:00)",
+            weeklySlots: loc.weeklySlots || convertWorkingHoursToWeeklySlots(loc.workingHours),
+          }));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      {
+        id: "loc-1",
+        name: "California Branch",
+        type: "physical",
+        address: "123 Healthcare Ave, Suite 100",
+        city: "San Francisco",
+        state: "CA",
+        zip: "94102",
+        country: "United States",
+        timezone: "America/Los_Angeles (Pacific Time - UTC-08:00)",
+        isPrimary: true,
+        weeklySlots: createDefaultLocationWeeklySlots(),
+      },
+      {
+        id: "loc-2",
+        name: "New York Branch",
+        type: "physical",
+        address: "450 Lexington Ave, Suite 240",
+        city: "New York",
+        state: "NY",
+        zip: "10017",
+        country: "United States",
+        timezone: "America/New_York (Eastern Time - UTC-05:00)",
+        isPrimary: false,
+        weeklySlots: createDefaultLocationWeeklySlots(),
+      },
+      {
+        id: "loc-3",
+        name: "Online",
+        type: "online",
+        address: "Virtual / Telehealth Consultation",
+        city: "",
+        state: "",
+        zip: "",
+        country: "United States",
+        timezone: "America/Los_Angeles (Pacific Time - UTC-08:00)",
+        isPrimary: false,
+        weeklySlots: createDefaultLocationWeeklySlots(),
+      },
+    ];
+  });
+
+  const [expandedLocs, setExpandedLocs] = useState<Record<string, boolean>>(() => {
+    return { "loc-1": true };
+  });
+
+  // Sync to localStorage whenever locations change
+  useEffect(() => {
+    if (!formData?.id || locations.length === 0) return;
+    try {
+      localStorage.setItem(`mantra_org_locations_${formData.id}`, JSON.stringify(locations));
+      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new Event("mantra_locations_changed"));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [locations, formData?.id]);
+
+  // Reload locations if organization changes
+  useEffect(() => {
+    if (!formData?.id) return;
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${formData.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const list = parsed.map((loc: any, idx: number) => ({
+            ...loc,
+            id: loc.id || `loc-${idx + 1}`,
+            name: loc.name || `Location ${idx + 1}`,
+            type: loc.type || (loc.name?.toLowerCase().includes("online") ? "online" : "physical"),
+            address: loc.address || "",
+            city: loc.city || "",
+            state: loc.state || "",
+            zip: loc.zip || "",
+            timezone: loc.timezone || formData?.timezone || "America/Los_Angeles (Pacific Time - UTC-08:00)",
+            weeklySlots: loc.weeklySlots || convertWorkingHoursToWeeklySlots(loc.workingHours),
+          }));
+          setLocations(list);
+          setExpandedLocs((prev) => (Object.keys(prev).length === 0 ? { [list[0].id]: true } : prev));
+        }
+      }
+    } catch {}
+  }, [formData?.id]);
+
+  // Handlers for Per-Location Availability
+  const handleUpdateTimezone = (locId: string, newTz: string) => {
+    setLocations((prev) =>
+      prev.map((loc) => (loc.id === locId ? { ...loc, timezone: newTz } : loc))
     );
-    toast.success("Applied Monday hours to all weekdays");
+    const locName = locations.find((l) => l.id === locId)?.name || "Location";
+    toast.success(`Updated timezone for ${locName}`);
+  };
+
+  const handleToggleDay = (locId: string, dayKey: string, enabled: boolean) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const currentSlots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+        const currentDay = currentSlots[dayKey] || { enabled: false, slots: [] };
+        const updatedSlots = enabled
+          ? currentDay.slots && currentDay.slots.length > 0
+            ? currentDay.slots
+            : [{ start: "09:00", end: "17:00", durationMinutes: 30 }]
+          : currentDay.slots;
+
+        const updatedWeeklySlots: LocationWeeklySlots = {
+          ...currentSlots,
+          [dayKey]: {
+            enabled,
+            slots: updatedSlots,
+          },
+        };
+
+        return {
+          ...loc,
+          weeklySlots: updatedWeeklySlots,
+          workingHours: convertWeeklySlotsToWorkingHours(updatedWeeklySlots),
+        };
+      })
+    );
+  };
+
+  const handleAddSlot = (locId: string, dayKey: string) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const currentSlots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+        const currentDay = currentSlots[dayKey] || { enabled: false, slots: [] };
+
+        let start = "09:00";
+        let end = "17:00";
+        if (currentDay.slots && currentDay.slots.length > 0) {
+          const lastSlot = currentDay.slots[currentDay.slots.length - 1];
+          const [lastH, lastM] = (lastSlot.end || "17:00").split(":").map(Number);
+          const lastEndMin = (lastH || 0) * 60 + (lastM || 0);
+          if (lastEndMin + 60 <= 22 * 60) {
+            const nextStart = lastEndMin + 30;
+            const nextEnd = Math.min(lastEndMin + 180, 22 * 60);
+            start = `${String(Math.floor(nextStart / 60)).padStart(2, "0")}:${String(nextStart % 60).padStart(2, "0")}`;
+            end = `${String(Math.floor(nextEnd / 60)).padStart(2, "0")}:${String(nextEnd % 60).padStart(2, "0")}`;
+          } else {
+            start = "18:00";
+            end = "21:00";
+          }
+        }
+
+        const updatedWeeklySlots: LocationWeeklySlots = {
+          ...currentSlots,
+          [dayKey]: {
+            enabled: true,
+            slots: [...(currentDay.slots || []), { start, end, durationMinutes: 30 }],
+          },
+        };
+
+        return {
+          ...loc,
+          weeklySlots: updatedWeeklySlots,
+          workingHours: convertWeeklySlotsToWorkingHours(updatedWeeklySlots),
+        };
+      })
+    );
+  };
+
+  const handleRemoveSlot = (locId: string, dayKey: string, slotIdx: number) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const currentSlots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+        const currentDay = currentSlots[dayKey] || { enabled: false, slots: [] };
+        const updatedSlots = [...(currentDay.slots || [])];
+        updatedSlots.splice(slotIdx, 1);
+
+        const updatedWeeklySlots: LocationWeeklySlots = {
+          ...currentSlots,
+          [dayKey]: {
+            enabled: updatedSlots.length > 0,
+            slots: updatedSlots,
+          },
+        };
+
+        return {
+          ...loc,
+          weeklySlots: updatedWeeklySlots,
+          workingHours: convertWeeklySlotsToWorkingHours(updatedWeeklySlots),
+        };
+      })
+    );
+  };
+
+  const handleUpdateSlot = (
+    locId: string,
+    dayKey: string,
+    slotIdx: number,
+    field: "start" | "end",
+    val: string
+  ) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const currentSlots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+        const currentDay = currentSlots[dayKey] || { enabled: false, slots: [] };
+        const updatedSlots = [...(currentDay.slots || [])];
+        if (!updatedSlots[slotIdx]) return loc;
+
+        updatedSlots[slotIdx] = {
+          ...updatedSlots[slotIdx],
+          [field]: val,
+        };
+
+        const updatedWeeklySlots: LocationWeeklySlots = {
+          ...currentSlots,
+          [dayKey]: {
+            ...currentDay,
+            slots: updatedSlots,
+          },
+        };
+
+        return {
+          ...loc,
+          weeklySlots: updatedWeeklySlots,
+          workingHours: convertWeeklySlotsToWorkingHours(updatedWeeklySlots),
+        };
+      })
+    );
+  };
+
+  const handleApplyMonFri = (locId: string) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const currentSlots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+        const mon = currentSlots["monday"];
+        if (!mon) return loc;
+
+        const updatedWeeklySlots: LocationWeeklySlots = { ...currentSlots };
+        ["tuesday", "wednesday", "thursday", "friday"].forEach((d) => {
+          updatedWeeklySlots[d] = {
+            enabled: mon.enabled,
+            slots: mon.slots.map((s) => ({ ...s })),
+          };
+        });
+
+        return {
+          ...loc,
+          weeklySlots: updatedWeeklySlots,
+          workingHours: convertWeeklySlotsToWorkingHours(updatedWeeklySlots),
+        };
+      })
+    );
+    const locName = locations.find((l) => l.id === locId)?.name || "Location";
+    toast.success(`Applied Monday hours to all weekdays for ${locName}`);
+  };
+
+  const handleSaveLocation = (locId: string) => {
+    if (!formData?.id) return;
+    try {
+      localStorage.setItem(`mantra_org_locations_${formData.id}`, JSON.stringify(locations));
+      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new Event("mantra_locations_changed"));
+      const locName = locations.find((l) => l.id === locId)?.name || "Location";
+      toast.success(`Availability saved for ${locName}`);
+    } catch {
+      toast.error("Failed to save availability");
+    }
+  };
+
+  const handleDeleteLocation = (locId: string) => {
+    if (locations.length <= 1) {
+      toast.error("Organization must have at least one location");
+      return;
+    }
+    const locToDelete = locations.find((l) => l.id === locId);
+    if (locToDelete?.isPrimary) {
+      toast.error("Cannot delete the primary location");
+      return;
+    }
+    const updatedList = locations.filter((l) => l.id !== locId);
+    setLocations(updatedList);
+
+    const locNames = updatedList.map((l) => l.name);
+    handleFieldChange("locations", locNames);
+
+    if (formData?.id) {
+      try {
+        localStorage.setItem(`mantra_org_locations_${formData.id}`, JSON.stringify(updatedList));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new Event("mantra_locations_changed"));
+      } catch {}
+    }
+    toast.success(`Location "${locToDelete?.name || ""}" deleted`);
+  };
+
+  const handleUpdateLocationField = (locId: string, patch: Partial<OrganizationLocationItem>) => {
+    setLocations((prev) =>
+      prev.map((loc) => {
+        if (loc.id !== locId) return loc;
+        const updated = { ...loc, ...patch };
+        return updated;
+      })
+    );
+  };
+
+  const handleSetPrimaryLocation = (locId: string) => {
+    setLocations((prev) =>
+      prev.map((loc) => ({
+        ...loc,
+        isPrimary: loc.id === locId,
+      }))
+    );
+    const locName = locations.find((l) => l.id === locId)?.name || "Location";
+    toast.success(`Set "${locName}" as primary location`);
+  };
+
+  const handleAddLocationInline = () => {
+    const primaryIdx = locations.findIndex((l) => l.isPrimary);
+    const insertIdx = primaryIdx >= 0 ? primaryIdx + 1 : 1;
+    const newLocId = `loc-${Date.now()}`;
+    const newLocNum = locations.length + 1;
+    const newSlots = createDefaultLocationWeeklySlots();
+    const newLoc: OrganizationLocationItem = {
+      id: newLocId,
+      name: `Branch ${newLocNum}`,
+      type: "physical",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      country: "United States",
+      timezone: formData?.timezone || "America/Los_Angeles (Pacific Time - UTC-08:00)",
+      isPrimary: false,
+      weeklySlots: newSlots,
+      workingHours: convertWeeklySlotsToWorkingHours(newSlots),
+      daysOff: [],
+    };
+
+    const updated = [...locations];
+    updated.splice(insertIdx, 0, newLoc);
+    setLocations(updated);
+
+    // Expand the newly created location dropdown immediately
+    setExpandedLocs((prev) => ({
+      ...prev,
+      [newLocId]: true,
+    }));
+
+    const locNames = updated.map((l) => l.name);
+    handleFieldChange("locations", locNames);
+
+    if (formData?.id) {
+      try {
+        localStorage.setItem(`mantra_org_locations_${formData.id}`, JSON.stringify(updated));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new Event("mantra_locations_changed"));
+      } catch {}
+    }
+
+    toast.success(`Added "${newLoc.name}" below primary location`);
   };
 
   // Security Settings State
@@ -342,7 +798,24 @@ export default function OrganizationDetailDrawer({
       toast.error("Organization name is required");
       return;
     }
-    onSave(formData);
+
+    if (formData.id && locations.length > 0) {
+      try {
+        localStorage.setItem(`mantra_org_locations_${formData.id}`, JSON.stringify(locations));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new Event("mantra_locations_changed"));
+      } catch {}
+    }
+
+    const locNames = locations.map((l) => l.name);
+    const updatedForm: OrganizationDetail = {
+      ...formData,
+      locations: locNames,
+      location: locations.find((l) => l.isPrimary)?.name || locNames[0] || formData.location,
+      timezone: selectedLocation?.timezone || formData.timezone,
+    };
+
+    onSave(updatedForm);
     toast.success("Organization details saved successfully");
     onClose();
   };
@@ -1119,122 +1592,438 @@ export default function OrganizationDetailDrawer({
         </>
       )}
 
-      {/* ── TAB 2: AVAILABILITY & OPERATING HOURS ─────────────────────────── */}
+      {/* ── TAB 2: AVAILABILITY & OPERATING HOURS (LOCATION ACCORDIONS) ───── */}
       {activeTab === "availability" && (
         <div className="space-y-4">
-          {/* Operating Hours Card */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" />
+          {/* Header Bar: Title on Left, Add Location on the Far Right Corner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-blue-600 shrink-0 shadow-2xs">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                   OPERATING HOURS & AVAILABILITY
                 </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Configure location-wise weekly schedule & multiple time slots
+                </p>
               </div>
+            </div>
+
+            {/* Right Corner: Add Location button outside the dropdown */}
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
               <button
                 type="button"
-                onClick={handleApplyMonFriToAll}
-                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                onClick={handleAddLocationInline}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <RotateCcw className="w-3 h-3" />
-                Apply Mon-Fri Hours
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Location</span>
               </button>
-            </div>
-
-            {/* Timezone picker */}
-            <div className="mb-4 pb-4 border-b border-slate-100">
-              <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
-                ORGANIZATION TIMEZONE
-              </label>
-              <select
-                value={scheduleTimezone}
-                onChange={(e) => {
-                  setScheduleTimezone(e.target.value);
-                  handleFieldChange("timezone", e.target.value);
-                }}
-                className="w-full h-9 px-3 rounded-xl border border-[#E2E8F0] bg-white text-xs text-[#1E293B] font-medium outline-none focus:border-blue-500 cursor-pointer"
-              >
-                <option value="America/Los_Angeles (Pacific Time)">America/Los_Angeles (Pacific Time - UTC-08:00)</option>
-                <option value="America/New_York (Eastern Time)">America/New_York (Eastern Time - UTC-05:00)</option>
-                <option value="America/Chicago (Central Time)">America/Chicago (Central Time - UTC-06:00)</option>
-                <option value="America/Denver (Mountain Time)">America/Denver (Mountain Time - UTC-07:00)</option>
-                <option value="Europe/London (GMT)">Europe/London (GMT - UTC+00:00)</option>
-                <option value="Asia/Kolkata (IST)">Asia/Kolkata (IST - UTC+05:30)</option>
-              </select>
-            </div>
-
-            {/* Weekly schedule days */}
-            <div className="space-y-2.5">
-              {weeklySchedule.map((item, idx) => (
-                <div
-                  key={item.day}
-                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
-                    item.open ? "bg-white border-slate-200" : "bg-slate-50/70 border-slate-100"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 w-36">
-                    <Switch
-                      checked={item.open}
-                      onCheckedChange={(checked) => {
-                        setWeeklySchedule((prev) =>
-                          prev.map((d, i) => (i === idx ? { ...d, open: checked } : d))
-                        );
-                      }}
-                    />
-                    <span
-                      className={`text-xs font-semibold ${
-                        item.open ? "text-slate-800" : "text-slate-400 line-through"
-                      }`}
-                    >
-                      {item.day}
-                    </span>
-                  </div>
-
-                  {item.open ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item.start}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setWeeklySchedule((prev) =>
-                            prev.map((d, i) => (i === idx ? { ...d, start: val } : d))
-                          );
-                        }}
-                        className="w-24 h-8 px-2 text-center text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                      <span className="text-xs text-slate-400">to</span>
-                      <input
-                        type="text"
-                        value={item.end}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setWeeklySchedule((prev) =>
-                            prev.map((d, i) => (i === idx ? { ...d, end: val } : d))
-                          );
-                        }}
-                        className="w-24 h-8 px-2 text-center text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  ) : (
-                    <span className="text-xs text-slate-400 font-medium px-2">Closed all day</span>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
 
-          {/* Organization Clinic Locations */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
-                  ORGANIZATION CLINIC LOCATIONS
-                </h3>
-              </div>
-            </div>
-            <OrganizationLocationsSection organizationId={formData.id} isEditing={true} />
+          {/* List of Location Dropdown Accordions (Call Trigger Settings UI) */}
+          <div className="space-y-3">
+            {locations.map((loc) => {
+              const isOpen = !!expandedLocs[loc.id];
+              const slots = loc.weeklySlots || createDefaultLocationWeeklySlots();
+              const openDaysCount = WEEKDAYS.filter((d) => slots[d.key]?.enabled && (slots[d.key]?.slots?.length || 0) > 0).length;
+
+              return (
+                <div
+                  key={loc.id}
+                  className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all"
+                >
+                  {/* Dropdown Header (Call Trigger Settings style - in the label only keep location name) */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedLocs((prev) => ({
+                        ...prev,
+                        [loc.id]: !prev[loc.id],
+                      }))
+                    }
+                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                        {loc.type === "online" ? (
+                          <Globe className="w-4 h-4" />
+                        ) : (
+                          <Building2 className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                        <span
+                          className="text-sm font-bold text-[#222222]"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {loc.name}
+                        </span>
+                        {loc.isPrimary && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0 ml-3">
+                      {/* Delete icon */}
+                      {!loc.isPrimary && locations.length > 1 && (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteLocation(loc.id);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Delete location"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                      )}
+
+                      {/* Chevron toggle */}
+                      <ChevronDown
+                        className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  {/* Dropdown Content when Open: Specific Settings for this Location */}
+                  {isOpen && (
+                    <div className="p-4 sm:p-5 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                      {/* Boundary Card 1: Location Information (Call Trigger Settings style) */}
+                      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                              <Building2 className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                              Location Details
+                            </span>
+                          </div>
+                          {loc.isPrimary ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Primary Location
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetPrimaryLocation(loc.id)}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer transition-colors"
+                            >
+                              Set as Primary
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Location Name Field */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                            Location Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={loc.name}
+                            onChange={(e) => handleUpdateLocationField(loc.id, { name: e.target.value })}
+                            placeholder="e.g. California Branch, Downtown Care Center"
+                            className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                          />
+                        </div>
+
+                        {/* Location Type Field */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                            Location Type
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateLocationField(loc.id, { type: "physical" })}
+                              className={`h-9 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                loc.type !== "online"
+                                  ? "bg-blue-50 border-blue-500 text-blue-700 shadow-2xs"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              <Building2 className="w-3.5 h-3.5" />
+                              Physical Clinic
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateLocationField(loc.id, { type: "online" })}
+                              className={`h-9 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                loc.type === "online"
+                                  ? "bg-purple-50 border-purple-500 text-purple-700 shadow-2xs"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              Online / Virtual
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Address fields (if physical clinic) */}
+                        {loc.type !== "online" && (
+                          <div className="space-y-2.5 pt-0.5">
+                            <div>
+                              <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                                Street Address
+                              </label>
+                              <input
+                                type="text"
+                                value={loc.address || ""}
+                                onChange={(e) => handleUpdateLocationField(loc.id, { address: e.target.value })}
+                                placeholder="e.g. 123 Healthcare Ave, Suite 100"
+                                className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                              />
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                                  City
+                                </label>
+                                <input
+                                  type="text"
+                                  value={loc.city || ""}
+                                  onChange={(e) => handleUpdateLocationField(loc.id, { city: e.target.value })}
+                                  placeholder="San Francisco"
+                                  className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                                  State
+                                </label>
+                                <input
+                                  type="text"
+                                  value={loc.state || ""}
+                                  onChange={(e) => handleUpdateLocationField(loc.id, { state: e.target.value })}
+                                  placeholder="CA"
+                                  className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                                  ZIP
+                                </label>
+                                <input
+                                  type="text"
+                                  value={loc.zip || ""}
+                                  onChange={(e) => handleUpdateLocationField(loc.id, { zip: e.target.value })}
+                                  placeholder="94102"
+                                  className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Location Timezone */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">
+                            Location Timezone
+                          </label>
+                          <select
+                            value={loc.timezone || "America/Los_Angeles (Pacific Time - UTC-08:00)"}
+                            onChange={(e) => handleUpdateTimezone(loc.id, e.target.value)}
+                            className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 font-medium outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="America/Los_Angeles (Pacific Time - UTC-08:00)">America/Los_Angeles (Pacific Time - UTC-08:00)</option>
+                            <option value="America/New_York (Eastern Time - UTC-05:00)">America/New_York (Eastern Time - UTC-05:00)</option>
+                            <option value="America/Chicago (Central Time - UTC-06:00)">America/Chicago (Central Time - UTC-06:00)</option>
+                            <option value="America/Denver (Mountain Time - UTC-07:00)">America/Denver (Mountain Time - UTC-07:00)</option>
+                            <option value="Europe/London (GMT - UTC+00:00)">Europe/London (GMT - UTC+00:00)</option>
+                            <option value="Europe/Paris (CET - UTC+01:00)">Europe/Paris (CET - UTC+01:00)</option>
+                            <option value="Asia/Dubai (GST - UTC+04:00)">Asia/Dubai (GST - UTC+04:00)</option>
+                            <option value="Asia/Kolkata (IST - UTC+05:30)">Asia/Kolkata (IST - UTC+05:30)</option>
+                            <option value="Asia/Singapore (SGT - UTC+08:00)">Asia/Singapore (SGT - UTC+08:00)</option>
+                            <option value="Asia/Tokyo (JST - UTC+09:00)">Asia/Tokyo (JST - UTC+09:00)</option>
+                            <option value="Australia/Sydney (AEDT - UTC+11:00)">Australia/Sydney (AEDT - UTC+11:00)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Boundary Card 2: Operating Hours & Availability (Call Trigger Settings boundary div) */}
+                      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                              <Clock className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold uppercase tracking-wider text-[#1E293B] block">
+                                Operating Hours & Availability
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                Configure multiple time slots per day for this location
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApplyMonFri(loc.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 bg-white text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all cursor-pointer shadow-2xs self-start sm:self-auto"
+                            title="Copy Monday operating hours to Tue-Fri for this location"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Apply Mon-Fri</span>
+                          </button>
+                        </div>
+
+                        {/* 7-Day Multi-slot Availability Schedule matching Appointments UI */}
+                        <div className="rounded-xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden bg-white">
+                          {WEEKDAYS.map(({ key, label }) => {
+                            const day = slots[key] || { enabled: false, slots: [] };
+                            const hasSlots = day.enabled && day.slots.length > 0;
+                            const summary = hasSlots ? day.slots.map((s) => `${s.start}–${s.end}`).join(", ") : "";
+
+                            return (
+                              <div
+                                key={key}
+                                className={`flex flex-col lg:flex-row lg:items-center p-3.5 sm:px-4 gap-4 transition-colors ${
+                                  hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
+                                }`}
+                              >
+                                {/* Left: Checkbox & Day Label */}
+                                <div className="w-44 shrink-0">
+                                  <div className="flex items-center gap-2.5">
+                                    <input
+                                      type="checkbox"
+                                      id={`loc-${loc.id}-toggle-${key}`}
+                                      checked={hasSlots}
+                                      onChange={(e) => handleToggleDay(loc.id, key, e.target.checked)}
+                                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer"
+                                    />
+                                    <label
+                                      htmlFor={`loc-${loc.id}-toggle-${key}`}
+                                      className="text-sm font-bold select-none text-slate-800 cursor-pointer"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      {label}
+                                    </label>
+                                  </div>
+                                  <div className="ml-6.5 mt-0.5">
+                                    {hasSlots ? (
+                                      <span className="text-[11px] text-slate-400 font-medium">
+                                        Open {summary}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                                        Location Closed
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Middle: Slots or Unavailable */}
+                                <div className="flex-1 min-w-0">
+                                  {!hasSlots ? (
+                                    <span className="text-xs font-medium text-slate-400 italic">
+                                      Unavailable
+                                    </span>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-3">
+                                      {day.slots.map((slot, slotIdx) => (
+                                        <div
+                                          key={slotIdx}
+                                          className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50/70 border border-slate-200/70 shadow-2xs"
+                                        >
+                                          {/* Start Time */}
+                                          <div className="flex flex-col gap-1">
+                                            <span
+                                              className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
+                                              style={{ fontFamily: "Outfit, sans-serif" }}
+                                            >
+                                              Start Time
+                                            </span>
+                                            <ClockTimePicker
+                                              value={slot.start}
+                                              onChange={(newTime) =>
+                                                handleUpdateSlot(loc.id, key, slotIdx, "start", newTime)
+                                              }
+                                            />
+                                          </div>
+
+                                          <span className="text-xs text-slate-400 font-medium mt-4">–</span>
+
+                                          {/* End Time */}
+                                          <div className="flex flex-col gap-1">
+                                            <span
+                                              className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
+                                              style={{ fontFamily: "Outfit, sans-serif" }}
+                                            >
+                                              End Time
+                                            </span>
+                                            <ClockTimePicker
+                                              value={slot.end}
+                                              onChange={(newTime) =>
+                                                handleUpdateSlot(loc.id, key, slotIdx, "end", newTime)
+                                              }
+                                            />
+                                          </div>
+
+                                          {/* Remove Slot */}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveSlot(loc.id, key, slotIdx)}
+                                            className="mt-4 p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer rounded-lg hover:bg-rose-50"
+                                            title="Remove slot"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Right: Add Slot Button */}
+                                <div className="shrink-0 flex items-center justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddSlot(loc.id, key)}
+                                    className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                    title={`Add slot for ${label}`}
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Bottom Save Action for this Location */}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                        <p className="text-xs text-slate-400">
+                          Schedules for <span className="font-semibold text-slate-700">{loc.name}</span> apply to bookings and routing.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveLocation(loc.id)}
+                          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-all shadow-xs cursor-pointer active:scale-98 shrink-0"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Check className="w-4 h-4" />
+                          Save {loc.name} Availability
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
