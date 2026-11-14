@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Check,
   Sparkles,
-  Eye,
   FileText,
   X,
   Minus,
@@ -20,8 +19,6 @@ import {
   Stethoscope,
   ArrowRight,
   ArrowLeft,
-  CheckCircle2,
-  Pill,
   ShieldCheck,
   Calendar,
   Receipt,
@@ -43,7 +40,6 @@ import {
   PRESET_SCENARIOS,
   saveScribeSession,
   issuePrescriptionDocument,
-  SCRIBE_DOCTORS,
 } from "../../../lib/scribeSessionStore";
 
 export interface AIScribePopupProps {
@@ -95,10 +91,9 @@ export default function AIScribePopup({
   const { user } = useAuth();
 
   // Workflow steps:
-  // 1. "record" — Immediate ambient recording or audio upload (no clunky presets, clean UI)
-  // 2. "assign" — On saving, assign patient and encounter metadata
-  // 3. "completed" — Clean success state with one-click transcript view
-  const [step, setStep] = useState<"record" | "assign" | "completed">("record");
+  // 1. "record" — Immediate ambient recording or audio upload
+  // 2. "assign" — Assign contact, appointment, date and attendee, then 1-click Save
+  const [step, setStep] = useState<"record" | "assign">("record");
 
   // Free-form Draggable window state matching AIAssistantPopup
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -145,9 +140,6 @@ export default function AIScribePopup({
   const clientDropdownRef = useRef<HTMLDivElement>(null);
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
 
-  // Step 3: Saved result state
-  const [savedSession, setSavedSession] = useState<ScribeSession | null>(null);
-
   // Reset or initialize state when opened/closed
   useEffect(() => {
     if (isOpen) {
@@ -156,7 +148,6 @@ export default function AIScribePopup({
       setIsPaused(false);
       setRecordingSec(0);
       setUploadedFile(null);
-      setSavedSession(null);
 
       // Refresh appointments
       const appts = appointmentService.getAppointments();
@@ -311,7 +302,6 @@ export default function AIScribePopup({
     setRecordingSec(0);
     setUploadedFile(null);
     setStep("record");
-    setSavedSession(null);
     toast.info("Scribe session reset");
   };
 
@@ -439,10 +429,9 @@ export default function AIScribePopup({
       issuePrescriptionDocument(newSession);
     } catch {}
 
-    setSavedSession(newSession);
-    setStep("completed");
-    toast.success(`Consultation saved for ${patientName}!`);
+    toast.success(`AI Scribe consultation saved for ${patientName}!`);
     onSessionCreated?.(newSession);
+    onClose();
   };
 
   const filteredClients = liveClients.filter((c) => {
@@ -946,83 +935,6 @@ export default function AIScribePopup({
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Save</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════
-            STEP 3: COMPLETED VIEW & ACTIONS
-           ══════════════════════════════════════════════════════ */}
-        {step === "completed" && savedSession && (
-          <div className="flex-1 flex flex-col justify-between items-center text-center py-3">
-            <div className="my-auto w-full">
-              {/* Checkmark icon badge */}
-              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3 shadow-xs">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-
-              <h3 className="text-base font-bold text-slate-900 dark:text-zinc-100">
-                Consultation Transcribed!
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                Clinical documentation and SOAP notes generated.
-              </p>
-
-              {/* Patient & Summary Details Card */}
-              <div className="w-full bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs mt-4 text-left space-y-2">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-                  <div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-zinc-100">
-                      {savedSession.clientName}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      {savedSession.patientAge}y • {savedSession.patientGender} • {savedSession.doctorName}
-                    </p>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60">
-                    Attested
-                  </span>
-                </div>
-
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-300">
-                    <Stethoscope className="w-3.5 h-3.5 text-blue-500" />
-                    <span className="font-medium truncate">
-                      {savedSession.extractedData?.diagnosis || "Consultation Completed"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-300">
-                    <Pill className="w-3.5 h-3.5 text-amber-500" />
-                    <span>
-                      {savedSession.extractedData?.medications?.length || 0} Medications Prescribed
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="w-full space-y-1.5 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onViewTranscript?.(savedSession);
-                }}
-                className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>View Full Transcript & SOAP Notes</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReset}
-                className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-medium border border-slate-200 dark:border-zinc-700 transition-colors cursor-pointer"
-              >
-                Start Another Scribe
               </button>
             </div>
           </div>
