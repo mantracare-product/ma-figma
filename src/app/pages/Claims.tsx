@@ -1,3 +1,5 @@
+import { receiveMockEra } from "../../lib/eraStore";
+import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
 import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
 import { claimService } from "../../lib/claimService";
@@ -102,6 +104,8 @@ export default function Claims() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedClaimForDetail, setSelectedClaimForDetail] = useState<Claim | null>(null);
   const [claimViewMode, setClaimViewMode] = useState<"list" | "board">("list");
+  const { hasPermission: hasClaimPermission } = useCurrentPermissions();
+  const canPostPayments = hasClaimPermission("rcmPayments", "add");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
 
   // Load claims
@@ -632,6 +636,18 @@ export default function Claims() {
               <button type="button" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
               <button type="button" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>
               <span className="text-xs text-slate-500">{insuranceProcess.name}</span>
+              <button
+                type="button"
+                disabled={!canPostPayments}
+                title={canPostPayments ? "Mock: stage an ERA for claims that are out with the payer" : "You need the rcmPayments permission"}
+                onClick={() => {
+                  const era = receiveMockEra({ includeUnmatched: true });
+                  toast.success(`Mock ERA ${era.traceNumber} received (${era.lines.length} lines)`);
+                }}
+                className="ml-auto px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
+              >
+                Receive ERA (mock)
+              </button>
             </div>
             {claimViewMode === "board" ? (
               <ClaimBoard

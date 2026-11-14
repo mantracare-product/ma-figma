@@ -35,6 +35,8 @@ export interface StepItem {
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "post_remittance", name: "Post Remittance", desc: "Post an ERA to its claims (paid, partial, denied). Unmatched lines are kept and raise era.unmatched.", iconKey: "filetext", cats: ["all", "records"], popular: false },
+  { key: "draft_appeal", name: "Draft Appeal", desc: "Propose an appeal letter for a denied claim (never sends or moves anything).", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "create_claim", name: "Create Claim", desc: "Create a claim from the visit (reads Billing setup, coverage and the service/scribe codes); never creates two for the same source.", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "scrub_claim", name: "Scrub Claim", desc: "Check the claim against the scrub rules (Billing setup) and move it on pass or fail.", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "submit_claim", name: "Submit Claim", desc: "Submit the claim to the clearinghouse (mock) and handle the acknowledgement.", iconKey: "filetext", cats: ["all", "records"], popular: false },

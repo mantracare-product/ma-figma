@@ -97,6 +97,18 @@ export interface Claim {
   sourceId?: string;
   dedupeKey?: string;
   /** Result of the last scrub (scrub_claim) and how many times the claim was scrubbed / submitted. */
+  /** Payments posted from ERAs (post_remittance) and what is still unpaid by the payer. */
+  payments?: Array<{ id: string; eraId: string; traceNumber: string; amount: number; date: string }>;
+  underpaidBy?: number;
+  /** Denial facts written when a denial is posted (categories: see denialCodes.ts). */
+  denialCategory?: string;
+  denialCodes?: string[];
+  denialSummary?: string;
+  denialNext?: string;
+  appealDeadline?: string;
+  appealRevision?: number;
+  /** Proposed appeal letter (draft_appeal is propose-only). */
+  appealDraft?: { text: string; revision: number; proposedAt: string; status: "proposed" | "accepted" | "rejected" };
   scrubIssues?: Array<{ ruleId: string; severity: "error" | "warning"; message: string }>;
   scrubVersion?: number;
   submissionCount?: number;

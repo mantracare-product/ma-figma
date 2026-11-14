@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeDraftAppealStep, executePostRemittanceStep, isDraftAppealStep, isPostRemittanceStep } from "./remittanceActions";
 import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, isCreateClaimStep, isScrubClaimStep, isSubmitClaimStep } from "./claimActions";
 import { claimService } from "./claimService";
 import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
@@ -733,6 +734,16 @@ export async function executeRulesForEvent(
       }
       if (isNotifyStep(stepKey)) {
         executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
+      }
+
+      // Actions: Post Remittance (ERA -> claims) / Draft Appeal (propose-only)
+      if (isPostRemittanceStep(stepKey)) {
+        const run = executePostRemittanceStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] post_remittance failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (isDraftAppealStep(stepKey)) {
+        const run = executeDraftAppealStep({ rule, stepId: act.id, params: act.params || {}, event });
+        if (run.status === "failed") console.warn(`[RuleEngine] draft_appeal failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Actions: Create / Scrub / Submit Claim

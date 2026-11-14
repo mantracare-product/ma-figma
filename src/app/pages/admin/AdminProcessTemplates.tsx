@@ -895,6 +895,8 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "send_message": ["stage", "incall", "inchat", "postcall"],
   "move_to_workflow": ["stage", "postcall"],
   "create_claim": ["stage", "postcall"],
+  "post_remittance": ["stage", "postcall"],
+  "draft_appeal": ["stage", "postcall"],
   "scrub_claim": ["stage", "postcall"],
   "submit_claim": ["stage", "postcall"],
   "notify": ["stage", "incall", "inchat", "postcall"],

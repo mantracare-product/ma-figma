@@ -64,7 +64,9 @@ Demo script (tests: rcmSetC.test.ts, claimService.test.ts, claimActions.test.ts,
 - NOT RUN (browser): Process page claim tab (add/rename/delete workflows), Claims page workflow dropdown + List/Board toggle, claim detail drawer, Codes panel layout, Invoices claim column, Billing setup scrub rules.
 
 ## Slice 5 - Money back
-- [ ] S5.1 .. S5.4 (pending)
+- [x] S5.1 ERA staging + post_remittance + unmatched handling AND S5.2 CARC/RARC categorization + draft_appeal (propose-only) -- done in ONE commit (see git log "S5.1+S5.2"). The Denial & appeal sample workflow was seeded in S4.1; the A25 move_to_workflow rule lands with Set M (S5.4).
+- [ ] S5.3 update_invoice_from_claim + invoice sample stages + payment plans (lib) + portal balance
+- [ ] S5.4 Set M rules A21-A30 + check_claim_status + start_call mock
 
 ## Slice 6 - Overview row, reports, permission wiring, polish
 - [ ] S6.1 .. S6.5 (pending)
