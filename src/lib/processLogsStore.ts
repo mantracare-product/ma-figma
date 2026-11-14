@@ -1,7 +1,20 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+import { getStoredProcesses } from "./useProcessStore";
 
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
+/** Flag set once every `callLogs` key variant has been migrated to the process-instance model. */
+export const CALL_LOGS_SCHEMA_FLAG = "callLogs_schema_v2";
+
+/** Where a process instance came from (e.g. the appointment that triggered it). */
+export interface ProcessInstanceSource {
+  type: string; // "appointment" | "manual" | "call" | "import" | "process" | "legacy" | …
+  id: string;
+  /** Human title used on cards, e.g. "Eye exam — 2026-11-20 10:30 (Appt #123)". */
+  title?: string;
+}
+
+export type ProcessInstanceStatus = "active" | "completed" | "cancelled";
 
 /**
  * A row in the `callLogs` store is EITHER a real call ("call") OR a client-in-process
@@ -29,6 +42,21 @@ export interface CallLog {
   relationshipReason?: "Call Trigger" | "Stage Change" | "Retry" | "Manual Trigger";
   /** Explicit discriminator. Rows written before this field existed are classified by isProcessInstanceRow(). */
   kind?: CallLogKind;
+
+  // ── Process-instance fields (only on kind === "process_instance" rows) ──
+  /** Unique id of this client-in-process instance. Equal to the row `id`. */
+  instanceId?: string;
+  /** Process (workflow) id; `process` stays as the denormalized name. */
+  processId?: string;
+  source?: ProcessInstanceSource;
+  /** clientId|processId(or name)|sourceType:sourceId — creation is idempotent per key. */
+  dedupeKey?: string;
+  /** Lifecycle of the instance (distinct from `status`, which is the call status). */
+  instanceStatus?: ProcessInstanceStatus;
+  parentInstanceId?: string;
+  /** Display title (card/list). */
+  title?: string;
+  createdAt?: string;
 }
 
 /**
@@ -54,10 +82,17 @@ const initialPatientCareJourneyLogsRaw: CallLog[] = [
   { id: "PRC-CL-003", client: "Emily Davis", clientId: "CL-003", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Payment Done", duration: "5:05", date: "2026-10-11 11:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
 
-export const initialPatientCareJourneyLogs: CallLog[] = initialPatientCareJourneyLogsRaw.map((l) => ({
-  ...l,
-  kind: "process_instance" as const,
-}));
+export const initialPatientCareJourneyLogs: CallLog[] = initialPatientCareJourneyLogsRaw.map((l) => {
+  const source: ProcessInstanceSource = { type: "legacy", id: "primary" };
+  return {
+    ...l,
+    kind: "process_instance" as const,
+    instanceId: l.id,
+    instanceStatus: "active" as const,
+    source,
+    dedupeKey: buildDedupeKey(l.clientId, l.process, source),
+  };
+});
 
 const initialCallLogs: CallLog[] = [
   ...initialPatientCareJourneyLogs,
@@ -104,6 +139,7 @@ function notifyProcessLogsChanged() {
 
 export function getStoredCallLogs(): CallLog[] {
   try {
+    ensureInstanceMigration();
     if (isDemoMantraActive()) {
       const demoRaw =
         (typeof window !== "undefined" &&
@@ -190,6 +226,338 @@ export function saveCallLogs(logs: CallLog[]): void {
   } catch {}
 }
 
+
+// ─── Process instances (client-in-process rows) ───────────────────────────────
+// A "process instance" is ONE client's enrollment in ONE process, created from a source record
+// (for example an appointment). The same client can be in the same process many times; each
+// instance has its own id, stage and field values. The row `id` is the `instanceId`.
+
+function nowLogDate(): string {
+  return new Date().toISOString().replace("T", " ").substring(0, 16);
+}
+
+function norm(s: unknown): string {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+let instanceSeq = 0;
+/** Collision-safe instance id: time + per-session counter + random suffix. */
+export function makeInstanceId(): string {
+  instanceSeq = (instanceSeq + 1) % 46656;
+  const rnd = Math.random().toString(36).slice(2, 6).padEnd(4, "0");
+  return `PI-${Date.now().toString(36)}${instanceSeq.toString(36)}-${rnd}`;
+}
+
+/**
+ * clientId|processKey|sourceType:sourceId. `processKey` is the process id when known, otherwise the
+ * process name. It is lower-cased so id- and name-based keys stay comparable.
+ */
+export function buildDedupeKey(
+  clientId: string,
+  processKey: string,
+  source: Pick<ProcessInstanceSource, "type" | "id">
+): string {
+  return `${String(clientId)}|${norm(processKey)}|${source.type}:${source.id}`;
+}
+
+function resolveProcessId(processName: string): string | undefined {
+  try {
+    const p = getStoredProcesses().find((pr) => norm(pr.name) === norm(processName));
+    return p?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+function readClientsRaw(): any[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("clients") || sessionStorage.getItem("clients");
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeClientsRaw(clients: any[]): void {
+  const serialized = JSON.stringify(clients);
+  localStorage.setItem("clients", serialized);
+  sessionStorage.setItem("clients", serialized);
+  window.dispatchEvent(new CustomEvent("clientsStore_updated", { detail: clients }));
+}
+
+function findClientByKey(key: string): any | undefined {
+  if (!key) return undefined;
+  return readClientsRaw().find((c) => c.id === key || (c.name && norm(c.name) === norm(key)));
+}
+
+function rowMatchesClient(l: CallLog, clientKey: string): boolean {
+  if (!clientKey) return false;
+  return l.clientId === clientKey || (!!l.client && norm(l.client) === norm(clientKey));
+}
+
+export function isActiveInstance(l: CallLog): boolean {
+  return !l.instanceStatus || l.instanceStatus === "active";
+}
+
+export function getProcessInstanceById(instanceId: string): CallLog | undefined {
+  if (!instanceId) return undefined;
+  return getStoredCallLogs().find(
+    (l) => isProcessInstanceRow(l) && (l.instanceId === instanceId || l.id === instanceId)
+  );
+}
+
+/** All instances of a client (by id or name), optionally limited to one process name. */
+export function getInstancesForClient(clientKey: string, processName?: string): CallLog[] {
+  return getStoredCallLogs().filter(
+    (l) =>
+      isProcessInstanceRow(l) &&
+      rowMatchesClient(l, clientKey) &&
+      (!processName || norm(l.process) === norm(processName))
+  );
+}
+
+/**
+ * The "primary" instance of a process for a client = the most recent ACTIVE one (falls back to the
+ * most recent of any status). Used by the legacy name-based shims; warns when it is ambiguous.
+ */
+export function getPrimaryInstance(
+  clientKey: string,
+  processName: string,
+  opts: { warn?: boolean } = {}
+): CallLog | undefined {
+  const all = getInstancesForClient(clientKey, processName);
+  if (all.length === 0) return undefined;
+  const active = all.filter(isActiveInstance);
+  const pool = active.length > 0 ? active : all;
+  // Stable sort: ties keep store order (the store is newest-first).
+  const sorted = [...pool].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  if (active.length > 1 && opts.warn !== false) {
+    console.warn(
+      `[processLogsStore] ${active.length} active instances of "${processName}" for client "${clientKey}"; ` +
+        `name-based API resolved to the most recent (${sorted[0].instanceId || sorted[0].id}). Use the instanceId API.`
+    );
+  }
+  return sorted[0];
+}
+
+export interface StartProcessInstanceInput {
+  clientId: string;
+  clientName: string;
+  processName: string;
+  processId?: string;
+  stageName: string;
+  /** Record that triggered this instance. Without one, a unique manual source is used (never deduped). */
+  source?: ProcessInstanceSource;
+  title?: string;
+  /** Override the default dedupe key (clientId|processId|sourceType:sourceId). */
+  dedupeKey?: string;
+  parentInstanceId?: string;
+  channel?: string;
+}
+
+export interface StartProcessInstanceResult {
+  instance: CallLog;
+  alreadyExisted: boolean;
+}
+
+/**
+ * Create a process instance, idempotently per dedupe key. Re-saving or rescheduling the same
+ * booking (same source) returns the existing instance and does NOT change its stage.
+ */
+export function startProcessInstance(input: StartProcessInstanceInput): StartProcessInstanceResult {
+  const logs = getStoredCallLogs();
+  const processId = input.processId || resolveProcessId(input.processName);
+  const source: ProcessInstanceSource = input.source || { type: "manual", id: makeInstanceId() };
+
+  const defaultKey = buildDedupeKey(input.clientId, processId || input.processName, source);
+  const candidateKeys = Array.from(
+    new Set(
+      [input.dedupeKey, defaultKey, buildDedupeKey(input.clientId, input.processName, source)].filter(
+        Boolean
+      ) as string[]
+    )
+  );
+  const existing = logs.find(
+    (l) => isProcessInstanceRow(l) && !!l.dedupeKey && candidateKeys.includes(l.dedupeKey)
+  );
+  if (existing) return { instance: existing, alreadyExisted: true };
+
+  let id = makeInstanceId();
+  while (logs.some((l) => l.id === id)) id = makeInstanceId();
+
+  const row: CallLog = {
+    id,
+    kind: "process_instance",
+    instanceId: id,
+    client: input.clientName,
+    clientId: input.clientId,
+    type: input.channel === "sms" ? "SMS" : "WhatsApp",
+    status: "In Progress",
+    process: input.processName,
+    processId,
+    currentStage: input.stageName,
+    duration: "0:00",
+    date: nowLogDate(),
+    hasRecording: false,
+    hasTranscript: true,
+    hasScheduledCall: false,
+    source,
+    dedupeKey: input.dedupeKey || defaultKey,
+    instanceStatus: "active",
+    parentInstanceId: input.parentInstanceId,
+    title: input.title || source.title,
+    createdAt: new Date().toISOString(),
+  };
+  saveCallLogs([row, ...logs]);
+  syncInstanceToClient(row);
+  return { instance: row, alreadyExisted: false };
+}
+
+/**
+ * Mirror an instance's stage onto the client record. Writes `processInstanceStages[instanceId]` and,
+ * for the primary instance of that process only, the legacy name-keyed `processStagesMap`.
+ * It deliberately does NOT write `client.stage` (instance moves never touch the client's own stage).
+ */
+function syncInstanceToClient(row: CallLog): void {
+  if (typeof window === "undefined") return;
+  try {
+    const clients = readClientsRaw();
+    if (clients.length === 0) return;
+    const primary = getPrimaryInstance(row.clientId, row.process, { warn: false });
+    let changed = false;
+    const next = clients.map((c: any) => {
+      const isThisClient = c.id === row.clientId || (c.name && norm(c.name) === norm(row.clientId));
+      if (!isThisClient) return c;
+      changed = true;
+      const processInstanceStages = {
+        ...(c.processInstanceStages || {}),
+        [row.instanceId || row.id]: {
+          processId: row.processId,
+          processName: row.process,
+          stageName: row.currentStage,
+        },
+      };
+      const processStagesMap = { ...(c.processStagesMap || {}) };
+      if (primary && (primary.instanceId || primary.id) === (row.instanceId || row.id)) {
+        processStagesMap[row.process] = row.currentStage;
+      }
+      return { ...c, processInstanceStages, processStagesMap, lastUpdatedProcess: row.process };
+    });
+    if (changed) writeClientsRaw(next);
+  } catch (e) {
+    console.warn("Failed to sync instance stage to clients store:", e);
+  }
+}
+
+/**
+ * Mirror an instance's stage onto its deal card(s). Cards are matched by instanceId. A legacy card
+ * without an instanceId is only adopted when the client has exactly ONE active instance of the
+ * process, so one move can never drag another instance's card along.
+ */
+function syncInstanceToDeals(row: CallLog): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
+    if (!raw) return;
+    const deals = JSON.parse(raw);
+    if (!Array.isArray(deals)) return;
+    const instanceId = row.instanceId || row.id;
+    const singleActive =
+      getInstancesForClient(row.clientId, row.process).filter(isActiveInstance).length <= 1;
+    let changed = false;
+    const updated = deals.map((d: any) => {
+      const byInstance = d.instanceId && d.instanceId === instanceId;
+      const legacyAdopt =
+        !d.instanceId &&
+        singleActive &&
+        (d.clientId === row.clientId || (d.clientName && norm(d.clientName) === norm(row.client))) &&
+        d.stage &&
+        norm(d.stage).startsWith(norm(row.process));
+      if (byInstance || legacyAdopt) {
+        changed = true;
+        return { ...d, instanceId, stage: `${row.process}: ${row.currentStage}` };
+      }
+      return d;
+    });
+    if (changed) {
+      const serialized = JSON.stringify(updated);
+      localStorage.setItem("deals", serialized);
+      sessionStorage.setItem("deals", serialized);
+      window.dispatchEvent(new CustomEvent("deals_updated"));
+    }
+  } catch (e) {
+    console.warn("Failed to sync instance stage to deals:", e);
+  }
+}
+
+/** Move ONE instance to a stage (by instanceId). Returns the updated row, or null if not found. */
+export function updateProcessInstanceStage(
+  instanceId: string,
+  newStageName: string
+): CallLog | null {
+  const logs = getStoredCallLogs();
+  const idx = logs.findIndex(
+    (l) => isProcessInstanceRow(l) && (l.instanceId === instanceId || l.id === instanceId)
+  );
+  if (idx < 0) return null;
+  const updatedRow: CallLog = { ...logs[idx], currentStage: newStageName, date: nowLogDate() };
+  const next = [...logs];
+  next[idx] = updatedRow;
+  saveCallLogs(next);
+  syncInstanceToClient(updatedRow);
+  syncInstanceToDeals(updatedRow);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: updatedRow.clientId }));
+  }
+  return updatedRow;
+}
+
+const PROTECTED_INSTANCE_KEYS = ["id", "instanceId", "kind", "dedupeKey", "source"];
+
+/** Merge field values onto ONE instance (by instanceId). Identity keys are never overwritten. */
+export function updateProcessInstanceFields(
+  instanceId: string,
+  fieldValues: Record<string, any>
+): CallLog | null {
+  const logs = getStoredCallLogs();
+  const idx = logs.findIndex(
+    (l) => isProcessInstanceRow(l) && (l.instanceId === instanceId || l.id === instanceId)
+  );
+  if (idx < 0) return null;
+  const safe: Record<string, any> = {};
+  for (const [k, v] of Object.entries(fieldValues || {})) {
+    if (!PROTECTED_INSTANCE_KEYS.includes(k)) safe[k] = v;
+  }
+  const updatedRow = { ...logs[idx], ...safe } as CallLog;
+  const next = [...logs];
+  next[idx] = updatedRow;
+  saveCallLogs(next);
+  return updatedRow;
+}
+
+/** Set the lifecycle status of an instance (active | completed | cancelled). */
+export function setProcessInstanceStatus(
+  instanceId: string,
+  status: ProcessInstanceStatus
+): CallLog | null {
+  return updateProcessInstanceFields(instanceId, { instanceStatus: status });
+}
+
+// ─── Legacy name-based shims ──────────────────────────────────────────────────
+// Keep working for callers that only know (client, process NAME). They resolve to the PRIMARY
+// instance (most recent active) and warn when there is more than one. New code must use the
+// instanceId API above.
+
+const LEGACY_SOURCE: ProcessInstanceSource = { type: "legacy", id: "primary" };
+
+function resolveClientForShim(clientKey: string): { id: string; name: string } {
+  const c = findClientByKey(clientKey);
+  if (c) return { id: c.id, name: c.name || clientKey };
+  return { id: clientKey, name: clientKey };
+}
+
 export function addProcessCallLog(entry: {
   clientId: string;
   clientName: string;
@@ -197,157 +565,33 @@ export function addProcessCallLog(entry: {
   stageName: string;
   channel?: string;
 }): CallLog {
-  const currentLogs = getStoredCallLogs();
-  
-  // Check if this client is already in this process in callLogs
-  const existingIndex = currentLogs.findIndex(
-    (l) => l.clientId === entry.clientId && l.process === entry.processName
-  );
-
-  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-
-  if (existingIndex >= 0) {
-    const updated = [...currentLogs];
-    updated[existingIndex] = {
-      ...updated[existingIndex],
-      currentStage: entry.stageName,
-      date: nowStr,
-    };
-    saveCallLogs(updated);
-    return updated[existingIndex];
-  } else {
-    const newLog: CallLog = {
-      id: `PRC-${entry.clientId}-${Date.now().toString().slice(-4)}`,
-      client: entry.clientName,
-      clientId: entry.clientId,
-      type: entry.channel === "sms" ? "SMS" : "WhatsApp",
-      status: "In Progress",
-      process: entry.processName,
-      currentStage: entry.stageName,
-      duration: "0:00",
-      date: nowStr,
-      hasRecording: false,
-      hasTranscript: true,
-      hasScheduledCall: false,
-      kind: "process_instance",
-    };
-    const updated = [newLog, ...currentLogs];
-    saveCallLogs(updated);
-    return newLog;
+  const primary = getPrimaryInstance(entry.clientId, entry.processName);
+  if (primary) {
+    return updateProcessInstanceStage(primary.instanceId || primary.id, entry.stageName) || primary;
   }
+  return startProcessInstance({
+    clientId: entry.clientId,
+    clientName: entry.clientName,
+    processName: entry.processName,
+    stageName: entry.stageName,
+    channel: entry.channel,
+    source: LEGACY_SOURCE,
+  }).instance;
 }
 
 export function updateProcessCallLogStage(clientId: string, processName: string, newStageName: string): void {
-  const currentLogs = getStoredCallLogs();
-  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-  let found = false;
-  const updated = currentLogs.map((l) => {
-    if (
-      (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
-      l.process.toLowerCase() === processName.toLowerCase()
-    ) {
-      found = true;
-      return { ...l, currentStage: newStageName, date: nowStr };
-    }
-    return l;
-  });
-
-  const rawClientsStr = typeof window !== "undefined" ? (localStorage.getItem("clients") || sessionStorage.getItem("clients")) : null;
-  let clientDisplayName = clientId;
-  if (rawClientsStr) {
-    try {
-      const parsedClients = JSON.parse(rawClientsStr);
-      const foundClient = parsedClients.find((c: any) => c.id === clientId || c.name?.toLowerCase() === clientId.toLowerCase());
-      if (foundClient?.name) clientDisplayName = foundClient.name;
-    } catch {}
+  let primary = getPrimaryInstance(clientId, processName);
+  if (!primary) {
+    const client = resolveClientForShim(clientId);
+    primary = startProcessInstance({
+      clientId: client.id,
+      clientName: client.name,
+      processName,
+      stageName: newStageName,
+      source: LEGACY_SOURCE,
+    }).instance;
   }
-
-  if (!found) {
-    const newLog: CallLog = {
-      id: `PRC-${clientId}-${Date.now().toString().slice(-4)}`,
-      client: clientDisplayName,
-      clientId: clientId,
-      type: "Inbound",
-      status: "In Progress",
-      process: processName,
-      currentStage: newStageName,
-      duration: "0:00",
-      date: nowStr,
-      hasRecording: false,
-      hasTranscript: true,
-      hasScheduledCall: true,
-      kind: "process_instance",
-    };
-    updated.unshift(newLog);
-  }
-
-  saveCallLogs(updated);
-
-  // Synchronize to clients in storage and dispatch cross-view events
-  if (typeof window !== "undefined") {
-    try {
-      const rawClients = localStorage.getItem("clients") || sessionStorage.getItem("clients");
-      if (rawClients) {
-        const clients = JSON.parse(rawClients);
-        let changed = false;
-        const nextClients = clients.map((c: any) => {
-          if (
-            c.id === clientId ||
-            (c.name && clientId && c.name.toLowerCase() === clientId.toLowerCase())
-          ) {
-            changed = true;
-            const newMap = { ...(c.processStagesMap || {}), [processName]: newStageName };
-            return {
-              ...c,
-              processStagesMap: newMap,
-              stage: newStageName,
-              lastUpdatedProcess: processName,
-            };
-          }
-          return c;
-        });
-
-        if (changed) {
-          const serialized = JSON.stringify(nextClients);
-          localStorage.setItem("clients", serialized);
-          sessionStorage.setItem("clients", serialized);
-          window.dispatchEvent(new CustomEvent("clientsStore_updated", { detail: nextClients }));
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to sync stage to clients store:", e);
-    }
-
-    // Synchronize to deals in storage
-    try {
-      const rawDeals = localStorage.getItem("deals") || sessionStorage.getItem("deals");
-      if (rawDeals) {
-        const deals = JSON.parse(rawDeals);
-        let dealChanged = false;
-        const updatedDeals = deals.map((d: any) => {
-          if (
-            (d.clientId === clientId || (d.clientName && clientId && d.clientName.toLowerCase() === clientId.toLowerCase())) &&
-            d.stage &&
-            d.stage.toLowerCase().startsWith(processName.toLowerCase())
-          ) {
-            dealChanged = true;
-            return { ...d, stage: `${processName}: ${newStageName}` };
-          }
-          return d;
-        });
-        if (dealChanged) {
-          const serializedDeals = JSON.stringify(updatedDeals);
-          localStorage.setItem("deals", serializedDeals);
-          sessionStorage.setItem("deals", serializedDeals);
-          window.dispatchEvent(new CustomEvent("deals_updated"));
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to sync stage to deals:", e);
-    }
-
-    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientId }));
-  }
+  updateProcessInstanceStage(primary.instanceId || primary.id, newStageName);
 }
 
 export function updateProcessCallLogFields(
@@ -355,33 +599,198 @@ export function updateProcessCallLogFields(
   processName: string,
   fieldValues: Record<string, any>
 ): void {
-  const currentLogs = getStoredCallLogs();
-  const existingIndex = currentLogs.findIndex(
-    (l) =>
-      (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
-      l.process.toLowerCase() === processName.toLowerCase()
-  );
-  if (existingIndex >= 0) {
-    const updated = [...currentLogs];
-    updated[existingIndex] = { ...updated[existingIndex], ...fieldValues };
-    saveCallLogs(updated);
-  } else {
-    const newLog: CallLog & Record<string, any> = {
-      id: `CALL-${processName.toUpperCase().replace(/\s+/g, "-")}`,
-      client: clientId,
-      clientId: clientId,
-      type: "Outbound",
-      status: "In Progress",
-      process: processName,
-      currentStage: "Initial Stage",
-      duration: "0:00",
-      date: new Date().toISOString().replace("T", " ").substring(0, 16),
-      hasRecording: false,
-      hasTranscript: false,
-      hasScheduledCall: false,
-      kind: "process_instance",
-      ...fieldValues,
-    };
-    saveCallLogs([newLog, ...currentLogs]);
+  let primary = getPrimaryInstance(clientId, processName);
+  if (!primary) {
+    const client = resolveClientForShim(clientId);
+    primary = startProcessInstance({
+      clientId: client.id,
+      clientName: client.name,
+      processName,
+      stageName: "Initial Stage",
+      source: LEGACY_SOURCE,
+    }).instance;
   }
+  updateProcessInstanceFields(primary.instanceId || primary.id, fieldValues);
+}
+
+// ─── One-time migration to the instance model ─────────────────────────────────
+
+let instanceMigrationChecked = false;
+
+/** Run the migration at most once per page load, and only until the persistent flag is set. */
+export function ensureInstanceMigration(): void {
+  if (instanceMigrationChecked || typeof window === "undefined") return;
+  instanceMigrationChecked = true;
+  try {
+    if (localStorage.getItem(CALL_LOGS_SCHEMA_FLAG) === "1") return;
+    migrateProcessInstances();
+    localStorage.setItem(CALL_LOGS_SCHEMA_FLAG, "1");
+  } catch (e) {
+    console.warn("[processLogsStore] instance migration failed (will retry next load):", e);
+  }
+}
+
+/** Test hook. */
+export function __resetInstanceMigrationForTests(): void {
+  instanceMigrationChecked = false;
+}
+
+function storageKeys(store: Storage): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < store.length; i++) {
+    const k = store.key(i);
+    if (k) keys.push(k);
+  }
+  return keys;
+}
+
+/**
+ * Idempotent. For every `callLogs` key variant (callLogs, callLogs_demo, callLogs_signup, callLogs_<org>
+ * in localStorage, plus sessionStorage callLogs): classify rows, stamp `kind`, backfill
+ * instanceId/clientId/processId/source/dedupeKey/instanceStatus, collapse duplicate legacy
+ * (client, process) pairs to the newest, then backfill `deals` rows and activity entries.
+ */
+export function migrateProcessInstances(): { rowsMigrated: number; collapsed: number } {
+  const clients = readClientsRaw();
+  const findClient = (key: unknown) =>
+    key ? clients.find((c) => c.id === key || (c.name && norm(c.name) === norm(key))) : undefined;
+  const processIdCache = new Map<string, string | undefined>();
+  const processIdByName = (name: string) => {
+    const k = norm(name);
+    if (!processIdCache.has(k)) processIdCache.set(k, resolveProcessId(name));
+    return processIdCache.get(k);
+  };
+
+  const index = new Map<string, CallLog>(); // `${clientKey}|${processKey}` -> instance
+  let rowsMigrated = 0;
+  let collapsed = 0;
+
+  const migrateRows = (rows: any[]): { rows: any[]; changed: boolean } => {
+    let changed = false;
+    const out: any[] = [];
+    const keptByGroup = new Map<string, number>();
+    for (const r of rows) {
+      if (!r || typeof r !== "object") {
+        out.push(r);
+        continue;
+      }
+      if (!isProcessInstanceRow(r)) {
+        if (!r.kind) {
+          out.push({ ...r, kind: "call" });
+          changed = true;
+        } else {
+          out.push(r);
+        }
+        continue;
+      }
+      const wasLegacy = !r.instanceId;
+      const client = findClient(r.clientId) || findClient(r.client);
+      const clientId = client?.id || r.clientId;
+      const processId = r.processId || processIdByName(r.process);
+      const source: ProcessInstanceSource = r.source || { type: "legacy", id: "primary" };
+      const next = {
+        ...r,
+        kind: "process_instance",
+        instanceId: r.instanceId || r.id,
+        clientId,
+        processId,
+        source,
+        instanceStatus: r.instanceStatus || "active",
+        dedupeKey: r.dedupeKey || buildDedupeKey(clientId, processId || r.process, source),
+      };
+      if (JSON.stringify(next) !== JSON.stringify(r)) changed = true;
+
+      if (wasLegacy) {
+        const group = `${norm(clientId)}|${norm(r.process)}`;
+        const keptIdx = keptByGroup.get(group);
+        if (keptIdx === undefined) {
+          keptByGroup.set(group, out.length);
+          out.push(next);
+        } else {
+          // duplicate legacy (client, process) pair: keep the newest (ties keep the earlier row; the store is newest-first)
+          if (String(next.date || "") > String(out[keptIdx].date || "")) out[keptIdx] = next;
+          collapsed++;
+          changed = true;
+        }
+      } else {
+        out.push(next);
+      }
+    }
+    for (const r of out) {
+      if (r && typeof r === "object" && r.kind === "process_instance") {
+        rowsMigrated++;
+        const keys = [norm(r.clientId), norm(r.client)];
+        const procKeys = [norm(r.process), r.processId ? norm(r.processId) : ""].filter(Boolean);
+        for (const ck of keys) for (const pk of procKeys) if (ck) index.set(`${ck}|${pk}`, r);
+      }
+    }
+    return { rows: out, changed };
+  };
+
+  const stores: Storage[] = [localStorage, sessionStorage];
+  for (const store of stores) {
+    for (const key of storageKeys(store)) {
+      const isCallLogsKey =
+        key === STORAGE_KEY || (key.startsWith(`${STORAGE_KEY}_`) && key !== CALL_LOGS_SCHEMA_FLAG);
+      if (!isCallLogsKey) continue;
+      try {
+        const parsed = JSON.parse(store.getItem(key) || "null");
+        if (!Array.isArray(parsed)) continue;
+        const result = migrateRows(parsed);
+        if (result.changed) store.setItem(key, JSON.stringify(result.rows));
+      } catch {
+        /* unparseable key: leave untouched */
+      }
+    }
+  }
+
+  // Backfill deal cards (instanceId / clientId)
+  for (const store of stores) {
+    for (const key of storageKeys(store)) {
+      if (key !== "deals" && !key.startsWith("deals_")) continue;
+      try {
+        const parsed = JSON.parse(store.getItem(key) || "null");
+        if (!Array.isArray(parsed)) continue;
+        let changed = false;
+        const next = parsed.map((d: any) => {
+          if (!d || typeof d !== "object" || d.instanceId) return d;
+          const sep = String(d.stage || "").indexOf(":");
+          if (sep < 0) return d;
+          const proc = norm(String(d.stage).slice(0, sep));
+          const inst = index.get(`${norm(d.clientId)}|${proc}`) || index.get(`${norm(d.clientName)}|${proc}`);
+          if (!inst) return d;
+          changed = true;
+          return { ...d, instanceId: inst.instanceId, clientId: d.clientId || inst.clientId };
+        });
+        if (changed) store.setItem(key, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  // Backfill activity entries (instanceId)
+  for (const store of stores) {
+    try {
+      const raw = store.getItem("activityEngine_v1");
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+      let changed = false;
+      const next = parsed.map((e: any) => {
+        if (!e || typeof e !== "object" || e.instanceId || !e.clientId) return e;
+        const procKey = norm(e.processName || e.processId);
+        if (!procKey) return e;
+        const inst = index.get(`${norm(e.clientId)}|${procKey}`);
+        if (!inst) return e;
+        changed = true;
+        return { ...e, instanceId: inst.instanceId };
+      });
+      if (changed) store.setItem("activityEngine_v1", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { rowsMigrated, collapsed };
 }
