@@ -30,6 +30,8 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { claimService } from "./claimService";
+import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
 import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
 import { computeDerivedFields, derivedFieldsNeeded } from "./ruleContextFields";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
@@ -514,25 +516,9 @@ export async function executeRulesForEvent(
             });
           }
         } else if (event.recordType === "claim") {
-          const claimBefore = getStoredClaims().find((c) => c.id === event.recordId);
-          const moved = moveClaimToStage(event.recordId, actionStageId, targetStage?.name || rule.action.stageName);
-          if (moved) {
-            logStageMove(
-              {
-                orgId: event.orgId || "default",
-                recordType: "claim",
-                recordId: event.recordId,
-                fromStageId: claimBefore?.currentStageId,
-                fromStageName: claimBefore?.statusLabel,
-                toStageId: actionStageId,
-                toStageName: targetStage?.name || rule.action.stageName || moved.statusLabel || "Unknown Stage",
-                processId: rule.action.processId,
-                processName: targetProcess?.name || rule.action.processName,
-                cause: moveCause,
-              },
-              { recordData: { ...moved } }
-            );
-          }
+          // claimService is the one door for claim moves: it saves, logs one StageMove and emits claim.* events,
+          // and moves across workflows when the rule's target process is another claim workflow.
+          claimService.moveFromRule(event.recordId, rule.action.processId || undefined, actionStageId, moveCause);
         } else {
           console.warn(
             `[RuleEngine] No stage mover is registered for record type "${event.recordType}"; move skipped ` +
@@ -734,6 +720,12 @@ export async function executeRulesForEvent(
       }
       if (isNotifyStep(stepKey)) {
         executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
+      }
+
+      // Action: Move To Workflow (claim to another claim workflow; keeps its field values)
+      if (isMoveToWorkflowStep(stepKey)) {
+        const run = executeMoveToWorkflowStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] move_to_workflow failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Create Task (work-queue task linked to the triggering record; auto-closes on stage exit)

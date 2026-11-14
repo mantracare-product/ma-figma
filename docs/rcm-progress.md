@@ -45,7 +45,7 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 
 ## Slice 4 - Visit to claim
 - [x] S4.1 Multi-workflow claims (persisted claim processes, Claim.processId + migration, per-process required categories, Process page Insurance & Claims tab on the claim entity; Claims page + drawer use claim workflows) -- done (git log "S4.1")
-- [ ] S4.2 claimService + move_to_workflow + claim Undo + claim events
+- [x] S4.2 claimService + move_to_workflow + claim Undo + claim events -- done (git log "S4.2"). Engine claim moves + Claims page stage changes now go through claimService; move_to_workflow supports claims only (instance records TODO(rcm)).
 - [ ] S4.3 Claims page: workflow selector, board per workflow, drawer sections, required-at-stage
 - [ ] S4.4 Scribe Codes panel + Sign and send to billing + CPTs + J06.9 fix
 - [ ] S4.5 create_claim + scrub_claim + submit_claim (mock)

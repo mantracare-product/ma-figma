@@ -1,3 +1,5 @@
+import { getStoredClaims, saveClaim } from "./claimsStore";
+import { claimStatusForStage, findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
 import { useState, useEffect } from "react";
 import { eventBus } from "./eventBus";
 import {
@@ -719,6 +721,17 @@ export function undoStageMove(moveId: string): boolean {
           );
           localStorage.setItem("mantra_invoices_v1", JSON.stringify(updated));
           window.dispatchEvent(new CustomEvent("mantra_invoices_changed", { detail: updated }));
+        }
+      } catch {}
+    } else if (move.recordType === "claim") {
+      try {
+        const claim = getStoredClaims().find((c) => c.id === String(move.recordId));
+        if (claim) {
+          const wf = getClaimWorkflow(move.fromProcessId || claim.processId) || getClaimWorkflows()[0];
+          const stage = findStage(wf, move.fromStageId) || findStage(wf, move.fromStageName);
+          if (wf && stage) {
+            saveClaim({ ...claim, processId: wf.id, currentStageId: stage.id, statusLabel: stage.name, status: claimStatusForStage(stage) });
+          }
         }
       } catch {}
     }

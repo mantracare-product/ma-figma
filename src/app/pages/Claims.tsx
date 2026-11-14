@@ -1,3 +1,4 @@
+import { claimService } from "../../lib/claimService";
 import { getClaimWorkflows } from "../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router";
@@ -135,27 +136,13 @@ export default function Claims() {
     if (!target) return;
     const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
     const name = stageName || stageObj?.name || stageId;
-
-    let newStatus: ClaimStatus = target.status;
-    const lower = name.toLowerCase();
-    if (lower.includes("paid")) newStatus = "Paid";
-    else if (lower.includes("accept") || lower.includes("verified")) newStatus = "Accepted";
-    else if (lower.includes("submit")) newStatus = "Submitted";
-    else if (lower.includes("review")) newStatus = "Under Review";
-    else if (lower.includes("ready") || lower.includes("pending")) newStatus = "Ready to Submit";
-    else if (lower.includes("reject") || lower.includes("fail") || lower.includes("denied")) newStatus = "Rejected";
-    else if (lower.includes("draft")) newStatus = "Draft";
-
-    const updated: Claim = {
-      ...target,
-      currentStageId: stageId,
-      statusLabel: name,
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-    };
-    saveClaim(updated);
-    refreshClaims();
-    toast.success(`Claim moved to ${name} ✓`);
+    try {
+      claimService.moveToStage(claimId, stageId, { type: "manual" });
+      refreshClaims();
+      toast.success(`Claim moved to ${name} ✓`);
+    } catch (e: any) {
+      toast.error(String(e?.message || e));
+    }
   };
 
   // Filtered claims

@@ -97,6 +97,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   run_eligibility: ["stage", "inchat", "postcall"],
   check_auth_required: ["stage", "inchat", "postcall"],
   send_message: ["stage", "incall", "inchat", "postcall"],
+  move_to_workflow: ["stage", "postcall"],
   notify: ["stage", "incall", "inchat", "postcall"],
   request_prior_auth: ["stage", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],

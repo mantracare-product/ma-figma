@@ -35,6 +35,7 @@ export interface StepItem {
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "move_to_workflow", name: "Move To Workflow", desc: "Move a claim to another claim workflow (keeps all its values).", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
   { key: "send_message", name: "Send Message", desc: "Send a templated message to the client (mock dispatch into Chats; checks consent).", iconKey: "messagecircle", cats: ["all", "communication"], popular: false },
   { key: "notify", name: "Notify", desc: "Raise an in-app notification for the team.", iconKey: "mail", cats: ["all", "communication"], popular: false },
   { key: "check_auth_required", name: "Check Auth Required", desc: "Look up whether this payer and service need prior authorization (rules in Billing setup > Payers) and record the answer.", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },

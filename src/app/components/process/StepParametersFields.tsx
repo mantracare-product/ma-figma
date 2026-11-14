@@ -4036,6 +4036,14 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "move_to_workflow" || stepKey === "move-to-workflow") && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600">Moves the claim to another claim workflow and keeps all of its values. Leave the stage blank to start at the workflow's first stage.</p>
+                {renderField("Target workflow (id or name)", <input value={params.workflowId || ""} onChange={(e) => onChange({ workflowId: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Target stage (id or name, optional)", <input value={params.stageName || ""} onChange={(e) => onChange({ stageName: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+              </div>
+            )}
+
             {(stepKey === "send_message" || stepKey === "send-message") && (
               <div className="space-y-4">
                 <p className="text-xs text-amber-700">Mock data: the message is added to the client's conversation in Chats; nothing is actually sent.</p>
