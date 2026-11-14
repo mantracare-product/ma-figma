@@ -21,7 +21,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ScheduleCallDrawer, { ScheduleCallClientOption } from "../components/telephony/ScheduleCallDrawer";
 import { useClients, type Client } from "../../lib/clientsStore";
-import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { getCallsOnly, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface CallLog {
@@ -502,7 +502,7 @@ export default function CallLogs() {
   // Ensure all call logs have process field from central store
   const [callLogs, setCallLogs] = useState<CallLog[]>(() => {
     try {
-      const stored = getStoredCallLogs();
+      const stored = getCallsOnly();
       return stored.map(log => ({
         ...log,
         process: log.process || deriveProcessFromStage(log.currentStage)
@@ -515,7 +515,7 @@ export default function CallLogs() {
   useEffect(() => {
     const handler = () => {
       try {
-        const stored = getStoredCallLogs();
+        const stored = getCallsOnly();
         setCallLogs(stored.map(log => ({
           ...log,
           process: log.process || deriveProcessFromStage(log.currentStage)

@@ -7,7 +7,7 @@ import { Button } from "../ui/Button";
 import { Tooltip } from "../ui/Tooltip";
 import { Drawer } from "../ui/drawer";
 import { toast } from "sonner";
-import { CallLog, getStoredCallLogs } from "../../../lib/processLogsStore";
+import { CallLog, getCallsOnly } from "../../../lib/processLogsStore";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
 
 export type MetricTone = "success" | "neutral" | "warning";
@@ -344,7 +344,7 @@ export default function CallDetailDrawer({
     }
   }, [callProp, callId]);
 
-  const allLogs = callLogsProp && callLogsProp.length > 0 ? callLogsProp : getStoredCallLogs();
+  const allLogs = callLogsProp && callLogsProp.length > 0 ? callLogsProp : getCallsOnly();
 
   let selectedCall: CallLog | null = null;
   if (callProp && (!currentCallId || callProp.id === currentCallId || callProp.id.toLowerCase() === currentCallId.toLowerCase())) {

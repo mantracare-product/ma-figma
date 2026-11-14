@@ -3,6 +3,13 @@ import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
 
+/**
+ * A row in the `callLogs` store is EITHER a real call ("call") OR a client-in-process
+ * row ("process_instance"). Real calls may carry a `process` name too (calls placed from a
+ * process stage), so the process name alone cannot tell them apart.
+ */
+export type CallLogKind = "call" | "process_instance";
+
 export interface CallLog {
   id: string;
   client: string;
@@ -20,15 +27,37 @@ export interface CallLog {
   parentCallId?: string;
   childCallIds?: string[];
   relationshipReason?: "Call Trigger" | "Stage Change" | "Retry" | "Manual Trigger";
+  /** Explicit discriminator. Rows written before this field existed are classified by isProcessInstanceRow(). */
+  kind?: CallLogKind;
 }
 
-export const initialPatientCareJourneyLogs: CallLog[] = [
+/**
+ * True when the row is a client-in-process row rather than a real call.
+ * Uses the explicit `kind` when present; for legacy rows falls back to the id shapes the
+ * old writers produced (`PRC-…` and the `CALL-<PROCESS-NAME>` fallback creator).
+ */
+export function isProcessInstanceRow(log: Pick<CallLog, "id"> & { kind?: CallLogKind }): boolean {
+  if (!log) return false;
+  if (log.kind) return log.kind === "process_instance";
+  const id = String(log.id || "");
+  if (id.startsWith("PRC-")) return true;
+  // Legacy fallback creator in updateProcessCallLogFields: id = CALL-<PROCESS NAME UPPER>, never numeric.
+  if (/^CALL-[A-Z][A-Z0-9-]*$/.test(id)) return true;
+  return false;
+}
+
+const initialPatientCareJourneyLogsRaw: CallLog[] = [
   { id: "PRC-CL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Client Checked In", duration: "2:45", date: "2026-10-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "PRC-CL-013", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Patient Care Journey", currentStage: "Book Appointment", duration: "4:12", date: "2026-10-12 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "PRC-CL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Move to Pharmacy", duration: "3:20", date: "2026-10-11 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "PRC-CL-002", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Completed", process: "Patient Care Journey", currentStage: "Pay Bill", duration: "1:50", date: "2026-10-11 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "PRC-CL-003", client: "Emily Davis", clientId: "CL-003", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Payment Done", duration: "5:05", date: "2026-10-11 11:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
+
+export const initialPatientCareJourneyLogs: CallLog[] = initialPatientCareJourneyLogsRaw.map((l) => ({
+  ...l,
+  kind: "process_instance" as const,
+}));
 
 const initialCallLogs: CallLog[] = [
   ...initialPatientCareJourneyLogs,
@@ -140,6 +169,16 @@ export function getStoredCallLogs(): CallLog[] {
   }
 }
 
+/** Real calls only (process rows excluded). Use for call lists, call counts and call drawers. */
+export function getCallsOnly(): CallLog[] {
+  return getStoredCallLogs().filter((l) => !isProcessInstanceRow(l));
+}
+
+/** Client-in-process rows only (no real calls). */
+export function getProcessInstances(): CallLog[] {
+  return getStoredCallLogs().filter((l) => isProcessInstanceRow(l));
+}
+
 export function saveCallLogs(logs: CallLog[]): void {
   try {
     const serialized = JSON.stringify(logs);
@@ -190,6 +229,7 @@ export function addProcessCallLog(entry: {
       hasRecording: false,
       hasTranscript: true,
       hasScheduledCall: false,
+      kind: "process_instance",
     };
     const updated = [newLog, ...currentLogs];
     saveCallLogs(updated);
@@ -236,6 +276,7 @@ export function updateProcessCallLogStage(clientId: string, processName: string,
       hasRecording: false,
       hasTranscript: true,
       hasScheduledCall: true,
+      kind: "process_instance",
     };
     updated.unshift(newLog);
   }
@@ -338,6 +379,7 @@ export function updateProcessCallLogFields(
       hasRecording: false,
       hasTranscript: false,
       hasScheduledCall: false,
+      kind: "process_instance",
       ...fieldValues,
     };
     saveCallLogs([newLog, ...currentLogs]);

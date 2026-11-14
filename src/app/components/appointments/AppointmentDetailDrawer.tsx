@@ -57,7 +57,7 @@ import {
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, Process, Stage } from "../../../lib/useProcessStore";
 import { appointmentService } from "../../../lib/appointmentService";
-import { getStoredCallLogs, CallLog } from "../../../lib/processLogsStore";
+import { getCallsOnly, CallLog } from "../../../lib/processLogsStore";
 import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
 import { logStageMove } from "../../../lib/useAutomationStore";
 import { hasInvoiceAutomation } from "../../../lib/invoiceService";
@@ -657,7 +657,7 @@ export default function AppointmentDetailDrawer({
   // Calls for this client
   const clientCalls: CallLog[] = useMemo(() => {
     if (!appointment) return [];
-    const all = getStoredCallLogs();
+    const all = getCallsOnly();
     const filtered = all.filter((l) => {
       return (
         (appointment.clientId && l.clientId === appointment.clientId) ||

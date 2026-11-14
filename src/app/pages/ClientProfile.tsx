@@ -32,7 +32,7 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import { getStoredCallLogs, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { getStoredCallLogs, getCallsOnly, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
@@ -4322,7 +4322,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               setSelectedCallId(null);
             }}
             callId={selectedCallId}
-            callLogs={getStoredCallLogs()}
+            callLogs={getCallsOnly()}
             onSelectCallId={(targetId) => {
               setSelectedCallId(targetId);
             }}

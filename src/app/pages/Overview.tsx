@@ -30,7 +30,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
-import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT, type CallLog } from "../../lib/processLogsStore";
+import { getCallsOnly, PROCESS_LOGS_STORE_EVENT, type CallLog } from "../../lib/processLogsStore";
 import { isFreshWorkspace } from "../../lib/onboardingWorkspace";
 import { getStoredTasks, TASKS_STORE_EVENT } from "../../lib/tasksStore";
 import type { TaskEntity } from "../../types/task";
@@ -133,13 +133,13 @@ export default function Overview() {
   const [filterDate, setFilterDate] = useState("All Time");
   const [filterCallType, setFilterCallType] = useState("Call Type");
 
-  const [callLogs, setCallLogs] = useState<CallLog[]>(() => getStoredCallLogs());
+  const [callLogs, setCallLogs] = useState<CallLog[]>(() => getCallsOnly());
   const [tasks, setTasks] = useState<TaskEntity[]>(() => getStoredTasks());
   const [notifications, setNotifications] = useState<InAppNotification[]>(() => getStoredNotifications());
 
   useEffect(() => {
     const handleUpdate = () => {
-      setCallLogs(getStoredCallLogs());
+      setCallLogs(getCallsOnly());
     };
     const handleTasksUpdate = () => {
       setTasks(getStoredTasks());
