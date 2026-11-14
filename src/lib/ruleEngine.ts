@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, isCreateClaimStep, isScrubClaimStep, isSubmitClaimStep } from "./claimActions";
 import { claimService } from "./claimService";
 import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
 import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
@@ -590,6 +591,18 @@ export async function executeRulesForEvent(
         const rawTargetEntity = act.params?.stageEntity || act.params?.entityType;
         const targetStageId = act.params?.stageId || act.params?.stepDetailStage || act.params?.stageName || act.params?.stepDetailStageName;
 
+        // A claim event moves the CLAIM (this branch used to fall through and move the client instead).
+        if (event.recordType === "claim" && (!rawTargetEntity || rawTargetEntity === "claim")) {
+          if (targetStageId) {
+            try {
+              claimService.moveFromRule(event.recordId, act.params?.processId || act.params?.stepDetailProcess || undefined, String(targetStageId), ruleCause(rule, event, depth, visitedRules));
+            } catch (e) {
+              console.warn("[RuleEngine] Failed to move claim stage:", e);
+            }
+          }
+          continue;
+        }
+
         if (targetStageId) {
           const appointmentProcesses = processes.filter((p) => p.entityType === "appointment");
           const targetInAppt = appointmentProcesses.some((p) =>
@@ -720,6 +733,20 @@ export async function executeRulesForEvent(
       }
       if (isNotifyStep(stepKey)) {
         executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
+      }
+
+      // Actions: Create / Scrub / Submit Claim
+      if (isCreateClaimStep(stepKey)) {
+        const run = executeCreateClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] create_claim failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (isScrubClaimStep(stepKey)) {
+        const run = executeScrubClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] scrub_claim failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (isSubmitClaimStep(stepKey)) {
+        const run = executeSubmitClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] submit_claim failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Move To Workflow (claim to another claim workflow; keeps its field values)

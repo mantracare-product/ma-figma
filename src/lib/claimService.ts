@@ -75,6 +75,22 @@ function move(claimId: string, workflowId: string | undefined, stageRef: string 
 }
 
 export const claimService = {
+  /** Create a claim directly in a workflow stage (default: initial). Emits one stage.entered (no exit) + claim.<category>. */
+  create(claim: Claim, workflowId: string, stageRef?: string, cause: MoveCause = { type: "manual" }): Claim {
+    const wf = getClaimWorkflow(workflowId);
+    if (!wf) throw new Error(`Claim workflow "${workflowId}" not found`);
+    const stage = stageRef ? findStage(wf, stageRef) : initialStageOf(wf);
+    if (!stage) throw new Error(`Stage "${stageRef}" not found in workflow "${wf.name}"`);
+    const created: Claim = { ...claim, processId: wf.id, currentStageId: stage.id, statusLabel: stage.name, status: claimStatusForStage(stage) };
+    saveClaim(created);
+    logStageMove(
+      { orgId: "default", recordType: "claim", recordId: created.id, toStageId: stage.id, toStageName: stage.name, processId: wf.id, processName: wf.name, clientId: created.patientId, cause },
+      { recordData: { ...created, claimId: created.id } }
+    );
+    emitDomainEvent(created, stage.systemCategory, cause);
+    return created;
+  },
+
   /** Move within the claim's current workflow. */
   moveToStage(claimId: string, stageRef: string, cause: MoveCause = { type: "manual" }): ClaimMoveResult | null {
     return move(claimId, undefined, stageRef, cause);

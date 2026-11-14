@@ -96,6 +96,11 @@ export interface Claim {
   sourceType?: string;
   sourceId?: string;
   dedupeKey?: string;
+  /** Result of the last scrub (scrub_claim) and how many times the claim was scrubbed / submitted. */
+  scrubIssues?: Array<{ ruleId: string; severity: "error" | "warning"; message: string }>;
+  scrubVersion?: number;
+  submissionCount?: number;
+  frequencyCode?: string;
   /** Eligibility/authorization summary at the date of service. */
   authNumber?: string;
   authStatus?: string;

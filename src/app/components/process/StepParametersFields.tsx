@@ -4036,6 +4036,30 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "create_claim" || stepKey === "scrub_claim" || stepKey === "submit_claim") && (
+              <div className="space-y-4">
+                <p className="text-xs text-amber-700">Mock data: scrubbing uses the rules in Billing setup; submission and acknowledgements are simulated.</p>
+                {stepKey === "create_claim" && (<>
+                  {renderField("Start workflow (id or name)", <input value={params.startWorkflow || ""} onChange={(e) => onChange({ startWorkflow: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("Start stage (blank = first stage)", <input value={params.startStage || ""} onChange={(e) => onChange({ startStage: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("Lines from", (
+                    <select value={params.linesFrom || ""} onChange={(e) => onChange({ linesFrom: e.target.value || undefined })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                      <option value="">Automatic</option><option value="service_cpt">The appointment's service (CPT)</option><option value="scribe_codes">Scribe codes</option><option value="none">None</option>
+                    </select>
+                  ))}
+                </>)}
+                {stepKey === "scrub_claim" && (<>
+                  {renderField("On pass, move to stage", <input value={params.onPass || ""} onChange={(e) => onChange({ onPass: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("On fail, move to stage (blank = raise claim.scrub_failed)", <input value={params.onFail || ""} onChange={(e) => onChange({ onFail: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                </>)}
+                {stepKey === "submit_claim" && (<>
+                  {renderField("After submitting, move to stage", <input value={params.onSubmit || ""} onChange={(e) => onChange({ onSubmit: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("If the payer accepts, move to stage", <input value={params.onAccepted || ""} onChange={(e) => onChange({ onAccepted: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("If the payer rejects, move to stage", <input value={params.onRejected || ""} onChange={(e) => onChange({ onRejected: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                </>)}
+              </div>
+            )}
+
             {(stepKey === "move_to_workflow" || stepKey === "move-to-workflow") && (
               <div className="space-y-4">
                 <p className="text-xs text-slate-600">Moves the claim to another claim workflow and keeps all of its values. Leave the stage blank to start at the workflow's first stage.</p>

@@ -102,3 +102,36 @@ export async function runDaily(now: Date = new Date(), only?: string[]): Promise
   }
   return { emitted, byJob };
 }
+
+// Claim jobs (Slice 4) ------------------------------------------------------------------------------------
+
+import { getStoredClaims } from "./claimsStore";
+import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
+
+/**
+ * Every claim with where it is: stage name + category and how long it has been there (claim.updatedAt is the last
+ * stage change/edit). Rules pick what they need with conditions on stageCategory / stageName / ageDays / ageHours.
+ */
+registerDailyJob("claims", (now) =>
+  getStoredClaims().map((c) => {
+    const wf = getClaimWorkflow(c.processId) || getClaimWorkflows()[0];
+    const stage = findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel);
+    const ageMs = Math.max(0, now.getTime() - (Date.parse(c.updatedAt) || now.getTime()));
+    return {
+      recordType: "claim" as const,
+      recordId: c.id,
+      data: {
+        claimId: c.id,
+        clientId: c.patientId,
+        workflowId: wf?.id,
+        stageName: stage?.name || c.statusLabel,
+        stageCategory: stage?.systemCategory || "",
+        ageHours: Math.round(ageMs / 3600000),
+        ageDays: Math.floor(ageMs / 86400000),
+        submittedAt: c.submittedAt,
+        trackingId: c.clearinghouseTrackingId,
+        amount: c.totalCharge,
+      },
+    };
+  })
+);

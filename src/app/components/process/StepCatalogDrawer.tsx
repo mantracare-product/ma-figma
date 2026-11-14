@@ -35,6 +35,9 @@ export interface StepItem {
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "create_claim", name: "Create Claim", desc: "Create a claim from the visit (reads Billing setup, coverage and the service/scribe codes); never creates two for the same source.", iconKey: "filetext", cats: ["all", "records"], popular: false },
+  { key: "scrub_claim", name: "Scrub Claim", desc: "Check the claim against the scrub rules (Billing setup) and move it on pass or fail.", iconKey: "filetext", cats: ["all", "records"], popular: false },
+  { key: "submit_claim", name: "Submit Claim", desc: "Submit the claim to the clearinghouse (mock) and handle the acknowledgement.", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "move_to_workflow", name: "Move To Workflow", desc: "Move a claim to another claim workflow (keeps all its values).", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
   { key: "send_message", name: "Send Message", desc: "Send a templated message to the client (mock dispatch into Chats; checks consent).", iconKey: "messagecircle", cats: ["all", "communication"], popular: false },
   { key: "notify", name: "Notify", desc: "Raise an in-app notification for the team.", iconKey: "mail", cats: ["all", "communication"], popular: false },

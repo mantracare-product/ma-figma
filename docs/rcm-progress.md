@@ -48,7 +48,7 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 - [x] S4.2 claimService + move_to_workflow + claim Undo + claim events -- done (git log "S4.2"). Engine claim moves + Claims page stage changes now go through claimService; move_to_workflow supports claims only (instance records TODO(rcm)).
 - [x] S4.3 Claims page: workflow selector, board per workflow, drawer sections, required-at-stage -- PARTIAL, done (git log "S4.3"): workflow selector (existing dropdown now lists claim workflows), List/Board toggle with a compact ClaimBoard (NOT a shared PipelineBoard extraction), required-at-stage for claim fields on manual moves, N16 blank-table fix. Per-workflow drawer sections (workflowIds) honoured by the checker only: TODO(rcm) the drawer does not hide fields by workflow.
 - [x] S4.4 Scribe Codes panel + Sign and send to billing + CPTs + J06.9 fix -- done (git log "S4.4"). Codes panel sits in the transcript drawer (col-span-full inside the body grid; not browser-checked). 14 ophthalmology CPTs added. icd_code now comes from the extraction.
-- [ ] S4.5 create_claim + scrub_claim + submit_claim (mock)
+- [x] S4.5 create_claim + scrub_claim + submit_claim (mock) -- done (git log "S4.5"). Step-level update_to_stage on a claim event now moves the claim (it used to move the client). Added a "claims" daily-job collector. Mock clearinghouse scenario is stored (clearinghouseSettingsStore) but has no UI picker yet: TODO(rcm).
 - [ ] S4.6 Set C rules + queue views + Invoices claim link/columns
 
 ## Slice 5 - Money back
