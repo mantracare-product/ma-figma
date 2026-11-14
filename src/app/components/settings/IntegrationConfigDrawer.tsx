@@ -93,6 +93,51 @@ export default function IntegrationConfigDrawer({
   const [newCustomSample, setNewCustomSample] = useState("");
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
+  // Field Mapping computed values (Unconditional Hooks called before any return)
+  const currentMappings = useMemo(() => {
+    if (!integration) return {};
+    return config?.fieldMappings || getDefaultFieldMappings(integration.id);
+  }, [config?.fieldMappings, integration]);
+
+  const knownVariables = useMemo(() => {
+    return integration ? getKnownPayloadVariables(integration.id) : [];
+  }, [integration]);
+
+  const availableCustomFields = useMemo(() => {
+    if (!fieldRegistry?.getAllFields) return [];
+    try {
+      const clientFields = fieldRegistry.getAllFields("client") || [];
+      const apptFields = fieldRegistry.getAllFields("appointment") || [];
+      const processFields = fieldRegistry.getAllFields("process") || [];
+      const scribeFields = fieldRegistry.getAllFields("scribe") || [];
+      return [
+        ...clientFields.map((f: any) => ({ ...f, moduleType: "client" as const, moduleLabel: "Contact / Client" })),
+        ...apptFields.map((f: any) => ({ ...f, moduleType: "appointment" as const, moduleLabel: "Appointment" })),
+        ...processFields.map((f: any) => ({ ...f, moduleType: "custom" as const, moduleLabel: "Process" })),
+        ...scribeFields.map((f: any) => ({ ...f, moduleType: "clinical" as const, moduleLabel: "Clinical / Scribe" })),
+      ];
+    } catch {
+      return [];
+    }
+  }, [fieldRegistry]);
+
+  const filteredMappingsList = useMemo(() => {
+    const list = Object.values(currentMappings);
+    return list.filter((m) => {
+      const matchesModule =
+        mappingModuleFilter === "all" ||
+        (mappingModuleFilter === "custom" ? m.isCustom : m.module === mappingModuleFilter);
+      const q = mappingSearchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        m.targetFieldLabel.toLowerCase().includes(q) ||
+        m.placeholderToken.toLowerCase().includes(q) ||
+        m.incomingVariable.toLowerCase().includes(q) ||
+        (m.sampleValue && m.sampleValue.toLowerCase().includes(q));
+      return matchesModule && matchesSearch;
+    });
+  }, [currentMappings, mappingModuleFilter, mappingSearchQuery]);
+
   useEffect(() => {
     if (integration && isOpen) {
       const loaded = getStoredIntegrationConfig(integration.id);
@@ -125,10 +170,6 @@ export default function IntegrationConfigDrawer({
       setExpandedLogId(storedLogs.length > 0 ? storedLogs[0].id : null);
     }
   }, [integration, isOpen]);
-
-  if (!isOpen || !integration || !config) return null;
-
-  const isManualMode = config.syncInterval === "manual";
 
   const handleCredentialChange = (field: string, value: string) => {
     setConfig((prev) => {
@@ -368,33 +409,6 @@ export default function IntegrationConfigDrawer({
     toast.success("Copied JSON");
   };
 
-  // Field Mapping computed values and handlers
-  const currentMappings = useMemo(() => {
-    return config?.fieldMappings || (integration ? getDefaultFieldMappings(integration.id) : {});
-  }, [config?.fieldMappings, integration]);
-
-  const knownVariables = useMemo(() => {
-    return integration ? getKnownPayloadVariables(integration.id) : [];
-  }, [integration]);
-
-  const availableCustomFields = useMemo(() => {
-    if (!fieldRegistry?.getAllFields) return [];
-    try {
-      const clientFields = fieldRegistry.getAllFields("client") || [];
-      const apptFields = fieldRegistry.getAllFields("appointment") || [];
-      const processFields = fieldRegistry.getAllFields("process") || [];
-      const scribeFields = fieldRegistry.getAllFields("scribe") || [];
-      return [
-        ...clientFields.map((f: any) => ({ ...f, moduleType: "client" as const, moduleLabel: "Contact / Client" })),
-        ...apptFields.map((f: any) => ({ ...f, moduleType: "appointment" as const, moduleLabel: "Appointment" })),
-        ...processFields.map((f: any) => ({ ...f, moduleType: "custom" as const, moduleLabel: "Process" })),
-        ...scribeFields.map((f: any) => ({ ...f, moduleType: "clinical" as const, moduleLabel: "Clinical / Scribe" })),
-      ];
-    } catch {
-      return [];
-    }
-  }, [fieldRegistry]);
-
   const handleUpdateMapping = (id: string, patch: Partial<IntegrationFieldMapping>) => {
     setConfig((prev) => {
       if (!prev || !integration) return prev;
@@ -503,22 +517,12 @@ export default function IntegrationConfigDrawer({
     toast.success(`Copied variable ${token}`);
   };
 
-  const filteredMappingsList = useMemo(() => {
-    const list = Object.values(currentMappings);
-    return list.filter((m) => {
-      const matchesModule =
-        mappingModuleFilter === "all" ||
-        (mappingModuleFilter === "custom" ? m.isCustom : m.module === mappingModuleFilter);
-      const q = mappingSearchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        m.targetFieldLabel.toLowerCase().includes(q) ||
-        m.placeholderToken.toLowerCase().includes(q) ||
-        m.incomingVariable.toLowerCase().includes(q) ||
-        (m.sampleValue && m.sampleValue.toLowerCase().includes(q));
-      return matchesModule && matchesSearch;
-    });
-  }, [currentMappings, mappingModuleFilter, mappingSearchQuery]);
+  if (!isOpen || !integration || !config) return null;
+
+  const isManualMode = config.syncInterval === "manual";
+  const totalCapabilities = integration.capabilities.length;
+  const enabledCount = Object.values(config.features).filter((f) => f.enabled).length;
+  const filteredLogs = logs.filter((log) => (logFilter === "all" ? true : log.status === logFilter));
 
   const moduleGroups: { key: SyncCapability["module"]; title: string; icon: React.ReactNode }[] = [
     { key: "appointments", title: "Appointments", icon: <Calendar className="w-4 h-4 text-slate-600" /> },
@@ -526,10 +530,6 @@ export default function IntegrationConfigDrawer({
     { key: "rcm", title: "Billing & RCM", icon: <DollarSign className="w-4 h-4 text-slate-600" /> },
     { key: "clinical", title: "Clinical", icon: <FileText className="w-4 h-4 text-slate-600" /> },
   ];
-
-  const totalCapabilities = integration.capabilities.length;
-  const enabledCount = Object.values(config.features).filter((f) => f.enabled).length;
-  const filteredLogs = logs.filter((log) => (logFilter === "all" ? true : log.status === logFilter));
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
