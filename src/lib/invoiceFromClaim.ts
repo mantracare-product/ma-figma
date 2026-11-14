@@ -91,9 +91,9 @@ export function executeUpdateInvoiceFromClaimStep(args: { rule: AutomationRule; 
 
 // ── invoice sample stages ──────────────────────────────────────────────────────────────────────
 
-export const SAMPLE_INVOICE_STAGE_NAMES = ["Reminder 1", "Reminder 2", "Payment plan", "Written off"] as const;
+export const SAMPLE_INVOICE_STAGE_NAMES = ["Sent", "Reminder 1", "Reminder 2", "Payment plan", "Written off"] as const;
 
-/** Add the sample invoice stages (by name) to the invoice workflow, before its first final stage. Returns how many were added. */
+/** Add the sample invoice stages (by name; "Sent" is the one the default workflow lacks) before its first final stage. Returns how many were added. */
 export function seedInvoiceSampleStages(): number {
   const list = getStoredProcesses();
   const idx = list.findIndex((p) => p.entityType === "invoice");
@@ -104,6 +104,7 @@ export function seedInvoiceSampleStages(): number {
     id: `${proc.id}-sample-${n.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name: n,
     description: "Sample stage",
+    systemCategory: n.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
     status: "active",
     color: n === "Written off" ? "#64748B" : "#F59E0B",
     stageCategory: n === "Written off" ? ("lost" as const) : ("in_progress" as const),

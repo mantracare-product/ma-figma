@@ -973,6 +973,8 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "create_claim": ["stage", "postcall"],
   "post_remittance": ["stage", "postcall"],
   "update_invoice_from_claim": ["stage", "postcall"],
+  "check_claim_status": ["stage", "postcall"],
+  "start_call": ["stage", "postcall"],
   "draft_appeal": ["stage", "postcall"],
   "scrub_claim": ["stage", "postcall"],
   "submit_claim": ["stage", "postcall"],

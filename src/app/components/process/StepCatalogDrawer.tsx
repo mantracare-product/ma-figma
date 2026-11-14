@@ -35,6 +35,8 @@ export interface StepItem {
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "check_claim_status", name: "Check Claim Status", desc: "Ask the clearinghouse (mock) where a submitted claim is and move it on.", iconKey: "filetext", cats: ["all", "records"], popular: false },
+  { key: "start_call", name: "Start Call", desc: "Place an outbound call for a purpose (payer benefits or balance reminder). Mock; balance calls need voice consent.", iconKey: "phone", cats: ["all", "communication"], popular: false },
   { key: "update_invoice_from_claim", name: "Update Invoice From Claim", desc: "Copy the claim's insurance payment, adjustments and patient responsibility to its invoice, move the invoice and mark a statement.", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "post_remittance", name: "Post Remittance", desc: "Post an ERA to its claims (paid, partial, denied). Unmatched lines are kept and raise era.unmatched.", iconKey: "filetext", cats: ["all", "records"], popular: false },
   { key: "draft_appeal", name: "Draft Appeal", desc: "Propose an appeal letter for a denied claim (never sends or moves anything).", iconKey: "filetext", cats: ["all", "records"], popular: false },

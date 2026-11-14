@@ -8,5 +8,6 @@
  */
 import "./rcmRulesSetE";
 import "./rcmRulesSetC";
+import "./rcmRulesSetM";
 
 export {};

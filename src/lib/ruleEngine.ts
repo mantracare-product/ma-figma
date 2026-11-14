@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeCheckClaimStatusStep, executeStartCallStep, isCheckClaimStatusStep, isStartCallStep } from "./claimStatusAndCalls";
 import { executeUpdateInvoiceFromClaimStep, isUpdateInvoiceFromClaimStep } from "./invoiceFromClaim";
 import { executeDraftAppealStep, executePostRemittanceStep, isDraftAppealStep, isPostRemittanceStep } from "./remittanceActions";
 import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, isCreateClaimStep, isScrubClaimStep, isSubmitClaimStep } from "./claimActions";
@@ -735,6 +736,16 @@ export async function executeRulesForEvent(
       }
       if (isNotifyStep(stepKey)) {
         executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
+      }
+
+      // Actions: Check Claim Status (mock 277) / Start Call (mock)
+      if (isCheckClaimStatusStep(stepKey)) {
+        const run = executeCheckClaimStatusStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] check_claim_status failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (isStartCallStep(stepKey)) {
+        const run = executeStartCallStep({ rule, stepId: act.id, params: act.params || {}, event });
+        if (run.status === "failed") console.warn(`[RuleEngine] start_call failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Update Invoice From Claim (insurance paid / adjustments / patient responsibility -> invoice; statement)

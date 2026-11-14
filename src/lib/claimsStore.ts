@@ -111,6 +111,8 @@ export interface Claim {
   appealDraft?: { text: string; revision: number; proposedAt: string; status: "proposed" | "accepted" | "rejected" };
   scrubIssues?: Array<{ ruleId: string; severity: "error" | "warning"; message: string }>;
   scrubVersion?: number;
+  /** Last (mock) clearinghouse status check. */
+  statusCheck?: { status: string; message: string; checkedAt: string };
   submissionCount?: number;
   frequencyCode?: string;
   /** Eligibility/authorization summary at the date of service. */

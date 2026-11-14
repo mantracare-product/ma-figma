@@ -964,7 +964,9 @@ class InvoiceService {
     const existing = all.find((i) => i.id === invoiceId);
     if (!existing) throw new Error(`[InvoiceService] Invoice ${invoiceId} not found.`);
 
-    const targetStage = this.findStageById(stageId);
+    const targetStage =
+      this.findStageById(stageId) ||
+      this.getInvoiceProcess().stages.find((s) => (s.name || "").trim().toLowerCase() === String(stageId).trim().toLowerCase());
     if (!targetStage) throw new Error(`[InvoiceService] Stage ${stageId} not found.`);
 
     const previousStageId = existing.currentStageId;

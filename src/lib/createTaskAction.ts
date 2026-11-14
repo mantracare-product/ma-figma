@@ -109,6 +109,15 @@ export function executeCreateTaskStep(args: {
     const st = findStage(wf, String(params.stage));
     if (st) entityRef = { ...entityRef, type: "claim", processId: wf?.id, stageId: st.id, stageName: st.name };
   }
+  // params.stage for INVOICE events: tie the task to that invoice stage (closes when the invoice leaves it).
+  if (event.recordType === "invoice" && params.stage) {
+    const proc = getStoredProcesses().find((p) => p.entityType === "invoice");
+    const q = String(params.stage).trim().toLowerCase();
+    const st = proc?.stages.find((s) => s.id === params.stage || (s.name || "").trim().toLowerCase() === q);
+    if (st) entityRef = { ...entityRef, type: "invoice", processId: proc?.id, stageId: st.id, stageName: st.name };
+  }
+  // params.entityType overrides the linked record type (e.g. "era" for tasks about a remittance).
+  if (params.entityType) entityRef = { ...entityRef, type: String(params.entityType) };
   // linkTo "instance_if_present": tie the task to the process instance of the triggering record when one exists
   // (stage = the instance's current stage, so the task closes when it leaves), else keep the event's own record.
   if (params.linkTo === "instance_if_present" && ctx.instance) {

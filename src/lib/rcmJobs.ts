@@ -131,7 +131,42 @@ registerDailyJob("claims", (now) =>
         submittedAt: c.submittedAt,
         trackingId: c.clearinghouseTrackingId,
         amount: c.totalCharge,
+        appealDeadline: c.appealDeadline,
+        daysToAppealDeadline: c.appealDeadline ? daysBetween(ymd(now), c.appealDeadline) : 9999,
       },
     };
   })
 );
+
+// Invoice jobs (Slice 5) ---------------------------------------------------------------------------------
+
+import { invoiceService } from "./invoiceService";
+import { getStoredProcesses } from "./useProcessStore";
+import { getStoredClients } from "./clientsStore";
+
+/** Every unpaid invoice with its stage, how long ago it was sent (or created) and the client's voice consent. */
+registerDailyJob("invoices", (now) => {
+  const proc = getStoredProcesses().find((p) => p.entityType === "invoice");
+  const clients = getStoredClients() as any[];
+  return invoiceService
+    .getInvoices()
+    .filter((i) => i.total - (i.amountPaid || 0) > 0 && i.status !== "paid" && i.status !== "void")
+    .map((i) => {
+      const stage = proc?.stages.find((s) => s.id === i.currentStageId);
+      const since = Date.parse(i.sentAt || i.createdAt) || now.getTime();
+      const client = clients.find((c) => c.id === i.clientId);
+      return {
+        recordType: "invoice" as const,
+        recordId: i.id,
+        data: {
+          invoiceId: i.id,
+          clientId: i.clientId,
+          stageName: i.statusLabel || stage?.name,
+          stageCategory: stage?.systemCategory || "",
+          ageDays: Math.floor(Math.max(0, now.getTime() - since) / 86400000),
+          balance: i.total - (i.amountPaid || 0),
+          voiceConsent: String(!!client?.consents?.voice),
+        },
+      };
+    });
+});

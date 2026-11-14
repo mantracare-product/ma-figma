@@ -62,11 +62,11 @@ function paidClaim(id = "clm-I", extra: any = {}) {
 const ev = (claimId: string): any => ({ id: "E1", event: "claim.paid", recordType: "claim", recordId: claimId, data: { claimId }, timestamp: "" });
 
 describe("invoice sample stages", () => {
-  it("adds Reminder 1/2, Payment plan, Written off before the first final stage, once, without removing anything", () => {
+  it("adds Sent, Reminder 1/2, Payment plan, Written off before the first final stage, once, without removing anything", () => {
     const before = pstore.getStoredProcesses().find((p) => p.entityType === "invoice")!.stages.map((s) => s.name);
-    expect(ifc.seedInvoiceSampleStages()).toBe(4);
+    expect(ifc.seedInvoiceSampleStages()).toBe(5);
     const after = pstore.getStoredProcesses().find((p) => p.entityType === "invoice")!.stages.map((s) => s.name);
-    expect(after).toEqual(expect.arrayContaining([...before, "Reminder 1", "Reminder 2", "Payment plan", "Written off"]));
+    expect(after).toEqual(expect.arrayContaining([...before, "Sent", "Reminder 1", "Reminder 2", "Payment plan", "Written off"]));
     expect(ifc.seedInvoiceSampleStages()).toBe(0);
   });
 });

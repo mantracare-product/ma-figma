@@ -66,12 +66,25 @@ Demo script (tests: rcmSetC.test.ts, claimService.test.ts, claimActions.test.ts,
 ## Slice 5 - Money back
 - [x] S5.1 ERA staging + post_remittance + unmatched handling AND S5.2 CARC/RARC categorization + draft_appeal (propose-only) -- done in ONE commit (see git log "S5.1+S5.2"). The Denial & appeal sample workflow was seeded in S4.1; the A25 move_to_workflow rule lands with Set M (S5.4).
 - [x] S5.3 update_invoice_from_claim + invoice sample stages + payment plans (lib) + portal balance -- done (git log "S5.3"). Statement drawer is opened from a new Statement column on Invoices; portal bill screen shows insurance paid/adjustments/plan under an invoice when present. Invoice sample stages are inserted into the existing invoice workflow (not a second workflow: invoice code is single-workflow).
-- [ ] S5.4 Set M rules A21-A30 + check_claim_status + start_call mock
+- [x] S5.4 Set M rules A21-A30 + check_claim_status + start_call mock -- done (git log "S5.4"). Invoice "Sent" stage added to the invoice sample stages (the default invoice workflow has none). A30 runs from the daily job (no invoice.overdue emitter). invoiceService.moveToStage now also accepts a stage name.
 
+### Slice 5 gate
+Commits: d2d3b84 (5.1+5.2), e7dbc6a (5.3), S5.4 (this commit).
+Status: tsc OK, vitest OK (no failures beyond baseline), build OK.
+Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.ts; no browser run):
+- PASS Enable demo set M (A21-A30, plus A25b appeal draft + A27 split into 3 stage rules).
+- PASS Receive ERA -> payments post: the paid claim moves to Paid; its invoice is updated from the claim (insurance paid, statement, payment link), moved to Sent, and the payment-link message lands in Chats (consent required).
+- PASS one line denies (CO-97): categorized appealable, appeal deadline set, claim.denied -> move_to_workflow to Denial & appeal / New denial, priority set, task in Denials and A/R, appeal DRAFT proposed (nothing sent/moved); moving the claim to Appeal submitted auto-closes the task.
+- PASS unmatched ERA lines -> era.unmatched -> task in Posting linked to the ERA.
+- PASS advance the clock (invoice sentAt aged, then Run daily jobs): Sent -> Reminder 1 (+message) -> Reminder 2 -> 45 days balance call (voice consent) -> 60 days Overdue + task in Patient balances.
+- PASS A21: accepted claim with no payment after 30 days is status-checked (mock 277) and moved to Pending (payer) with a follow-up task.
+- NOT RUN (browser): Receive ERA button, Statement column + drawer, portal statement block, payment plan creation UI, Process-page stage editing for the new invoice stages.
 ## Slice 6 - Overview row, reports, permission wiring, polish
 - [ ] S6.1 .. S6.5 (pending)
 
 ## Decisions
+- S5.1: post_remittance matches ERA lines to claims by claim number, then tracking id / payer claim number; a fully accounted-for claim (paid + patient responsibility + contractual) counts as paid.
+- S5.4: mock start_call completes immediately with a canned outcome; benefit results from payer calls are written into instances in S6.4.
 - S4.1: the legacy `insurance` entity process is left in place and unused by Claims (nothing deleted); claims migrate to the first claim workflow (the default "Claims Management" process).
 - S4.2: claimService emits claim.<systemCategory> after each stage entry (claim.submitted, claim.rejected, claim.denied, claim.paid ...); scrub_claim without onFail raises claim.scrub_failed itself.
 - S4.5: step-level update_to_stage on a claim event now moves the claim (before it fell through to the client mover).
@@ -84,6 +97,8 @@ Demo script (tests: rcmSetC.test.ts, claimService.test.ts, claimActions.test.ts,
 - S2.5: queue views bypass the My tasks / Tasks by me tab (queues are cross-user work lists).
 
 ## TODO(rcm)
+- Payment-plan installments are not marked paid when payments arrive; no reminders from the plan schedule.
+- No UI for the mock clearinghouse / ERA scenarios beyond the Receive ERA button.
 - Claims board is a compact ClaimBoard, not an extracted shared PipelineBoard.
 - Claim drawer does not hide fields by workflowIds (checker/scrubber honour it).
 - Mock clearinghouse scenario (accept/reject) has no UI picker; set via clearinghouseSettingsStore.
