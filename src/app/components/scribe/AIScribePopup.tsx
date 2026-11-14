@@ -284,8 +284,6 @@ export default function AIScribePopup({
     } catch {}
   };
 
-  if (!isOpen) return null;
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -483,6 +481,8 @@ export default function AIScribePopup({
     }
     return list;
   }, [clientAppointments, selectedApptObj]);
+
+  if (!isOpen) return null;
 
   return (
     <div
