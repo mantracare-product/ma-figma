@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { computeDerivedFields, derivedFieldsNeeded } from "./ruleContextFields";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
 import { executeAuthStep, isCheckAuthStep, isRequestAuthStep } from "./authActions";
 
@@ -327,6 +328,12 @@ export async function executeRulesForEvent(
   // rule's whole action chain completes (is awaited) before the next rule starts, so a later rule can rely on what an
   // earlier one did. (Before this, rules ran in stored-array order, i.e. newest-created first, with no explicit order.)
   matchingRules.sort(compareRulesByOrder);
+
+  // Derived "_" condition fields (e.g. _hasCoverage) are computed once per event, only when a matching rule uses them.
+  const neededDerived = derivedFieldsNeeded(matchingRules);
+  if (neededDerived.size > 0) {
+    event.data = { ...(event.data || {}), ...computeDerivedFields(event, neededDerived) };
+  }
 
   const results: RuleExecutionResult[] = [];
   const processes = getStoredProcesses();

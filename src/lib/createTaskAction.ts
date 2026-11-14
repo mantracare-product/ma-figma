@@ -11,6 +11,7 @@ import { queueIdFromName } from "./taskViewsStore";
 import { renderTemplate } from "./updateFieldsAction";
 import { resolveRecordContext } from "./recordContext";
 import { getStoredProcesses } from "./useProcessStore";
+import { readLocalRecordFields } from "./recordWriter";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 
 export const CREATE_TASK_STEP_KEYS = ["create_task", "create-task"];
@@ -136,7 +137,19 @@ export function executeCreateTaskStep(args: {
     clientName: ctx.client?.name,
     ruleId: rule.id,
   };
+  // onlyWhen {field, in:[...]}: create the task only if the instance (else appointment) field has one of the values.
+  const onlyWhen = params.onlyWhen as { field?: string; in?: string[] } | undefined;
+  const gateSkipped = (() => {
+    if (!onlyWhen?.field) return false;
+    const fromInstance = (ctx.instance as any)?.[onlyWhen.field];
+    const fromAppt = ctx.appointmentId ? readLocalRecordFields("appointment", ctx.appointmentId)[onlyWhen.field] : undefined;
+    const v = fromInstance !== undefined && fromInstance !== "" ? fromInstance : fromAppt;
+    return !(onlyWhen.in || []).map(String).includes(String(v));
+  })();
   const key = actionIdempotencyKey("create_task", rule.id, stepId, event.id, entityRef.id, entityRef.stageId);
+  if (gateSkipped) {
+    return runActionOnce(key, { actionKey: "create_task", ruleId: rule.id, ruleName: rule.name, stepId }, () => ({ skipped: true }));
+  }
   return runActionOnce(key, { actionKey: "create_task", ruleId: rule.id, ruleName: rule.name, stepId, payload: payload as any }, () =>
     performCreateTask(payload)
   );

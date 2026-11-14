@@ -421,12 +421,15 @@ export function getStoredRules(orgId?: string): AutomationRule[] {
       "rule-inv-paid-auto",
       "rule-patient-checkin-care-journey",
     ]);
+    // Sample rules (tagged by "Load sample templates") are exempt from the legacy check-in filter: a sample rule
+    // may legitimately trigger on appointment.checked_in (e.g. sample A13).
     let filtered = parsed.filter(
       (r) =>
         !legacyMockIds.has(r.id) &&
-        r.trigger?.event !== "client.checked_in" &&
-        r.trigger?.event !== "checked_in" &&
-        r.trigger?.event !== "appointment.checked_in"
+        ((r as any).sampleSet ||
+          (r.trigger?.event !== "client.checked_in" &&
+            r.trigger?.event !== "checked_in" &&
+            r.trigger?.event !== "appointment.checked_in"))
     );
     if (filtered.length !== parsed.length) {
       localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));

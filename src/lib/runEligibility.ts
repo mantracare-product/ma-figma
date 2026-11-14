@@ -38,6 +38,8 @@ import {
 } from "./eligibility";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 import { getStoredClients } from "./clientsStore";
+import { appointmentService } from "./appointmentService";
+import { getProcessInstances } from "./processLogsStore";
 
 export const RUN_ELIGIBILITY_STEP_KEYS = ["run_eligibility", "run-eligibility"];
 export const isRunEligibilityStep = (k: string) => RUN_ELIGIBILITY_STEP_KEYS.includes((k || "").toLowerCase());
@@ -280,6 +282,28 @@ export function executeRunEligibilityStep(args: {
 }): RunOnceResult<any> {
   const { rule, stepId, params, event, cause } = args;
   const ctx = resolveRecordContext(event);
+
+  // scope "future_appointments": run for every active instance of the client created for a future appointment
+  // (e.g. after the coverage changed). One run per instance; failures of one do not stop the others.
+  if ((params as any).scope === "future_appointments") {
+    const clientId = ctx.clientId || "";
+    const today = todayStr();
+    const key = actionIdempotencyKey("run_eligibility", rule.id, stepId, event.id, clientId, "future");
+    return runActionOnce(key, { actionKey: "run_eligibility", ruleId: rule.id, ruleName: rule.name, stepId }, () => {
+      if (!clientId) throw new Error("run_eligibility: cannot resolve a client for future_appointments");
+      const results: RunEligibilityResult[] = [];
+      for (const inst of getProcessInstances()) {
+        if (inst.clientId !== clientId || (inst.instanceStatus || "active") !== "active" || inst.source?.type !== "appointment") continue;
+        const appt = appointmentService.getAppointmentById(inst.source.id);
+        if (!appt || appt.date < today) continue;
+        results.push(
+          performRunEligibility({ clientId, appointmentId: String(appt.id), instanceId: inst.instanceId || inst.id, serviceDate: appt.date, trigger: event.event, params: params as RunEligibilityParams, cause })
+        );
+      }
+      return { count: results.length, statuses: results.map((r) => r.status) } as any;
+    });
+  }
+
   const input: RunEligibilityInput = {
     clientId: ctx.clientId || "",
     appointmentId: ctx.appointmentId,

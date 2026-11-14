@@ -10,6 +10,7 @@ import {
   loadSampleTemplates,
 } from "../../../lib/sampleBundles";
 import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
+import { runDaily } from "../../../lib/rcmJobs";
 
 const btn = "px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50";
 
@@ -42,6 +43,17 @@ export default function SampleTemplatesPanel() {
           }}
         >
           Load sample templates
+        </button>
+        <button
+          type="button"
+          className={btn}
+          title="The rule engine has no scheduler: this runs every daily job once, now"
+          onClick={async () => {
+            const r = await runDaily();
+            toast.success(`Daily jobs ran: ${r.emitted} record${r.emitted === 1 ? "" : "s"} processed`);
+          }}
+        >
+          Run daily jobs now
         </button>
       </div>
       {sets.length > 0 && (
