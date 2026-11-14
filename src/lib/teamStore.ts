@@ -6,6 +6,8 @@ export interface TeamMember {
   email: string;
   phone?: string;
   role?: string;
+  /** Id of the Role (rolesStore) assigned to this member; `role` stays the display name. */
+  roleId?: string;
   department?: string;
   status?: boolean;
   organizationId?: string;

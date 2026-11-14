@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
+import { getStoredRoles } from "../../../lib/rolesStore";
+import { findMemberByEmail, sessionRoleForMember } from "../../../lib/permissions";
 import { useHowItWorks } from "../../context/HowItWorksContext";
 import GuestRoute from "../../components/auth/GuestRoute";
 import {
@@ -19,7 +22,13 @@ import logo from "@/imports/ma_logo-1.png";
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, setRole } = useAuth();
+  const resolveSessionRole = (em: string) =>
+    sessionRoleForMember(
+      findMemberByEmail(getStoredTeamMembers(), em),
+      getStoredRoles(),
+      localStorage.getItem("user_role") || "SystemAdmin"
+    );
   const { triggerAutoOpen } = useHowItWorks();
 
   const isVerifyRoute = location.pathname === "/verify";
@@ -95,12 +104,14 @@ export default function Login() {
         namePart.charAt(0).toUpperCase() + namePart.slice(1);
 
       localStorage.setItem("login_email", currentEmail);
+      const sessionRole = resolveSessionRole(currentEmail);
+      setRole(sessionRole);
       localStorage.setItem(
         "user_data",
         JSON.stringify({
           name: formattedName || "Admin User",
           email: currentEmail,
-          role: localStorage.getItem("user_role") || "SystemAdmin",
+          role: sessionRole,
         })
       );
 
@@ -149,12 +160,14 @@ export default function Login() {
       const formattedName =
         namePart.charAt(0).toUpperCase() + namePart.slice(1);
 
+      const sessionRole2 = resolveSessionRole(currentEmail);
+      setRole(sessionRole2);
       localStorage.setItem(
         "user_data",
         JSON.stringify({
           name: formattedName || "Admin User",
           email: currentEmail,
-          role: localStorage.getItem("user_role") || "SystemAdmin",
+          role: sessionRole2,
         })
       );
 

@@ -4,6 +4,7 @@ import { ChevronDown, MapPin, Video, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { addTeamMemberToStore, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
+import { getStoredRoles } from "../../../lib/rolesStore";
 
 export interface AddTeamMemberDrawerProps {
   isOpen: boolean;
@@ -134,6 +135,7 @@ export default function AddTeamMemberDrawer({
       name: name.trim(),
       email: email.trim(),
       role,
+      roleId: getStoredRoles().find((r) => r.name === role)?.id,
       department: department || undefined,
       status: true,
       organizationId: activeOrganization?.id || "1",
@@ -162,9 +164,13 @@ export default function AddTeamMemberDrawer({
     onClose();
   };
 
+  // Prefer the roles configured in Settings > Team > Roles; the static list is only a fallback for an empty store.
+  const storedRoles = getStoredRoles();
+  const roleSource: Array<{ id: string; name: string; department?: string }> =
+    storedRoles.length > 0 ? storedRoles : DEFAULT_ROLES;
   const filteredRoles = department
-    ? DEFAULT_ROLES.filter((r) => r.department === department)
-    : DEFAULT_ROLES;
+    ? roleSource.filter((r) => !r.department || r.department === department)
+    : roleSource;
 
   return (
     <Drawer

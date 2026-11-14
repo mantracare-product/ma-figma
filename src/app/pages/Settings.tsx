@@ -162,6 +162,9 @@ import BusinessProfileModal from "../components/settings/BusinessProfileModal";
 import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
+import { getStoredRoles, saveStoredRoles, addRolesIfMissing } from "../../lib/rolesStore";
+import { buildSampleRcmRoles } from "../../lib/rcmSampleRoles";
+import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
 import { DepartmentDrawer } from "../components/settings/DepartmentDrawer";
 import { getStoredDepartments, saveStoredDepartments } from "../../lib/departmentStore";
 import type { Department } from "../../types/permissions";
@@ -197,6 +200,7 @@ interface User {
   organizationId: string;
   permissions: ItemPermissions;
   role?: string;
+  roleId?: string;
   calendarConnected?: boolean;
   connectedCalendar?: "google" | "outlook" | null;
   availability?: WeeklyAvailability;
@@ -781,6 +785,12 @@ export default function Settings() {
     const path = location.pathname.toLowerCase();
     const queryTab = searchParams.get("tab")?.toLowerCase();
 
+    // 0. Billing setup (RCM). Checked first: path.startsWith("/settings/billing") below would swallow it.
+    if (path === "/settings/billing-setup" || urlTab === "billing-setup" || queryTab === "billing-setup") {
+      setActiveTab("billing-setup");
+      return;
+    }
+
     // 1. First check if current route or query is for Billing
     const isBilling =
       path.startsWith("/settings/billing") ||
@@ -1281,6 +1291,7 @@ export default function Settings() {
     name: string;
     email: string;
     role: string;
+    roleId?: string;
     canBookAppointments: boolean;
     permissions: ItemPermissions;
   }>({
@@ -1378,14 +1389,8 @@ export default function Settings() {
   const [systemPermission, setSystemPermission] = useState<"" | ActionScope>("");
 
   // Roles & Permissions state
-  const [roles, setRoles] = useState<Role[]>(() => {
-    try {
-      const raw = sessionStorage.getItem("settings_roles");
-      return raw ? JSON.parse(raw) : DEFAULT_ROLES;
-    } catch {
-      return DEFAULT_ROLES;
-    }
-  });
+  // Roles live in the shared rolesStore (localStorage) so guards and hooks outside Settings can read them.
+  const [roles, setRoles] = useState<Role[]>(() => getStoredRoles(DEFAULT_ROLES));
   const [showRolesDrawer, setShowRolesDrawer] = useState(false);
   const [editingClientRole, setEditingClientRole] = useState<Role | null>(null);
   const [departments, setDepartments] = useState<Department[]>(() => getStoredDepartments());
@@ -1394,10 +1399,21 @@ export default function Settings() {
 
   const handleSaveRoles = (updatedRoles: Role[]) => {
     setRoles(updatedRoles);
-    try {
-      sessionStorage.setItem("settings_roles", JSON.stringify(updatedRoles));
-    } catch { }
+    saveStoredRoles(updatedRoles);
   };
+
+  const handleAddSampleRcmRoles = () => {
+    const { roles: merged, added } = addRolesIfMissing(buildSampleRcmRoles(), DEFAULT_ROLES);
+    setRoles(merged);
+    toast.success(added > 0 ? `Added ${added} sample RCM role${added === 1 ? "" : "s"}` : "Sample RCM roles are already added");
+  };
+
+  // Current user's permissions. A non-admin who reached Settings (only /settings/billing-setup allows that)
+  // sees Billing setup and nothing else.
+  const currentPerms = useCurrentPermissions();
+  useEffect(() => {
+    if (!currentPerms.isSystemAdmin && activeTab !== "billing-setup") setActiveTab("billing-setup");
+  }, [currentPerms.isSystemAdmin, activeTab]);
 
   const assignedUserCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -3876,6 +3892,7 @@ export default function Settings() {
     { id: "custom-fields", label: "Sections/Fields", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
     { id: "reception", label: "AI Receptionist", icon: Sparkles },
+    { id: "billing-setup", label: "Billing setup", icon: FileText },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
   ];
 
@@ -4003,6 +4020,7 @@ export default function Settings() {
         status: true,
         organizationId: activeOrganization.id,
         role: userFormData.role,
+        roleId: userFormData.roleId || roles.find((r) => r.name === userFormData.role)?.id,
         permissions: userFormData.permissions,
         canBookAppointments: canBook,
         locations: selectedLocationNames,
@@ -5066,12 +5084,23 @@ export default function Settings() {
                   ];
 
                   return (
+                    <>
+                    <div className="flex justify-end px-1 pb-2">
+                      <button
+                        type="button"
+                        onClick={handleAddSampleRcmRoles}
+                        className="text-xs font-semibold text-[#2563EB] hover:underline bg-transparent border-none cursor-pointer"
+                      >
+                        Add sample RCM roles
+                      </button>
+                    </div>
                     <TableComponent
                       columns={roleColumns}
                       data={filteredRoles}
                       getRowId={(r) => r.id}
                       emptyMessage="No roles found matching your search."
                     />
+                    </>
                   );
                 })()}
 
@@ -8135,6 +8164,17 @@ export default function Settings() {
               </div>
             )}
 
+            {/* Billing setup (RCM) Tab */}
+            {activeTab === "billing-setup" && (
+              <div className="p-6">
+                <h2 className="text-lg font-semibold text-[#0F172A]" style={{ fontFamily: "DM Sans, sans-serif" }}>Billing setup</h2>
+                <p className="text-sm text-[#64748B] mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Payers, fee schedules and billing configuration will live here.
+                </p>
+                {/* TODO(rcm): placeholder tab. The real Billing setup content is built in a later slice. */}
+              </div>
+            )}
+
             {/* Reception Tab */}
             {activeTab === "reception" && <ReceptionSettingsTab />}
         {/* Unified Integration Capability & Sync Config Drawer */}
@@ -8844,9 +8884,9 @@ export default function Settings() {
                     const selectedRoleName = e.target.value;
                     const matchedRole = roles.find((r) => r.name === selectedRoleName);
                     if (matchedRole) {
-                      setUserFormData({ ...userFormData, role: selectedRoleName, permissions: { ...matchedRole.permissions } });
+                      setUserFormData({ ...userFormData, role: selectedRoleName, roleId: matchedRole.id, permissions: { ...matchedRole.permissions } });
                     } else {
-                      setUserFormData({ ...userFormData, role: selectedRoleName });
+                      setUserFormData({ ...userFormData, role: selectedRoleName, roleId: undefined });
                     }
                   }}
                   className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"

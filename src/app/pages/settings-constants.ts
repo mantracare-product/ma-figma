@@ -44,6 +44,13 @@ export const createDefaultPermissions = (): ItemPermissions => ({
   webForms: { ...DEFAULT_MODULE_PERMISSIONS },
   appointments: { ...DEFAULT_MODULE_PERMISSIONS },
   services: { ...DEFAULT_MODULE_PERMISSIONS },
+  billingSetup: { ...DEFAULT_MODULE_PERMISSIONS },
+  eligibility: { ...DEFAULT_MODULE_PERMISSIONS },
+  priorAuth: { ...DEFAULT_MODULE_PERMISSIONS },
+  claims: { ...DEFAULT_MODULE_PERMISSIONS },
+  rcmPayments: { ...DEFAULT_MODULE_PERMISSIONS },
+  denials: { ...DEFAULT_MODULE_PERMISSIONS },
+  rcmReports: { ...DEFAULT_MODULE_PERMISSIONS },
   processInstances: {},
 });
 

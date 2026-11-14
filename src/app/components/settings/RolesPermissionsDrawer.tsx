@@ -48,6 +48,14 @@ export const ROLE_PERMISSION_MODULES: RoleModuleItem[] = [
   { id: "processes", label: "Processes" },
   { id: "settings", label: "Settings" },
   { id: "webForms", label: "WebForms" },
+  // RCM
+  { id: "billingSetup", label: "Billing setup" },
+  { id: "eligibility", label: "Eligibility" },
+  { id: "priorAuth", label: "Prior authorization" },
+  { id: "claims", label: "Claims" },
+  { id: "rcmPayments", label: "RCM payments" },
+  { id: "denials", label: "Denials & appeals" },
+  { id: "rcmReports", label: "RCM reports" },
 ];
 
 export type ScopeLevelOption = "all" | "department" | "own" | "deny";
@@ -128,6 +136,17 @@ export const DEFAULT_ROLES: Role[] = [
       webForms: { ...ALL_PERMS },
       appointments: { ...ALL_PERMS },
       services: { ...ALL_PERMS },
+      billings: { ...ALL_PERMS },
+      dashboard: { ...ALL_PERMS },
+      documentTemplates: { ...ALL_PERMS },
+      integrations: { ...ALL_PERMS },
+      billingSetup: { ...ALL_PERMS },
+      eligibility: { ...ALL_PERMS },
+      priorAuth: { ...ALL_PERMS },
+      claims: { ...ALL_PERMS },
+      rcmPayments: { ...ALL_PERMS },
+      denials: { ...ALL_PERMS },
+      rcmReports: { ...ALL_PERMS },
       processInstances: {},
     },
   },
@@ -147,6 +166,10 @@ export const DEFAULT_ROLES: Role[] = [
       webForms: { ...OPERATIONAL_PERMS },
       appointments: { ...OPERATIONAL_PERMS },
       services: { ...OPERATIONAL_PERMS },
+      billings: { ...OPERATIONAL_PERMS },
+      dashboard: { ...OPERATIONAL_PERMS },
+      documentTemplates: { ...OPERATIONAL_PERMS },
+      integrations: { ...OPERATIONAL_PERMS },
       processInstances: {},
     },
   },
@@ -166,6 +189,10 @@ export const DEFAULT_ROLES: Role[] = [
       webForms: { ...OPERATIONAL_PERMS },
       appointments: { ...OPERATIONAL_PERMS },
       services: { ...OPERATIONAL_PERMS },
+      billings: { ...OPERATIONAL_PERMS },
+      dashboard: { ...OPERATIONAL_PERMS },
+      documentTemplates: { ...OPERATIONAL_PERMS },
+      integrations: { ...OPERATIONAL_PERMS },
       processInstances: {},
     },
   },
@@ -183,12 +210,8 @@ function getModulePermsFromRole(role?: Role | null): Record<string, SimpleModule
 
     const perms = (role.permissions as any)?.[mod.id] as ModulePermissions | undefined;
     if (!perms) {
-      result[mod.id] = {
-        actions: role.isDefault
-          ? ["read", "write", "delete", "import", "export"]
-          : ["read", "write"],
-        level: "all",
-      };
+      // A module the role has no entry for is DENIED (it used to show read+write, which looked granted but was never saved).
+      result[mod.id] = { actions: [], level: "deny" };
       return;
     }
 
@@ -286,9 +309,8 @@ function convertToItemPermissions(
       import: acts.includes("import") ? scope : "deny",
     };
 
-    if (mod.id in base) {
-      (base as any)[mod.id] = permObj;
-    }
+    // Every listed module is saved (modules not in the base shape used to be silently dropped).
+    (base as any)[mod.id] = permObj;
   });
 
   // Dynamic processInstances
