@@ -220,6 +220,7 @@ export default function IntegrationConfigDrawer({
   };
 
   const handleSave = () => {
+    if (!config || !integration) return;
     const isNowConnected = testStatus === "success" || config.connected;
     const updated: IntegrationSyncConfig = {
       ...config,
@@ -255,6 +256,7 @@ export default function IntegrationConfigDrawer({
   };
 
   const handleDisconnect = () => {
+    if (!config || !integration) return;
     const updated: IntegrationSyncConfig = {
       ...config,
       connected: false,
@@ -386,6 +388,7 @@ export default function IntegrationConfigDrawer({
   };
 
   const handleTriggerSyncNow = async () => {
+    if (!integration) return;
     setIsSyncingNow(true);
     const result = await runIntegrationManualSync(integration.id, "all");
     setLogs(getStoredSyncLogs(integration.id));
@@ -394,7 +397,7 @@ export default function IntegrationConfigDrawer({
     toast.success(result.message);
   };
 
-  const webhookUrl = `https://api.mantraassist.com/v1/integrations/${integration.id}/events`;
+  const webhookUrl = integration ? `https://api.mantraassist.com/v1/integrations/${integration.id}/events` : "";
   const handleCopyWebhook = () => {
     navigator.clipboard.writeText(webhookUrl);
     setCopiedWebhook(true);
