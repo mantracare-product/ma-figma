@@ -164,3 +164,48 @@ describe("queue views", () => {
     expect(views.countTasksInView(list, v)).toBe(3);
   });
 });
+
+describe("end to end through the rule engine (Slice 2 demo)", () => {
+  it("stage-entry rule with create_task -> task in queue view with linked record -> auto-close when the instance leaves", async () => {
+    await import("../ruleEngine"); // registers the bus subscriber
+    const auto = await import("../useAutomationStore");
+    localStorage.setItem(
+      "process_store_processes",
+      JSON.stringify([
+        { id: "p-cov", name: "Cov", entityType: "client", stages: [
+          { id: "stg-nf", name: "Needs fix" }, { id: "stg-ok", name: "Verified" }, { id: "stg-start", name: "Not checked" },
+        ] },
+      ])
+    );
+    const now = new Date().toISOString();
+    auto.saveStoredRules([
+      {
+        id: "r-e2e", orgId: "default", name: "Needs fix -> task", entityType: "client",
+        trigger: { event: "stage.entered", params: { processId: "p-cov", stageId: "stg-nf" } },
+        action: { type: "moveToStage", processId: "", stageId: "" },
+        actions: [{ id: "st1", stepKey: "create_task", params: { title: "Fix {{client.name}} coverage", queue: "Insurance fixes", priority: "high" } }],
+        enabled: true, createdAt: now, updatedAt: now,
+      } as any,
+    ]);
+    views.seedTaskViewSamples();
+    const view = views.taskViewsStore.get().find((v) => v.name.startsWith("Insurance fixes"))!;
+
+    const inst = startInstance("555");
+    const moved = store.updateProcessInstanceStage(inst.instanceId!, "Needs fix")!;
+    store.logInstanceStageMove(moved, "Not checked", { type: "manual" });
+    await new Promise((r) => setTimeout(r, 40));
+
+    const queued = views.applyTaskView(tasks.getStoredTasks(), view);
+    expect(queued).toHaveLength(1);
+    expect(queued[0].entityRef).toMatchObject({ type: "process_instance", instanceId: inst.instanceId, stageId: "stg-nf" });
+    const link = (await import("../taskLinks")).describeEntityRef(queued[0])!;
+    expect(link.label).toContain("Appt #555");
+
+    // drag the instance out of the stage (what Deals does)
+    const out = store.updateProcessInstanceStage(inst.instanceId!, "Verified")!;
+    store.logInstanceStageMove(out, "Needs fix", { type: "manual" });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(views.applyTaskView(tasks.getStoredTasks(), view)).toHaveLength(0);
+    expect(mine()[0].closedBy).toBe("auto:stage_exit");
+  });
+});

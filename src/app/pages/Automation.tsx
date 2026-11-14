@@ -26,6 +26,7 @@ import { useProcessStore, isProcessMatchingOrg } from "../../lib/useProcessStore
 import { useOrganization } from "../context/OrganizationContext";
 import { toast } from "sonner";
 import ActionRunsPanel from "../components/automation/ActionRunsPanel";
+import SampleTemplatesPanel from "../components/automation/SampleTemplatesPanel";
 
 export default function Automation() {
   const { processes } = useProcessStore();
@@ -276,6 +277,8 @@ export default function Automation() {
         />
 
         <ActionRunsPanel />
+
+        <SampleTemplatesPanel />
 
         {/* Stats Cards — thin capsule style matching WebForms */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">

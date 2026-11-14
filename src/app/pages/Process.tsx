@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAIProviders } from "../context/AIProviderContext";
 import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
+import SampleTemplatesPanel from "../components/automation/SampleTemplatesPanel";
 import PageTopBar from "../components/layout/PageTopBar";
 import { DataExportModal } from "../components/common/DataExportModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
@@ -3558,6 +3559,7 @@ export default function Process() {
             </>
           }
         />
+        <SampleTemplatesPanel />
         {/* Top Control Bar: PageTopBar with Entity Dropdown + Search + Add New Process */}
         <PageTopBar
           leftElement={
