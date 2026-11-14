@@ -27,6 +27,7 @@ import {
 import { getStoredClaims, moveClaimToStage } from "./claimsStore";
 import type { RuleChainContext, StageMove } from "./useAutomationStore";
 import { executeStartProcessStep, isStartProcessStep } from "./startProcessAction";
+import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -700,6 +701,12 @@ export async function executeRulesForEvent(
             }
           }
         }
+      }
+
+      // Action: Update Fields (persisting, merge-safe writer; replaces the in-memory-only fieldupdate)
+      if (isUpdateFieldsStep(stepKey)) {
+        const run = executeUpdateFieldsStep({ rule, stepId: act.id, params: act.params || {}, event });
+        if (run.status === "failed") console.warn(`[RuleEngine] update_fields failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Start Process (new instance for the client; idempotent per rule step + triggering record)
