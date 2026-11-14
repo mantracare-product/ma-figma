@@ -165,6 +165,7 @@ import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/Ro
 import { getStoredRoles, saveStoredRoles, addRolesIfMissing } from "../../lib/rolesStore";
 import { buildSampleRcmRoles } from "../../lib/rcmSampleRoles";
 import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
+import BillingSetupTab from "../components/settings/BillingSetupTab";
 import { DepartmentDrawer } from "../components/settings/DepartmentDrawer";
 import { getStoredDepartments, saveStoredDepartments } from "../../lib/departmentStore";
 import type { Department } from "../../types/permissions";
@@ -8165,15 +8166,7 @@ export default function Settings() {
             )}
 
             {/* Billing setup (RCM) Tab */}
-            {activeTab === "billing-setup" && (
-              <div className="p-6">
-                <h2 className="text-lg font-semibold text-[#0F172A]" style={{ fontFamily: "DM Sans, sans-serif" }}>Billing setup</h2>
-                <p className="text-sm text-[#64748B] mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Payers, fee schedules and billing configuration will live here.
-                </p>
-                {/* TODO(rcm): placeholder tab. The real Billing setup content is built in a later slice. */}
-              </div>
-            )}
+            {activeTab === "billing-setup" && <BillingSetupTab />}
 
             {/* Reception Tab */}
             {activeTab === "reception" && <ReceptionSettingsTab />}
