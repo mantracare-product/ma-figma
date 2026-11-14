@@ -593,7 +593,7 @@ export default function Invoices() {
                 header: "Statement",
                 align: "center",
                 render: (inv) => (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); setStatementInvoiceId(inv.id); }} className="text-xs font-semibold text-blue-700 hover:underline">
+                  <button type="button" data-testid="invoice-statement-btn" onClick={(e) => { e.stopPropagation(); setStatementInvoiceId(inv.id); }} className="text-xs font-semibold text-blue-700 hover:underline">
                     Statement
                   </button>
                 ),

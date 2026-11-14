@@ -792,6 +792,7 @@ export default function AppointmentDetailDrawer({
             return (
               <button
                 key={tab.id}
+                data-testid={`appt-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`py-3.5 text-xs font-semibold transition-all flex items-center gap-2 relative cursor-pointer ${
                   isSelected ? "text-blue-600" : "text-slate-500 hover:text-slate-800"

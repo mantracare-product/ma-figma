@@ -39,6 +39,7 @@ export default function TaskQueueBar({
     <div className="flex flex-wrap items-center gap-2" data-testid="task-queue-bar">
       <span className="text-xs font-semibold text-slate-500">Queue</span>
       <select
+        data-testid="task-queue-select"
         value={activeViewId}
         onChange={(e) => onChange(e.target.value)}
         className="h-[34px] px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-white"

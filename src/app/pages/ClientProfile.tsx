@@ -2366,6 +2366,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             ).map((tab) => (
               <button
                 key={tab.id}
+                data-testid={`profile-tab-${tab.id}`}
                 onClick={() => setActiveProfileTab(tab.id)}
                 className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all cursor-pointer ${activeProfileTab === tab.id
                   ? "border-b-2 border-[#1F2937] text-[#1F2937] font-semibold"

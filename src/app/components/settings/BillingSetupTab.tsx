@@ -329,6 +329,7 @@ export default function BillingSetupTab() {
         {SECTIONS.map((s) => (
           <button
             key={s.id}
+            data-testid={`billing-section-${s.id}`}
             onClick={() => setSection(s.id)}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${section === s.id ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 hover:bg-slate-50"}`}
           >

@@ -642,8 +642,8 @@ export default function Claims() {
             <>
             <MockDataBanner />
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
-              <button type="button" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>
+              <button type="button" data-testid="claims-view-list" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
+              <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>
               <span className="text-xs text-slate-500">{insuranceProcess.name}</span>
               <button
                 type="button"

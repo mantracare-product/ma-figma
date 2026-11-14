@@ -37,6 +37,7 @@ export default function SampleTemplatesPanel() {
         <button
           type="button"
           className={btn}
+          data-testid="load-sample-templates"
           onClick={() => {
             const r = loadSampleTemplates();
             toast.success(r.total > 0 ? `Loaded ${r.total} sample item${r.total === 1 ? "" : "s"}` : "Sample templates already loaded");
@@ -47,6 +48,7 @@ export default function SampleTemplatesPanel() {
         <button
           type="button"
           className={btn}
+          data-testid="run-daily-jobs"
           title="The rule engine has no scheduler: this runs every daily job once, now"
           onClick={async () => {
             const r = await runDaily();
@@ -70,6 +72,7 @@ export default function SampleTemplatesPanel() {
                 <button
                   type="button"
                   className={btn}
+                  data-testid={`demo-set-${s.id}`}
                   onClick={() => {
                     if (on) {
                       disableDemoSet(s.id);
