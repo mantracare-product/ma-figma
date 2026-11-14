@@ -1074,7 +1074,6 @@ export default function Process() {
   const targetProcessFromNav = useMemo(() => {
     const params = new URLSearchParams(location.search);
     let targetEntity = params.get("entity") || (location.state as any)?.entity;
-    if (targetEntity === "claim") targetEntity = "insurance";
     const targetProcessId = params.get("processId") || params.get("process") || (location.state as any)?.processId;
     const targetProcessName = params.get("processName") || params.get("name") || (location.state as any)?.processName;
     if (!targetProcessId && !targetProcessName && !targetEntity) return null;
@@ -1097,7 +1096,7 @@ export default function Process() {
     return null;
   });
   const [selectedEntity, setSelectedEntity] = useState<EntityType>(() => {
-    if (targetProcessFromNav?.entityType) return (targetProcessFromNav.entityType === "claim" ? "insurance" : targetProcessFromNav.entityType) as EntityType;
+    if (targetProcessFromNav?.entityType) return targetProcessFromNav.entityType as EntityType;
     return "client";
   });
   const [replacementStageId, setReplacementStageId] = useState<string>("");
@@ -1123,7 +1122,7 @@ export default function Process() {
     { id: "client", label: "Processes", icon: GitBranch },
     { id: "appointment", label: "Appointments", icon: Calendar },
     { id: "invoice", label: "Invoices", icon: FileText },
-    { id: "insurance", label: "Insurance & Claims", icon: Shield },
+    { id: "claim", label: "Insurance & Claims", icon: Shield },
     { id: "task", label: "Tasks", icon: CheckSquare },
   ];
 
@@ -1171,7 +1170,7 @@ export default function Process() {
       return isProcessMatchingOrg(p, organization);
     });
     // For appointment, insurance, and task entities, allow multiple processes matching the client organization's category, industry, and location
-    if (selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "task") {
+    if (selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "task") {
       if (matching.length > 0) {
         return matching;
       }
@@ -1180,6 +1179,8 @@ export default function Process() {
         : [
             selectedEntity === "appointment"
               ? DEFAULT_ENTITY_PROCESSES.appointment
+              : selectedEntity === "claim"
+              ? DEFAULT_ENTITY_PROCESSES.claim
               : selectedEntity === "insurance"
               ? DEFAULT_ENTITY_PROCESSES.insurance
               : DEFAULT_ENTITY_PROCESSES.task,
@@ -2823,14 +2824,14 @@ export default function Process() {
     }
 
     const isAppointment = selectedEntity === "appointment";
-    const isInsurance = selectedEntity === "insurance";
+    const isInsurance = selectedEntity === "insurance" || selectedEntity === "claim";
     const isInvoice = selectedEntity === "invoice";
     const isTask = selectedEntity === "task";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
     const targetEntityType: EntityType = isAppointment
       ? "appointment"
       : isInsurance
-      ? "insurance"
+      ? (selectedEntity === "claim" ? "claim" : "insurance")
       : isInvoice
       ? "invoice"
       : isTask
@@ -2838,7 +2839,14 @@ export default function Process() {
       : "client";
 
     // Auto-render predefined stages for this entity
-    const initialStages = createDefaultStagesForEntity(targetEntityType, newProcessId);
+    // A new claim workflow starts minimal (a start and an end stage); the clinic builds the rest.
+    const initialStages: Stage[] =
+      targetEntityType === "claim"
+        ? [
+            { id: `${newProcessId}-start`, name: "Start", description: "First stage", status: "active", color: "#64748B", stageCategory: "in_progress", stagePosition: "initial", isInitial: true },
+            { id: `${newProcessId}-end`, name: "Done", description: "Last stage", status: "active", color: "#10B981", stageCategory: "success", stagePosition: "final", isFinal: true, isFinalStage: true },
+          ]
+        : createDefaultStagesForEntity(targetEntityType, newProcessId);
 
     // Register initial workflow steps into storage so actions appear immediately
     try {
@@ -3618,7 +3626,7 @@ export default function Process() {
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
           filterPresets={
-            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "task"
+            selectedEntity === "client" || selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "task"
               ? [
                 {
                   id: "all",
@@ -3656,12 +3664,12 @@ export default function Process() {
           ]}
           onExport={() => setShowExportModal(true)}
           primaryAction={
-            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance" || selectedEntity === "invoice" || selectedEntity === "task"
+            selectedEntity === "client" || selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "invoice" || selectedEntity === "task"
               ? {
                 label:
                   selectedEntity === "appointment"
                     ? "Add Appointment Workflow"
-                    : selectedEntity === "insurance"
+                    : (selectedEntity === "insurance" || selectedEntity === "claim")
                     ? "Add Insurance & Claim Workflow"
                     : selectedEntity === "invoice"
                     ? "Add Invoice Workflow"
@@ -4547,7 +4555,7 @@ export default function Process() {
                           </button>
                         )}
 
-                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) || isPredefinedStage(stage, selectedProcessData?.entityType) ? (
+                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory, selectedProcessData as any) || isPredefinedStage(stage, selectedProcessData?.entityType) ? (
                           <Tooltip text="Predefined stage cannot be deleted">
                             <Button
                               variant="outline"
@@ -5743,7 +5751,7 @@ export default function Process() {
           title={
             selectedEntity === "appointment"
               ? "Add Appointment Workflow"
-              : selectedEntity === "insurance"
+              : (selectedEntity === "insurance" || selectedEntity === "claim")
               ? "Add Insurance & Claim Workflow"
               : selectedEntity === "task"
               ? "Add Task Workflow"
@@ -5763,7 +5771,7 @@ export default function Process() {
               >
                 {selectedEntity === "appointment"
                   ? "Add Appointment Workflow"
-                  : selectedEntity === "insurance"
+                  : (selectedEntity === "insurance" || selectedEntity === "claim")
                   ? "Add Insurance & Claim Workflow"
                   : selectedEntity === "task"
                   ? "Add Task Workflow"
@@ -5780,7 +5788,7 @@ export default function Process() {
               placeholder={
                 selectedEntity === "appointment"
                   ? "e.g., Clinical Consultation Workflow"
-                  : selectedEntity === "insurance"
+                  : (selectedEntity === "insurance" || selectedEntity === "claim")
                   ? "e.g., Pre-Authorization & Claims Workflow"
                   : selectedEntity === "task"
                   ? "e.g., Clinical Tasks & QA Review"
@@ -5912,7 +5920,7 @@ export default function Process() {
           }}
           title="Delete Stage"
           footer={
-            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
+            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory, selectedProcessData as any) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -5942,7 +5950,7 @@ export default function Process() {
             )
           }
         >
-          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
+          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory, selectedProcessData as any) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
             <div className="space-y-4 text-center py-2">
               <div className="flex items-center justify-center">
                 <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-200">
@@ -6180,7 +6188,7 @@ export default function Process() {
             </div>
 
             <div className="flex items-center justify-between pt-4">
-              {editingStage && (editingStage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, editingStage.systemCategory)) ? (
+              {editingStage && (editingStage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, editingStage.systemCategory, selectedProcessData as any)) ? (
                 <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200" title="Required system stage cannot be deleted">
                   <Lock className="w-3.5 h-3.5" />
                   <span>Required Stage</span>

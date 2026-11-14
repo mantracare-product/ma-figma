@@ -1,3 +1,4 @@
+import { getClaimWorkflows } from "../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
@@ -61,11 +62,8 @@ export default function Claims() {
     return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
   }, [location.search]);
 
-  const insuranceProcesses = useMemo(() => {
-    const procs = getStoredProcesses();
-    const list = procs.filter((p) => p.entityType === "insurance");
-    return list.length > 0 ? list : [DEFAULT_ENTITY_PROCESSES.insurance];
-  }, [storeTick]);
+  // Claim workflows (any number). A claim belongs to one; the selected workflow filters the list.
+  const insuranceProcesses = useMemo(() => getClaimWorkflows(), [storeTick]);
 
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
 
@@ -163,6 +161,8 @@ export default function Claims() {
   // Filtered claims
   const filteredClaims = useMemo(() => {
     return claims.filter((claim) => {
+      // Workflow: claims without one (not migrated yet) count as the first workflow's.
+      if ((claim.processId || insuranceProcesses[0]?.id) !== insuranceProcess.id) return false;
       // Tab filter
       if (selectedStatusTab === "ready" && claim.status !== "Ready to Submit") return false;
       if (selectedStatusTab === "submitted" && !["Submitted", "Under Review"].includes(claim.status)) return false;
@@ -449,7 +449,7 @@ export default function Claims() {
                 </button>
               </Tooltip>
               <WorkflowGearDropdown
-                entityType="insurance"
+                entityType="claim"
                 processId={insuranceProcess.id}
                 processName={insuranceProcess.name}
                 buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"

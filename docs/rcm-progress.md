@@ -30,7 +30,7 @@ Demo script (tests only; no browser run):
 - [x] S3.7 Front-desk Check-in button + kiosk insurance/copay steps -- done (git log "S3.7"). Kiosk: KioskInsuranceStep (coverage on file, mock copay estimate, member ID correction -> coverage.updated). Front desk: Check in button in the appointment drawer tab bar (uses appointmentService.checkInAppointment).
 
 ### Slice 3 gate
-Commits: 317fb0b (3.1+3.2), 6b97458 (3.3), 21af3b4 (3.4), 7b16f27 (3.5), a1522e9 (3.6), S3.7 (see git log).
+Commits: 317fb0b (3.1+3.2), 6b97458 (3.3), 21af3b4 (3.4), 7b16f27 (3.5), a1522e9 (3.6), S3.7 (this commit).
 Status: tsc OK, vitest OK (no failures beyond baseline), build OK.
 Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, authActions.test.ts, messageActions.test.ts; no browser run):
 - PASS Load sample templates -> Enable demo set E: A1 runs first and A10 second (order 10/20), A10 writes to the instance A1 created; with A1 disabled A10 falls back to the appointment only and creates no instance.
@@ -44,7 +44,12 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 - NOT RUN (browser): Billing setup > Payers rules table and scenario picker, detail drawer Coverage tab, Schedule drawer Coverage section, kiosk insurance step, front-desk Check in button, Run daily jobs button.
 
 ## Slice 4 - Visit to claim
-- [ ] S4.1 .. S4.6 (pending)
+- [x] S4.1 Multi-workflow claims (persisted claim processes, Claim.processId + migration, per-process required categories, Process page Insurance & Claims tab on the claim entity; Claims page + drawer use claim workflows) -- done (git log "S4.1")
+- [ ] S4.2 claimService + move_to_workflow + claim Undo + claim events
+- [ ] S4.3 Claims page: workflow selector, board per workflow, drawer sections, required-at-stage
+- [ ] S4.4 Scribe Codes panel + Sign and send to billing + CPTs + J06.9 fix
+- [ ] S4.5 create_claim + scrub_claim + submit_claim (mock)
+- [ ] S4.6 Set C rules + queue views + Invoices claim link/columns
 
 ## Slice 5 - Money back
 - [ ] S5.1 .. S5.4 (pending)

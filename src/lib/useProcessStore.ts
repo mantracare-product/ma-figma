@@ -182,6 +182,8 @@ export interface Process {
   permissions?: ProcessPermissions;
   source?: "system" | "template" | "custom";
   draft?: boolean;
+  /** Stage categories this workflow must keep (overrides the per-entity default). Claims: set per workflow. */
+  requiredCategories?: string[];
 }
 
 export function isProcessMatchingScope(
@@ -383,7 +385,8 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   appointment: ["booked", "rescheduled", "completed", "cancelled"],
   invoice: ["draft", "paid", "void"],
   insurance: ["draft", "submitted", "paid", "failed"],
-  claim: ["draft", "submitted", "paid", "denied"],
+  // Claim workflows declare their own (Process.requiredCategories); none are required by default.
+  claim: [],
   task: ["created", "completed", "overdue"],
 };
 
@@ -859,10 +862,10 @@ export const DEFAULT_TASK_PROCESSES: Process[] = [
   },
 ];
 
-export function isRequiredSystemCategory(entityType: EntityType | undefined, category: string | undefined): boolean {
+export function isRequiredSystemCategory(entityType: EntityType | undefined, category: string | undefined, process?: { requiredCategories?: string[] } | null): boolean {
   if (!category) return false;
   const targetEntity = entityType || "client";
-  const requiredList = REQUIRED_SYSTEM_CATEGORIES[targetEntity] || [];
+  const requiredList = process?.requiredCategories ?? REQUIRED_SYSTEM_CATEGORIES[targetEntity] ?? [];
   return requiredList.includes(category.toLowerCase().trim());
 }
 
@@ -1337,10 +1340,7 @@ export function getStoredProcesses(): Process[] {
 
   let changed = false;
 
-  // Filter out claim entity processes from workflows
-  const beforeLen = list.length;
-  list = list.filter((p) => p.entityType !== "claim");
-  if (list.length !== beforeLen) changed = true;
+  // Claim workflows are persisted (any number; Add/rename/delete allowed). They used to be dropped here on every load.
 
   // Rename insurance entity process to "Insurance and Claims" and populate in-progress stages if missing
   list = list.map((p) => {
@@ -1481,7 +1481,7 @@ export function getStoredProcesses(): Process[] {
 
   // Ensure singleton processes for non-client entities exist only if non-empty or not fresh
   if (!isFresh || list.length > 0) {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "task"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task"];
     for (const et of nonClientTypes) {
       const exists = list.some((p) => p.entityType === et);
       if (!exists) {
@@ -1559,7 +1559,7 @@ export function getActiveOrganizationSync(): {
 
 export function saveStoredProcesses(processes: Process[]) {
   try {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "task"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task"];
     const sanitized: Process[] = [];
 
     // 1. Client processes (free to add, edit, delete, reorder)

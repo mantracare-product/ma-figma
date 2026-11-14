@@ -1,4 +1,5 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+import { assignClaimsToWorkflows, getClaimWorkflows } from "./claimWorkflows";
 
 export type ClaimStatus =
   | "Draft"
@@ -8,7 +9,9 @@ export type ClaimStatus =
   | "Under Review"
   | "Paid"
   | "Denied"
-  | "Rejected";
+  | "Rejected"
+  /** Stage has no systemCategory (see claimWorkflows.claimStatusForStage). */
+  | "Unmapped";
 
 
 export interface ClaimPayer {
@@ -82,6 +85,20 @@ export interface Claim {
   status: ClaimStatus;
   currentStageId?: string;
   statusLabel?: string;
+  /** Claim workflow (Process with entityType "claim") this claim is in. Set by migration / claimService. */
+  processId?: string;
+  /** Optional data the builder could not fill (e.g. no NPI); the scrubber and tasks read it. */
+  missingData?: string[];
+  assignee?: string;
+  priority?: "low" | "normal" | "high" | "urgent";
+  timelyFilingDeadline?: string;
+  /** What created the claim: dedupe key = claim:{sourceType}:{sourceId}:{startWorkflowId}. */
+  sourceType?: string;
+  sourceId?: string;
+  dedupeKey?: string;
+  /** Eligibility/authorization summary at the date of service. */
+  authNumber?: string;
+  authStatus?: string;
   submissionMethod?: "clearinghouse" | "manual_cms1500";
   clearinghouseTrackingId?: string;
   clearinghouseBatchId?: string;
@@ -370,6 +387,29 @@ const SEED_CLAIMS: Claim[] = [
   }
 ];
 
+export const CLAIMS_SCHEMA_FLAG = "claims_schema_v2";
+
+/** One-time migration: every claim gets a workflow (Claim.processId) and a valid stage in it. Idempotent. */
+function ensureClaimWorkflows(list: Claim[], storageKey: string): Claim[] {
+  try {
+    if (list.length === 0 || localStorage.getItem(CLAIMS_SCHEMA_FLAG) === "1") return list;
+    const { claims, changed } = assignClaimsToWorkflows(list, getClaimWorkflows());
+    localStorage.setItem(CLAIMS_SCHEMA_FLAG, "1");
+    if (changed) localStorage.setItem(storageKey, JSON.stringify(claims));
+    return claims;
+  } catch {
+    return list;
+  }
+}
+
+export function __resetClaimMigrationForTests(): void {
+  try {
+    localStorage.removeItem(CLAIMS_SCHEMA_FLAG);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function getStoredClaims(): Claim[] {
   try {
     if (isFreshWorkspace()) {
@@ -377,16 +417,16 @@ export function getStoredClaims(): Claim[] {
       const raw = typeof window !== "undefined" ? localStorage.getItem(`claims_${signupOrgId}`) : null;
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? ensureClaimWorkflows(parsed, `claims_${signupOrgId}`) : [];
     }
 
     const raw = typeof window !== "undefined" ? localStorage.getItem(CLAIMS_STORAGE_KEY) : null;
     if (!raw) {
       localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(SEED_CLAIMS));
-      return SEED_CLAIMS;
+      return ensureClaimWorkflows(SEED_CLAIMS, CLAIMS_STORAGE_KEY);
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : SEED_CLAIMS;
+    return ensureClaimWorkflows(Array.isArray(parsed) ? parsed : SEED_CLAIMS, CLAIMS_STORAGE_KEY);
   } catch (e) {
     console.warn("Failed to load claims from localStorage:", e);
     return [];

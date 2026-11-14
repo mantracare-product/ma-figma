@@ -16,7 +16,7 @@ import { useSidebarMenu } from "../../context/SidebarMenuContext";
 import { toast } from "sonner";
 
 export interface WorkflowGearDropdownProps {
-  entityType: "process" | "appointment" | "invoice" | "insurance";
+  entityType: "process" | "appointment" | "invoice" | "insurance" | "claim";
   processId?: string;
   processName?: string;
   className?: string;
@@ -37,7 +37,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
 
   // Resolve target details based on entityType
   const getEntityConfig = () => {
-    switch (entityType) {
+    switch (entityType === "claim" ? "insurance" : entityType) {
       case "process": {
         const pName = (processName || "").trim();
         const pId = processId || "";
@@ -160,7 +160,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
             label: pName,
             iconName: "ShieldCheck",
             path: `/claims?process=${encodeURIComponent(pName)}&processId=${encodeURIComponent(pId)}`,
-            workflowPath: `/process?entity=insurance&processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`,
+            workflowPath: `/process?entity=${entityType === "claim" ? "claim" : "insurance"}&processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`,
             workflowState: { processId: pId, processName: pName },
           };
         }
@@ -170,7 +170,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
           label: "Insurance & Claims",
           iconName: "ShieldCheck",
           path: "/claims",
-          workflowPath: `/process?entity=insurance&processId=${encodeURIComponent(pId)}`,
+          workflowPath: `/process?entity=${entityType === "claim" ? "claim" : "insurance"}&processId=${encodeURIComponent(pId)}`,
           workflowState: { processId: pId, processName: pName },
         };
       }

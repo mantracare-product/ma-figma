@@ -1,3 +1,4 @@
+import { getClaimWorkflows } from "../../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -219,11 +220,11 @@ export default function ClaimDetailDrawer({
   }, [claim?.id]);
 
   // Insurance Process & Stages
+  // The claim's own workflow (Claim.processId), falling back to the first claim workflow.
   const insuranceProcess: Process = useMemo(() => {
-    const procs = getStoredProcesses();
-    const insProcs = procs.filter((p) => p.entityType === "insurance");
-    return insProcs[0] || DEFAULT_ENTITY_PROCESSES.insurance;
-  }, []);
+    const workflows = getClaimWorkflows();
+    return workflows.find((p) => p.id === (liveClaim || claim)?.processId) || workflows[0];
+  }, [liveClaim, claim]);
 
   const claimStages: Stage[] = useMemo(() => {
     return insuranceProcess.stages || DEFAULT_ENTITY_PROCESSES.insurance.stages;
