@@ -7,5 +7,6 @@
  * Until a slice contributes its rules, its set is simply not registered (no empty buttons in the UI).
  */
 import "./rcmRulesSetE";
+import "./rcmRulesSetC";
 
 export {};

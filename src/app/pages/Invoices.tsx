@@ -38,6 +38,7 @@ import {
 import { useNavigate, useLocation, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
+import { getStoredClaims } from "../../lib/claimsStore";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
@@ -82,6 +83,7 @@ export default function Invoices() {
     };
   }, []);
 
+  const claimsForInvoices = useMemo(() => getStoredClaims(), []);
   const invoices = useMemo(() => {
     return liveInvoices.length > 0 ? liveInvoices : contextInvoices;
   }, [liveInvoices, contextInvoices, storeTick]);
@@ -582,6 +584,20 @@ export default function Invoices() {
                     {inv.clientName}
                   </button>
                 ),
+              },
+              {
+                id: "claim",
+                header: "Claim",
+                align: "center",
+                render: (inv) => {
+                  const claim = claimsForInvoices.find((c) => c.invoiceId === inv.id || (!!inv.appointmentId && String(c.appointmentId) === String(inv.appointmentId)));
+                  if (!claim) return <span className="text-xs text-slate-400">—</span>;
+                  return (
+                    <a href="/claims" className="text-xs font-semibold text-blue-700 hover:underline" title={`${claim.statusLabel || claim.status} · ${claim.payer?.name || ""}`}>
+                      {claim.claimNumber} · {claim.statusLabel || claim.status}
+                    </a>
+                  );
+                },
               },
               {
                 id: "amount",

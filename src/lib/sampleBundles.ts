@@ -21,8 +21,9 @@ export interface TemplateSeeder {
 }
 
 export type SampleRuleDef = Omit<AutomationRule, "createdAt" | "updatedAt" | "enabled" | "orgId"> & {
-  /** Template seeders that must have run before the set can be enabled (checked by id). */
   id: string;
+  /** false = a variant: loaded disabled and NOT switched on by "Enable demo set" (the clinic picks one variant). */
+  demoDefault?: boolean;
 };
 
 interface RuleSet {
@@ -116,7 +117,8 @@ export interface SetStatus {
 export function getSampleSetStatus(setId: SampleSetId): SetStatus | undefined {
   const set = ruleSets.get(setId);
   if (!set) return undefined;
-  const ids = new Set(set.rules().map((r) => r.id));
+  // Status counts the default rules only (variants are opt-in).
+  const ids = new Set(set.rules().filter((r) => r.demoDefault !== false).map((r) => r.id));
   const rules = getStoredRules().filter((r) => ids.has(r.id));
   return { id: set.id, label: set.label, description: set.description, loaded: rules.length, total: ids.size, enabled: rules.filter((r) => r.enabled).length };
 }
@@ -124,7 +126,8 @@ export function getSampleSetStatus(setId: SampleSetId): SetStatus | undefined {
 function setEnabled(setId: SampleSetId, enabled: boolean): number {
   const set = ruleSets.get(setId);
   if (!set) return 0;
-  const ids = new Set(set.rules().map((r) => r.id));
+  // Enabling touches default rules only; disabling turns off every rule of the set, variants included.
+  const ids = new Set(set.rules().filter((r) => !enabled || r.demoDefault !== false).map((r) => r.id));
   let changed = 0;
   const next = getStoredRules().map((r) => {
     if (!ids.has(r.id) || r.enabled === enabled) return r;

@@ -79,7 +79,8 @@ const myTasks = () => tasks.getStoredTasks().filter((t) => !!t.entityRef);
 
 describe("Set E demo (Slice 3)", () => {
   it("ships disabled; Enable demo set E turns on A1-A10 and A13 with run order A1=10, A10=20", () => {
-    const rules = auto.getStoredRules().filter((r) => r.id.startsWith("sample-rule-A"));
+    const E_IDS = new Set(["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A13"]);
+    const rules = auto.getStoredRules().filter((r) => E_IDS.has(r.id.replace("sample-rule-", "")));
     expect(rules.map((r) => r.id.replace("sample-rule-", "")).sort()).toEqual(["A1", "A10", "A13", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"]);
     expect(rules.every((r) => r.enabled === false)).toBe(true);
     expect(rules.find((r) => r.id === "sample-rule-A1")!.order).toBe(10);

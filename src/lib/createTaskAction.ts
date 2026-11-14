@@ -3,6 +3,8 @@
  * Idempotency: (a) per-event run key, (b) an OPEN task with the same entityRef {id, stageId} + ruleId is reused,
  * so re-entering a stage after leaving it (the old task auto-closed) legitimately creates a new task.
  */
+import { getStoredClaims } from "./claimsStore";
+import { findStage, getClaimWorkflow } from "./claimWorkflows";
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule } from "./useAutomationStore";
 import type { TaskEntity, TaskEntityRef } from "../types/task";
@@ -100,6 +102,13 @@ export function executeCreateTaskStep(args: {
   const ctx = resolveRecordContext(event);
   const scope = { ...(event.data || {}), client: ctx.client, appointment: ctx.appointment, instance: ctx.instance };
   let entityRef = entityRefFromEvent(event, rule.id);
+  // params.stage (+ optional workflowId): for claim events, tie the task to that claim-workflow stage.
+  if (event.recordType === "claim" && params.stage) {
+    const claim = getStoredClaims().find((c) => c.id === String(event.recordId));
+    const wf = getClaimWorkflow(params.workflowId || claim?.processId);
+    const st = findStage(wf, String(params.stage));
+    if (st) entityRef = { ...entityRef, type: "claim", processId: wf?.id, stageId: st.id, stageName: st.name };
+  }
   // linkTo "instance_if_present": tie the task to the process instance of the triggering record when one exists
   // (stage = the instance's current stage, so the task closes when it leaves), else keep the event's own record.
   if (params.linkTo === "instance_if_present" && ctx.instance) {

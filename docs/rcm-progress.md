@@ -49,7 +49,19 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 - [x] S4.3 Claims page: workflow selector, board per workflow, drawer sections, required-at-stage -- PARTIAL, done (git log "S4.3"): workflow selector (existing dropdown now lists claim workflows), List/Board toggle with a compact ClaimBoard (NOT a shared PipelineBoard extraction), required-at-stage for claim fields on manual moves, N16 blank-table fix. Per-workflow drawer sections (workflowIds) honoured by the checker only: TODO(rcm) the drawer does not hide fields by workflow.
 - [x] S4.4 Scribe Codes panel + Sign and send to billing + CPTs + J06.9 fix -- done (git log "S4.4"). Codes panel sits in the transcript drawer (col-span-full inside the body grid; not browser-checked). 14 ophthalmology CPTs added. icd_code now comes from the extraction.
 - [x] S4.5 create_claim + scrub_claim + submit_claim (mock) -- done (git log "S4.5"). Step-level update_to_stage on a claim event now moves the claim (it used to move the client). Added a "claims" daily-job collector. Mock clearinghouse scenario is stored (clearinghouseSettingsStore) but has no UI picker yet: TODO(rcm).
-- [ ] S4.6 Set C rules + queue views + Invoices claim link/columns
+- [x] S4.6 Set C rules + queue views + Invoices claim link/columns -- done (git log "S4.6"). Queue views already seeded in S2.5; Invoices got a Claim column (claim number + stage) matched by Claim.invoiceId or the shared appointment. SampleRuleDef.demoDefault=false marks variants that Enable demo set does not switch on.
+
+### Slice 4 gate
+Commits: d4b2a39 (4.1), 934a701 (4.2), 22cd656 (4.3), afe7b73 (4.4), ebd846f (4.5), S4.6 (this commit).
+Status: tsc OK, vitest OK (no failures beyond baseline), build OK.
+Demo script (tests: rcmSetC.test.ts, claimService.test.ts, claimActions.test.ts, scribeBilling.test.ts, claimWorkflows.test.ts; no browser run):
+- PASS Load sample templates -> Enable demo set C (A14 default only; the three A14 variants stay off).
+- PASS complete an appointment -> claim appears in Charge capture / Awaiting note (once, repeat events do not duplicate).
+- PASS sign the note and accept codes (RT) -> claim.note_signed -> Ready to bill -> move_to_workflow -> Claim / Draft -> scrub passes -> Ready to submit.
+- PASS scrubber flags a missing laterality modifier: Scrub failed + task in Claim fixes (entityRef = the claim at that stage); fix + back to Draft -> re-scrub passes -> task auto-closes.
+- PASS "Run daily jobs now" (rcmJobs.runDaily) -> Submitted -> mock 277CA accepts (Accepted by payer) or rejects (Rejected + Claim fixes task); resubmit uses sequence 2 and is accepted; the rejection task auto-closes.
+- PASS change the A14 variant to "create at scribe signing": the claim is created from the scribe codes at signing, not at completion.
+- NOT RUN (browser): Process page claim tab (add/rename/delete workflows), Claims page workflow dropdown + List/Board toggle, claim detail drawer, Codes panel layout, Invoices claim column, Billing setup scrub rules.
 
 ## Slice 5 - Money back
 - [ ] S5.1 .. S5.4 (pending)
@@ -58,6 +70,9 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 - [ ] S6.1 .. S6.5 (pending)
 
 ## Decisions
+- S4.1: the legacy `insurance` entity process is left in place and unused by Claims (nothing deleted); claims migrate to the first claim workflow (the default "Claims Management" process).
+- S4.2: claimService emits claim.<systemCategory> after each stage entry (claim.submitted, claim.rejected, claim.denied, claim.paid ...); scrub_claim without onFail raises claim.scrub_failed itself.
+- S4.5: step-level update_to_stage on a claim event now moves the claim (before it fell through to the client mover).
 - S3.2: variant 2 of the mock request strips the first 3 letters of the member ID, so some mock member IDs resolve on retry (by design); markers: NOTFOUND / INACTIVE / DOWN / TIMEOUT in the member ID, or the scenario picker.
 - S3.2: retry backoff (1/5/30 min) is not executed; attempts run back to back (no scheduler).
 - S3.5: derived rule-condition fields (_hasCoverage, _voiceEnabled, _daysSinceLastCheck) computed in ruleContextFields.ts and merged into event.data; getStoredRules legacy check-in filter exempts sample-tagged rules.
@@ -67,6 +82,10 @@ Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, aut
 - S2.5: queue views bypass the My tasks / Tasks by me tab (queues are cross-user work lists).
 
 ## TODO(rcm)
+- Claims board is a compact ClaimBoard, not an extracted shared PipelineBoard.
+- Claim drawer does not hide fields by workflowIds (checker/scrubber honour it).
+- Mock clearinghouse scenario (accept/reject) has no UI picker; set via clearinghouseSettingsStore.
+- move_to_workflow supports claims only (not process instances).
 - RCM field seeds have no sections; status-like fields are plain text (no option lists).
 - Retry backoff for run_eligibility is not executed (no scheduler).
 - A7 (start_call) is inert until S5.4; A5/A9 send_message now work.
