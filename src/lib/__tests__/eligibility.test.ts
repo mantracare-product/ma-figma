@@ -203,3 +203,23 @@ describe("run_eligibility", () => {
     expect(again.alreadyRan).toBe(true);
   });
 });
+
+describe("Verify now (S3.4)", () => {
+  it("verifyAppointmentNow always calls the payer (window 0) and writes the appointment summary; preview writes nothing", async () => {
+    const vn = await import("../verifyNow");
+    cov.saveCoverage({ clientId: "CL-T", payerId: "payer-bcbs", memberId: "M100", priority: "primary", effectiveDate: "2025-01-01" });
+    const { id, instance } = apptWithInstance("2030-07-01");
+    const r1 = vn.verifyAppointmentNow(id);
+    const r2 = vn.verifyAppointmentNow(id);
+    expect(r1).toMatchObject({ status: "active", payerCalls: 1, copied: false });
+    expect(r2).toMatchObject({ payerCalls: 1, copied: false }); // window 0 even though a fresh result exists
+    expect((appts.appointmentService.getAppointmentById(id) as any).coverage.status).toBe("active");
+    expect((store.getProcessInstanceById(instance.instanceId!) as any).elig_history).toHaveLength(2);
+
+    const before = JSON.stringify(appts.appointmentService.getAppointmentById(id));
+    const p = vn.previewEligibility("CL-T", "2030-07-01");
+    expect(p).toMatchObject({ status: "active", mock: true });
+    expect(JSON.stringify(appts.appointmentService.getAppointmentById(id))).toBe(before);
+    expect(vn.previewEligibility("CL-NOPE", "2030-07-01").status).toBe("no_coverage");
+  });
+});

@@ -29,6 +29,7 @@ import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import ScheduleCoverageSection from "./ScheduleCoverageSection";
 import { findRoomForAppointment, Room } from "../../../lib/roomsStore";
 import { getServiceSlots, isServiceEnabledAtLocation, timeToMinutes, ServiceSlot } from "../../../lib/serviceAvailability";
 
@@ -1411,6 +1412,8 @@ export default function ScheduleAppointmentDrawer({
             )}
           </div>
         </SectionCard>
+
+        {values.client && <ScheduleCoverageSection clientId={String(values.client.id)} date={values.date} />}
 
         {/* ================================================================ */}
         {/* SECTION 4 — SCHEDULE                                             */}

@@ -1,3 +1,4 @@
+import AppointmentCoverageTab from "./AppointmentCoverageTab";
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -125,7 +126,7 @@ export default function AppointmentDetailDrawer({
   const { invoices } = useInvoices();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "invoices" | "calls">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "invoices" | "calls" | "coverage">("overview");
 
   // Ensure Overview tab is active when drawer opens or appointment changes
   useEffect(() => {
@@ -784,6 +785,7 @@ export default function AppointmentDetailDrawer({
               { id: "documents", label: "Documents", icon: <FileCheck className="w-3.5 h-3.5" />, count: 0 },
               { id: "invoices", label: "Invoices", icon: <DollarSign className="w-3.5 h-3.5" />, count: appointmentInvoices.length },
               { id: "calls", label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: clientCalls.length },
+              { id: "coverage", label: "Coverage", icon: <FileCheck className="w-3.5 h-3.5" /> },
             ] as const
           ).map((tab) => {
             const isSelected = activeTab === tab.id;
@@ -860,6 +862,8 @@ export default function AppointmentDetailDrawer({
           {/* ─────────────────────────────────────────────────────────────
               TAB 2: DOCUMENTS
              ───────────────────────────────────────────────────────────── */}
+          {activeTab === "coverage" && <AppointmentCoverageTab appointment={effectiveAppt} />}
+
           {activeTab === "documents" && (
             <div className="p-6">
               <DocumentsTab

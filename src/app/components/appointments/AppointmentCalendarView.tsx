@@ -1,3 +1,4 @@
+import CoverageChip from "./CoverageChip";
 import React from "react";
 import {
   Calendar as CalendarIcon,
@@ -212,6 +213,7 @@ export default function AppointmentCalendarView({
                       >
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
                         <span className="truncate">{apt.title || apt.clientName}</span>
+                        <CoverageChip appointment={apt} compact />
                       </div>
                     );
                   })}

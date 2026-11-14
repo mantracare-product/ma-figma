@@ -1,3 +1,4 @@
+import CoverageChip from "../components/appointments/CoverageChip";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -1644,6 +1645,13 @@ export default function Appointments() {
                       </span>
                     );
                   },
+                },
+                {
+                  header: "Coverage",
+                  accessorKey: "coverage",
+                  align: "left",
+                  width: 110,
+                  render: (apt) => <CoverageChip appointment={apt} /> ,
                 },
                 {
                   header: "Stages",

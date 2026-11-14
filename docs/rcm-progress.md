@@ -24,7 +24,7 @@ Demo script (tests only; no browser run):
 ## Slice 3 - Eligibility and prior-auth nodes
 - [x] S3.1 EG1-EG5 field seeds + S3.2 run_eligibility (mock adapter, resolver, normalizer, window/copy-fresh) -- done in ONE commit (see hash below; deviation: 3.1 and 3.2 share a test file)
 - [x] S3.3 check_auth_required + request_prior_auth + priorAuthRulesStore + Payers rules table -- done (see git log "S3.3"). create_task gained linkTo=instance_if_present; Service.requiresAuthDefault added.
-- [ ] S3.4 Appointment coverage chip, detail Coverage tab, Schedule drawer Coverage + Verify now
+- [x] S3.4 Appointment coverage chip, detail Coverage tab, Schedule drawer Coverage + Verify now -- done (git log "S3.4"). Schedule drawer Verify now is a preview (nothing written) because no appointment exists yet; the detail Coverage tab Verify now writes.
 - [ ] S3.5 Sample process + Set E rules + Run daily jobs now
 - [ ] S3.6 send_message/notify mock + 4 templates + variables
 - [ ] S3.7 Front-desk Check-in button + kiosk insurance/copay steps
