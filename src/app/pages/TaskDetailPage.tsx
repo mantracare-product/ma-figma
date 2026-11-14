@@ -36,6 +36,7 @@ import { useAuth } from "../context/AuthContext";
 import ShareTaskDrawer from "../components/tasks/ShareTaskDrawer";
 import { CircularProgressRing } from "../components/ui/CircularProgressRing";
 import { toast } from "sonner";
+import { describeEntityRef } from "../../lib/taskLinks";
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -330,6 +331,25 @@ export default function TaskDetailPage() {
               {task.description}
             </p>
           )}
+
+          {/* Linked record (set when the task was created for a record, e.g. by a rule) */}
+          {(() => {
+            const linked = describeEntityRef(task);
+            if (!linked) return null;
+            return (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-3.5 py-2.5 text-xs" data-testid="task-linked-record">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">{linked.kindLabel}</div>
+                  <div className="truncate font-medium text-slate-800">{linked.label}</div>
+                </div>
+                {linked.href && (
+                  <a href={linked.href} className="shrink-0 rounded-lg border border-blue-200 bg-white px-2.5 py-1 font-semibold text-blue-700 hover:bg-blue-50">
+                    Open
+                  </a>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Metadata Row: Observers (& Deadline for non-Admin tasks) */}
           <div className={`grid grid-cols-1 ${isAdmin ? "" : "sm:grid-cols-2"} gap-4 pt-1 border-t border-slate-100 text-xs`}>

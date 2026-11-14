@@ -16,6 +16,7 @@ import {
 } from "../types/task";
 import { addNotification } from "./notificationsStore";
 
+import { eventBus } from "./eventBus";
 export const TASKS_STORAGE_KEY = "mantra_tasks_store";
 export const TASKS_STORE_EVENT = "mantra-tasks-updated";
 export const OVERDUE_NOTIFIED_STORAGE_KEY = "mantra_overdue_notified_tasks";
@@ -848,6 +849,97 @@ export function saveStoredTasks(tasks: TaskEntity[]): void {
   }
 }
 
+// ── Hook-free mutators (also used by the create_task action and the auto-close subscriber) ─────────────
+
+const nowLabel = () => new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+function nextTaskCode(current: TaskEntity[]): string {
+  const max = current.reduce((m, t) => {
+    const n = Number(String(t.code || "").replace(/\D+/g, ""));
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 100);
+  return `TSK-${max + 1}`;
+}
+
+/** Collision-safe task id (Date.now() alone collides when two tasks are created in the same millisecond). */
+export function makeTaskId(existing: Set<string> = new Set()): string {
+  let id = `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  while (existing.has(id)) id = `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  return id;
+}
+
+export function createTaskRecord(newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">): TaskEntity {
+  const current = getStoredTasks();
+  const task: TaskEntity = {
+    ...newTaskData,
+    id: makeTaskId(new Set(current.map((t) => t.id))),
+    code: nextTaskCode(current),
+    createdAt: nowLabel(),
+    updatedAt: nowLabel(),
+  };
+  saveStoredTasks([task, ...current]);
+
+  addNotification({
+    type: "task",
+    title: "New Task Assigned",
+    message: `${task.code}: ${task.title} assigned to ${task.assignee.assigneeName}`,
+    link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
+    meta: { taskId: task.id },
+  });
+  void eventBus.emit("task.created", "task", task.id, { taskId: task.id, queueId: task.queueId, entityRef: task.entityRef });
+  return task;
+}
+
+export function updateTaskRecord(id: string, patch: Partial<TaskEntity>): TaskEntity | undefined {
+  const current = getStoredTasks();
+  let updatedTask: TaskEntity | undefined;
+  const updated = current.map((t) => {
+    if (t.id !== id) return t;
+    if (patch.assignee && patch.assignee.assigneeName !== t.assignee.assigneeName) {
+      addNotification({
+        type: "task",
+        title: "Task Reassigned",
+        message: `${t.code}: '${t.title}' reassigned to ${patch.assignee.assigneeName}`,
+        link: `/${t.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${t.id}`,
+        meta: { taskId: t.id },
+      });
+    }
+    updatedTask = { ...t, ...patch, updatedAt: nowLabel() };
+    return updatedTask;
+  });
+  if (!updatedTask) return undefined;
+  saveStoredTasks(updated);
+  void eventBus.emit("task.updated", "task", id, { taskId: id, patch: Object.keys(patch) });
+  return updatedTask;
+}
+
+/** Mark a task completed (idempotent). `closedBy` records who closed it, e.g. "user" or "auto:stage_exit". */
+export function completeTaskRecord(id: string, closedBy: string = "user"): TaskEntity | undefined {
+  const t = getStoredTasks().find((x) => x.id === id);
+  if (!t || t.status === "completed") return t;
+  const done = updateTaskRecord(id, {
+    status: "completed",
+    stageName: "Task Completed",
+    stageId: "task-stg-completed",
+    closedBy,
+    closedAt: new Date().toISOString(),
+  });
+  void eventBus.emit("task.completed", "task", id, { taskId: id, closedBy, queueId: t.queueId, entityRef: t.entityRef });
+  return done;
+}
+
+/** Open (not completed) tasks linked to the given record + stage. */
+export function findOpenTasksForRecord(match: { id: string; instanceId?: string; stageId?: string; ruleId?: string }): TaskEntity[] {
+  return getStoredTasks().filter((t) => {
+    const r = t.entityRef;
+    if (!r || t.status === "completed") return false;
+    if (r.id !== match.id && (!match.instanceId || r.instanceId !== match.instanceId)) return false;
+    if (match.stageId !== undefined && r.stageId !== match.stageId) return false;
+    if (match.ruleId !== undefined && r.ruleId !== match.ruleId) return false;
+    return true;
+  });
+}
+
 export function useTasks() {
   const [tasks, setTasks] = useState<TaskEntity[]>(() => getStoredTasks());
 
@@ -870,53 +962,13 @@ export function useTasks() {
     return () => clearInterval(interval);
   }, []);
 
-  const createTask = useCallback((newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => {
-    const current = getStoredTasks();
-    const nextNumber = current.length + 101;
-    const task: TaskEntity = {
-      ...newTaskData,
-      id: `tsk-${Date.now()}`,
-      code: `TSK-${nextNumber}`,
-      createdAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
-      updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
-    };
-    const updated = [task, ...current];
-    saveStoredTasks(updated);
-
-    // Trigger in-app notification
-    addNotification({
-      type: "task",
-      title: "New Task Assigned",
-      message: `${task.code}: ${task.title} assigned to ${task.assignee.assigneeName}`,
-      link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
-      meta: { taskId: task.id },
-    });
-
-    return task;
-  }, []);
+  const createTask = useCallback(
+    (newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => createTaskRecord(newTaskData),
+    []
+  );
 
   const updateTask = useCallback((id: string, patch: Partial<TaskEntity>) => {
-    const current = getStoredTasks();
-    const updated = current.map((t) => {
-      if (t.id === id) {
-        if (patch.assignee && patch.assignee.assigneeName !== t.assignee.assigneeName) {
-          addNotification({
-            type: "task",
-            title: "Task Reassigned",
-            message: `${t.code}: '${t.title}' reassigned to ${patch.assignee.assigneeName}`,
-            link: `/${t.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${t.id}`,
-            meta: { taskId: t.id },
-          });
-        }
-        return {
-          ...t,
-          ...patch,
-          updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
-        };
-      }
-      return t;
-    });
-    saveStoredTasks(updated);
+    updateTaskRecord(id, patch);
   }, []);
 
   const deleteTask = useCallback((id: string) => {

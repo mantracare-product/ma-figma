@@ -28,6 +28,8 @@ import { getStoredClaims, moveClaimToStage } from "./claimsStore";
 import type { RuleChainContext, StageMove } from "./useAutomationStore";
 import { executeStartProcessStep, isStartProcessStep } from "./startProcessAction";
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
+import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
+import "./taskAutoClose";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -701,6 +703,12 @@ export async function executeRulesForEvent(
             }
           }
         }
+      }
+
+      // Action: Create Task (work-queue task linked to the triggering record; auto-closes on stage exit)
+      if (isCreateTaskStep(stepKey)) {
+        const run = executeCreateTaskStep({ rule, stepId: act.id, params: act.params || {}, event });
+        if (run.status === "failed") console.warn(`[RuleEngine] create_task failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Update Fields (persisting, merge-safe writer; replaces the in-memory-only fieldupdate)

@@ -4020,6 +4020,29 @@ export default function StepParametersFields({
             )}
 
             {/* ASSIGN PROCESS ACTION STEP */}
+            {(stepKey === "create_task" || stepKey === "create-task") && (
+              <div className="space-y-4">
+                {renderField("Title (use {{field}} for values)", <input value={params.title || ""} onChange={(e) => onChange({ title: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Description", <textarea value={params.description || ""} onChange={(e) => onChange({ description: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" rows={2} />)}
+                {renderField("Queue (name)", <input value={params.queue || ""} onChange={(e) => onChange({ queue: e.target.value })} placeholder="e.g. a queue name from Tasks saved views" className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Priority", (
+                  <select value={params.priority || "normal"} onChange={(e) => onChange({ priority: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                    <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                  </select>
+                ))}
+                {renderField("Due in (days)", <input type="number" value={params.dueInDays ?? ""} onChange={(e) => onChange({ dueInDays: e.target.value === "" ? undefined : Number(e.target.value) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Assignee (name)", <input value={params.assignee || ""} onChange={(e) => onChange({ assignee: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={params.autoCloseOnStageExit !== false} onChange={(e) => onChange({ autoCloseOnStageExit: e.target.checked })} /> Close automatically when the record leaves this stage</label>
+              </div>
+            )}
+
+            {(stepKey === "update_fields" || stepKey === "update-fields") && (
+              <div className="space-y-4">
+                {renderField("Write to (comma separated: this, instance, appointment, client, claim, invoice)", <input value={(params.targets || ["this"]).join(", ")} onChange={(e) => onChange({ targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Fields as JSON, e.g. {\"field_key\": \"{{value}}\"}", <textarea defaultValue={JSON.stringify(params.fields || {}, null, 1)} onBlur={(e) => { try { onChange({ fields: JSON.parse(e.target.value || "{}") }); } catch { /* keep previous */ } }} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm font-mono" rows={4} />)}
+              </div>
+            )}
+
             {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process" || stepKey === "start_process" || stepKey === "start-process") && (() => {
               const clientProcesses = effectiveProcesses.filter(
                 (p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes"

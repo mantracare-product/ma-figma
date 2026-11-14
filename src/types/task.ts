@@ -166,5 +166,35 @@ export interface TaskEntity {
   department?: string;
   isPage?: boolean;
   htmlContent?: string;
+
+  // ── RCM work-queue fields (all optional) ──
+  /** The record this task is about. For a process instance, id === instanceId. */
+  entityRef?: TaskEntityRef;
+  /** Queue (saved-view bucket), e.g. a sample "Insurance fixes" queue. Free text, never hard-coded in logic. */
+  queueId?: string;
+  taskType?: string;
+  priority?: "low" | "normal" | "high" | "urgent";
+  /** ISO timestamp the task is due. */
+  dueAt?: string;
+  payerId?: string;
+  amountAtStake?: number;
+  /** How the task came to exist, e.g. "rule" | "manual". */
+  source?: string;
+  /** Who/what closed it: "user" | "auto:stage_exit" | "rule" | ... */
+  closedBy?: string;
+  closedAt?: string;
+}
+
+/** Link from a task to the record (and stage) it was created for. */
+export interface TaskEntityRef {
+  type: "process_instance" | "appointment" | "claim" | "invoice" | "client" | string;
+  id: string;
+  instanceId?: string;
+  processId?: string;
+  stageId?: string;
+  stageName?: string;
+  ruleId?: string;
+  /** Close the task automatically when the record leaves stageId (default true). */
+  autoCloseOnStageExit?: boolean;
 }
 

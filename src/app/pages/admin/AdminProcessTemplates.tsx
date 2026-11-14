@@ -889,6 +889,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "generate_invoice": ["stage", "postcall"],
   "start_process": ["stage", "inchat", "postcall"],
   "update_fields": ["stage", "inchat", "postcall"],
+  "create_task": ["stage", "inchat", "postcall"],
   "send_payment": ["stage", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],

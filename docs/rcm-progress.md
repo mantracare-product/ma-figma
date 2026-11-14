@@ -7,7 +7,7 @@ Status legend: pending | done (commit) | partial (what is missing is a TODO(rcm)
 - [x] S2.1 Instance leftovers -- done in Slice 1 (ad6d284: mockMaClient, portal, test drawers, Clients create flow). Nothing left.
 - [x] S2.2 Action plumbing: resolveRecordContext, recordWriter, fieldRegistryCore, Retry/health UI -- done (df010bc). update_fields action added (replaces non-persisting fieldupdate); ActionRunsPanel on Automation page.
 - [x] S2.3 Billing setup tab + reference stores + provider credentials -- done (f4b4487). Placeholder tab replaced by BillingSetupTab; samples only via seedBillingSetupSamples (wired in S2.6).
-- [ ] S2.4 Client typed fields + Coverages + Insurance tab
+- [x] S2.4 Client typed fields + Coverages + Insurance tab -- done (a0b2b00). Sample coverages seed only the 20 canonicalClients with contactType Client (spec said 40; only 20 exist).
 - [ ] S2.5 Tasks core (mutators, entityRef, auto-close, queues/saved views, linked-record card, create_task, Tasks.tsx import fix)
 - [ ] S2.6 Load sample templates + Enable demo set + bundle plumbing
 

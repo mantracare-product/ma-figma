@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useLocation, useNavigate } from "react-router";
 import {
   Plus,
@@ -16,6 +16,9 @@ import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import TaskQueueBar from "../components/tasks/TaskQueueBar";
+import { applyTaskView, taskViewsStore, isTaskOverdue, type TaskView } from "../../lib/taskViewsStore";
+import { describeEntityRef } from "../../lib/taskLinks";
 
 export default function Tasks() {
   const location = useLocation();
@@ -53,6 +56,8 @@ export default function Tasks() {
     return taskWorkflows[0]?.id || "process-task-default";
   });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
+  // Work queue = saved task view; when set it replaces the My/By-me tab filter.
+  const [activeViewId, setActiveViewId] = useState<string>("");
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
@@ -199,7 +204,16 @@ export default function Tasks() {
     return { myTasksCount: myCount, tasksByMeCount: byMeCount };
   }, [tasks, currentUserName]);
 
+  const activeView: TaskView | undefined = activeViewId ? taskViewsStore.find(activeViewId) : undefined;
+
   const filteredTasks = useMemo(() => {
+    if (activeView) {
+      const inScope = tasks.filter((t) => (isAdmin ? t.scopeLevel === "admin" : t.scopeLevel !== "admin"));
+      const q = searchQuery.toLowerCase().trim();
+      return applyTaskView(inScope, activeView).filter(
+        (t) => !q || t.title.toLowerCase().includes(q) || t.code.toLowerCase().includes(q)
+      );
+    }
     return tasks.filter((t) => {
       // 1. Role / Scope Isolation:
       // In Admin workspace (/admin/tasks), ONLY admin-level tasks appear.
@@ -243,7 +257,7 @@ export default function Tasks() {
 
       return matchesSearch && matchesWorkflow;
     });
-  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, clientTab, currentUserName, isAdmin]);
+  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, clientTab, currentUserName, isAdmin, activeView]);
 
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = useMemo(() => {
@@ -556,6 +570,26 @@ export default function Tasks() {
     return baseCols;
   }, [isAdmin, clientTab, taskStages, updateTaskStage]);
 
+  // Extra columns for work-queue views: queue, linked record, priority, due, SLA breached, amount at stake.
+  const displayColumns: TableColumn<TaskEntity>[] = useMemo(() => {
+    if (!activeView) return columns;
+    const extra: TableColumn<TaskEntity>[] = [
+      { key: "queue", header: "QUEUE", width: "140px", minWidth: "120px", align: "left", render: (t) => <span className="text-xs">{t.queueId || "—"}</span> },
+      {
+        key: "linkedRecord",
+        header: "LINKED RECORD",
+        minWidth: "220px",
+        align: "left",
+        render: (t) => <span className="text-xs text-blue-700">{describeEntityRef(t)?.label || "—"}</span>,
+      },
+      { key: "priority", header: "PRIORITY", width: "90px", minWidth: "80px", align: "left", render: (t) => <span className="text-xs capitalize">{t.priority || "normal"}</span> },
+      { key: "due", header: "DUE", width: "120px", minWidth: "100px", align: "left", render: (t) => <span className="text-xs">{t.dueAt ? t.dueAt.slice(0, 10) : "—"}</span> },
+      { key: "sla", header: "SLA BREACHED", width: "110px", minWidth: "100px", align: "left", render: (t) => <span className={"text-xs " + (isTaskOverdue(t) ? "text-red-600 font-semibold" : "")}>{isTaskOverdue(t) ? "Yes" : "No"}</span> },
+      { key: "amount", header: "AMOUNT AT STAKE", width: "130px", minWidth: "110px", align: "left", render: (t) => <span className="text-xs">{t.amountAtStake ? t.amountAtStake.toLocaleString() : "—"}</span> },
+    ];
+    return [...columns.slice(0, 2), ...extra, ...columns.slice(2)];
+  }, [columns, activeView]);
+
   const rowActions: TableRowAction<TaskEntity>[] = useMemo(() => {
     const actions: TableRowAction<TaskEntity>[] = [
       {
@@ -679,10 +713,12 @@ export default function Tasks() {
           }
         />
 
+        <TaskQueueBar tasks={tasks} activeViewId={activeViewId} onChange={setActiveViewId} />
+
         {/* ── Main Viewport: Standard 32px Table ── */}
         <TableComponent<TaskEntity>
           data={filteredTasks}
-          columns={columns}
+          columns={displayColumns}
           getRowId={(t) => t.id}
           rowActions={rowActions}
           onRowClick={(task) => handleOpenTask(task)}
