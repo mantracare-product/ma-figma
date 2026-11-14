@@ -152,12 +152,15 @@ describe("Set E demo (Slice 3)", () => {
     expect(rb.elig_history[0].source).toBe("copied");
   });
 
-  it("scenario inactive: instance Inactive, A5 queues an Insurance fixes task", async () => {
+  it("scenario inactive: instance Inactive, A5 queues an Insurance fixes task AND sends the update-insurance message into Chats (client has SMS consent)", async () => {
     sb.enableDemoSet("E");
+    localStorage.setItem("clients", JSON.stringify([{ id: "CL-T", name: "Test Patient", phone: "5550001", contactType: "Client", stage: "x", processes: [], dob: "1980-01-01", consents: { sms: true } }]));
     el.setMockScenario("inactive");
     const id = await book(702, "2030-09-04");
     expect((instancesOf(id)[0] as any).currentStage).toBe("Inactive");
     expect(myTasks().filter((x) => x.queueId === "insurance-fixes" && x.status !== "completed")).toHaveLength(1);
+    const conv = (await import("../useConversations")).getStoredConversations().find((c) => c.clientId === "CL-T" && c.channel === "sms");
+    expect(conv?.messages.slice(-1)[0].text).toContain("could not verify your insurance");
   });
 
   it("Run daily jobs: A2 re-checks visits in the next days (window skips fresh results, so no extra payer call)", async () => {

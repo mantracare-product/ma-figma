@@ -13,6 +13,7 @@ import {
   Check,
   Zap,
 } from "lucide-react";
+import KioskInsuranceStep from "./components/KioskInsuranceStep";
 import { Client, getStoredClients, saveStoredClients, moveClientToStage } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
 import { eventBus } from "../../../lib/eventBus";
@@ -333,6 +334,8 @@ export default function PatientCheckinScreen() {
                 }
               }
             `}</style>
+
+            <KioskInsuranceStep clientId={activeClient.id} clientName={activeClient.name} />
 
             {/* Action CTA: "Done (QR Scanned)" */}
             <div className="space-y-3 pt-2">

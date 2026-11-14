@@ -27,7 +27,21 @@ Demo script (tests only; no browser run):
 - [x] S3.4 Appointment coverage chip, detail Coverage tab, Schedule drawer Coverage + Verify now -- done (git log "S3.4"). Schedule drawer Verify now is a preview (nothing written) because no appointment exists yet; the detail Coverage tab Verify now writes.
 - [x] S3.5 Sample process + Set E rules + Run daily jobs now -- done (git log "S3.5"). getStoredRules legacy check-in filter now exempts sample-tagged rules (A13 needs it). Deals instance-card polish: nothing further needed (cards per instance exist from Slice 1). A7 start_call and A5/A9 send_message are inert until S5.4/S3.6.
 - [x] S3.6 send_message/notify mock + 4 templates + variables -- done (git log "S3.6"). send_message dispatches into the whatsappMockConversations store + activity; consent = client.consents.sms (sms/whatsapp). notify = in-app notification (type process).
-- [ ] S3.7 Front-desk Check-in button + kiosk insurance/copay steps
+- [x] S3.7 Front-desk Check-in button + kiosk insurance/copay steps -- done (git log "S3.7"). Kiosk: KioskInsuranceStep (coverage on file, mock copay estimate, member ID correction -> coverage.updated). Front desk: Check in button in the appointment drawer tab bar (uses appointmentService.checkInAppointment).
+
+### Slice 3 gate
+Commits: 317fb0b (3.1+3.2), 6b97458 (3.3), 21af3b4 (3.4), 7b16f27 (3.5), a1522e9 (3.6), S3.7 (see git log).
+Status: tsc OK, vitest OK (no failures beyond baseline), build OK.
+Demo script (tests = src/lib/__tests__/rcmSetE.test.ts, eligibility.test.ts, authActions.test.ts, messageActions.test.ts; no browser run):
+- PASS Load sample templates -> Enable demo set E: A1 runs first and A10 second (order 10/20), A10 writes to the instance A1 created; with A1 disabled A10 falls back to the appointment only and creates no instance.
+- PASS booking for a "member not found" member: instance (titled from the appointment) lands in Needs fix, task in Insurance fixes. NOT RUN (browser): amber chip.
+- PASS fix coverage -> coverage.updated -> A3 re-runs (window 0) -> Verified -> the task auto-closes. NOT RUN (browser): green chip, Insurance tab editing.
+- PASS second booking inside 30 days: new instance, fresh result COPIED (history source "copied", no new payer call).
+- PASS window 0 always calls the payer (also Verify now).
+- PASS a service the rule table marks as needing auth: request_prior_auth writes Authorization fields + history row and a task lands in Prior auth (entityRef = the instance, or the appointment when no instance).
+- PASS scenario inactive: instance Inactive, Insurance fixes task, and the update-insurance message appears in the client SMS conversation (consent required).
+- PASS daily jobs (Run daily jobs now = rcmJobs.runDaily): A2 re-checks upcoming visits (window skips fresh results); A13 re-verifies on check-in only when the last check is older than a day.
+- NOT RUN (browser): Billing setup > Payers rules table and scenario picker, detail drawer Coverage tab, Schedule drawer Coverage section, kiosk insurance step, front-desk Check in button, Run daily jobs button.
 
 ## Slice 4 - Visit to claim
 - [ ] S4.1 .. S4.6 (pending)
@@ -39,11 +53,18 @@ Demo script (tests only; no browser run):
 - [ ] S6.1 .. S6.5 (pending)
 
 ## Decisions
+- S3.2: variant 2 of the mock request strips the first 3 letters of the member ID, so some mock member IDs resolve on retry (by design); markers: NOTFOUND / INACTIVE / DOWN / TIMEOUT in the member ID, or the scenario picker.
+- S3.2: retry backoff (1/5/30 min) is not executed; attempts run back to back (no scheduler).
+- S3.5: derived rule-condition fields (_hasCoverage, _voiceEnabled, _daysSinceLastCheck) computed in ruleContextFields.ts and merged into event.data; getStoredRules legacy check-in filter exempts sample-tagged rules.
+- S3.5: daily jobs emit one job.daily event per record with data.job = collector id; sample rules select the job with a condition.
 - S2.4: spec says 40 mock patients; canonicalClients has only 20 with contactType Client, so 20 are seeded.
 - S2.5: create_task rules need the stage filter ids (trigger.params.stageId) to equal the process stage id; instance entry events resolve ids by stage name.
 - S2.5: queue views bypass the My tasks / Tasks by me tab (queues are cross-user work lists).
 
 ## TODO(rcm)
+- RCM field seeds have no sections; status-like fields are plain text (no option lists).
+- Retry backoff for run_eligibility is not executed (no scheduler).
+- A7 (start_call) is inert until S5.4; A5/A9 send_message now work.
 - No UI to edit AutomationRule.order.
 - start_process / create_task / update_fields have no dedicated canvas NodeType (generic step in the builder).
 - Deals does not open the instance drawer from ?instance= (task linked-record Open lands on the board).

@@ -813,6 +813,23 @@ export default function AppointmentDetailDrawer({
               </button>
             );
           })}
+          {["scheduled", "rescheduled", "pending-accept"].includes(String(effectiveAppt.status)) && (
+            <button
+              type="button"
+              data-testid="front-desk-check-in"
+              onClick={() => {
+                try {
+                  appointmentService.checkInAppointment(effectiveAppt.id);
+                  toast.success("Checked in");
+                } catch (e: any) {
+                  toast.error(String(e?.message || e));
+                }
+              }}
+              className="ml-auto my-2 px-3 py-1 text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+            >
+              Check in
+            </button>
+          )}
         </div>
 
         {/* ── Scrollable Tab Body ── */}
