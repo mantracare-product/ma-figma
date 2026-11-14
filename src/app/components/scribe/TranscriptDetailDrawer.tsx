@@ -374,18 +374,18 @@ export default function TranscriptDetailDrawer({
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 overflow-hidden"
+      className="fixed inset-0 z-50 flex justify-end overflow-hidden"
       style={{ zIndex }}
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
         onClick={onClose}
       />
 
-      {/* Modal Popup Panel */}
+      {/* Slide-over Drawer Panel */}
       <div
-        className="relative w-full max-w-5xl max-h-[90vh] bg-[#f8fafc] rounded-2xl shadow-2xl border border-border flex flex-col z-50 overflow-hidden animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-3xl sm:max-w-4xl lg:max-w-5xl bg-[#f8fafc] h-full shadow-2xl border-l border-border flex flex-col z-10 overflow-hidden animate-in slide-in-from-right duration-300"
         style={{ fontFamily: "DM Sans, sans-serif" }}
       >
         {/* Drawer Header */}

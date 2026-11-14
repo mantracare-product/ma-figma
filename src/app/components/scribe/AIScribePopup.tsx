@@ -28,11 +28,16 @@ import {
   FileCheck,
   Activity,
   FileSpreadsheet,
+  Users,
+  Link2,
 } from "lucide-react";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { toast } from "sonner";
 import { useClients } from "../../../lib/clientsStore";
 import { useProcessStore, EntityType } from "../../../lib/useProcessStore";
+import { appointmentService, Appointment } from "../../../lib/appointmentService";
+import { useTeamMembers } from "../../../lib/teamStore";
+import { useAuth } from "../../context/AuthContext";
 import {
   ScribeSession,
   PRESET_SCENARIOS,
@@ -52,6 +57,10 @@ export interface AIScribePopupProps {
   initialProcessId?: string;
   initialProcessName?: string;
   initialRecordId?: string;
+  initialAppointmentId?: string;
+  initialAppointmentDate?: string;
+  initialAttendeeId?: string;
+  initialAttendeeName?: string;
   zIndex?: number;
 }
 
@@ -74,10 +83,16 @@ export default function AIScribePopup({
   initialProcessId,
   initialProcessName,
   initialRecordId,
+  initialAppointmentId,
+  initialAppointmentDate,
+  initialAttendeeId,
+  initialAttendeeName,
   zIndex = 2147483645,
 }: AIScribePopupProps) {
   const { clients: liveClients } = useClients();
   const { processes: liveProcesses } = useProcessStore();
+  const { teamMembers } = useTeamMembers();
+  const { user } = useAuth();
 
   // Workflow steps:
   // 1. "record" — Immediate ambient recording or audio upload (no clunky presets, clean UI)
@@ -121,14 +136,14 @@ export default function AIScribePopup({
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [customPatientName, setCustomPatientName] = useState("");
-  const [patientAge, setPatientAge] = useState<number>(45);
-  const [patientGender, setPatientGender] = useState<"Female" | "Male" | "Other">("Female");
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(SCRIBE_DOCTORS[0]?.id || "doc-1");
-  const [selectedEntityId, setSelectedEntityId] = useState<EntityType>("client");
-  const [consultationTitle, setConsultationTitle] = useState("");
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("none");
+  const [sessionDate, setSessionDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [selectedAttendeeId, setSelectedAttendeeId] = useState<string>("");
+  const [selectedAttendeeName, setSelectedAttendeeName] = useState<string>("");
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const clientDropdownRef = useRef<HTMLDivElement>(null);
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
 
   // Step 3: Saved result state
   const [savedSession, setSavedSession] = useState<ScribeSession | null>(null);
@@ -143,39 +158,77 @@ export default function AIScribePopup({
       setUploadedFile(null);
       setSavedSession(null);
 
+      // Refresh appointments
+      const appts = appointmentService.getAppointments();
+      setAllAppointments(appts);
+
       // Pre-select patient if provided in props
       if (initialClientId) {
         setSelectedClientId(initialClientId);
-        const match = liveClients.find((c) => c.id === initialClientId);
-        if (match) {
-          setPatientAge(match.age || 45);
-          setPatientGender((match.gender as any) || "Female");
-        }
+        setIsNewPatient(false);
       } else if (initialClientName) {
         const match = liveClients.find(
           (c) => c.name.toLowerCase().trim() === initialClientName.toLowerCase().trim()
         );
         if (match) {
           setSelectedClientId(match.id);
-          setPatientAge(match.age || 45);
-          setPatientGender((match.gender as any) || "Female");
+          setIsNewPatient(false);
         } else {
           setIsNewPatient(true);
           setCustomPatientName(initialClientName);
         }
       } else if (liveClients.length > 0) {
         setSelectedClientId(liveClients[0].id);
-        setPatientAge(liveClients[0].age || 42);
-        setPatientGender((liveClients[0].gender as any) || "Female");
+        setIsNewPatient(false);
       }
 
-      if (initialEntityType) {
-        setSelectedEntityId(initialEntityType);
+      // Link appointment
+      if (initialAppointmentId) {
+        setSelectedAppointmentId(String(initialAppointmentId));
+      } else {
+        setSelectedAppointmentId("none");
+      }
+
+      // Session / Appointment Date
+      if (initialAppointmentDate) {
+        setSessionDate(initialAppointmentDate.slice(0, 10));
+      } else {
+        setSessionDate(new Date().toISOString().slice(0, 10));
+      }
+
+      // Attendee Name / Team Member
+      if (initialAttendeeName) {
+        setSelectedAttendeeName(initialAttendeeName);
+        const matchMem = teamMembers.find(
+          (m) => m.name.toLowerCase().trim() === initialAttendeeName.toLowerCase().trim()
+        );
+        if (matchMem) {
+          setSelectedAttendeeId(String(matchMem.id));
+        } else if (initialAttendeeId) {
+          setSelectedAttendeeId(String(initialAttendeeId));
+        } else {
+          setSelectedAttendeeId("custom-attendee");
+        }
+      } else if (user?.name) {
+        setSelectedAttendeeName(user.name);
+        setSelectedAttendeeId(String(user.id || teamMembers[0]?.id || "member-1"));
+      } else if (teamMembers.length > 0) {
+        setSelectedAttendeeId(String(teamMembers[0].id));
+        setSelectedAttendeeName(teamMembers[0].name);
       }
     } else {
       clearInterval(timerRef.current);
     }
-  }, [isOpen, initialClientId, initialClientName, initialEntityType, liveClients]);
+  }, [
+    isOpen,
+    initialClientId,
+    initialClientName,
+    initialAppointmentId,
+    initialAppointmentDate,
+    initialAttendeeId,
+    initialAttendeeName,
+    liveClients,
+  ]);
 
   // Recording timer
   useEffect(() => {
@@ -265,28 +318,47 @@ export default function AIScribePopup({
     if (isRecording) {
       setIsPaused(true);
     }
-
-    const clientName = isNewPatient
-      ? customPatientName.trim() || "Walk-in Patient"
-      : liveClients.find((c) => c.id === selectedClientId)?.name || "Patient";
-    const today = new Date().toISOString().slice(0, 10);
-    setConsultationTitle(`${clientName}_Consultation_${today}`);
-
     setStep("assign");
   };
 
   const handleSelectClient = (client: any) => {
     setSelectedClientId(client.id);
     setIsNewPatient(false);
-    setPatientAge(client.age || 42);
-    setPatientGender(client.gender || "Female");
     setIsClientDropdownOpen(false);
+  };
+
+  const handleAppointmentChange = (apptId: string) => {
+    setSelectedAppointmentId(apptId);
+    if (apptId !== "none") {
+      const match = allAppointments.find((a) => String(a.id) === String(apptId));
+      if (match) {
+        if (match.date) {
+          setSessionDate(match.date);
+        }
+        if (match.employeeName) {
+          setSelectedAttendeeName(match.employeeName);
+          const found = teamMembers.find(
+            (m) => m.name.toLowerCase().trim() === match.employeeName?.toLowerCase().trim()
+          );
+          if (found) {
+            setSelectedAttendeeId(String(found.id));
+          }
+        }
+      }
+    }
+  };
+
+  const handleAttendeeChange = (attendeeId: string) => {
+    setSelectedAttendeeId(attendeeId);
+    const found = teamMembers.find((m) => String(m.id) === String(attendeeId));
+    if (found) {
+      setSelectedAttendeeName(found.name);
+    }
   };
 
   const handleConfirmSave = () => {
     // Pick standard clinical scenario data seamlessly in background
     const scenario = PRESET_SCENARIOS[0];
-    const doctor = SCRIBE_DOCTORS.find((d) => d.id === selectedDoctorId) || SCRIBE_DOCTORS[0];
 
     let patientId = selectedClientId;
     let patientName = "Walk-in Patient";
@@ -302,9 +374,11 @@ export default function AIScribePopup({
       }
     }
 
+    const currentClient = liveClients.find((c) => c.id === patientId);
     const firstName = patientName.split(" ")[0] || patientName;
     const lastName = patientName.split(" ").slice(1).join(" ") || firstName;
-    const prefix = patientGender === "Female" ? "Ms." : "Mr.";
+    const resolvedGender = (currentClient?.gender as any) || "Female";
+    const prefix = resolvedGender === "Female" ? "Ms." : "Mr.";
 
     // Personalize scenario transcript cleanly
     const customizedTranscript = scenario.transcriptText
@@ -320,26 +394,30 @@ export default function AIScribePopup({
         .replace(/Rajesh/gi, firstName),
     }));
 
-    const finalTitle =
-      consultationTitle.trim() ||
-      `${patientName}_Consultation_${new Date().toISOString().slice(0, 10)}`;
+    const doctorName = selectedAttendeeName || user?.name || "Dr. Priya Sharma";
+    const doctorId = selectedAttendeeId || "member-1";
+    const formattedDate = sessionDate || new Date().toISOString().slice(0, 10);
+    const finalTitle = `${patientName}_Consultation_${formattedDate}`;
+
+    const linkedApptId = selectedAppointmentId !== "none" ? selectedAppointmentId : undefined;
+    const finalEntity: EntityType = linkedApptId ? "appointment" : (initialEntityType || "client");
 
     const newSession: ScribeSession = {
       id: `scribe-${Date.now()}`,
       clientId: patientId,
       clientName: patientName,
       title: finalTitle,
-      patientAge: patientAge,
-      patientGender: patientGender,
-      entityType: selectedEntityId,
+      patientAge: currentClient?.age || 42,
+      patientGender: resolvedGender,
+      entityType: finalEntity,
       workflow: "Clinical Consultation",
       processId: initialProcessId,
       processName: initialProcessName,
-      recordId: initialRecordId || `REC-${patientId}-${Date.now().toString().slice(-4)}`,
+      recordId: linkedApptId || initialRecordId || `REC-${patientId}-${Date.now().toString().slice(-4)}`,
       sessionName: `Clinical Consultation • ${patientName}`,
-      doctorId: doctor.id,
-      doctorName: doctor.name,
-      sessionDate: new Date().toISOString(),
+      doctorId: doctorId,
+      doctorName: doctorName,
+      sessionDate: sessionDate ? new Date(sessionDate).toISOString() : new Date().toISOString(),
       durationSeconds: recordingSec || 78,
       audioInputMode: audioInputMode,
       status: "completed",
@@ -351,7 +429,7 @@ export default function AIScribePopup({
       extractedData: {
         ...scenario.extractedData,
         chiefComplaint: scenario.extractedData.chiefComplaint,
-        doctorNotes: `Attending Physician: ${doctor.name}. ${scenario.extractedData.doctorNotes || "Follow-up advised in 7 days."}`,
+        doctorNotes: `Attending Team Member: ${doctorName}. ${scenario.extractedData.doctorNotes || "Follow-up advised in 7 days."}`,
       },
     };
 
@@ -362,7 +440,7 @@ export default function AIScribePopup({
 
     setSavedSession(newSession);
     setStep("completed");
-    toast.success(`Consultation saved & SOAP notes generated for ${patientName}!`);
+    toast.success(`Consultation saved for ${patientName}!`);
     onSessionCreated?.(newSession);
   };
 
@@ -377,6 +455,31 @@ export default function AIScribePopup({
   });
 
   const selectedClient = liveClients.find((c) => c.id === selectedClientId);
+
+  const clientAppointments = useMemo(() => {
+    if (isNewPatient) {
+      const name = customPatientName.trim().toLowerCase();
+      if (!name) return [];
+      return allAppointments.filter((a) => a.clientName?.toLowerCase().includes(name));
+    }
+    if (!selectedClientId) return [];
+    const client = liveClients.find((c) => c.id === selectedClientId);
+    const clientName = client?.name?.toLowerCase().trim();
+    return allAppointments.filter(
+      (a) =>
+        (a.clientId && String(a.clientId) === String(selectedClientId)) ||
+        (clientName && a.clientName?.toLowerCase().trim() === clientName)
+    );
+  }, [allAppointments, selectedClientId, isNewPatient, customPatientName, liveClients]);
+
+  const selectedApptObj = allAppointments.find((a) => String(a.id) === String(selectedAppointmentId));
+  const appointmentOptions = useMemo(() => {
+    const list = [...clientAppointments];
+    if (selectedApptObj && !list.some((a) => String(a.id) === String(selectedApptObj.id))) {
+      list.unshift(selectedApptObj);
+    }
+    return list;
+  }, [clientAppointments, selectedApptObj]);
 
   return (
     <div
@@ -669,13 +772,13 @@ export default function AIScribePopup({
            ══════════════════════════════════════════════════════ */}
         {step === "assign" && (
           <div className="flex-1 flex flex-col justify-between h-full">
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {/* Back to Recording Bar */}
-              <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center justify-between pb-0.5">
                 <button
                   type="button"
                   onClick={() => setStep("record")}
-                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   Back to Recording
@@ -685,12 +788,12 @@ export default function AIScribePopup({
                 </span>
               </div>
 
-              {/* Patient Selection Card */}
+              {/* 1. Contact Selection Card */}
               <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-blue-600" />
-                    Patient
+                    Contact
                   </label>
                   <button
                     type="button"
@@ -700,7 +803,7 @@ export default function AIScribePopup({
                         setCustomPatientName("");
                       }
                     }}
-                    className="text-[11px] font-semibold text-blue-600 hover:underline"
+                    className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
                   >
                     {isNewPatient ? "Select Existing" : "+ New / Walk-in"}
                   </button>
@@ -712,7 +815,7 @@ export default function AIScribePopup({
                       type="text"
                       value={customPatientName}
                       onChange={(e) => setCustomPatientName(e.target.value)}
-                      placeholder="Type patient full name..."
+                      placeholder="Type contact full name..."
                       className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
@@ -721,10 +824,10 @@ export default function AIScribePopup({
                     <button
                       type="button"
                       onClick={() => setIsClientDropdownOpen(!isClientDropdownOpen)}
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium"
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium cursor-pointer"
                     >
                       <span className="truncate">
-                        {selectedClient ? selectedClient.name : "Select patient..."}
+                        {selectedClient ? selectedClient.name : "Select contact..."}
                       </span>
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
                     </button>
@@ -738,7 +841,7 @@ export default function AIScribePopup({
                               type="text"
                               value={clientSearchQuery}
                               onChange={(e) => setClientSearchQuery(e.target.value)}
-                              placeholder="Search patient..."
+                              placeholder="Search contact..."
                               className="w-full pl-6 pr-2 py-1 text-xs bg-slate-50 dark:bg-zinc-900 rounded-lg text-slate-700 dark:text-zinc-200 focus:outline-none"
                             />
                           </div>
@@ -749,7 +852,7 @@ export default function AIScribePopup({
                               key={c.id}
                               type="button"
                               onClick={() => handleSelectClient(c)}
-                              className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                              className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
                                 selectedClientId === c.id
                                   ? "bg-blue-50 text-blue-700 font-semibold"
                                   : "hover:bg-slate-50 text-slate-700 dark:text-zinc-200"
@@ -767,90 +870,67 @@ export default function AIScribePopup({
                     )}
                   </div>
                 )}
+              </div>
 
-                {/* Age & Gender Demographics */}
-                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-                      Age
-                    </label>
-                    <input
-                      type="number"
-                      value={patientAge}
-                      onChange={(e) => setPatientAge(parseInt(e.target.value) || 0)}
-                      className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 focus:outline-none"
-                    />
-                  </div>
+              {/* 2. Link Appointment & Session Date Card */}
+              <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs space-y-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-blue-600" />
+                    Link Appointment
+                  </label>
+                  <select
+                    value={selectedAppointmentId}
+                    onChange={(e) => handleAppointmentChange(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium focus:outline-none"
+                  >
+                    <option value="none">No appointment linked</option>
+                    {appointmentOptions.map((appt) => (
+                      <option key={appt.id} value={String(appt.id)}>
+                        APT-{appt.id} • {appt.serviceName || appt.title || "Consultation"} ({appt.date})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-                      Gender
-                    </label>
-                    <select
-                      value={patientGender}
-                      onChange={(e) => setPatientGender(e.target.value as any)}
-                      className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 focus:outline-none"
-                    >
-                      <option value="Female">Female</option>
-                      <option value="Male">Male</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    Session Date / Appointment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={sessionDate}
+                    onChange={(e) => setSessionDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Attending Doctor */}
+              {/* 3. Attendee Name (Team Member) Card */}
               <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs">
                 <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
-                  Attending Doctor
+                  <Users className="w-3.5 h-3.5 text-blue-600" />
+                  Attendee Name
                 </label>
                 <select
-                  value={selectedDoctorId}
-                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  value={selectedAttendeeId}
+                  onChange={(e) => handleAttendeeChange(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium focus:outline-none"
                 >
-                  {SCRIBE_DOCTORS.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} — {d.specialty}
+                  {teamMembers.map((member) => (
+                    <option key={member.id} value={String(member.id)}>
+                      {member.name}{member.role ? ` (${member.role})` : ""}
                     </option>
                   ))}
+                  {/* Fallback option if attendee was custom or not in team list */}
+                  {selectedAttendeeName &&
+                    !teamMembers.some((m) => String(m.id) === String(selectedAttendeeId)) && (
+                      <option value={selectedAttendeeId || "custom-attendee"}>
+                        {selectedAttendeeName}
+                      </option>
+                    )}
                 </select>
-              </div>
-
-              {/* Entity Link */}
-              <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-                      Link Entity
-                    </label>
-                    <select
-                      value={selectedEntityId}
-                      onChange={(e) => setSelectedEntityId(e.target.value as any)}
-                      className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 focus:outline-none"
-                    >
-                      {SCRIBE_ENTITIES.map((ent) => (
-                        <option key={ent.id} value={ent.id}>
-                          {ent.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-                      Consultation Title
-                    </label>
-                    <input
-                      type="text"
-                      value={consultationTitle}
-                      onChange={(e) => setConsultationTitle(e.target.value)}
-                      placeholder="Title summary..."
-                      className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 focus:outline-none"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -861,8 +941,8 @@ export default function AIScribePopup({
                 onClick={handleConfirmSave}
                 className="w-full py-2.5 px-3 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Confirm & Generate SOAP Notes</span>
+                <Check className="w-3.5 h-3.5" />
+                <span>Save</span>
               </button>
             </div>
           </div>
