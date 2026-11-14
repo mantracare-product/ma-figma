@@ -164,23 +164,40 @@ export function isAutomationRuleMatchingScope(
   return true;
 }
 
+/** Loop-guard context carried across rule-caused stage moves (depth + rules already run in the chain). */
+export interface RuleChainContext {
+  depth: number;
+  visited: string[];
+}
+
 export interface StageMove {
   id: string;
   orgId: string;
   recordType: EntityType;
+  /** For client-process moves this is the instanceId (one move = one instance); otherwise the record id. */
   recordId: string;
   fromStageId?: string;
   fromStageName?: string;
   toStageId: string;
   toStageName: string;
+  /** The process the record ENTERED (TO process). */
   processId: string;
   processName?: string;
+  /** The process the record LEFT. Equal to processId for a plain stage move; differs for a workflow change. */
+  fromProcessId?: string;
+  fromProcessName?: string;
+  /** Process instance this move belongs to (client-in-process moves). */
+  instanceId?: string;
+  clientId?: string;
+  source?: { type: string; id: string; title?: string };
   cause: {
     type: "rule" | "manual" | "intent" | "import" | "webhook";
     ruleId?: string;
     ruleName?: string;
     eventId?: string;
     eventName?: string;
+    /** Set by the rule engine so rule-caused moves keep the loop guard when they re-enter the bus. */
+    chain?: RuleChainContext;
   };
   at: string;
   reverted?: boolean;
@@ -548,11 +565,44 @@ export function getStoredStageMoves(orgId?: string): StageMove[] {
   }
 }
 
-export function logStageMove(move: Omit<StageMove, "id" | "at">): StageMove {
+/** Best-effort stage-id lookup by name within a process (used when a caller knows names but not ids). */
+function resolveStageIdByName(processId: string | undefined, stageName: string | undefined): string | undefined {
+  if (!processId || !stageName) return undefined;
   try {
+    const proc = getStoredProcesses().find((p) => p.id === processId);
+    const target = stageName.trim().toLowerCase();
+    return proc?.stages?.find((s) => s.name.trim().toLowerCase() === target)?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Record a stage move and emit its bus events. Exactly ONE `stage.entered` event is emitted per move
+ * (plus ONE `stage.exited` when there was a previous stage). The entry event carries the TO process;
+ * the exit event carries the FROM process (`fromProcessId`, defaulting to the same process).
+ *
+ * `opts.recordData` is merged into the event data so rules can evaluate record fields (it replaces the
+ * second, record-carrying `stage.entered` emit the services used to send themselves).
+ */
+export function logStageMove(
+  move: Omit<StageMove, "id" | "at">,
+  opts?: { recordData?: Record<string, any> }
+): StageMove {
+  try {
+    // fromStageId must always be supplied when there was a previous stage: resolve it by name if the caller only knew the name.
+    const fromProcessId = move.fromProcessId || move.processId;
+    // Falls back to the stage NAME (as the entry side does) so a previous stage always produces an exit event.
+    const fromStageId =
+      move.fromStageId ||
+      (move.fromStageName ? resolveStageIdByName(fromProcessId, move.fromStageName) || move.fromStageName : undefined);
+    const toStageId = move.toStageId || resolveStageIdByName(move.processId, move.toStageName) || move.toStageName;
+
+    const normalized: Omit<StageMove, "id" | "at"> = { ...move, fromStageId, fromProcessId, toStageId };
+
     const moves = getStoredStageMoves();
     const newMove: StageMove = {
-      ...move,
+      ...normalized,
       id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       at: new Date().toISOString(),
     };
@@ -560,25 +610,34 @@ export function logStageMove(move: Omit<StageMove, "id" | "at">): StageMove {
     localStorage.setItem(STAGE_MOVES_STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event(STAGE_MOVES_STORE_EVENT));
 
-    // Emit eventBus stage events for automations
-    eventBus.emit("stage.entered", move.recordType, move.recordId, {
-      ...move,
-      stageId: move.toStageId,
-      stageName: move.toStageName,
-      processId: move.processId,
+    // instanceId / clientId / source are already in `normalized` when the caller supplied them, so they are
+    // not re-set here (re-setting would overwrite record data with undefined).
+    const common = {
+      ...(opts?.recordData || {}),
+      ...normalized,
+      chain: normalized.cause?.chain,
+      moveId: newMove.id,
+    };
+
+    // ONE entry event per move.
+    eventBus.emit("stage.entered", normalized.recordType, normalized.recordId, {
+      ...common,
+      stageId: toStageId,
+      stageName: normalized.toStageName,
+      processId: normalized.processId,
+      processName: normalized.processName,
     });
-    eventBus.emit(`${move.recordType}.entered_stage`, move.recordType, move.recordId, {
-      ...move,
-      stageId: move.toStageId,
-      stageName: move.toStageName,
-      processId: move.processId,
-    });
-    if (move.fromStageId) {
-      eventBus.emit("stage.exited", move.recordType, move.recordId, {
-        ...move,
-        stageId: move.fromStageId,
-        stageName: move.fromStageName,
-        processId: move.processId,
+    // ONE exit event per move, carrying the FROM process.
+    if (fromStageId) {
+      eventBus.emit("stage.exited", normalized.recordType, normalized.recordId, {
+        ...common,
+        stageId: fromStageId,
+        stageName: normalized.fromStageName,
+        processId: fromProcessId,
+        processName: normalized.fromProcessName || normalized.processName,
+        toStageId,
+        toStageName: normalized.toStageName,
+        toProcessId: normalized.processId,
       });
     }
 

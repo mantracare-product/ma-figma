@@ -16,9 +16,110 @@ import { appendActivity } from "./activityEngine";
 import { getStoredDocumentTemplates } from "./documentTemplatesStore";
 import { getClientList } from "./getClientList";
 import { moveClientToStage, getStoredClients } from "./clientsStore";
+import {
+  getPrimaryInstance,
+  getProcessInstanceById,
+  updateProcessInstanceStage,
+  logInstanceStageMove,
+  isActiveInstance,
+} from "./processLogsStore";
+import { getStoredClaims, moveClaimToStage } from "./claimsStore";
+import type { RuleChainContext, StageMove } from "./useAutomationStore";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
+
+/**
+ * Stage events for client-in-process moves carry `recordId = instanceId` (so every instance is its own
+ * record: idempotency, undo and tasks are per instance) plus `data.clientId`. Most actions were written
+ * with "client event => recordId is the client id", so for actions we present the event with
+ * `recordId = clientId`; the instance stays available as `event.data.instanceId`.
+ */
+function toActionEvent(raw: BusEvent): BusEvent {
+  if (raw.recordType === "client" && raw.data?.instanceId && raw.data?.clientId) {
+    return { ...raw, recordId: String(raw.data.clientId) };
+  }
+  return raw;
+}
+
+/** Cause for a stage move made by a rule; carries the loop-guard chain so bus-driven cascades stay bounded. */
+function ruleCause(
+  rule: AutomationRule,
+  event: BusEvent,
+  depth: number,
+  visited: Set<string>
+): StageMove["cause"] {
+  const chain: RuleChainContext = { depth: depth + 1, visited: [...visited, rule.id] };
+  return {
+    type: "rule",
+    ruleId: rule.id,
+    ruleName: rule.name,
+    eventId: event.id,
+    eventName: event.event,
+    chain,
+  };
+}
+
+/**
+ * Move a client within a process, by INSTANCE. Resolution order: the instance named by the triggering event
+ * (if it belongs to the target process), else the client's primary (most recent active) instance of that
+ * process. Instance moves never write client.stage. With no instance, falls back to the client-level move.
+ */
+function moveClientInProcess(opts: {
+  clientId: string;
+  processRef?: string;
+  stageRef: string;
+  event: BusEvent;
+  cause: StageMove["cause"];
+}): { moved: boolean; instanceId?: string; stageName?: string } {
+  const { clientId, processRef, stageRef, event, cause } = opts;
+  if (!clientId || !stageRef) return { moved: false };
+  const processes = getStoredProcesses();
+  const refLower = (processRef || "").trim().toLowerCase();
+  const proc = refLower
+    ? processes.find((p) => p.id === processRef || (p.name || "").trim().toLowerCase() === refLower)
+    : undefined;
+
+  if (!proc) {
+    const updated = moveClientToStage(clientId, stageRef, processRef, { cause });
+    return { moved: !!updated, stageName: updated?.stage };
+  }
+
+  const q = stageRef.trim().toLowerCase();
+  const stage =
+    proc.stages?.find((s) => s.id === stageRef) ||
+    proc.stages?.find((s) => (s.name || "").trim().toLowerCase() === q) ||
+    proc.stages?.find((s) => (s.name || "").toLowerCase().includes(q));
+  if (!stage) {
+    console.warn(`[RuleEngine] Stage "${stageRef}" not found in process "${proc.name}"; client move skipped.`);
+    return { moved: false };
+  }
+
+  const eventInstanceId = event.data?.instanceId ? String(event.data.instanceId) : undefined;
+  let instance = eventInstanceId ? getProcessInstanceById(eventInstanceId) : undefined;
+  if (
+    instance &&
+    !(
+      (instance.processId && instance.processId === proc.id) ||
+      (instance.process || "").trim().toLowerCase() === (proc.name || "").trim().toLowerCase()
+    )
+  ) {
+    instance = undefined; // the event's instance belongs to another process
+  }
+  if (!instance) instance = getPrimaryInstance(clientId, proc.name, { warn: false });
+
+  if (instance && isActiveInstance(instance)) {
+    const fromStageName = instance.currentStage;
+    const updated = updateProcessInstanceStage(instance.instanceId || instance.id, stage.name);
+    if (updated) {
+      logInstanceStageMove(updated, fromStageName, cause);
+      return { moved: true, instanceId: updated.instanceId, stageName: stage.name };
+    }
+  }
+
+  const updatedClient = moveClientToStage(clientId, stage.id, proc.id, { cause });
+  return { moved: !!updatedClient, stageName: updatedClient?.stage };
+}
 
 /**
  * Check if condition matches event data / record properties
@@ -157,10 +258,12 @@ export function flattenRuleSteps(steps: any[]): any[] {
  * Core Rule Execution Engine
  */
 export async function executeRulesForEvent(
-  event: BusEvent,
+  rawEvent: BusEvent,
   depth = 0,
   visitedRules: Set<string> = new Set()
 ): Promise<RuleExecutionResult[]> {
+  // `rawEvent.recordId` may be an instanceId (client-process moves); actions see the client id (see toActionEvent).
+  const event = toActionEvent(rawEvent);
   if (depth >= MAX_CHAIN_DEPTH) {
     console.warn(`[RuleEngine] Max execution chain depth (${MAX_CHAIN_DEPTH}) reached for record ${event.recordId}. Aborting cascade.`);
     return [];
@@ -291,8 +394,9 @@ export async function executeRulesForEvent(
       continue;
     }
 
-    // 2. Idempotency Check
-    const idempotencyKey = `${event.recordId}:${rule.id}:${event.id}`;
+    // 2. Idempotency Check — keyed on the RAW record id (the instanceId for instance moves), so two instances
+    // of one client never collapse into one execution.
+    const idempotencyKey = `${rawEvent.recordId}:${rule.id}:${event.id}`;
     if (executedIdempotencyKeys.has(idempotencyKey)) {
       results.push({
         ruleId: rule.id,
@@ -365,55 +469,58 @@ export async function executeRulesForEvent(
     const targetStage = hasTopLevelMove ? targetProcess?.stages.find((s) => s.id === rule.action.stageId) : undefined;
 
     if (hasTopLevelMove && rule.action?.stageId) {
-      logStageMove({
-        orgId: event.orgId || "default",
-        recordType: event.recordType,
-        recordId: event.recordId,
-        toStageId: rule.action.stageId,
-        toStageName: targetStage?.name || rule.action.stageName || "Unknown Stage",
-        processId: rule.action.processId,
-        processName: targetProcess?.name || rule.action.processName || "Default Process",
-        cause: {
-          type: "rule",
-          ruleId: rule.id,
-          ruleName: rule.name,
-          eventId: event.id,
-          eventName: event.event,
-        },
-      });
-
-      if (event.recordType === "appointment") {
-        try {
-          appointmentService.moveToStage(event.recordId, rule.action.stageId, {
-            type: "rule",
-            ruleName: rule.name,
+      // Dispatch by record type. Exactly ONE stage move is logged (and so ONE stage.entered is emitted) per rule action:
+      // appointment/invoice are logged inside their services, client-in-process moves by logInstanceStageMove, claims below.
+      // (This used to log here AND again in the service, and treat every non-appointment/invoice record as a client.)
+      const moveCause = ruleCause(rule, event, depth, visitedRules);
+      const actionStageId = rule.action.stageId;
+      try {
+        if (event.recordType === "appointment") {
+          appointmentService.moveToStage(event.recordId, actionStageId, {
+            ...moveCause,
             processId: rule.action.processId,
           });
-        } catch (err) {
-          console.warn("[RuleEngine] Failed to sync appointment stage:", err);
-        }
-      } else if (event.recordType === "invoice") {
-        try {
-          invoiceService.moveToStage(event.recordId, rule.action.stageId, {
-            type: "rule",
-            ruleName: rule.name,
-          });
-        } catch (err) {
-          console.warn("[RuleEngine] Failed to sync invoice stage:", err);
-        }
-      } else {
-        // Client or processes
-        try {
-          const clientId =
-            event.recordType === "client"
-              ? event.recordId
-              : (event.data?.clientId || event.data?.id || event.recordId);
+        } else if (event.recordType === "invoice") {
+          invoiceService.moveToStage(event.recordId, actionStageId, moveCause);
+        } else if (event.recordType === "client") {
+          const clientId = event.data?.clientId || event.recordId;
           if (clientId) {
-            moveClientToStage(clientId, rule.action.stageId, rule.action.processId);
+            moveClientInProcess({
+              clientId: String(clientId),
+              processRef: rule.action.processId,
+              stageRef: actionStageId,
+              event,
+              cause: moveCause,
+            });
           }
-        } catch (err) {
-          console.warn("[RuleEngine] Failed to sync client stage:", err);
+        } else if (event.recordType === "claim") {
+          const claimBefore = getStoredClaims().find((c) => c.id === event.recordId);
+          const moved = moveClaimToStage(event.recordId, actionStageId, targetStage?.name || rule.action.stageName);
+          if (moved) {
+            logStageMove(
+              {
+                orgId: event.orgId || "default",
+                recordType: "claim",
+                recordId: event.recordId,
+                fromStageId: claimBefore?.currentStageId,
+                fromStageName: claimBefore?.statusLabel,
+                toStageId: actionStageId,
+                toStageName: targetStage?.name || rule.action.stageName || moved.statusLabel || "Unknown Stage",
+                processId: rule.action.processId,
+                processName: targetProcess?.name || rule.action.processName,
+                cause: moveCause,
+              },
+              { recordData: { ...moved } }
+            );
+          }
+        } else {
+          console.warn(
+            `[RuleEngine] No stage mover is registered for record type "${event.recordType}"; move skipped ` +
+              `(it used to be applied to a client record by mistake).`
+          );
         }
+      } catch (err) {
+        console.warn(`[RuleEngine] Failed to move ${event.recordType} ${event.recordId} to stage ${actionStageId}:`, err);
       }
     }
 
@@ -507,8 +614,7 @@ export async function executeRulesForEvent(
             if (apptId) {
               try {
                 appointmentService.moveToStage(apptId, targetStageId, {
-                  type: "rule",
-                  ruleName: rule.name,
+                  ...ruleCause(rule, event, depth, visitedRules),
                   processId: act.params?.processId || act.params?.stepDetailProcess,
                 });
                 console.log(`[RuleEngine] Moved appointment ${apptId} to stage ${targetStageId} via rule "${rule.name}"`);
@@ -529,10 +635,7 @@ export async function executeRulesForEvent(
             const invId = event.recordType === "invoice" ? event.recordId : (event.data?.invoiceId || act.params?.invoiceId || currentAppt?.invoiceId);
             if (invId) {
               try {
-                invoiceService.moveToStage(invId, targetStageId, {
-                  type: "rule",
-                  ruleName: rule.name,
-                });
+                invoiceService.moveToStage(invId, targetStageId, ruleCause(rule, event, depth, visitedRules));
                 console.log(`[RuleEngine] Moved invoice ${invId} to stage ${targetStageId} via rule "${rule.name}"`);
               } catch (e) {
                 console.warn("[RuleEngine] Failed to move invoice stage:", e);
@@ -573,31 +676,19 @@ export async function executeRulesForEvent(
                 act.params?.stepDetailStageName ||
                 act.params?.stageId ||
                 act.params?.stepDetailStage;
-              const updatedClient = moveClientToStage(
-                targetClientId,
-                targetStageVal,
-                targetProcId
-              );
-              if (updatedClient) {
+              // Resolve by INSTANCE (the event's instance, else the client's primary instance of the target process).
+              // The move is logged once (logInstanceStageMove / moveClientToStage); instance moves never write client.stage.
+              const result = moveClientInProcess({
+                clientId: String(targetClientId),
+                processRef: targetProcId,
+                stageRef: String(targetStageVal || ""),
+                event,
+                cause: ruleCause(rule, event, depth, visitedRules),
+              });
+              if (result.moved) {
                 console.log(
-                  `[RuleEngine] Moved client ${targetClientId} to stage "${updatedClient.stage}" in process "${targetProcId}" via rule "${rule.name}"`
+                  `[RuleEngine] Moved client ${targetClientId}${result.instanceId ? ` (instance ${result.instanceId})` : ""} to stage "${result.stageName}" in process "${targetProcId}" via rule "${rule.name}"`
                 );
-                logStageMove({
-                  orgId: event.orgId || "default",
-                  recordType: "client",
-                  recordId: targetClientId,
-                  toStageId: act.params?.stageId || updatedClient.stage,
-                  toStageName: updatedClient.stage,
-                  processId: targetProcId,
-                  processName: act.params?.processName || "Patient Care Journey",
-                  cause: {
-                    type: "rule",
-                    ruleId: rule.id,
-                    ruleName: rule.name,
-                    eventId: event.id,
-                    eventName: event.event,
-                  },
-                });
               }
             }
           }
@@ -1011,28 +1102,10 @@ export async function executeRulesForEvent(
       movedToStageName: targetStage?.name,
     });
 
-    // 9. Cascade: Emit stage entry event if top level move happened
-    if (hasTopLevelMove && rule.action?.stageId) {
-      const nextVisited = new Set(visitedRules);
-      nextVisited.add(rule.id);
-
-      const enteredStageEvent: BusEvent = {
-        id: `evt-stg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        event: `${event.recordType}.entered_stage`,
-        recordType: event.recordType,
-        recordId: event.recordId,
-        orgId: event.orgId,
-        data: {
-          stageId: rule.action.stageId,
-          stageName: targetStage?.name,
-          processId: rule.action.processId,
-          causeRuleId: rule.id,
-        },
-        timestamp: new Date().toISOString(),
-      };
-
-      await executeRulesForEvent(enteredStageEvent, depth + 1, nextVisited);
-    }
+    // 9. Cascade: a stage move made by this rule has already emitted its single stage.entered event (via logStageMove),
+    // tagged with cause.chain {depth + 1, visited + this rule}. The bus subscriber below feeds that event back through
+    // executeRulesForEvent with the same chain, so the loop guard and MAX_CHAIN_DEPTH still bound the cascade.
+    // (A synthetic second entered_stage event used to be fired here, which made stage rules run twice.)
   }
 
   return results;
@@ -1044,10 +1117,9 @@ export function initializeRuleEngine() {
   if (isInitialized) return;
   isInitialized = true;
   eventBus.subscribeAll(async (event) => {
-    // Avoid re-processing internal cascaded entered_stage events if already handled
-    if (!event.data?.causeRuleId) {
-      await executeRulesForEvent(event);
-    }
+    // Rule-caused moves carry their loop-guard chain on the event; resume it so depth/visited survive the bus hop.
+    const chain: RuleChainContext | undefined = event.data?.chain;
+    await executeRulesForEvent(event, chain?.depth ?? 0, new Set(chain?.visited ?? []));
   });
 }
 

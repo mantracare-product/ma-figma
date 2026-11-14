@@ -1109,6 +1109,8 @@ export default function Deals() {
     fromStageName,
     toStageName,
     cause = "manual",
+    instanceId,
+    source,
   }: {
     clientId: string;
     clientName: string;
@@ -1116,6 +1118,9 @@ export default function Deals() {
     fromStageName?: string;
     toStageName: string;
     cause?: "manual" | "rule";
+    /** Process instance being moved (recordId of the stage event). */
+    instanceId?: string;
+    source?: { type: string; id: string; title?: string };
   }) => {
     const procObj = storedProcesses.find(
       (p) => p.name.trim().toLowerCase() === (processName || "").trim().toLowerCase() || p.id === processName
@@ -1132,13 +1137,16 @@ export default function Deals() {
     const moveResult = logStageMove({
       orgId: orgIdStr,
       recordType: (procObj?.entityType as any) || "client",
-      recordId: clientId || clientName,
+      recordId: instanceId || clientId || clientName,
       fromStageId: fromStageObj?.id,
       fromStageName: fromStageObj?.name || fromStageName,
       toStageId: toStageObj?.id || toStageName,
       toStageName: toStageObj?.name || toStageName,
       processId: procObj?.id || processName,
       processName: procObj?.name || processName,
+      instanceId,
+      clientId: clientId || undefined,
+      source,
       cause: {
         type: cause,
         ruleName: `Stage changed to ${toStageName} from /deals`,

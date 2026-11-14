@@ -15,7 +15,7 @@
  */
 
 import { eventBus } from "./eventBus";
-import { logStageMove, getStoredRules } from "./useAutomationStore";
+import { logStageMove, getStoredRules, type RuleChainContext } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, Payment } from "../app/types/invoiceTypes";
 import { addActivityEntry } from "./activityLog";
@@ -955,7 +955,11 @@ class InvoiceService {
   /**
    * Move invoice to a specific stage ID directly
    */
-  public moveToStage(invoiceId: string, stageId: string, cause?: { type: any; ruleName?: string }): ClientInvoice {
+  public moveToStage(
+    invoiceId: string,
+    stageId: string,
+    cause?: { type: any; ruleId?: string; ruleName?: string; eventId?: string; eventName?: string; chain?: RuleChainContext }
+  ): ClientInvoice {
     const all = this.getInvoices();
     const existing = all.find((i) => i.id === invoiceId);
     if (!existing) throw new Error(`[InvoiceService] Invoice ${invoiceId} not found.`);
@@ -984,27 +988,21 @@ class InvoiceService {
 
     this.saveInvoices(all.map((i) => (i.id === invoiceId ? updated : i)));
 
-    logStageMove({
-      orgId: "default",
-      recordType: "invoice",
-      recordId: invoiceId,
-      fromStageId: previousStageId,
-      toStageId: targetStage.id,
-      toStageName: targetStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
-    });
-
-    eventBus.emit("stage.entered", "invoice", invoiceId, {
-      ...updated,
-      fromStageId: previousStageId,
-      toStageId: targetStage.id,
-      stageId: targetStage.id,
-      stageName: targetStage.name,
-      processId: proc.id,
-      causeRuleId: cause?.type === "rule" ? cause.ruleName : undefined,
-    });
+    // ONE stage.entered (and one stage.exited) comes from logStageMove; the invoice rides along as recordData.
+    logStageMove(
+      {
+        orgId: "default",
+        recordType: "invoice",
+        recordId: invoiceId,
+        fromStageId: previousStageId,
+        toStageId: targetStage.id,
+        toStageName: targetStage.name,
+        processId: proc.id,
+        processName: proc.name,
+        cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
+      },
+      { recordData: { ...updated } }
+    );
 
     return updated;
   }

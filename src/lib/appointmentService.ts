@@ -14,7 +14,7 @@
  */
 
 import { eventBus } from "./eventBus";
-import { logStageMove, getStoredRules } from "./useAutomationStore";
+import { logStageMove, getStoredRules, type RuleChainContext } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
 import { appendActivity } from "./activityEngine";
@@ -1135,7 +1135,12 @@ class AppointmentService {
    * Check in an appointment
    * Updates status without hardcoding stage. Stage movement is driven by automations on appointment.checked_in.
    */
-  public checkInAppointment(id: number | string): Appointment {
+  /**
+   * Single owner of check-in events: emits appointment.checked_in and client.checked_in exactly once.
+   * Callers (kiosk, patient portal) must NOT emit those events themselves when an appointment is checked in;
+   * pass anything extra they used to put on the event (ticket number, phone, …) via `extraEventData`.
+   */
+  public checkInAppointment(id: number | string, extraEventData?: Record<string, any>): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
@@ -1148,12 +1153,13 @@ class AppointmentService {
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
 
-    eventBus.emit("appointment.checked_in", "appointment", String(id), updatedAppointment);
+    eventBus.emit("appointment.checked_in", "appointment", String(id), { ...updatedAppointment, ...(extraEventData || {}) });
 
     const targetClientId = (existing as any).clientId || (existing as any).patientId;
     if (targetClientId) {
       eventBus.emit("client.checked_in", "client", String(targetClientId), {
         ...updatedAppointment,
+        ...(extraEventData || {}),
         clientId: String(targetClientId),
       });
     }
@@ -1164,7 +1170,11 @@ class AppointmentService {
   /**
    * Move appointment to a specific stage ID directly
    */
-  public moveToStage(id: number | string, stageId: string, cause?: { type: any; ruleName?: string; processId?: string }): Appointment {
+  public moveToStage(
+    id: number | string,
+    stageId: string,
+    cause?: { type: any; ruleId?: string; ruleName?: string; eventId?: string; eventName?: string; chain?: RuleChainContext; processId?: string }
+  ): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
@@ -1219,27 +1229,22 @@ class AppointmentService {
       },
     });
 
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(id),
-      fromStageId: previousStageId,
-      toStageId: targetStage.id,
-      toStageName: targetStage.name,
-      processId: finalProcessId,
-      processName: targetProcess?.name || "Appointment Process",
-      cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
-    });
-
-    eventBus.emit("stage.entered", "appointment", String(id), {
-      ...updatedAppointment,
-      fromStageId: previousStageId,
-      toStageId: targetStage.id,
-      stageId: targetStage.id,
-      stageName: targetStage.name,
-      processId: finalProcessId,
-      causeRuleId: cause?.type === "rule" ? cause.ruleName : undefined,
-    });
+    // ONE stage.entered (and one stage.exited) is emitted by logStageMove; the appointment record rides along as recordData
+    // so rules can still evaluate its fields. (This used to be a second, separate eventBus.emit.)
+    logStageMove(
+      {
+        orgId: "default",
+        recordType: "appointment",
+        recordId: String(id),
+        fromStageId: previousStageId,
+        toStageId: targetStage.id,
+        toStageName: targetStage.name,
+        processId: finalProcessId,
+        processName: targetProcess?.name || "Appointment Process",
+        cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
+      },
+      { recordData: { ...updatedAppointment } }
+    );
 
     return updatedAppointment;
   }

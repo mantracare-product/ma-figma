@@ -1365,22 +1365,24 @@ export class MockMaClient implements IMaClient {
 
       // Emit check-in automation events across both client and appointment scopes
       try {
-        eventBus.emit('client.checked_in', 'client', patient.id, {
+        const checkinEventData = {
           clientId: patient.id,
           clientName: patient.name,
           clientPhone: patient.phone,
           appointmentId: apt?.id,
           ticketNumber: tokenLabel,
-        });
+        };
+        // appointmentService.checkInAppointment is the single owner of check-in events: with an appointment it emits
+        // appointment.checked_in + client.checked_in once. Only a client-only check-in emits client.checked_in here.
+        let appointmentCheckedIn = false;
         if (apt?.id) {
-          eventBus.emit('appointment.checked_in', 'appointment', apt.id, {
-            appointmentId: apt.id,
-            clientId: patient.id,
-            clientName: patient.name,
-          });
           try {
-            appointmentService.checkInAppointment(apt.id);
+            appointmentService.checkInAppointment(apt.id, checkinEventData);
+            appointmentCheckedIn = true;
           } catch {}
+        }
+        if (!appointmentCheckedIn) {
+          eventBus.emit('client.checked_in', 'client', patient.id, checkinEventData);
         }
       } catch (err) {
         console.warn('[MockMaClient] Failed to emit check-in events:', err);

@@ -802,13 +802,16 @@ export default function ProcessDetailDrawer({
     logStageMove({
       orgId: orgIdStr,
       recordType: (procObj?.entityType as any) || "client",
-      recordId: clientId || log.id,
+      recordId: (log as any).instanceId || clientId || log.id,
       fromStageId: fromStageObj?.id,
       fromStageName: fromStageObj?.name || currentStageName,
       toStageId: toStageObj?.id || targetStageName,
       toStageName: toStageObj?.name || targetStageName,
       processId: procObj?.id || log.process,
       processName: procObj?.name || log.process,
+      instanceId: (log as any).instanceId,
+      clientId: clientId || (log as any).clientId,
+      source: (log as any).source,
       cause: {
         type: "manual",
         ruleName: `Stage changed to ${targetStageName} in Process View`,

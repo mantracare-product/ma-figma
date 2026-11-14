@@ -73,21 +73,27 @@ export default function PatientCheckinScreen() {
         const { targetProcName, targetStageName } = getTargetStageAndProcess();
         moveClientToStage(target.id, targetStageName, targetProcName);
 
-        eventBus.emit("client.checked_in", "client", target.id, {
+        // appointmentService.checkInAppointment owns the check-in events (emitted once). A client with no appointment
+        // still emits client.checked_in directly.
+        const qrCheckinData = {
           clientId: target.id,
           clientName: target.name,
           clientPhone: target.phone,
-        });
-
+        };
+        let qrApptCheckedIn = false;
         try {
           const appts = appointmentService.getAppointments();
           const userAppt = appts.find(
             (a) => String(a.clientId) === String(target.id) || a.clientName === target.name
           );
           if (userAppt) {
-            appointmentService.checkInAppointment(userAppt.id);
+            appointmentService.checkInAppointment(userAppt.id, qrCheckinData);
+            qrApptCheckedIn = true;
           }
         } catch {}
+        if (!qrApptCheckedIn) {
+          eventBus.emit("client.checked_in", "client", target.id, qrCheckinData);
+        }
 
         const updatedClients = getStoredClients().map((c) =>
           c.id === target.id
@@ -128,23 +134,27 @@ export default function PatientCheckinScreen() {
       // 1. Move client to automation stage immediately in store and process logs
       moveClientToStage(activeClient.id, targetStageName, targetProcName);
 
-      // 2. Trigger automation pipeline on check-in
-      await eventBus.emit("client.checked_in", "client", activeClient.id, {
+      // 2 + 3. Trigger the check-in automation pipeline. appointmentService.checkInAppointment owns the check-in events
+      // (emitted once) when an appointment exists; a client with no appointment emits client.checked_in directly.
+      const checkinData = {
         clientId: activeClient.id,
         clientName: activeClient.name,
         clientPhone: activeClient.phone,
-      });
-
-      // 3. Mark appointment checked-in if exists
+      };
+      let apptCheckedIn = false;
       try {
         const appts = appointmentService.getAppointments();
         const userAppt = appts.find(
           (a) => String(a.clientId) === String(activeClient.id) || a.clientName === activeClient.name
         );
         if (userAppt) {
-          appointmentService.checkInAppointment(userAppt.id);
+          appointmentService.checkInAppointment(userAppt.id, checkinData);
+          apptCheckedIn = true;
         }
       } catch {}
+      if (!apptCheckedIn) {
+        await eventBus.emit("client.checked_in", "client", activeClient.id, checkinData);
+      }
 
       // 4. Update client record with Checked In status and timestamp
       const freshClients = getStoredClients();

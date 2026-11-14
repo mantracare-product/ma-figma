@@ -10,6 +10,13 @@ import { useState, useEffect } from "react";
 import { initialClients as canonicalClients, type Client } from "../data/canonicalClients";
 import { getStoredProcesses, DEMO_PATIENT_PORTAL_PROCESS_ID } from "./useProcessStore";
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+import {
+  getPrimaryInstance,
+  isActiveInstance,
+  updateProcessInstanceStage,
+  logInstanceStageMove,
+} from "./processLogsStore";
+import { logStageMove, type StageMove } from "./useAutomationStore";
 
 export type { Client };
 export const CLIENTS_STORE_EVENT = "clientsStore_updated";
@@ -313,7 +320,8 @@ export function deleteStoredClient(id: string): void {
 export function moveClientToStage(
   clientId: string,
   targetStageIdOrName: string,
-  processIdOrName?: string
+  processIdOrName?: string,
+  opts?: { cause?: StageMove["cause"] }
 ): Client | null {
   if (!clientId || !targetStageIdOrName) return null;
   const currentClients = getStoredClients();
@@ -329,7 +337,9 @@ export function moveClientToStage(
 
   // Dynamically resolve target process and stage name
   let targetProcessName = "Patient Care Journey";
+  let targetProcessId: string | undefined;
   let targetStageName = targetStageIdOrName;
+  const previousClientStage: string | undefined = client.stage;
 
   try {
     const allProcesses = getStoredProcesses();
@@ -343,6 +353,7 @@ export function moveClientToStage(
 
     if (targetProcess) {
       targetProcessName = targetProcess.name || "Patient Care Journey";
+      targetProcessId = targetProcess.id;
       if (Array.isArray(targetProcess.stages)) {
         const q = targetStageIdOrName.trim().toLowerCase();
         const matched = targetProcess.stages.find(
@@ -374,6 +385,34 @@ export function moveClientToStage(
 
   currentClients[index] = updatedClient;
   saveStoredClients(currentClients);
+
+  // Emit ONE stage move for this client-level move. If the client already has an active instance of the target
+  // process, mirror the stage onto that instance (after the client save above, so its mirror write is not
+  // overwritten) and log the move against the instance; otherwise log it against the client.
+  try {
+    const cause = opts?.cause || { type: "manual" as const };
+    const primary = getPrimaryInstance(updatedClient.id, targetProcessName, { warn: false });
+    if (primary && isActiveInstance(primary)) {
+      const fromName = primary.currentStage;
+      const moved = updateProcessInstanceStage(primary.instanceId || primary.id, targetStageName);
+      if (moved) logInstanceStageMove(moved, fromName, cause);
+    } else {
+      logStageMove({
+        orgId: "default",
+        recordType: "client",
+        recordId: updatedClient.id,
+        fromStageName: previousClientStage,
+        toStageId: "",
+        toStageName: targetStageName,
+        processId: targetProcessId || targetProcessName,
+        processName: targetProcessName,
+        clientId: updatedClient.id,
+        cause,
+      });
+    }
+  } catch (e) {
+    console.warn("[clientsStore] Failed to emit stage move for client move:", e);
+  }
 
   if (typeof window !== "undefined") {
     try {

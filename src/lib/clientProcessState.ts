@@ -1,3 +1,6 @@
+import { getPrimaryInstance } from "./processLogsStore";
+import { logStageMove } from "./useAutomationStore";
+
 export const CLIENTS_STORE_EVENT = "clientsStore_updated";
 
 function notifyClientsChanged() {
@@ -30,14 +33,38 @@ export function setClientProcessStage(clientId: string, entry: ClientProcessStag
   try {
     const raw = sessionStorage.getItem("clients");
     const clients = raw ? JSON.parse(raw) : [];
+    let previous: ClientProcessStage | undefined;
     const updated = clients.map((c: any) => {
       if (c.id !== clientId) return c;
       const existing: ClientProcessStage[] = c.processStages ?? [];
+      previous = existing.find((e) => e.processId === entry.processId);
       const withoutThisProcess = existing.filter((e) => e.processId !== entry.processId);
       return { ...c, processStages: [...withoutThisProcess, entry] };
     });
     sessionStorage.setItem("clients", JSON.stringify(updated));
     notifyClientsChanged();
+
+    // Emit ONE stage move (skipped when the stage did not change). Logged against the client's primary instance
+    // of this process when there is one, otherwise against the client.
+    const before = previous as ClientProcessStage | undefined;
+    if (!before || before.stageId !== entry.stageId) {
+      const primary = getPrimaryInstance(clientId, entry.processName, { warn: false });
+      logStageMove({
+        orgId: "default",
+        recordType: "client",
+        recordId: primary ? primary.instanceId || primary.id : clientId,
+        fromStageId: before?.stageId,
+        fromStageName: before?.stageName,
+        toStageId: entry.stageId,
+        toStageName: entry.stageName,
+        processId: entry.processId,
+        processName: entry.processName,
+        instanceId: primary ? primary.instanceId || primary.id : undefined,
+        clientId,
+        source: primary?.source,
+        cause: { type: "manual" },
+      });
+    }
   } catch {}
 }
 

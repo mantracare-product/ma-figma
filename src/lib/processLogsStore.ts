@@ -1,5 +1,6 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 import { getStoredProcesses } from "./useProcessStore";
+import { logStageMove, type StageMove } from "./useAutomationStore";
 
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
@@ -512,6 +513,40 @@ export function updateProcessInstanceStage(
     window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: updatedRow.clientId }));
   }
   return updatedRow;
+}
+
+/**
+ * Log and emit the stage move of a process instance: ONE stage.entered (and one stage.exited when there was a
+ * previous stage) with recordId = instanceId and data carrying instanceId / clientId / source / processId.
+ * Call it AFTER updateProcessInstanceStage / startProcessInstance. `fromStageName` undefined = new enrollment.
+ * Instance moves never write client.stage.
+ */
+export function logInstanceStageMove(
+  row: CallLog,
+  fromStageName: string | undefined,
+  cause: StageMove["cause"] = { type: "manual" },
+  extra?: { fromProcessId?: string; fromProcessName?: string; recordData?: Record<string, any> }
+): StageMove {
+  const processId = row.processId || resolveProcessId(row.process) || row.process;
+  return logStageMove(
+    {
+      orgId: "default",
+      recordType: "client",
+      recordId: row.instanceId || row.id,
+      fromStageName,
+      toStageId: "", // resolved from the stage name by logStageMove
+      toStageName: row.currentStage,
+      processId,
+      processName: row.process,
+      fromProcessId: extra?.fromProcessId,
+      fromProcessName: extra?.fromProcessName,
+      instanceId: row.instanceId || row.id,
+      clientId: row.clientId,
+      source: row.source,
+      cause,
+    },
+    { recordData: extra?.recordData }
+  );
 }
 
 const PROTECTED_INSTANCE_KEYS = ["id", "instanceId", "kind", "dedupeKey", "source"];

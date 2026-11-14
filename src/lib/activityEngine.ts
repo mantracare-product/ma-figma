@@ -22,6 +22,8 @@ export interface ActivityBase {
   seq?: number;              // Monotonic sequence number for tie-breaking timestamps
   processId?: string;
   processName?: string;
+  /** Process instance this entry belongs to (one client-in-process enrollment). */
+  instanceId?: string;
   clientId?: string;
   appointmentId?: string;
   invoiceId?: string;

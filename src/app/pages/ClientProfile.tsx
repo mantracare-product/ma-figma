@@ -32,7 +32,7 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import { getStoredCallLogs, getCallsOnly, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { getStoredCallLogs, getCallsOnly, getPrimaryInstance, logInstanceStageMove, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
@@ -1050,7 +1050,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
     const clientIdStr = String(client.id);
 
-    // 3. Create/update call log in processLogsStore
+    // 3. Create/update the process instance in processLogsStore, and emit ONE stage move for it
+    const instanceBefore = getPrimaryInstance(clientIdStr, procName, { warn: false });
     addProcessCallLog({
       clientId: clientIdStr,
       clientName: client.name,
@@ -1058,6 +1059,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       stageName: stageName,
     });
     updateProcessCallLogStage(clientIdStr, procName, stageName);
+    const instanceAfter = getPrimaryInstance(clientIdStr, procName, { warn: false });
+    if (instanceAfter && (!instanceBefore || instanceBefore.currentStage !== instanceAfter.currentStage)) {
+      logInstanceStageMove(instanceAfter, instanceBefore?.currentStage, {
+        type: "manual",
+        ruleName: `Process "${procName}" assigned`,
+      });
+    }
 
     // 4. Update Client in global Clients store and persistent storage
     const stored = getStoredClients();
