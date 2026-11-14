@@ -1,3 +1,4 @@
+import ScribeCodesPanel from "./ScribeCodesPanel";
 import React, { useState, useEffect, useRef } from "react";
 import {
   X,
@@ -215,7 +216,7 @@ export default function TranscriptDetailDrawer({
 
       // 3. Diagnosis
       primary_diagnosis: d.diagnosis || "Acute upper respiratory tract infection",
-      icd_code: "J06.9",
+      icd_code: d.icd10Code || "",
       diagnosis_type: "Acute",
       clinical_findings: "Mild fever, congested throat, no breathing difficulty. Bilateral air entry clear.",
 
@@ -519,6 +520,8 @@ export default function TranscriptDetailDrawer({
                 </p>
               </div>
             </div>
+
+            <ScribeCodesPanel session={session} />
 
             {/* Column 2: Transcription Speech Timeline */}
             <div className="space-y-5">

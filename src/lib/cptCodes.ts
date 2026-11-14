@@ -1,6 +1,6 @@
 export interface CPTCodeOption {
   code: string;
-  category: "Therapy & Mental Health" | "Evaluation & Management" | "Telehealth" | "Physical & Rehab" | "Dental" | "Diagnostics & Labs";
+  category: "Therapy & Mental Health" | "Evaluation & Management" | "Telehealth" | "Physical & Rehab" | "Dental" | "Diagnostics & Labs" | "Ophthalmology";
   description: string;
   typicalDuration?: number;
 }
@@ -53,6 +53,22 @@ export const COMMON_CPT_CODES: CPTCodeOption[] = [
   { code: "71045", category: "Diagnostics & Labs", description: "Radiologic Examination, Chest; Single View", typicalDuration: 15 },
   { code: "80053", category: "Diagnostics & Labs", description: "Comprehensive Metabolic Panel (CMP)", typicalDuration: 15 },
   { code: "85025", category: "Diagnostics & Labs", description: "Complete Blood Count (CBC) with Automated Differential", typicalDuration: 15 },
+
+  // Ophthalmology
+  { code: "92002", category: "Ophthalmology", description: "Ophthalmological services: new patient, intermediate exam", typicalDuration: 30 },
+  { code: "92004", category: "Ophthalmology", description: "Ophthalmological services: new patient, comprehensive exam", typicalDuration: 45 },
+  { code: "92012", category: "Ophthalmology", description: "Ophthalmological services: established patient, intermediate exam", typicalDuration: 20 },
+  { code: "92014", category: "Ophthalmology", description: "Ophthalmological services: established patient, comprehensive exam", typicalDuration: 30 },
+  { code: "92015", category: "Ophthalmology", description: "Determination of refractive state", typicalDuration: 15 },
+  { code: "92083", category: "Ophthalmology", description: "Visual field examination, extended (e.g. Humphrey)", typicalDuration: 20 },
+  { code: "92133", category: "Ophthalmology", description: "OCT of the optic nerve (scanning computerized ophthalmic imaging)", typicalDuration: 15 },
+  { code: "92134", category: "Ophthalmology", description: "OCT of the retina (scanning computerized ophthalmic imaging)", typicalDuration: 15 },
+  { code: "92225", category: "Ophthalmology", description: "Extended ophthalmoscopy with drawing, initial", typicalDuration: 15 },
+  { code: "92250", category: "Ophthalmology", description: "Fundus photography with interpretation", typicalDuration: 15 },
+  { code: "76514", category: "Ophthalmology", description: "Corneal pachymetry, unilateral or bilateral", typicalDuration: 10 },
+  { code: "66982", category: "Ophthalmology", description: "Cataract surgery, complex, with IOL insertion", typicalDuration: 60 },
+  { code: "66984", category: "Ophthalmology", description: "Cataract surgery with IOL insertion", typicalDuration: 45 },
+  { code: "67028", category: "Ophthalmology", description: "Intravitreal injection of a pharmacologic agent", typicalDuration: 20 },
 ];
 
 export function searchCPTCodes(query: string): CPTCodeOption[] {

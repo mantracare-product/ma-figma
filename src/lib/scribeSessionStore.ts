@@ -90,6 +90,8 @@ export interface ScribeSession {
   audioInputMode?: "live" | "upload";
   status: "recording" | "transcribed" | "extracted" | "completed" | "discarded";
   createdAt: number;
+  /** ICD/CPT codes accepted for billing (see scribeBilling.ts). */
+  codes?: import("./scribeBilling").ScribeCodes;
 }
 
 export interface PresetScenario {
