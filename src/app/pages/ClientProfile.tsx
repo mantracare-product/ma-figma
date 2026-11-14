@@ -32,6 +32,7 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
+import ClientInsuranceTab from "../components/profile/ClientInsuranceTab";
 import { getStoredCallLogs, getCallsOnly, getPrimaryInstance, getInstancesForClient, logInstanceStageMove, isProcessInstanceRow, startProcessInstance, updateProcessRowStage, appointmentInstanceTitle, CallLog, type ProcessInstanceSource, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
@@ -930,7 +931,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products" | "insurance">("overview");
 
   // Assign Process Multi-select & Stage state
   const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
@@ -2360,6 +2361,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "products" as const, label: "Product/Services" },
+                { id: "insurance" as const, label: "Insurance" },
               ] as const
             ).map((tab) => (
               <button
@@ -3765,6 +3767,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           )}
 
           {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
+          {activeProfileTab === "insurance" && client && <ClientInsuranceTab clientId={String(client.id)} />}
+
           {activeProfileTab === "products" && (() => {
             const assignedIds = new Set(clientProductList.map((p) => p.id));
             const unassignedServices = globalServiceList.filter(
