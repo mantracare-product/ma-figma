@@ -81,7 +81,7 @@ Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.t
 - NOT RUN (browser): Receive ERA button, Statement column + drawer, portal statement block, payment plan creation UI, Process-page stage editing for the new invoice stages.
 ## Slice 6 - Overview row, reports, permission wiring, polish
 - [x] S6.1 Overview RCM row (queue counts from Task views + KPIs, gated by rcmReports; links open Tasks with ?view=) AND S6.2 report sources (claims, denials, payments, ar_aging, eligibility; offered in the report builder only with rcmReports) -- done in ONE commit (see git log "S6.1+S6.2")
-- [ ] S6.3 A11/A12 (Set E2) + per-event notification toggles
+- [x] S6.3 A11/A12 (Set E2) + per-event notification toggles -- done (git log "S6.3"). Added recordAuthDecision (manual approval/denial, UI on the appointment Coverage tab) because the mock prior-auth request never decides on its own; A11 fires on approved authorizations. Notification toggles live in Billing setup > Notifications (default all on).
 - [ ] S6.4 Voice callPurpose + mock call result into an instance
 - [ ] S6.5 hasPermission wiring + audit entries + Mock data banner
 

@@ -18,11 +18,12 @@ import {
   type ProviderCredential,
   type ScrubRule,
 } from "../../../lib/billingSetupStore";
+import { KNOWN_RCM_NOTIFICATIONS, RCM_NOTIFICATION_EVENT, isRcmNotificationEnabled, setRcmNotificationEnabled } from "../../../lib/rcmNotificationSettings";
 import { newId } from "../../../lib/refStore";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
 import { ELIGIBILITY_SETTINGS_EVENT, getMockScenario, setMockScenario, type MockScenario } from "../../../lib/eligibility";
 
-type Section = "entity" | "locations" | "payers" | "fees" | "defaults" | "scrub" | "providers";
+type Section = "entity" | "locations" | "payers" | "fees" | "defaults" | "scrub" | "providers" | "notifications";
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: "entity", label: "Billing entity" },
@@ -32,6 +33,7 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: "defaults", label: "Claim defaults" },
   { id: "scrub", label: "Scrub rules" },
   { id: "providers", label: "Provider credentials" },
+  { id: "notifications", label: "Notifications" },
 ];
 
 const inputCls = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white disabled:bg-slate-50 disabled:text-slate-500";
@@ -172,6 +174,26 @@ function MockScenarioPicker({ canEdit }: { canEdit: boolean }) {
       <select className={inputCls + " max-w-xs"} disabled={!canEdit} value={getMockScenario()} onChange={(e) => setMockScenario(e.target.value as MockScenario)}>
         {SCENARIOS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
       </select>
+    </div>
+  );
+}
+
+function NotificationsSection({ canEdit }: { canEdit: boolean }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener(RCM_NOTIFICATION_EVENT, bump);
+    return () => window.removeEventListener(RCM_NOTIFICATION_EVENT, bump);
+  }, []);
+  return (
+    <div className="space-y-2 max-w-2xl">
+      <p className="text-xs text-slate-500">Switch off the automation notifications you do not want. Everything is on by default.</p>
+      {KNOWN_RCM_NOTIFICATIONS.map((n) => (
+        <label key={n.key} className="flex items-center gap-2 text-sm">
+          <input type="checkbox" disabled={!canEdit} checked={isRcmNotificationEnabled(n.key)} onChange={(e) => setRcmNotificationEnabled(n.key, e.target.checked)} />
+          {n.label}
+        </label>
+      ))}
     </div>
   );
 }
@@ -317,6 +339,7 @@ export default function BillingSetupTab() {
         {section === "defaults" && <DefaultsSection canEdit={canEdit} />}
         {section === "scrub" && <ScrubSection canEdit={canEdit} />}
         {section === "providers" && <ProvidersSection canEdit={canEdit} />}
+        {section === "notifications" && <NotificationsSection canEdit={canEdit} />}
       </div>
     </div>
   );

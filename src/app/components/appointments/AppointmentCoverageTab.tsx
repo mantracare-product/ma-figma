@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { Appointment } from "../../../lib/appointmentService";
 import { readLocalRecordFields } from "../../../lib/recordWriter";
 import { verifyAppointmentNow } from "../../../lib/verifyNow";
+import { recordAuthDecision } from "../../../lib/authActions";
 import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import CoverageChip from "./CoverageChip";
 
@@ -22,6 +23,9 @@ const ROWS: Array<[string, string]> = [
 export default function AppointmentCoverageTab({ appointment }: { appointment: Appointment }) {
   const { hasPermission } = useCurrentPermissions();
   const canVerify = hasPermission("eligibility", "add");
+  const canDecide = hasPermission("priorAuth", "edit");
+  const [authNo, setAuthNo] = useState("");
+  const [authUnits, setAuthUnits] = useState("");
   const [, setTick] = useState(0);
   const values = readLocalRecordFields("appointment", appointment.id);
 
@@ -60,6 +64,20 @@ export default function AppointmentCoverageTab({ appointment }: { appointment: A
           </div>
         ))}
       </dl>
+      {String(values.auth_status) === "requested" && (
+        <div className="rounded-xl border border-slate-200 p-3 space-y-2" data-testid="auth-decision">
+          <div className="text-xs font-semibold text-slate-700">Record the payer's authorization decision</div>
+          <div className="flex flex-wrap gap-2">
+            <input className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg" placeholder="Authorization #" value={authNo} onChange={(e) => setAuthNo(e.target.value)} />
+            <input className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg w-24" type="number" placeholder="Units" value={authUnits} onChange={(e) => setAuthUnits(e.target.value)} />
+            {(["approved", "denied"] as const).map((d) => (
+              <button key={d} type="button" disabled={!canDecide} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50" onClick={() => {
+                try { recordAuthDecision({ instanceId: appointment.coverage?.instanceId, appointmentId: String(appointment.id), decision: d, authNumber: authNo || undefined, unitsApproved: authUnits ? Number(authUnits) : undefined }); toast.success(`Authorization ${d}`); setTick((t) => t + 1); } catch (e: any) { toast.error(String(e?.message || e)); }
+              }}>{d === "approved" ? "Approve" : "Deny"}</button>
+            ))}
+          </div>
+        </div>
+      )}
       {appointment.coverage?.instanceId && <p className="text-xs text-slate-500">Process instance: {appointment.coverage.instanceId}</p>}
     </div>
   );

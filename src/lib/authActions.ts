@@ -172,7 +172,8 @@ registerActionRetryHandler("request_prior_auth", (run) => performRequestAuth(run
 function buildInput(rule: AutomationRule, params: Record<string, any>, event: BusEvent, cause: StageMove["cause"]): { input: AuthStepInput; ctx: RecordContext } {
   void rule;
   const ctx = resolveRecordContext(event);
-  const serviceDate = ctx.appointment?.date || todayStr();
+  // renew: the new authorization period starts today (so it is a different request from the original).
+  const serviceDate = params.renew ? todayStr() : ctx.appointment?.date || todayStr();
   const serviceId = params.serviceId ?? ctx.appointment?.serviceId;
   const svc = serviceId !== undefined ? getStoredServices().find((s) => String(s.id) === String(serviceId)) : undefined;
   const payerId = params.payerId || (ctx.clientId ? getCoverageOn(ctx.clientId, serviceDate, "primary")?.payerId : undefined);
@@ -213,4 +214,46 @@ export function executeAuthStep(args: {
     if (!input.clientId) throw new Error(`${actionKey}: cannot resolve a client from ${event.recordType} ${event.recordId}`);
     return (kind === "check" ? performCheckAuth(input) : performRequestAuth(input)) as any;
   });
+}
+
+// ── Authorization decision (manual) ────────────────────────────────────────────────────────────────
+
+export interface AuthDecisionInput {
+  /** Process instance and/or appointment to record it on (at least one). */
+  instanceId?: string;
+  appointmentId?: string;
+  decision: "approved" | "denied";
+  authNumber?: string;
+  unitsApproved?: number;
+  /** Optional instance stage to move to (name or id), e.g. the stage that means "cleared". */
+  stage?: string;
+}
+
+/** Record the payer's decision on a prior-auth request (the mock request never decides on its own). */
+export function recordAuthDecision(input: AuthDecisionInput): { instanceId?: string; appointmentId?: string; stageMoved?: string } {
+  const instance = input.instanceId ? getProcessInstanceById(input.instanceId) : undefined;
+  if (!instance && !input.appointmentId) throw new Error("recordAuthDecision: no record to write to");
+  const fields: Record<string, any> = {
+    auth_status: input.decision,
+    auth_decided_at: todayStr(),
+    ...(input.authNumber ? { auth_number: input.authNumber } : {}),
+    ...(input.unitsApproved !== undefined ? { auth_units_approved: input.unitsApproved } : {}),
+  };
+  const out: { instanceId?: string; appointmentId?: string; stageMoved?: string } = {};
+  if (instance) {
+    const id = instance.instanceId || instance.id;
+    const w = writeRecordFields({ type: "process_instance", id }, {
+      ...fields,
+      ...appendHistory(id, { checkedAt: new Date().toISOString(), trigger: "manual.auth_decision", source: "prior_auth_decision", status: `auth_${input.decision}`, reasonCode: "", summary: `Authorization ${input.decision}${input.authNumber ? ` (${input.authNumber})` : ""}`, sourceRecord: input.appointmentId ? `appointment:${input.appointmentId}` : "", rawRef: "" }),
+    });
+    if (!w.ok) throw new Error(w.error);
+    out.instanceId = id;
+    out.stageMoved = moveInstance(id, input.stage, { type: "manual" });
+  }
+  if (input.appointmentId) {
+    const w = writeRecordFields({ type: "appointment", id: input.appointmentId }, fields);
+    if (!w.ok) throw new Error(w.error);
+    out.appointmentId = input.appointmentId;
+  }
+  return out;
 }

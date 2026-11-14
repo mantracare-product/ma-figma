@@ -7,6 +7,7 @@
  * there is no template), requireConsent (default true for sms / whatsapp), variables (extra {{...}} values).
  * Idempotency: recordId : template : ruleId : eventId.
  */
+import { isRcmNotificationEnabled } from "./rcmNotificationSettings";
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule } from "./useAutomationStore";
 import { resolveRecordContext } from "./recordContext";
@@ -162,6 +163,11 @@ export function executeNotifyStep(args: { rule: AutomationRule; stepId?: string;
   const scope = buildMessageScope(event);
   const message = String(renderTemplate(params.message || rule.name, scope));
   const key = actionIdempotencyKey("notify", event.recordId, rule.id, event.id, stepId);
+  // Per-event toggle: an RCM notification switched off in Billing setup does nothing.
+  const eventKey = String(params.eventKey || rule.id);
+  if (!isRcmNotificationEnabled(eventKey)) {
+    return runActionOnce(key, { actionKey: "notify", ruleId: rule.id, ruleName: rule.name, stepId }, () => ({ notified: false, disabled: true }) as any);
+  }
   // notify is best effort: failures are swallowed (spec: "ignored on failure")
   return runActionOnce(key, { actionKey: "notify", ruleId: rule.id, ruleName: rule.name, stepId }, () => {
     try {

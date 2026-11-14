@@ -71,6 +71,16 @@ registerDailyJob("instance_visit_countdown", (now) => {
         elig_status: row.elig_status,
         auth_status: row.auth_status,
         auth_valid_to: row.auth_valid_to,
+        auth_units_approved: row.auth_units_approved,
+        auth_units_used: row.auth_units_used,
+        daysToAuthExpiry: row.auth_valid_to ? daysBetween(today, String(row.auth_valid_to)) : 9999,
+        authUnitsPct: Number(row.auth_units_approved) > 0 ? Math.round((Number(row.auth_units_used || 0) / Number(row.auth_units_approved)) * 100) : 0,
+        // true when an approved authorization is close to running out (14 days or 80% of units)
+        authRenewalDue: String(
+          row.auth_status === "approved" &&
+            ((row.auth_valid_to ? daysBetween(today, String(row.auth_valid_to)) <= 14 : false) ||
+              (Number(row.auth_units_approved) > 0 && Number(row.auth_units_used || 0) / Number(row.auth_units_approved) >= 0.8))
+        ),
       },
     });
   }
