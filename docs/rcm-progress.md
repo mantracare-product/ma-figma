@@ -26,7 +26,7 @@ Demo script (tests only; no browser run):
 - [x] S3.3 check_auth_required + request_prior_auth + priorAuthRulesStore + Payers rules table -- done (see git log "S3.3"). create_task gained linkTo=instance_if_present; Service.requiresAuthDefault added.
 - [x] S3.4 Appointment coverage chip, detail Coverage tab, Schedule drawer Coverage + Verify now -- done (git log "S3.4"). Schedule drawer Verify now is a preview (nothing written) because no appointment exists yet; the detail Coverage tab Verify now writes.
 - [x] S3.5 Sample process + Set E rules + Run daily jobs now -- done (git log "S3.5"). getStoredRules legacy check-in filter now exempts sample-tagged rules (A13 needs it). Deals instance-card polish: nothing further needed (cards per instance exist from Slice 1). A7 start_call and A5/A9 send_message are inert until S5.4/S3.6.
-- [ ] S3.6 send_message/notify mock + 4 templates + variables
+- [x] S3.6 send_message/notify mock + 4 templates + variables -- done (git log "S3.6"). send_message dispatches into the whatsappMockConversations store + activity; consent = client.consents.sms (sms/whatsapp). notify = in-app notification (type process).
 - [ ] S3.7 Front-desk Check-in button + kiosk insurance/copay steps
 
 ## Slice 4 - Visit to claim

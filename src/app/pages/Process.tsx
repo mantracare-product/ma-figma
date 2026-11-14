@@ -968,6 +968,8 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "create_task": ["stage", "inchat", "postcall"],
   "run_eligibility": ["stage", "inchat", "postcall"],
   "check_auth_required": ["stage", "inchat", "postcall"],
+  "send_message": ["stage", "incall", "inchat", "postcall"],
+  "notify": ["stage", "incall", "inchat", "postcall"],
   "request_prior_auth": ["stage", "inchat", "postcall"],
   "send_payment": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],

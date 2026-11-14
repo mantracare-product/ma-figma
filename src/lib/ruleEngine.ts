@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
 import { computeDerivedFields, derivedFieldsNeeded } from "./ruleContextFields";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
 import { executeAuthStep, isCheckAuthStep, isRequestAuthStep } from "./authActions";
@@ -724,6 +725,15 @@ export async function executeRulesForEvent(
       if (isRunEligibilityStep(stepKey)) {
         const run = executeRunEligibilityStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
         if (run.status === "failed") console.warn(`[RuleEngine] run_eligibility failed in rule "${rule.name}": ${run.error}`);
+      }
+
+      // Actions: Send Message (mock dispatch to Chats) / Notify (in-app)
+      if (isSendMessageStep(stepKey)) {
+        const run = executeSendMessageStep({ rule, stepId: act.id, params: act.params || {}, event });
+        if (run.status === "failed") console.warn(`[RuleEngine] send_message failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (isNotifyStep(stepKey)) {
+        executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
       }
 
       // Action: Create Task (work-queue task linked to the triggering record; auto-closes on stage exit)

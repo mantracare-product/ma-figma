@@ -4036,6 +4036,28 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "send_message" || stepKey === "send-message") && (
+              <div className="space-y-4">
+                <p className="text-xs text-amber-700">Mock data: the message is added to the client's conversation in Chats; nothing is actually sent.</p>
+                {renderField("Channel", (
+                  <select value={params.channel || "sms"} onChange={(e) => onChange({ channel: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                    <option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option>
+                  </select>
+                ))}
+                {renderField("Template id (Settings sample templates)", <input value={params.template || ""} onChange={(e) => onChange({ template: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Or inline text ({{client.name}}, {{insurance.copay}}, {{billing.payment_link}} ...)", <textarea value={params.body || ""} onChange={(e) => onChange({ body: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" rows={3} />)}
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={params.requireConsent !== false} onChange={(e) => onChange({ requireConsent: e.target.checked })} /> Require the client's SMS consent</label>
+              </div>
+            )}
+
+            {stepKey === "notify" && (
+              <div className="space-y-4">
+                {renderField("Title", <input value={params.title || ""} onChange={(e) => onChange({ title: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Message", <textarea value={params.message || ""} onChange={(e) => onChange({ message: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" rows={3} />)}
+                {renderField("Link (optional)", <input value={params.link || ""} onChange={(e) => onChange({ link: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+              </div>
+            )}
+
             {(stepKey === "check_auth_required" || stepKey === "request_prior_auth") && (
               <div className="space-y-4">
                 <p className="text-xs text-slate-600">Uses the payer x service rules in Billing setup &gt; Payers. Writes to the existing instance and the appointment; it never creates an instance.</p>

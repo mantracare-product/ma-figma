@@ -136,6 +136,6 @@ registerSampleRuleSet({
   id: "E",
   label: "Eligibility and prior auth (A1-A10, A13)",
   description: "Eligibility checks, prior authorization and the related queue tasks",
-  requires: ["billing-setup", "coverages", "task-views", "rcm-fields", "coverage-process", "prior-auth-rules"],
+  requires: ["billing-setup", "coverages", "task-views", "rcm-fields", "coverage-process", "prior-auth-rules", "message-templates"],
   rules: buildSetERules,
 });
