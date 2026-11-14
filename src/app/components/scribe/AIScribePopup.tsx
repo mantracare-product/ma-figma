@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Mic,
   Square,
@@ -211,7 +211,10 @@ export default function AIScribePopup({
         }
       } else if (user?.name) {
         setSelectedAttendeeName(user.name);
-        setSelectedAttendeeId(String(user.id || teamMembers[0]?.id || "member-1"));
+        const matchUser = teamMembers.find(
+          (m) => m.name.toLowerCase().trim() === user.name.toLowerCase().trim()
+        );
+        setSelectedAttendeeId(String(matchUser?.id || teamMembers[0]?.id || "member-1"));
       } else if (teamMembers.length > 0) {
         setSelectedAttendeeId(String(teamMembers[0].id));
         setSelectedAttendeeName(teamMembers[0].name);
