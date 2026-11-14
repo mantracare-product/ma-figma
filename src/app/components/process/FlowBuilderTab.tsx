@@ -173,6 +173,7 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "send-sms": "sms",
   "send-whatsapp": "whatsapp",
   "assign-process": "assign_process",
+  // TODO(rcm): start_process has no dedicated canvas NodeType yet; it is added via the step catalog and renders as a generic step.
   "field-update": "fieldupdate",
   "assign-responsible": "assignhuman",
   "move-stage": "stagemovement",

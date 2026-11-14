@@ -26,6 +26,7 @@ import {
 } from "./processLogsStore";
 import { getStoredClaims, moveClaimToStage } from "./claimsStore";
 import type { RuleChainContext, StageMove } from "./useAutomationStore";
+import { executeStartProcessStep, isStartProcessStep } from "./startProcessAction";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -698,6 +699,22 @@ export async function executeRulesForEvent(
               }
             }
           }
+        }
+      }
+
+      // Action: Start Process (new instance for the client; idempotent per rule step + triggering record)
+      if (isStartProcessStep(stepKey)) {
+        const run = executeStartProcessStep({
+          rule,
+          stepId: act.id,
+          params: act.params || {},
+          event,
+          cause: ruleCause(rule, event, depth, visitedRules),
+        });
+        if (run.status === "failed") {
+          console.warn(`[RuleEngine] start_process failed in rule "${rule.name}": ${run.error} (retry from the action run log)`);
+        } else if (!run.alreadyRan) {
+          console.log(`[RuleEngine] start_process via rule "${rule.name}"`, run.result);
         }
       }
 

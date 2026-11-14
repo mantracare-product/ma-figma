@@ -91,6 +91,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   send_payment: ["stage", "incall", "inchat", "postcall"],
   processmovement: ["stage", "inchat", "postcall"],
   assign_process: ["stage", "inchat", "postcall"],
+  start_process: ["stage", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],

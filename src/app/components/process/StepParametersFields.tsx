@@ -4020,7 +4020,7 @@ export default function StepParametersFields({
             )}
 
             {/* ASSIGN PROCESS ACTION STEP */}
-            {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process") && (() => {
+            {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process" || stepKey === "start_process" || stepKey === "start-process") && (() => {
               const clientProcesses = effectiveProcesses.filter(
                 (p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes"
               );
