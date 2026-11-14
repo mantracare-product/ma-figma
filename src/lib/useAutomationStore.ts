@@ -77,6 +77,12 @@ export interface AutomationRule {
   action: AutomationAction;
   actions?: WorkflowStep[];
   enabled: boolean;
+  /**
+   * Run order among rules matching the SAME event: ascending, default DEFAULT_RULE_ORDER (100); ties are broken by
+   * creation time (older first). Dependent rules set it explicitly (e.g. one rule that creates a record = 10, the rule
+   * that needs that record = 20). TODO(rcm): there is no UI to edit `order` yet (it can be set in rule data / seeds).
+   */
+  order?: number;
   graph?: {
     nodes: AutomationGraphNode[];
     edges: AutomationGraphEdge[];
@@ -94,6 +100,19 @@ export interface AutomationRule {
   source?: "product" | "custom" | "template";
   createdAt: string;
   updatedAt: string;
+}
+
+export const DEFAULT_RULE_ORDER = 100;
+
+/** Comparator for running the rules that match one event: ascending `order`, ties by creation time (older first). */
+export function compareRulesByOrder(a: AutomationRule, b: AutomationRule): number {
+  const orderOf = (r: AutomationRule) =>
+    typeof r.order === "number" && Number.isFinite(r.order) ? r.order : DEFAULT_RULE_ORDER;
+  const createdOf = (r: AutomationRule) => {
+    const t = Date.parse(r.createdAt || "");
+    return Number.isFinite(t) ? t : 0;
+  };
+  return orderOf(a) - orderOf(b) || createdOf(a) - createdOf(b);
 }
 
 /**

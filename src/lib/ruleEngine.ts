@@ -6,6 +6,7 @@ import {
   saveStoredRules,
   logStageMove,
   validateRuleEntityTarget,
+  compareRulesByOrder,
 } from "./useAutomationStore";
 import { getStoredProcesses, Process } from "./useProcessStore";
 import { appointmentService } from "./appointmentService";
@@ -315,6 +316,11 @@ export async function executeRulesForEvent(
 
     return true;
   });
+
+  // Rules matching one event run in a defined order: ascending `order` (default 100), ties by creation time. Each
+  // rule's whole action chain completes (is awaited) before the next rule starts, so a later rule can rely on what an
+  // earlier one did. (Before this, rules ran in stored-array order, i.e. newest-created first, with no explicit order.)
+  matchingRules.sort(compareRulesByOrder);
 
   const results: RuleExecutionResult[] = [];
   const processes = getStoredProcesses();
