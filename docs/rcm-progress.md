@@ -83,7 +83,19 @@ Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.t
 - [x] S6.1 Overview RCM row (queue counts from Task views + KPIs, gated by rcmReports; links open Tasks with ?view=) AND S6.2 report sources (claims, denials, payments, ar_aging, eligibility; offered in the report builder only with rcmReports) -- done in ONE commit (see git log "S6.1+S6.2")
 - [x] S6.3 A11/A12 (Set E2) + per-event notification toggles -- done (git log "S6.3"). Added recordAuthDecision (manual approval/denial, UI on the appointment Coverage tab) because the mock prior-auth request never decides on its own; A11 fires on approved authorizations. Notification toggles live in Billing setup > Notifications (default all on).
 - [x] S6.4 Voice callPurpose + mock call result into an instance -- done (git log "S6.4"). callPurpose added to CallTriggerSettings (type only: TODO(rcm) no stage voice-settings UI); the start_call step has the purpose + result stage; voice toggle is in Billing setup > Notifications; call result is accepted from the appointment Coverage tab.
-- [ ] S6.5 hasPermission wiring + audit entries + Mock data banner
+- [x] S6.5 hasPermission wiring + audit entries + Mock data banner -- done (git log "S6.5"). hasPermission wired: Billing setup (route + edit), Verify now (eligibility add), authorization decisions (priorAuth edit), accept call result (eligibility add), Sign and send to billing (claims add), Receive ERA (rcmPayments add), Claims create (claims add) / export (claims export) / stage moves (claims edit; denied claims need denials edit), Overview row + RCM report sources (rcmReports read). Audit module RCM added; Mock data banner on Claims, plus mock labels on Billing setup, Coverage tab, schedule Coverage, statement link, Overview row.
+
+### Slice 6 gate
+Commits: 5460838 (6.1+6.2), e0086dc (6.3), 184d103 (6.4), S6.5 (this commit).
+Status: tsc OK; vitest 217 passed, 13 failed (the same 13 baseline failures as before this run; no new failures); build OK.
+Demo script (tests: rcmReports.test.ts, rcmSetE2.test.ts, voiceBenefits.test.ts, rcmAudit.test.ts; no browser run):
+- PASS Overview numbers: queue counts per Task saved view (open, overdue, amount at stake) and KPIs (denial rate, A/R, days in A/R, first-pass, eligibility verified rate); the row component renders nothing without rcmReports.
+- PASS Reports: denial rate by payer = average of the 1/0 `denied` field on the claims source; denials, payments, ar_aging (aging buckets), eligibility sources return rows from the stores.
+- PASS Prior auth renewal (Set E2 / A11): an approved authorization expiring within 14 days (or at 80% of units) is renewed by the daily job (new request starting today) and a Prior auth task is queued; A12 notifies when the visit is 2 days away and the authorization is still only requested; the per-event toggle silences it.
+- PASS Voice: with voice on, an Inconclusive instance gets a mock payer call whose benefits land as Pending review; accepting makes them the verified result on the instance and appointment; with voice off the Benefits to verify task is created instead (A8).
+- PASS Audit entries for manual claim moves (not rule moves), coverage changes, authorization decisions, ERA receipt/posting, payment plans, scribe signing, Verify now, call-result acceptance; an audit failure never blocks the action.
+- PASS Sample roles open exactly the areas they were given (hasPermission); denied/missing keys are denied.
+- NOT RUN (browser): Overview row layout, Tasks ?view= link, report builder RCM source cards, Claims page permission states (disabled export/create), Billing setup Notifications/Voice toggle, Coverage tab call-result and authorization-decision panels.
 
 ## Decisions
 - S5.1: post_remittance matches ERA lines to claims by claim number, then tracking id / payer claim number; a fully accounted-for claim (paid + patient responsibility + contractual) counts as paid.
@@ -100,6 +112,8 @@ Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.t
 - S2.5: queue views bypass the My tasks / Tasks by me tab (queues are cross-user work lists).
 
 ## TODO(rcm)
+- Stage-level voice settings UI does not expose callPurpose yet (type + start_call step only).
+- Appeal drafts have no accept/reject UI (stored as proposed on the claim).
 - Payment-plan installments are not marked paid when payments arrive; no reminders from the plan schedule.
 - No UI for the mock clearinghouse / ERA scenarios beyond the Receive ERA button.
 - Claims board is a compact ClaimBoard, not an extracted shared PipelineBoard.

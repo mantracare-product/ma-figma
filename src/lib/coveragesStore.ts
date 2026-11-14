@@ -2,6 +2,7 @@
  * Client coverages (Slice 2, item 2.4): the insurance reference table for each client, plus typed demographics.
  * Saving or removing a coverage emits `coverage.updated` (trigger for eligibility re-checks, sample rule A3).
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { createListStore, newId, seedMissing } from "./refStore";
 import { eventBus } from "./eventBus";
 import { getStoredClients, saveStoredClients } from "./clientsStore";
@@ -81,6 +82,7 @@ export function saveCoverage(input: Omit<Coverage, "id"> & { id?: string }): Sav
     }
   }
   coveragesStore.save([...list, coverage]);
+  recordRcmAudit({ action: input.id ? "updated" : "created", entityType: "coverage", entityId: coverage.id, summary: `${input.id ? "Updated" : "Added"} ${coverage.priority} coverage for client ${coverage.clientId}` });
   void eventBus.emit("coverage.updated", "client", coverage.clientId, { clientId: coverage.clientId, coverageId: coverage.id });
   return { coverage, demoted };
 }

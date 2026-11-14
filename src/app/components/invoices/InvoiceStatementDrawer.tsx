@@ -30,7 +30,7 @@ export default function InvoiceStatementDrawer({ invoiceId, onClose }: { invoice
           <dt className="text-slate-500">Paid by patient</dt><dd className="text-right">{fmt(s.amountPaid)}</dd>
           <dt className="font-semibold">Balance</dt><dd className="text-right font-semibold">{fmt(s.balance)}</dd>
         </dl>
-        {s.paymentLink && <p className="text-xs break-all text-blue-700">{s.paymentLink}</p>}
+        {s.paymentLink && <p className="text-xs break-all text-blue-700">{s.paymentLink} <span className="text-amber-700">(mock payment link)</span></p>}
 
         <div className="rounded-xl border border-slate-200 p-3 space-y-2">
           <div className="text-sm font-semibold">Payment plan</div>

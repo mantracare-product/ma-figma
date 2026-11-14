@@ -6,6 +6,7 @@
  *
  * A claim can change workflow (moveToWorkflow, used by the move_to_workflow action): it keeps all its field values.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { getStoredClaims, saveClaim, type Claim } from "./claimsStore";
 import { claimStatusForStage, findStage, getClaimWorkflow, getClaimWorkflows, initialStageOf } from "./claimWorkflows";
 import { logStageMove, type StageMove } from "./useAutomationStore";
@@ -51,6 +52,7 @@ function move(claimId: string, workflowId: string | undefined, stageRef: string 
     updatedAt: new Date().toISOString(),
   };
   saveClaim(updated);
+  if (cause?.type === "manual") recordRcmAudit({ action: "updated", entityType: "claim", entityId: claim.id, targetName: claim.claimNumber, summary: `Moved claim ${claim.claimNumber} to ${stage.name}${sameWorkflow ? "" : ` (${toWorkflow.name})`}`, before: { stage: fromStage?.name }, after: { stage: stage.name } });
 
   logStageMove(
     {

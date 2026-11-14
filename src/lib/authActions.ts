@@ -10,6 +10,7 @@
  * instance only. Prior-auth requests are MOCK (no payer portal call): the request is recorded as Authorization
  * fields plus a history row.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { resolveRecordContext, type RecordContext } from "./recordContext";
@@ -233,6 +234,7 @@ export interface AuthDecisionInput {
 export function recordAuthDecision(input: AuthDecisionInput): { instanceId?: string; appointmentId?: string; stageMoved?: string } {
   const instance = input.instanceId ? getProcessInstanceById(input.instanceId) : undefined;
   if (!instance && !input.appointmentId) throw new Error("recordAuthDecision: no record to write to");
+  recordRcmAudit({ action: "updated", entityType: "authorization", entityId: String(input.appointmentId || input.instanceId), summary: `Authorization ${input.decision}${input.authNumber ? ` (${input.authNumber})` : ""}`, after: { decision: input.decision, authNumber: input.authNumber, unitsApproved: input.unitsApproved } });
   const fields: Record<string, any> = {
     auth_status: input.decision,
     auth_decided_at: todayStr(),

@@ -4,6 +4,7 @@
  * row) and the instance moves to the configured review stage. A person then accepts the result (acceptCallResult),
  * which turns it into a verified eligibility result on the instance and the appointment.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { getProcessInstanceById, logInstanceStageMove, updateProcessInstanceStage } from "./processLogsStore";
 import { writeRecordFields } from "./recordWriter";
 import { getCoverageOn } from "./coveragesStore";
@@ -71,6 +72,7 @@ export function acceptCallResult(input: { instanceId: string; stage?: string; ca
   const inst: any = getProcessInstanceById(input.instanceId);
   if (!inst) throw new Error(`Instance ${input.instanceId} not found`);
   if (inst.elig_status !== "pending_review") throw new Error("There is no call result waiting for review on this instance");
+  recordRcmAudit({ action: "updated", entityType: "process_instance", entityId: input.instanceId, summary: "Accepted the phone call benefits result", after: { elig_status: "active" } });
   const now = new Date().toISOString();
   const w = writeRecordFields(
     { type: "process_instance", id: input.instanceId },

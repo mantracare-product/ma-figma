@@ -1,3 +1,4 @@
+import MockDataBanner from "../components/common/MockDataBanner";
 import { receiveMockEra } from "../../lib/eraStore";
 import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
@@ -141,6 +142,12 @@ export default function Claims() {
   const handleStageChange = (claimId: string, stageId: string, stageName?: string) => {
     const target = claims.find((c) => c.id === claimId);
     if (!target) return;
+    // Moving a claim needs claims "edit"; moving a denied claim (denial & appeal work) needs denials "edit".
+    const needed = target.denialCategory ? "denials" : "claims";
+    if (!hasClaimPermission(needed, "edit")) {
+      toast.error(`You don't have permission to move this claim (needs ${needed} edit).`);
+      return;
+    }
     const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
     const name = stageName || stageObj?.name || stageId;
     // Claim fields required at the target stage must be filled before a manual move (rules are not blocked).
@@ -426,7 +433,7 @@ export default function Claims() {
               )}
             </div>
           }
-          primaryAction={{
+          primaryAction={!hasClaimPermission("claims", "add") ? undefined : {
             label: "Create Claim",
             icon: <Plus className="w-4 h-4" />,
             onClick: () => {
@@ -440,6 +447,7 @@ export default function Claims() {
               <Tooltip text="Export Claims">
                 <button
                   type="button"
+                  disabled={!hasClaimPermission("claims", "export")}
                   onClick={() => setShowExportModal(true)}
                   className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
                   aria-label="Export Claims"
@@ -632,6 +640,7 @@ export default function Claims() {
 
           return (
             <>
+            <MockDataBanner />
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
               <button type="button" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>

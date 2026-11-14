@@ -8,6 +8,7 @@
  * draft_appeal is PROPOSE-ONLY: it stores a draft letter on the claim (appealDraft) from a template and the denial
  *   facts; it never moves the claim or sends anything. Key: claimId:appealRevision.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import type { BusEvent } from "./eventBus";
 import { eventBus } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
@@ -97,6 +98,7 @@ export function performPostRemittance(input: PostRemittanceInput): PostRemittanc
 
   const status: Era["status"] = result.unmatched === lines.length && lines.length > 0 ? "unmatched" : lines.every((l) => l.status === "posted") ? "posted" : "partial";
   erasStore.upsert({ ...era, lines, status });
+  if (result.posted > 0) recordRcmAudit({ action: "updated", entityType: "era", entityId: era.id, actor: input.cause?.ruleName || (input.cause?.type === "manual" ? undefined : "Automation"), summary: `Posted ERA ${era.traceNumber}: ${result.paid} paid, ${result.partial} partial, ${result.denied} denied, ${result.unmatched} unmatched` });
   if (result.unmatched > 0) void eventBus.emit("era.unmatched", "claim", era.id, { eraId: era.id, unmatched: result.unmatched, chain: input.cause?.chain });
   return result;
 }

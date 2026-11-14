@@ -7,6 +7,7 @@
  * otherwise paid in full minus the contractual adjustment (CO-45) when the fee schedule is lower. A line for a claim
  * number that does not exist is added when `includeUnmatched` is set.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { createListStore } from "./refStore";
 import { eventBus } from "./eventBus";
 import { getStoredClaims, type Claim } from "./claimsStore";
@@ -95,6 +96,7 @@ export function receiveMockEra(opts: { includeUnmatched?: boolean; claimIds?: st
     mock: true,
   };
   erasStore.upsert(era);
+  recordRcmAudit({ action: "created", entityType: "era", entityId: era.id, summary: `Received (mock) ERA ${era.traceNumber} with ${lines.length} line(s)` });
   void eventBus.emit("era.received", "claim", era.id, { eraId: era.id, traceNumber: era.traceNumber, lines: lines.length });
   return era;
 }

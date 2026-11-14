@@ -7,6 +7,7 @@
  *     `claim.note_signed` is emitted for it;
  *   - otherwise `scribe.note_signed` is emitted for the client (a rule variant may create the claim at signing).
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { getScribeSessionById, saveScribeSession, type ScribeSession } from "./scribeSessionStore";
 import { getStoredClaims, saveClaim, type Claim, type ClaimDiagnosisCode, type ClaimServiceLine } from "./claimsStore";
 import { lookupFee } from "./billingSetupStore";
@@ -87,6 +88,7 @@ export async function signAndSendToBilling(sessionId: string): Promise<SignResul
   if (!codes.accepted) throw new Error("Accept the codes before signing");
   const signedAt = new Date().toISOString();
   saveSessionCodes(sessionId, { ...codes, signedAt });
+  recordRcmAudit({ action: "updated", entityType: "scribe_session", entityId: sessionId, summary: `Signed the note and sent ${codes.cpt.length} procedure and ${codes.icd.length} diagnosis code(s) to billing`, after: { cpt: codes.cpt.map((c) => c.code + (c.modifier ? "-" + c.modifier : "")), icd: codes.icd.map((c) => c.code) } });
 
   const claim = getStoredClaims().find(
     (c) => c.scribeSessionId === session.id || (session.appointmentId !== undefined && c.appointmentId !== undefined && String(c.appointmentId) === String(session.appointmentId))

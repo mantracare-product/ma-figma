@@ -4,6 +4,7 @@
  *  - previewEligibility: for a booking that does not exist yet; NOTHING is written.
  * Callers must gate the button with hasPermission("eligibility", ...).
  */
+import { recordRcmAudit } from "./rcmAudit";
 import { appointmentService } from "./appointmentService";
 import { findClientByRef, instancesForAppointment } from "./recordContext";
 import { getCoverageOn } from "./coveragesStore";
@@ -17,6 +18,7 @@ export function verifyAppointmentNow(appointmentId: string | number): RunEligibi
   const client = findClientByRef(appt.clientId || appt.clientName);
   if (!client) throw new Error("Client not found for this appointment");
   const instance = instancesForAppointment(appt.id)[0];
+  recordRcmAudit({ action: "updated", entityType: "appointment", entityId: String(appt.id), summary: `Manual eligibility check (Verify now) for appointment ${appt.id}` });
   return performRunEligibility({
     clientId: client.id,
     appointmentId: String(appt.id),

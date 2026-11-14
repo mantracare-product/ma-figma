@@ -7,6 +7,7 @@
  *  - getInvoiceStatement: what the statement drawer and the patient portal show.
  * Nothing names a stage in logic: the stage comes from the step params.
  */
+import { recordRcmAudit } from "./rcmAudit";
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { invoiceService } from "./invoiceService";
@@ -146,6 +147,7 @@ export function createPaymentPlan(invoiceId: string, opts: { installments: numbe
   const balance = money(inv.total - (inv.amountPaid || 0));
   if (balance <= 0) throw new Error("Nothing to pay: the invoice has no balance");
   const plan = buildPaymentPlan(balance, opts);
+  recordRcmAudit({ action: "created", entityType: "invoice", entityId: invoiceId, summary: `Created a ${opts.installments}-installment payment plan for invoice ${invoiceId}`, after: { installments: plan.length, balance } });
   const w = writeRecordFields({ type: "invoice", id: invoiceId }, { payment_plan: plan });
   if (!w.ok) throw new Error(w.error);
   return plan;
