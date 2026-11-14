@@ -47,6 +47,17 @@ export interface IntegrationDefinition {
 
 export type SyncIntervalOption = "manual" | "5m" | "15m" | "30m" | "1h" | "custom";
 
+export interface IntegrationFieldMapping {
+  id: string;
+  module: "client" | "appointment" | "clinical" | "custom";
+  targetFieldKey: string;      // e.g. "name", "age", or custom field key
+  targetFieldLabel: string;    // e.g. "Client Name", "Age"
+  placeholderToken: string;    // e.g. "{client_name}", "{age}"
+  incomingVariable: string;    // e.g. "firstName + ' ' + lastName", "mobile", "birthDate"
+  sampleValue?: string;        // e.g. "abhishek", "32", "Nov 14, 2026"
+  isCustom?: boolean;
+}
+
 export interface IntegrationSyncConfig {
   connected: boolean;
   credentials: Record<string, string>;
@@ -57,6 +68,7 @@ export interface IntegrationSyncConfig {
   syncStatus?: "idle" | "syncing" | "success" | "error";
   syncError?: string;
   features: Record<string, { enabled: boolean; workflowId?: string; direction?: "two-way" | "inbound" | "outbound" }>;
+  fieldMappings?: Record<string, IntegrationFieldMapping>;
 }
 
 export interface SyncLogEntry {
@@ -509,6 +521,188 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
   },
 ];
 
+// ── Field Mapping Defaults & Helpers ───────────────────────────────────────
+export function getDefaultFieldMappings(integrationId?: string): Record<string, IntegrationFieldMapping> {
+  const isCliniko = integrationId === "cliniko";
+  const isHealthie = integrationId === "healthie";
+
+  const list: IntegrationFieldMapping[] = [
+    {
+      id: "fm_client_name",
+      module: "client",
+      targetFieldKey: "name",
+      targetFieldLabel: "Client Name",
+      placeholderToken: "{client_name}",
+      incomingVariable: isCliniko
+        ? "patient.first_name + ' ' + patient.last_name"
+        : isHealthie
+        ? "user.first_name + ' ' + user.last_name"
+        : "firstName + ' ' + lastName",
+      sampleValue: "abhishek",
+    },
+    {
+      id: "fm_age",
+      module: "client",
+      targetFieldKey: "age",
+      targetFieldLabel: "Age",
+      placeholderToken: "{age}",
+      incomingVariable: isCliniko ? "patient.age" : isHealthie ? "user.age" : "client.age || birthDate",
+      sampleValue: "32",
+    },
+    {
+      id: "fm_current_date",
+      module: "appointment",
+      targetFieldKey: "current_date",
+      targetFieldLabel: "Current Date",
+      placeholderToken: "{current_date}",
+      incomingVariable: "system.current_date || appointmentDate",
+      sampleValue: "Nov 14, 2026",
+    },
+    {
+      id: "fm_responsible",
+      module: "appointment",
+      targetFieldKey: "responsible",
+      targetFieldLabel: "Responsible",
+      placeholderToken: "{responsible}",
+      incomingVariable: isCliniko
+        ? "booking.practitioner_name"
+        : isHealthie
+        ? "appointment.provider.name"
+        : "staffName || branch.name",
+      sampleValue: "John Smith",
+    },
+    {
+      id: "fm_diagnosis",
+      module: "clinical",
+      targetFieldKey: "diagnosis",
+      targetFieldLabel: "Diagnosis",
+      placeholderToken: "{diagnosis}",
+      incomingVariable: "categoryName || serviceName",
+      sampleValue: "Regular Consultation",
+    },
+    {
+      id: "fm_chief_complaint",
+      module: "clinical",
+      targetFieldKey: "chief_complaint",
+      targetFieldLabel: "Chief Complaint",
+      placeholderToken: "{chief_complaint}",
+      incomingVariable: "serviceName || appointment.notes",
+      sampleValue: "Regular Consultation",
+    },
+    {
+      id: "fm_medications",
+      module: "clinical",
+      targetFieldKey: "medications",
+      targetFieldLabel: "Medications",
+      placeholderToken: "{medications}",
+      incomingVariable: "client.medicalHistory || chart_note.medications",
+      sampleValue: "",
+    },
+    {
+      id: "fm_phone",
+      module: "client",
+      targetFieldKey: "phone",
+      targetFieldLabel: "Phone Number",
+      placeholderToken: "{phone}",
+      incomingVariable: isCliniko ? "patient.phone_numbers" : "mobile || telephone",
+      sampleValue: "+44 7412 345678",
+    },
+    {
+      id: "fm_email",
+      module: "client",
+      targetFieldKey: "email",
+      targetFieldLabel: "Email Address",
+      placeholderToken: "{email}",
+      incomingVariable: "email",
+      sampleValue: "abhishek@example.com",
+    },
+    {
+      id: "fm_service_name",
+      module: "appointment",
+      targetFieldKey: "service_name",
+      targetFieldLabel: "Service Name",
+      placeholderToken: "{service_name}",
+      incomingVariable: isCliniko ? "booking.service_name" : "serviceName",
+      sampleValue: "Cons Anti-Wrinkle",
+    },
+    {
+      id: "fm_notes",
+      module: "appointment",
+      targetFieldKey: "notes",
+      targetFieldLabel: "Notes / Instructions",
+      placeholderToken: "{notes}",
+      incomingVariable: "notes || booking_notes",
+      sampleValue: "First consultation and patch test",
+    },
+  ];
+
+  const map: Record<string, IntegrationFieldMapping> = {};
+  list.forEach((item) => {
+    map[item.id] = item;
+  });
+  return map;
+}
+
+export function getKnownPayloadVariables(integrationId?: string): { key: string; label: string; token: string }[] {
+  if (integrationId === "phorest") {
+    return [
+      { key: "firstName", label: "First Name", token: "{first_name}" },
+      { key: "lastName", label: "Last Name", token: "{last_name}" },
+      { key: "mobile", label: "Mobile Phone", token: "{mobile}" },
+      { key: "email", label: "Email", token: "{email}" },
+      { key: "birthDate", label: "Birth Date / DOB", token: "{dob}" },
+      { key: "gender", label: "Gender", token: "{gender}" },
+      { key: "serviceName", label: "Service Name", token: "{service_name}" },
+      { key: "appointmentDate", label: "Appointment Date", token: "{appointment_date}" },
+      { key: "startTime", label: "Start Time", token: "{start_time}" },
+      { key: "staffName", label: "Staff / Provider", token: "{responsible}" },
+      { key: "branchName", label: "Branch Name", token: "{branch_name}" },
+      { key: "price", label: "Price / Fee", token: "{price}" },
+      { key: "notes", label: "Booking Notes", token: "{notes}" },
+    ];
+  }
+  if (integrationId === "cliniko") {
+    return [
+      { key: "patient.first_name", label: "Patient First Name", token: "{first_name}" },
+      { key: "patient.last_name", label: "Patient Last Name", token: "{last_name}" },
+      { key: "patient.phone_numbers", label: "Phone", token: "{phone}" },
+      { key: "patient.email", label: "Email", token: "{email}" },
+      { key: "patient.date_of_birth", label: "Date of Birth", token: "{dob}" },
+      { key: "booking.service_name", label: "Service", token: "{service_name}" },
+      { key: "booking.starts_at", label: "Start Time", token: "{start_time}" },
+      { key: "booking.practitioner_name", label: "Practitioner", token: "{responsible}" },
+      { key: "booking.notes", label: "Booking Notes", token: "{notes}" },
+    ];
+  }
+  if (integrationId === "healthie") {
+    return [
+      { key: "user.first_name", label: "First Name", token: "{first_name}" },
+      { key: "user.last_name", label: "Last Name", token: "{last_name}" },
+      { key: "user.phone_number", label: "Phone", token: "{phone}" },
+      { key: "user.email", label: "Email", token: "{email}" },
+      { key: "appointment.appointment_type.name", label: "Appointment Type", token: "{service_name}" },
+      { key: "appointment.datetime", label: "Date & Time", token: "{appointment_date}" },
+      { key: "appointment.provider.name", label: "Provider", token: "{responsible}" },
+      { key: "appointment.notes", label: "Notes", token: "{notes}" },
+    ];
+  }
+  // Generic fallback
+  return [
+    { key: "client_name", label: "Full Name", token: "{client_name}" },
+    { key: "phone", label: "Phone", token: "{phone}" },
+    { key: "email", label: "Email", token: "{email}" },
+    { key: "age", label: "Age", token: "{age}" },
+    { key: "current_date", label: "Current Date", token: "{current_date}" },
+    { key: "responsible", label: "Responsible", token: "{responsible}" },
+    { key: "diagnosis", label: "Diagnosis", token: "{diagnosis}" },
+    { key: "chief_complaint", label: "Chief Complaint", token: "{chief_complaint}" },
+    { key: "medications", label: "Medications", token: "{medications}" },
+    { key: "service_name", label: "Service Name", token: "{service_name}" },
+    { key: "appointment_date", label: "Appointment Date", token: "{appointment_date}" },
+    { key: "notes", label: "Notes", token: "{notes}" },
+  ];
+}
+
 // ── LocalStorage Helpers ───────────────────────────────────────────────────
 const STORAGE_PREFIX = "mantra_integration_config_";
 const LOGS_STORAGE_PREFIX = "mantra_integration_logs_";
@@ -517,7 +711,11 @@ export function getStoredIntegrationConfig(integrationId: string): IntegrationSy
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}${integrationId}`);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.fieldMappings || Object.keys(parsed.fieldMappings).length === 0) {
+        parsed.fieldMappings = getDefaultFieldMappings(integrationId);
+      }
+      return parsed;
     }
   } catch (e) {
     console.error("Failed to load integration config:", e);
@@ -538,6 +736,7 @@ export function getStoredIntegrationConfig(integrationId: string): IntegrationSy
     credentials: {},
     syncInterval: def?.defaultSyncInterval || "15m",
     features: defaultFeatures,
+    fieldMappings: getDefaultFieldMappings(integrationId),
   };
 }
 
