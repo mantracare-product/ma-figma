@@ -25,7 +25,9 @@ export function isFieldValueEmpty(val: any): boolean {
     return trimmed === "" || trimmed === "—" || trimmed === "-";
   }
   if (Array.isArray(val)) {
-    return val.length === 0;
+    if (val.length === 0) return true;
+    // A table with only blank rows counts as empty (one untouched row used to satisfy "required").
+    return val.every((row) => row !== null && typeof row === "object" && !Array.isArray(row) && Object.values(row as Record<string, unknown>).every((v) => isFieldValueEmpty(v)));
   }
   if (typeof val === "object") {
     return Object.keys(val).length === 0;

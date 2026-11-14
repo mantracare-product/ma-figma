@@ -1,3 +1,5 @@
+import ClaimBoard from "../components/claims/ClaimBoard";
+import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
 import { claimService } from "../../lib/claimService";
 import { getClaimWorkflows } from "../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
@@ -99,6 +101,7 @@ export default function Claims() {
   const [activeCMS1500Claim, setActiveCMS1500Claim] = useState<Claim | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedClaimForDetail, setSelectedClaimForDetail] = useState<Claim | null>(null);
+  const [claimViewMode, setClaimViewMode] = useState<"list" | "board">("list");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
 
   // Load claims
@@ -136,6 +139,12 @@ export default function Claims() {
     if (!target) return;
     const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
     const name = stageName || stageObj?.name || stageId;
+    // Claim fields required at the target stage must be filled before a manual move (rules are not blocked).
+    const missing = getMissingRequiredClaimFields(target, name, insuranceProcess.id);
+    if (missing.length > 0) {
+      toast.error(`Fill in before moving to ${name}: ${missing.map((m) => m.label).join(", ")}`);
+      return;
+    }
     try {
       claimService.moveToStage(claimId, stageId, { type: "manual" });
       refreshClaims();
@@ -618,6 +627,20 @@ export default function Claims() {
           ];
 
           return (
+            <>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
+              <button type="button" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>
+              <span className="text-xs text-slate-500">{insuranceProcess.name}</span>
+            </div>
+            {claimViewMode === "board" ? (
+              <ClaimBoard
+                stages={insuranceProcess.stages}
+                claims={filteredClaims}
+                onMove={(id, stageId) => handleStageChange(id, stageId)}
+                onOpen={(c) => { setSelectedClaimForDetail(c); setIsDetailDrawerOpen(true); }}
+              />
+            ) : (
             <TableComponent
               data={filteredClaims}
               columns={claimColumns}
@@ -628,6 +651,8 @@ export default function Claims() {
               defaultRowsPerPage={20}
               emptyMessage="No insurance claims found matching your filters."
             />
+            )}
+            </>
           );
         })()}
 
