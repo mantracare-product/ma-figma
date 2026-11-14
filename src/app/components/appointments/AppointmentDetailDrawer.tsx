@@ -1274,6 +1274,10 @@ export default function AppointmentDetailDrawer({
         initialClientName={effectiveAppt.clientName}
         initialEntityType="appointment"
         initialRecordId={String(effectiveAppt.id)}
+        initialAppointmentId={String(effectiveAppt.id)}
+        initialAppointmentDate={effectiveAppt.date}
+        initialAttendeeId={effectiveAppt.employeeId ? String(effectiveAppt.employeeId) : undefined}
+        initialAttendeeName={effectiveAppt.employeeName}
         initialProcessId={appointmentProcess.id}
         initialProcessName={appointmentProcess.name}
         zIndex={600}
