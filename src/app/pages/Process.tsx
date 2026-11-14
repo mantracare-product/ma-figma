@@ -972,6 +972,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "move_to_workflow": ["stage", "postcall"],
   "create_claim": ["stage", "postcall"],
   "post_remittance": ["stage", "postcall"],
+  "update_invoice_from_claim": ["stage", "postcall"],
   "draft_appeal": ["stage", "postcall"],
   "scrub_claim": ["stage", "postcall"],
   "submit_claim": ["stage", "postcall"],

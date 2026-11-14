@@ -39,6 +39,7 @@ import { useNavigate, useLocation, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { getStoredClaims } from "../../lib/claimsStore";
+import InvoiceStatementDrawer from "../components/invoices/InvoiceStatementDrawer";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
@@ -84,6 +85,7 @@ export default function Invoices() {
   }, []);
 
   const claimsForInvoices = useMemo(() => getStoredClaims(), []);
+  const [statementInvoiceId, setStatementInvoiceId] = useState<string | null>(null);
   const invoices = useMemo(() => {
     return liveInvoices.length > 0 ? liveInvoices : contextInvoices;
   }, [liveInvoices, contextInvoices, storeTick]);
@@ -326,6 +328,7 @@ export default function Invoices() {
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        {statementInvoiceId && <InvoiceStatementDrawer invoiceId={statementInvoiceId} onClose={() => setStatementInvoiceId(null)} />}
         <PageHeader
           title={isProcessFixed && invoiceProcess?.name ? invoiceProcess.name : "Invoices"}
           subtitle={isProcessFixed && invoiceProcess?.name ? `Manage ${invoiceProcess.name} billing and payments` : "Manage client billing, view automated call-flow invoices, and collect payments"}
@@ -582,6 +585,16 @@ export default function Invoices() {
                     style={{ fontFamily: 'DM Sans, sans-serif' }}
                   >
                     {inv.clientName}
+                  </button>
+                ),
+              },
+              {
+                id: "statement",
+                header: "Statement",
+                align: "center",
+                render: (inv) => (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setStatementInvoiceId(inv.id); }} className="text-xs font-semibold text-blue-700 hover:underline">
+                    Statement
                   </button>
                 ),
               },

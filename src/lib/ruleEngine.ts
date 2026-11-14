@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeUpdateInvoiceFromClaimStep, isUpdateInvoiceFromClaimStep } from "./invoiceFromClaim";
 import { executeDraftAppealStep, executePostRemittanceStep, isDraftAppealStep, isPostRemittanceStep } from "./remittanceActions";
 import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, isCreateClaimStep, isScrubClaimStep, isSubmitClaimStep } from "./claimActions";
 import { claimService } from "./claimService";
@@ -734,6 +735,12 @@ export async function executeRulesForEvent(
       }
       if (isNotifyStep(stepKey)) {
         executeNotifyStep({ rule, stepId: act.id, params: act.params || {}, event });
+      }
+
+      // Action: Update Invoice From Claim (insurance paid / adjustments / patient responsibility -> invoice; statement)
+      if (isUpdateInvoiceFromClaimStep(stepKey)) {
+        const run = executeUpdateInvoiceFromClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] update_invoice_from_claim failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Actions: Post Remittance (ERA -> claims) / Draft Appeal (propose-only)

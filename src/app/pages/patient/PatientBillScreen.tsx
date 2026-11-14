@@ -1,3 +1,4 @@
+import { getInvoiceStatement } from "../../../lib/invoiceFromClaim";
 import React, { useState, useEffect, useMemo } from "react";
 import { useOutletContext, useNavigate } from "react-router";
 import {
@@ -204,6 +205,16 @@ export default function PatientBillScreen() {
                   </div>
                 </div>
 
+                {(() => {
+                  const st = getInvoiceStatement(inv.id);
+                  if (!st || (st.insurancePaid === 0 && st.adjustments === 0 && st.plan.length === 0)) return null;
+                  return (
+                    <div className="mb-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-600 space-y-0.5" data-testid="portal-statement">
+                      <div>Insurance paid {st.insurancePaid.toFixed(2)} · Adjustments {st.adjustments.toFixed(2)} · You owe {st.patientResponsibility.toFixed(2)}</div>
+                      {st.plan.length > 0 && <div>Payment plan: {st.plan.map((p) => `${p.dueDate} ${p.amount.toFixed(2)}`).join(" · ")}</div>}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
                   <span className="text-slate-500 font-medium">
                     {isPaid ? (

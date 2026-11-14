@@ -65,7 +65,7 @@ Demo script (tests: rcmSetC.test.ts, claimService.test.ts, claimActions.test.ts,
 
 ## Slice 5 - Money back
 - [x] S5.1 ERA staging + post_remittance + unmatched handling AND S5.2 CARC/RARC categorization + draft_appeal (propose-only) -- done in ONE commit (see git log "S5.1+S5.2"). The Denial & appeal sample workflow was seeded in S4.1; the A25 move_to_workflow rule lands with Set M (S5.4).
-- [ ] S5.3 update_invoice_from_claim + invoice sample stages + payment plans (lib) + portal balance
+- [x] S5.3 update_invoice_from_claim + invoice sample stages + payment plans (lib) + portal balance -- done (git log "S5.3"). Statement drawer is opened from a new Statement column on Invoices; portal bill screen shows insurance paid/adjustments/plan under an invoice when present. Invoice sample stages are inserted into the existing invoice workflow (not a second workflow: invoice code is single-workflow).
 - [ ] S5.4 Set M rules A21-A30 + check_claim_status + start_call mock
 
 ## Slice 6 - Overview row, reports, permission wiring, polish
