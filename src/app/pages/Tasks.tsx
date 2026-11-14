@@ -57,7 +57,11 @@ export default function Tasks() {
   });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
   // Work queue = saved task view; when set it replaces the My/By-me tab filter.
-  const [activeViewId, setActiveViewId] = useState<string>("");
+  const [activeViewId, setActiveViewId] = useState<string>(() => searchParams.get("view") || "");
+  useEffect(() => {
+    const v = searchParams.get("view");
+    if (v) setActiveViewId(v);
+  }, [searchParams]);
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");

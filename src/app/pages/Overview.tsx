@@ -1,3 +1,4 @@
+import RcmOverviewRow from "../components/overview/RcmOverviewRow";
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -196,6 +197,8 @@ export default function Overview() {
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full">
+        <RcmOverviewRow />
+
         {/* ── Strict 6-Column Grid ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-start">
           {/* ROW 1: Page Header & Dropdown Filter Pills (Col-span 6) */}

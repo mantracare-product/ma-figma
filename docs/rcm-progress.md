@@ -80,7 +80,10 @@ Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.t
 - PASS A21: accepted claim with no payment after 30 days is status-checked (mock 277) and moved to Pending (payer) with a follow-up task.
 - NOT RUN (browser): Receive ERA button, Statement column + drawer, portal statement block, payment plan creation UI, Process-page stage editing for the new invoice stages.
 ## Slice 6 - Overview row, reports, permission wiring, polish
-- [ ] S6.1 .. S6.5 (pending)
+- [x] S6.1 Overview RCM row (queue counts from Task views + KPIs, gated by rcmReports; links open Tasks with ?view=) AND S6.2 report sources (claims, denials, payments, ar_aging, eligibility; offered in the report builder only with rcmReports) -- done in ONE commit (see git log "S6.1+S6.2")
+- [ ] S6.3 A11/A12 (Set E2) + per-event notification toggles
+- [ ] S6.4 Voice callPurpose + mock call result into an instance
+- [ ] S6.5 hasPermission wiring + audit entries + Mock data banner
 
 ## Decisions
 - S5.1: post_remittance matches ERA lines to claims by claim number, then tracking id / payer claim number; a fully accounted-for claim (paid + patient responsibility + contractual) counts as paid.

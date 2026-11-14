@@ -1,3 +1,4 @@
+import { buildRcmReportRows, isRcmReportSource } from "../../lib/rcmReportSources";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
@@ -913,6 +914,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const getReportRows = (dataSource: ReportDataSource): Record<string, any>[] => {
+    if (isRcmReportSource(dataSource)) return buildRcmReportRows(dataSource);
     if (dataSource === "revenue") {
       return invoices
         .filter((i) => i.status !== "void")

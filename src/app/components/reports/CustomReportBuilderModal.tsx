@@ -1,3 +1,5 @@
+import { RCM_SOURCE_METADATA } from "../../../lib/rcmReportSources";
+import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Modal } from "../ui/Modal";
 import { ReportDataSource, ReportDefinition, ReportMetric } from "../../types/invoiceTypes";
@@ -76,6 +78,11 @@ export default function CustomReportBuilderModal({
   const [reportName, setReportName] = useState("");
   const [reportDescription, setReportDescription] = useState("");
   const [dataSource, setDataSource] = useState<ReportDataSource>("calls");
+  // RCM sources are offered only to users with the rcmReports permission.
+  const { hasPermission: hasReportPermission } = useCurrentPermissions();
+  const rcmCards = hasReportPermission("rcmReports", "read")
+    ? (Object.keys(RCM_SOURCE_METADATA) as Array<keyof typeof RCM_SOURCE_METADATA>).map((k) => ({ id: k, name: RCM_SOURCE_METADATA[k].name, desc: RCM_SOURCE_METADATA[k].description, icon: DollarSign }))
+    : [];
 
   // Selected Columns list
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
@@ -533,6 +540,7 @@ export default function CustomReportBuilderModal({
                 { id: "clients", name: "Clients & Registry", desc: "Patient conversion, demographics, spend & appointment counts", icon: Users },
                 { id: "revenue", name: "Revenue & Invoicing", desc: "Invoices, paid settlements, payment modes & balances", icon: DollarSign },
                 { id: "team", name: "Team & Staff", desc: "Agent productivity, appointments handled & ratings", icon: Sparkles },
+                ...rcmCards,
               ].map((ds) => {
                 const Icon = ds.icon;
                 const isSelected = dataSource === ds.id;

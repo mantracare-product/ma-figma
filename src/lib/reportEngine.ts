@@ -1,3 +1,4 @@
+import { RCM_SOURCE_METADATA } from "./rcmReportSources";
 import { ReportDataSource, ReportDefinition, ReportBucketRule, ReportMetric } from "../app/types/invoiceTypes";
 
 export interface FieldMetadata {
@@ -18,6 +19,7 @@ export const DATA_SOURCE_METADATA: Record<
     fields: FieldMetadata[];
   }
 > = {
+  ...RCM_SOURCE_METADATA,
   calls: {
     name: "Calls & Telephony",
     description: "Inbound/outbound call logs, durations, sentiment, clinic shifts & agents",

@@ -103,7 +103,7 @@ export interface MockService {
   tax?: number;
 }
 
-export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes";
+export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes" | "claims" | "denials" | "payments" | "ar_aging" | "eligibility";
 
 export interface ReportBucketCase {
   id: string;
