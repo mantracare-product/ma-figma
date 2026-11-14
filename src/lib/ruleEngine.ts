@@ -744,7 +744,7 @@ export async function executeRulesForEvent(
         if (run.status === "failed") console.warn(`[RuleEngine] check_claim_status failed in rule "${rule.name}": ${run.error}`);
       }
       if (isStartCallStep(stepKey)) {
-        const run = executeStartCallStep({ rule, stepId: act.id, params: act.params || {}, event });
+        const run = executeStartCallStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
         if (run.status === "failed") console.warn(`[RuleEngine] start_call failed in rule "${rule.name}": ${run.error}`);
       }
 

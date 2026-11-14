@@ -7,6 +7,7 @@
  *    activity feed. Balance reminders need the client's voice consent. The (mock) call completes immediately with a
  *    canned outcome. Key: recordId:purpose:day. (S6.4 writes benefit results from a payer call into an instance.)
  */
+import { captureVoiceBenefits } from "./voiceBenefits";
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { getStoredClaims, saveClaim, type Claim } from "./claimsStore";
@@ -96,6 +97,9 @@ export interface StartCallInput {
   recordType: string;
   recordId: string;
   instanceId?: string;
+  /** payer_benefits only: stage the instance moves to once the (mock) call result is captured (pending review). */
+  resultStage?: string;
+  cause?: StageMove["cause"];
 }
 
 export function performStartCall(input: StartCallInput): RcmCall {
@@ -105,6 +109,10 @@ export function performStartCall(input: StartCallInput): RcmCall {
   else if (input.purpose === "balance_reminder" && !input.phone) call = { ...base, status: "skipped", skipped: "no_phone" };
   else call = { ...base, status: "completed", outcome: input.purpose === "payer_benefits" ? "Mock call: payer read out the benefits" : "Mock call: patient acknowledged the balance" };
   rcmCallsStore.upsert(call);
+  // A payer-benefits call on an instance writes its (mock) result there as PENDING REVIEW until a person accepts it.
+  if (call.status === "completed" && input.purpose === "payer_benefits" && input.instanceId) {
+    captureVoiceBenefits({ instanceId: input.instanceId, callId: call.id, resultStage: input.resultStage, cause: input.cause || { type: "manual" } });
+  }
   appendActivity({
     type: call.status === "completed" ? "outbound_call" : "failed_call",
     callId: call.id,
@@ -122,8 +130,8 @@ export function performStartCall(input: StartCallInput): RcmCall {
 
 registerActionRetryHandler("start_call", (run) => performStartCall(run.payload as StartCallInput) as any);
 
-export function executeStartCallStep(args: { rule: AutomationRule; stepId?: string; params: Record<string, any>; event: BusEvent }): RunOnceResult<any> {
-  const { rule, stepId, params, event } = args;
+export function executeStartCallStep(args: { rule: AutomationRule; stepId?: string; params: Record<string, any>; event: BusEvent; cause?: StageMove["cause"] }): RunOnceResult<any> {
+  const { rule, stepId, params, event, cause } = args;
   const ctx = resolveRecordContext(event);
   const purpose = (params.purpose as CallPurpose) || "payer_benefits";
   const input: StartCallInput = {
@@ -135,6 +143,8 @@ export function executeStartCallStep(args: { rule: AutomationRule; stepId?: stri
     recordType: event.recordType,
     recordId: String(event.recordId),
     instanceId: ctx.instance ? ctx.instance.instanceId || ctx.instance.id : undefined,
+    resultStage: params.resultStage,
+    cause,
   };
   const key = actionIdempotencyKey("start_call", event.recordId, purpose, todayStr());
   return runActionOnce(key, { actionKey: "start_call", ruleId: rule.id, ruleName: rule.name, stepId, payload: input as any }, () => {

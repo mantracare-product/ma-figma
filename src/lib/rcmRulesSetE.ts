@@ -78,7 +78,7 @@ export function buildSetERules(): SampleRuleDef[] {
       "sample-rule-A7",
       "A7 Inconclusive with voice on: call the payer (Sample)",
       "Inconclusive",
-      [step("a7-call", "start_call", { purpose: "payer_benefits" })],
+      [step("a7-call", "start_call", { purpose: "payer_benefits", resultStage: "Pending review" })],
       { conditions: [cond("c1", "_voiceEnabled", "equals", "true")] }
     ),
     stageEntry(

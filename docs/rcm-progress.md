@@ -82,7 +82,7 @@ Demo script (tests: rcmSetM.test.ts, remittance.test.ts, invoiceFromClaim.test.t
 ## Slice 6 - Overview row, reports, permission wiring, polish
 - [x] S6.1 Overview RCM row (queue counts from Task views + KPIs, gated by rcmReports; links open Tasks with ?view=) AND S6.2 report sources (claims, denials, payments, ar_aging, eligibility; offered in the report builder only with rcmReports) -- done in ONE commit (see git log "S6.1+S6.2")
 - [x] S6.3 A11/A12 (Set E2) + per-event notification toggles -- done (git log "S6.3"). Added recordAuthDecision (manual approval/denial, UI on the appointment Coverage tab) because the mock prior-auth request never decides on its own; A11 fires on approved authorizations. Notification toggles live in Billing setup > Notifications (default all on).
-- [ ] S6.4 Voice callPurpose + mock call result into an instance
+- [x] S6.4 Voice callPurpose + mock call result into an instance -- done (git log "S6.4"). callPurpose added to CallTriggerSettings (type only: TODO(rcm) no stage voice-settings UI); the start_call step has the purpose + result stage; voice toggle is in Billing setup > Notifications; call result is accepted from the appointment Coverage tab.
 - [ ] S6.5 hasPermission wiring + audit entries + Mock data banner
 
 ## Decisions

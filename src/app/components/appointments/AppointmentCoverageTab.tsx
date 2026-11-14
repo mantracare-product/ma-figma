@@ -4,6 +4,8 @@ import type { Appointment } from "../../../lib/appointmentService";
 import { readLocalRecordFields } from "../../../lib/recordWriter";
 import { verifyAppointmentNow } from "../../../lib/verifyNow";
 import { recordAuthDecision } from "../../../lib/authActions";
+import { acceptCallResult } from "../../../lib/voiceBenefits";
+import { getProcessInstanceById } from "../../../lib/processLogsStore";
 import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import CoverageChip from "./CoverageChip";
 
@@ -64,6 +66,20 @@ export default function AppointmentCoverageTab({ appointment }: { appointment: A
           </div>
         ))}
       </dl>
+      {(() => {
+        const iid = appointment.coverage?.instanceId;
+        const row: any = iid ? getProcessInstanceById(iid) : undefined;
+        if (!row || row.elig_status !== "pending_review") return null;
+        return (
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2" data-testid="call-result-review">
+            <div className="text-xs font-semibold text-violet-900">A phone call captured benefits (mock). Review and accept to make it the verified result.</div>
+            <div className="text-xs text-violet-900">Copay {String(row.elig_copay ?? "-")} · deductible remaining {String(row.elig_deductible_remaining ?? "-")}</div>
+            <button type="button" disabled={!canVerify} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-violet-300 bg-white hover:bg-violet-100 disabled:opacity-50" onClick={() => {
+              try { acceptCallResult({ instanceId: iid! }); toast.success("Call result accepted"); setTick((t) => t + 1); } catch (e: any) { toast.error(String(e?.message || e)); }
+            }}>Accept call result</button>
+          </div>
+        );
+      })()}
       {String(values.auth_status) === "requested" && (
         <div className="rounded-xl border border-slate-200 p-3 space-y-2" data-testid="auth-decision">
           <div className="text-xs font-semibold text-slate-700">Record the payer's authorization decision</div>

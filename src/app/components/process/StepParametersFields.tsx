@@ -4053,6 +4053,7 @@ export default function StepParametersFields({
                     <option value="payer_benefits">Payer benefits</option><option value="balance_reminder">Balance reminder</option>
                   </select>
                 ))}
+                {(params.purpose || "payer_benefits") === "payer_benefits" && renderField("Move the instance to stage when the result is captured (pending review)", <input value={params.resultStage || ""} onChange={(e) => onChange({ resultStage: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
               </div>
             )}
 

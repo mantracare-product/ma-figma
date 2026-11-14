@@ -20,6 +20,7 @@ import {
 } from "../../../lib/billingSetupStore";
 import { KNOWN_RCM_NOTIFICATIONS, RCM_NOTIFICATION_EVENT, isRcmNotificationEnabled, setRcmNotificationEnabled } from "../../../lib/rcmNotificationSettings";
 import { newId } from "../../../lib/refStore";
+import { VOICE_ENABLED_KEY } from "../../../lib/ruleContextFields";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
 import { ELIGIBILITY_SETTINGS_EVENT, getMockScenario, setMockScenario, type MockScenario } from "../../../lib/eligibility";
 
@@ -187,6 +188,10 @@ function NotificationsSection({ canEdit }: { canEdit: boolean }) {
   }, []);
   return (
     <div className="space-y-2 max-w-2xl">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" disabled={!canEdit} checked={(() => { try { return localStorage.getItem(VOICE_ENABLED_KEY) === "1"; } catch { return false; } })()} onChange={(e) => { try { localStorage.setItem(VOICE_ENABLED_KEY, e.target.checked ? "1" : "0"); } catch { /* ignore */ } setTick((t) => t + 1); }} />
+        Voice calls for payer benefits (mock). When on, the sample Inconclusive rule calls the payer instead of creating a task.
+      </label>
       <p className="text-xs text-slate-500">Switch off the automation notifications you do not want. Everything is on by default.</p>
       {KNOWN_RCM_NOTIFICATIONS.map((n) => (
         <label key={n.key} className="flex items-center gap-2 text-sm">
