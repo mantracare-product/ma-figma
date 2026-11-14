@@ -35,6 +35,7 @@ export interface StepItem {
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "run_eligibility", name: "Run Eligibility", desc: "Check the client's coverage with the payer (mock) and write the result to the instance and appointment; fresh results inside the window are copied.", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
   { key: "create_task", name: "Create Task", desc: "Create a work-queue task linked to this record; it closes itself when the record leaves the stage.", iconKey: "check", cats: ["all", "records", "workflow"], popular: true },
   { key: "update_fields", name: "Update Fields", desc: "Write field values to this record, its instance, appointment or client (saved, merge-safe).", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
   { key: "start_process", name: "Start Process", desc: "Start a new instance of a process for this client, linked to the record that triggered it (idempotent).", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },

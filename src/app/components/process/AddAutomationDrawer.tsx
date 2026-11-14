@@ -94,6 +94,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   start_process: ["stage", "inchat", "postcall"],
   update_fields: ["stage", "inchat", "postcall"],
   create_task: ["stage", "inchat", "postcall"],
+  run_eligibility: ["stage", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],

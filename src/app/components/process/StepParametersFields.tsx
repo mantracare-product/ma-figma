@@ -4036,6 +4036,16 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "run_eligibility" || stepKey === "run-eligibility") && (
+              <div className="space-y-4">
+                <p className="text-xs text-amber-700">Mock data: results come from the mock payer adapter.</p>
+                {renderField("Dedupe window (days, 0 = always call the payer)", <input type="number" value={params.windowDays ?? 30} onChange={(e) => onChange({ windowDays: Number(e.target.value) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Retries (extra attempts, max 2)", <input type="number" value={params.retries ?? 2} onChange={(e) => onChange({ retries: Math.min(2, Math.max(0, Number(e.target.value))) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Write to (comma separated: instance, appointment)", <input value={(params.targets || ["instance", "appointment"]).join(", ")} onChange={(e) => onChange({ targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                {renderField("Result to stage map as JSON, e.g. {\"active\": \"Stage name\"} (keys: active, inactive, not_found, provider_setup, inconclusive, no_coverage)", <textarea defaultValue={JSON.stringify(params.stageMap || {}, null, 1)} onBlur={(e) => { try { onChange({ stageMap: JSON.parse(e.target.value || "{}") }); } catch { /* keep previous */ } }} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm font-mono" rows={5} />)}
+              </div>
+            )}
+
             {(stepKey === "update_fields" || stepKey === "update-fields") && (
               <div className="space-y-4">
                 {renderField("Write to (comma separated: this, instance, appointment, client, claim, invoice)", <input value={(params.targets || ["this"]).join(", ")} onChange={(e) => onChange({ targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}

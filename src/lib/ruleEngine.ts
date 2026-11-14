@@ -30,6 +30,7 @@ import { executeStartProcessStep, isStartProcessStep } from "./startProcessActio
 import { executeUpdateFieldsStep, isUpdateFieldsStep } from "./updateFieldsAction";
 import { executeCreateTaskStep, isCreateTaskStep } from "./createTaskAction";
 import "./taskAutoClose";
+import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -703,6 +704,12 @@ export async function executeRulesForEvent(
             }
           }
         }
+      }
+
+      // Action: Run Eligibility (mock payer adapter; copy-fresh window; writes instance + appointment)
+      if (isRunEligibilityStep(stepKey)) {
+        const run = executeRunEligibilityStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
+        if (run.status === "failed") console.warn(`[RuleEngine] run_eligibility failed in rule "${rule.name}": ${run.error}`);
       }
 
       // Action: Create Task (work-queue task linked to the triggering record; auto-closes on stage exit)

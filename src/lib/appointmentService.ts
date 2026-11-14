@@ -154,6 +154,11 @@ export interface Appointment {
   checkedInAt?: string;
   source?: string;
   bookingType?: "service" | "specialist";
+  /** Coverage summary written by run_eligibility (drives the coverage chip). */
+  coverage?: { instanceId?: string; status: string; checkedAt?: string; summary?: string };
+  coverageId?: string;
+  financialClass?: string;
+  claimId?: string;
 }
 
 export interface CreateAppointmentPayload {

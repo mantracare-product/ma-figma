@@ -22,7 +22,12 @@ Demo script (tests only; no browser run):
 - NOT RUN (browser): Billing setup form editing, client Insurance tab UI, Tasks queue bar, task detail linked-record card, Automation/Process sample panel, Deals drag.
 
 ## Slice 3 - Eligibility and prior-auth nodes
-- [ ] S3.1 .. S3.7 (pending)
+- [x] S3.1 EG1-EG5 field seeds + S3.2 run_eligibility (mock adapter, resolver, normalizer, window/copy-fresh) -- done in ONE commit (see hash below; deviation: 3.1 and 3.2 share a test file)
+- [ ] S3.3 check_auth_required + request_prior_auth + priorAuthRulesStore + Payers rules table
+- [ ] S3.4 Appointment coverage chip, detail Coverage tab, Schedule drawer Coverage + Verify now
+- [ ] S3.5 Sample process + Set E rules + Run daily jobs now
+- [ ] S3.6 send_message/notify mock + 4 templates + variables
+- [ ] S3.7 Front-desk Check-in button + kiosk insurance/copay steps
 
 ## Slice 4 - Visit to claim
 - [ ] S4.1 .. S4.6 (pending)

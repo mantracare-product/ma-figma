@@ -46,8 +46,26 @@ function readArray<T>(key: string): T[] {
   }
 }
 
+/**
+ * The stored registry is a module-keyed object ({client: [...], process: [...], ...}); a flat array is also
+ * tolerated (the context self-heals that shape). Each field's module is its key when it has none.
+ */
 export function getAllFieldsPure(): CoreFieldDef[] {
-  return readArray<CoreFieldDef>(FIELD_REGISTRY_KEY);
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(FIELD_REGISTRY_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return parsed as CoreFieldDef[];
+    if (parsed && typeof parsed === "object") {
+      const out: CoreFieldDef[] = [];
+      for (const [mod, list] of Object.entries(parsed)) {
+        if (Array.isArray(list)) out.push(...(list as CoreFieldDef[]).map((f) => ({ ...f, module: f.module || mod })));
+      }
+      return out;
+    }
+  } catch {
+    /* fall through */
+  }
+  return [];
 }
 
 function appliesToModule(def: { module: string; isReusable?: boolean; reusableModules?: string[] }, module: string): boolean {
