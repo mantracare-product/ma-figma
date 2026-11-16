@@ -1226,6 +1226,10 @@ export class MockMaClient implements IMaClient {
           location: dynamicRoomName,
           processId: defaultProcess,
           stageId: 'Confirmed',
+          // the receptionist passes what the caller said; missing => defaulted from the service and marked unconfirmed
+          paymentMode: (data as any).paymentMode,
+          payerId: (data as any).payerId,
+          memberId: (data as any).memberId,
         }, { force: true, createdBy: 'user' });
 
         if (typeof window !== 'undefined') {

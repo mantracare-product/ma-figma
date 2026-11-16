@@ -103,6 +103,7 @@ export default function ServiceDrawer({
   const [availableForAppointment, setAvailableForAppointment] = useState<boolean>(initialAvailableForAppointment);
   const [slotDuration, setSlotDuration] = useState<number>(30);
   const [isPrepaid, setIsPrepaid] = useState<boolean>(false);
+  const [billableToInsurance, setBillableToInsurance] = useState<boolean>(false);
   const [prepaidDepositType, setPrepaidDepositType] = useState<"full" | "deposit">("full");
   const [prepaidDepositAmount, setPrepaidDepositAmount] = useState<number>(0);
   const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([]);
@@ -227,6 +228,7 @@ export default function ServiceDrawer({
     if (mode === "edit" && service) {
       setAvailableForAppointment(service.availableForAppointment ?? true);
       setIsPrepaid(Boolean(service.isPrepaid));
+      setBillableToInsurance(Boolean((service as any).billableToInsurance));
       setPrepaidDepositType(service.prepaidDepositType || "full");
       setPrepaidDepositAmount(service.prepaidDepositAmount ?? service.price ?? 0);
       const sDuration = service.slotDuration || service.duration || 30;
@@ -465,6 +467,7 @@ export default function ServiceDrawer({
         isActive: true,
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
+        billableToInsurance,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -491,6 +494,7 @@ export default function ServiceDrawer({
         isActive: true,
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
+        billableToInsurance,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -516,6 +520,7 @@ export default function ServiceDrawer({
         isActive: true,
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
+        billableToInsurance,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -648,6 +653,28 @@ export default function ServiceDrawer({
                 mins
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* ── Billable to insurance (default payment mode of its appointments) ── */}
+        <div className={`border rounded-2xl p-4 shadow-2xs transition-all ${billableToInsurance ? "bg-emerald-50/50 border-emerald-200" : "bg-slate-50/90 border-slate-200"}`} data-testid="service-billable-card">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>Billable to insurance</label>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                When on, appointments for this service default to the payment mode Insurance (claim) and go through eligibility. When off they are Self-pay. This is separate from the prior-authorization default.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={billableToInsurance}
+              data-testid="service-billable-toggle"
+              onClick={() => setBillableToInsurance(!billableToInsurance)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${billableToInsurance ? "bg-emerald-600" : "bg-slate-300"}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ${billableToInsurance ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
           </div>
         </div>
 

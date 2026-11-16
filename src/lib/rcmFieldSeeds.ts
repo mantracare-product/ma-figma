@@ -17,6 +17,7 @@
  */
 import { FIELD_REGISTRY_KEY } from "./fieldRegistryCore";
 import { SAMPLE_COVERAGE_PROCESS_ID } from "./rcmSampleIds";
+import { DEFAULT_PAYMENT_MODES } from "./paymentMode";
 
 type Mod = "process" | "appointment" | "claim" | "client";
 
@@ -168,7 +169,7 @@ const byKey = (k: string) => all.find((f) => f.key === k)!;
 function plan(): Record<Mod, SeedField[]> {
   return {
     process: [...EG1, ...EG2, ...EG3, EG4, EG5],
-    appointment: [...APPT_SUMMARY.map(byKey), T("elig_instance_id", "Eligibility instance")],
+    appointment: [...APPT_SUMMARY.map(byKey), T("elig_instance_id", "Eligibility instance"), { key: "paymentMode", label: "Payment mode", inputType: "list_select", options: DEFAULT_PAYMENT_MODES }],
     claim: [...CLAIM_SUMMARY.map(byKey), ...CLAIM_RCM_FIELDS],
     client: CLIENT_FIELDS,
   };

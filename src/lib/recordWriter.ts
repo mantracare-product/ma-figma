@@ -35,7 +35,7 @@ const APPOINTMENT_TYPED = new Set([
   "clientName", "clientEmail", "clientPhone", "employeeId", "serviceId", "date", "time", "duration", "notes", "title",
   "serviceName", "employeeName", "description", "tags", "location", "invoiceId", "clientId",
   // RCM typed columns (added with S3.4); harmless before they exist
-  "coverage", "coverageId", "financialClass", "claimId",
+  "coverage", "coverageId", "financialClass", "claimId", "paymentMode", "paymentModeUnconfirmed",
 ]);
 
 function mergeLocal(key: string, values: Record<string, any>): string[] {

@@ -274,6 +274,8 @@ export default function AppointmentDetailDrawer({
       status: effectiveAppt.status || "scheduled",
       stage: currentStage?.name || "Unassigned",
       ...storedCustom,
+      // the typed column is the source of truth for the payment mode (rules write it)
+      paymentMode: (effectiveAppt as any).paymentMode || storedCustom.paymentMode || "",
     });
   }, [effectiveAppt, employees, services, currentStage?.name]);
 
@@ -351,6 +353,7 @@ export default function AppointmentDetailDrawer({
       if (key === "client_name") patch.clientName = value;
       if (key === "email") patch.clientEmail = value;
       if (key === "phone") patch.clientPhone = value;
+      if (key === "paymentMode") { patch.paymentMode = value; patch.paymentModeUnconfirmed = false; }
 
       if (Object.keys(patch).length > 0) {
         if (key === "appointment_date" || key === "appointment_time") {

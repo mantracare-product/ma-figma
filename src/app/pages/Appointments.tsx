@@ -423,6 +423,7 @@ export default function Appointments() {
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
   const [bookingSource, setBookingSource] = useState<string>("Inbound Call");
+  const [bookingPaymentMode, setBookingPaymentMode] = useState<string>("");
   const [bookingType, setBookingType] = useState<"service" | "specialist">("service");
 
   // Client search and filter state
@@ -791,6 +792,7 @@ export default function Appointments() {
         generateInvoice: bookingGenerateInvoice ?? false,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
         source: bookingSource || "Inbound Call",
+        paymentMode: bookingPaymentMode || undefined,
       });
 
       if (res.appointment) {
@@ -831,6 +833,7 @@ export default function Appointments() {
     setSelectedDate(formatDate(new Date()));
     setSessionType("video");
     setBookingTitle("");
+    setBookingPaymentMode("");
     setBookingDescription("");
     setBookingNote("");
     setBookingTags("");
@@ -1919,6 +1922,7 @@ export default function Appointments() {
           discountAmount: bookingDiscountAmount,
           location: bookingLocation,
           source: bookingSource,
+          paymentMode: bookingPaymentMode,
         }}
         onChange={(patch) => {
           if (patch.bookingType !== undefined) setBookingType(patch.bookingType);
@@ -1940,6 +1944,7 @@ export default function Appointments() {
           if (patch.lineItems !== undefined) setBookingLineItems(patch.lineItems);
           if (patch.discountAmount !== undefined) setBookingDiscountAmount(patch.discountAmount);
           if (patch.source !== undefined) setBookingSource(patch.source);
+          if (patch.paymentMode !== undefined) setBookingPaymentMode(patch.paymentMode);
         }}
         onSave={handleBookingComplete}
         employees={employees}

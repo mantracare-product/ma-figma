@@ -16,6 +16,8 @@ export interface Service {
   cptCode?: string;
   /** Default when no payer rule applies: does this service normally need prior authorization? */
   requiresAuthDefault?: boolean;
+  /** Billable to insurance (R4.2): the default payment mode of its appointments is Insurance (claim); otherwise Self-pay. */
+  billableToInsurance?: boolean;
   duration: number;
   slotDuration?: number;
   price: number;

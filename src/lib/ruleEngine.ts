@@ -1177,6 +1177,9 @@ export async function executeRulesForEvent(
             time: act.params?.time || "10:00",
             title: act.params?.title || "Automated Appointment",
             source: "ai",
+            paymentMode: act.params?.paymentMode || event.data?.paymentMode,
+            payerId: event.data?.payerId,
+            memberId: event.data?.memberId,
           });
         } catch (e) {
           console.warn("[RuleEngine] Failed to schedule appointment from rule action:", e);

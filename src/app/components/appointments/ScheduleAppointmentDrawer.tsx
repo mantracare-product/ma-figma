@@ -79,6 +79,7 @@ export interface BookingFormValues {
   roomName?: string;
   primaryInsurance?: string;
   secondaryInsurance?: string;
+  paymentMode?: string;
   source?: string;
   bookingType?: "service" | "specialist";
 }
@@ -1413,7 +1414,7 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </SectionCard>
 
-        {values.client && <ScheduleCoverageSection clientId={String(values.client.id)} date={values.date} />}
+        {values.client && <ScheduleCoverageSection serviceId={values.serviceId} paymentMode={values.paymentMode} onPaymentModeChange={(m) => onChange({ paymentMode: m })} clientId={String(values.client.id)} date={values.date} />}
 
         {/* ================================================================ */}
         {/* SECTION 4 — SCHEDULE                                             */}

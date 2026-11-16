@@ -10,6 +10,8 @@
   import { migrateStripSampleSuffix } from "./lib/sampleSuffixMigration";
   import { seedDemoWorkspace, restoreDemoScribeSessions } from "./lib/rcmDemoWorkspace";
   import { migrateStartCallToStageCalls } from "./lib/stageCallMigration";
+  import { migratePaymentModes } from "./lib/paymentMode";
+  import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
   // Billing entity and locations (POS) now live on the Organization record: copy the old Billing setup values once.
@@ -23,6 +25,9 @@
 
   // Round 4: calls are stage settings (the Start Call action is gone): migrate stored rules once, logged to mantra_migration_log_v1.
   try { if (!testRunActive()) migrateStartCallToStageCalls(); } catch { /* ignore */ }
+
+  // Round 4: services get the Billable flag and existing appointments a payment mode (once, logged).
+  try { if (!testRunActive()) { const r = migratePaymentModes(); if (r.services || r.appointments) logMigration("R4.2", `Payment modes: ${r.services} service(s) marked billable to insurance (they had a CPT code or prior-auth default), ${r.appointments} appointment(s) given a payment mode (insurance only with a coverage and a billable service, else self-pay)`); } } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

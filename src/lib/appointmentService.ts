@@ -13,6 +13,8 @@
  * with the canonical appointment process stages.
  */
 
+import { resolvePaymentMode } from "./paymentMode";
+import { getCoveragesForClient, saveCoverage } from "./coveragesStore";
 import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules, type RuleChainContext } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
@@ -159,6 +161,10 @@ export interface Appointment {
   coverageId?: string;
   financialClass?: string;
   claimId?: string;
+  /** How the visit is paid: "insurance" (claim) or "self_pay" (registry field paymentMode; options editable). */
+  paymentMode?: string;
+  /** The mode was defaulted from the service because nobody was asked (call / receptionist booking). */
+  paymentModeUnconfirmed?: boolean;
 }
 
 export interface CreateAppointmentPayload {
@@ -187,6 +193,10 @@ export interface CreateAppointmentPayload {
   discountAmount?: number;
   source?: "MA-Client" | "Inbound Call" | "Walked In" | "screen" | "call" | "webhook" | "import" | "ai" | string;
   bookingType?: "service" | "specialist";
+  paymentMode?: string;
+  /** Payer and member id collected at booking: saved as the client's primary coverage when none exists. */
+  payerId?: string;
+  memberId?: string;
 }
 
 export interface CreateAppointmentOptions {
@@ -729,6 +739,11 @@ class AppointmentService {
     const roomStationId = payload.roomStationId || resolvedRoom?.id;
     const roomName = payload.roomName || resolvedRoom?.name;
 
+    const pm = resolvePaymentMode({ serviceId: payload.serviceId, requested: payload.paymentMode, source: payload.source });
+    if (payload.payerId && payload.memberId && resolvedClientId && !getCoveragesForClient(resolvedClientId).some((c) => c.priority === "primary")) {
+      try { saveCoverage({ clientId: resolvedClientId, payerId: payload.payerId, memberId: payload.memberId, priority: "primary" } as any); } catch { /* ignore */ }
+    }
+
     const newAppointment: Appointment = {
       id: nextId,
       clientName: payload.clientName,
@@ -755,6 +770,8 @@ class AppointmentService {
       roomName,
       source: payload.source,
       bookingType: payload.bookingType,
+      paymentMode: pm.mode,
+      ...(pm.unconfirmed ? { paymentModeUnconfirmed: true } : {}),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
