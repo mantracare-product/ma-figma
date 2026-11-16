@@ -68,3 +68,8 @@ export function assignClaimsToWorkflows(claims: Claim[], workflows: Process[]): 
 export const isPreClaimWorkflow = (p?: { workflowType?: string } | null): boolean => p?.workflowType === "eligibility" || p?.workflowType === "prior_auth";
 /** True when a claim record currently sits in a pre-claim (eligibility / prior auth) workflow. */
 export const isPreClaimClaim = (c: { processId?: string }): boolean => isPreClaimWorkflow(getClaimWorkflow(c.processId));
+
+/** Claims proper: records in an Eligibility / Prior auth workflow are not claims yet and are left out of claim counts, A/R, denial rate and first-pass. */
+export const claimsOnly = <T extends { processId?: string }>(claims: T[]): T[] => claims.filter((c) => !isPreClaimClaim(c));
+/** The insurance records that are still before the claim stage. */
+export const preClaimRecords = <T extends { processId?: string }>(claims: T[]): T[] => claims.filter((c) => isPreClaimClaim(c));

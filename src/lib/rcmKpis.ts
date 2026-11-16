@@ -5,6 +5,8 @@
 import { getStoredTasks } from "./tasksStore";
 import { countTasksInView, isTaskOverdue, taskMatchesView, taskViewsStore, type TaskView } from "./taskViewsStore";
 import { getStoredClaims } from "./claimsStore";
+import { claimsOnly, getClaimWorkflow, preClaimRecords } from "./claimWorkflows";
+import { readLocalRecordFields } from "./recordWriter";
 import { outstandingOf } from "./rcmReportSources";
 import { getProcessInstances } from "./processLogsStore";
 import { stripSampleSuffix } from "./sampleSuffixMigration";
@@ -51,14 +53,15 @@ export interface RcmKpis {
 }
 
 export function rcmKpis(now: number = Date.now()): RcmKpis {
-  const claims = getStoredClaims();
+  const claims = claimsOnly(getStoredClaims());
   const submitted = claims.filter((c) => !!c.submittedAt);
   const paid = claims.filter((c) => (c.amountPaid || 0) > 0 && !c.denialCategory);
   const denied = claims.filter((c) => !!c.denialCategory);
   const decided = paid.length + denied.length;
   const waiting = submitted.filter((c) => (c.amountPaid || 0) === 0 && !c.denialCategory);
   const firstPass = submitted.filter((c) => (c.submissionCount || 1) === 1 && c.status !== "Rejected");
-  const checked = getProcessInstances().filter((i) => (i as any).elig_status);
+  const eligRecords = preClaimRecords(getStoredClaims()).filter((c) => getClaimWorkflow(c.processId)?.workflowType === "eligibility").map((c) => ({ elig_status: (readLocalRecordFields("claim", c.id) as any)?.elig_status || "" }));
+  const checked = [...eligRecords, ...getProcessInstances()].filter((i) => (i as any).elig_status);
   const verified = checked.filter((i) => (i as any).elig_status === "active");
   const ageDays = (c: { submittedAt?: string }) => Math.max(0, (now - Date.parse(c.submittedAt as string)) / 86400000);
   return {

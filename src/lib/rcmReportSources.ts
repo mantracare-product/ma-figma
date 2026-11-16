@@ -4,7 +4,8 @@
  * when it came from sample/mock sources so reports can show the banner.
  */
 import { getStoredClaims, type Claim } from "./claimsStore";
-import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
+import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows, preClaimRecords } from "./claimWorkflows";
+import { readLocalRecordFields } from "./recordWriter";
 import { getProcessInstances } from "./processLogsStore";
 import type { FieldMetadata } from "./reportEngine";
 
@@ -28,7 +29,7 @@ export function agingBucket(days: number): "0-30" | "31-60" | "61-90" | "90+" {
 }
 
 export function buildRcmReportRows(source: RcmReportSource, now: number = Date.now()): Record<string, any>[] {
-  const claims = getStoredClaims();
+  const claims = claimsOnly(getStoredClaims());
   switch (source) {
     case "claims":
       return claims.map((c) => {
@@ -61,12 +62,18 @@ export function buildRcmReportRows(source: RcmReportSource, now: number = Date.n
           return { id: c.id, claimNumber: c.claimNumber, client: c.patientName, payer: c.payer?.name || "", outstanding: outstandingOf(c), ageDays: age, bucket: agingBucket(age), stage: stageOf(c).stage?.name || c.statusLabel || "", date: ymd(c.submittedAt || c.createdAt) };
         });
     case "eligibility":
-      return getProcessInstances()
+      return [
+        ...preClaimRecords(getStoredClaims()).filter((c) => getClaimWorkflow(c.processId)?.workflowType === "eligibility").map((c) => {
+          const f: any = readLocalRecordFields("claim", c.id) || {};
+          return { id: c.id, client: c.patientName, process: getClaimWorkflow(c.processId)?.name || "", stage: c.statusLabel || "", status: f.elig_status || "", payer: f.elig_payer || "", copay: Number(f.elig_copay) || 0, checkedAt: f.elig_checked_at || "", date: ymd(f.elig_checked_at || c.createdAt) } as Record<string, any>;
+        }).filter((r) => r.status),
+        ...getProcessInstances()
         .filter((i) => (i as any).elig_status)
         .map((i) => {
           const r: any = i;
           return { id: i.instanceId || i.id, client: i.client, process: i.process, stage: i.currentStage, status: r.elig_status, payer: r.elig_payer || "", copay: Number(r.elig_copay) || 0, checkedAt: r.elig_checked_at || "", date: ymd(r.elig_checked_at), reason: r.elig_reason_code || "", source: r.elig_source || "" };
-        });
+        }),
+      ];
   }
 }
 

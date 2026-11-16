@@ -3,7 +3,7 @@ import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
 import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
 import { claimService } from "../../lib/claimService";
-import { getClaimWorkflow, getClaimWorkflows } from "../../lib/claimWorkflows";
+import { getClaimWorkflow, getClaimWorkflows, isPreClaimWorkflow } from "../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
@@ -106,7 +106,10 @@ export default function Claims() {
       if (workflowPicked.current || claims.length === 0) return;
       workflowPicked.current = true;
     }
-    const best = [...insuranceProcesses].sort((a, b) => (workflowCounts[b.id] || 0) - (workflowCounts[a.id] || 0))[0];
+    // default = the workflow with the most records; Eligibility / Prior auth (decided by workflow type) only when no claim workflow has any
+    const claimTypes = insuranceProcesses.filter((w) => !isPreClaimWorkflow(w) && (workflowCounts[w.id] || 0) > 0);
+    const pool = claimTypes.length > 0 ? claimTypes : insuranceProcesses;
+    const best = [...pool].sort((a, b) => (workflowCounts[b.id] || 0) - (workflowCounts[a.id] || 0))[0];
     setSelectedProcessFilter(best.id);
   }, [insuranceProcesses, workflowCounts, selectedProcessFilter]);
 

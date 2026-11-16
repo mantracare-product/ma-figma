@@ -3,7 +3,8 @@
  * filtered by payer and date range (claim date = submittedAt, else createdAt).
  */
 import { getStoredClaims, type Claim } from "./claimsStore";
-import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
+import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows, preClaimRecords } from "./claimWorkflows";
+import { readLocalRecordFields } from "./recordWriter";
 import { buildRcmReportRows } from "./rcmReportSources";
 import { queueCounts } from "./rcmKpis";
 import { stripSampleSuffix } from "./sampleSuffixMigration";
@@ -64,7 +65,7 @@ export interface ClaimsOverviewData {
 const BUCKETS = ["0-30", "31-60", "61-90", "90+"];
 
 export function buildClaimsOverview(f: OverviewFilters = {}, now: number = Date.now()): ClaimsOverviewData {
-  const all = getStoredClaims();
+  const all = claimsOnly(getStoredClaims());
   const claims = filterClaims(all, f);
   const ids = new Set(claims.map((c) => c.id));
 
@@ -91,7 +92,8 @@ export function buildClaimsOverview(f: OverviewFilters = {}, now: number = Date.
   const payerMixMap = new Map<string, number>();
   claims.forEach((c) => payerMixMap.set(c.payer?.name || "Unassigned", (payerMixMap.get(c.payer?.name || "Unassigned") || 0) + (c.totalCharge || 0)));
 
-  const inst = getProcessInstances().filter((i) => (i as any).elig_status);
+  const records = preClaimRecords(getStoredClaims()).filter((c) => getClaimWorkflow(c.processId)?.workflowType === "eligibility").map((c) => ({ elig_status: (readLocalRecordFields("claim", c.id) as any)?.elig_status || "" }));
+  const inst = [...records, ...getProcessInstances()].filter((i) => (i as any).elig_status);
   const eligLabel = (s: string) => (s === "active" ? "Verified" : s === "not_found" || s === "provider_setup" ? "Needs fix" : s === "inactive" ? "Inactive" : s === "inconclusive" || s === "pending_review" ? "Inconclusive" : "");
   const eligibility = ["Verified", "Needs fix", "Inactive", "Inconclusive"].map((name) => ({ name, value: inst.filter((i) => eligLabel((i as any).elig_status) === name).length }));
 
@@ -118,7 +120,7 @@ export interface KpiDeltas {
 }
 
 export function kpiDeltas(now: number = Date.now()): KpiDeltas {
-  const claims = getStoredClaims();
+  const claims = claimsOnly(getStoredClaims());
   const DAY = 86400000;
   const inWin = (c: Claim, a: number, b: number) => { const t = Date.parse(c.submittedAt || c.createdAt || ""); return !Number.isNaN(t) && t > now - b * DAY && t <= now - a * DAY; };
   const cur = claims.filter((c) => inWin(c, 0, 30));

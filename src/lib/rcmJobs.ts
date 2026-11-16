@@ -116,14 +116,14 @@ export async function runDaily(now: Date = new Date(), only?: string[]): Promise
 // Claim jobs (Slice 4) ------------------------------------------------------------------------------------
 
 import { getStoredClaims } from "./claimsStore";
-import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
+import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
 
 /**
  * Every claim with where it is: stage name + category and how long it has been there (claim.updatedAt is the last
  * stage change/edit). Rules pick what they need with conditions on stageCategory / stageName / ageDays / ageHours.
  */
 registerDailyJob("claims", (now) =>
-  getStoredClaims().map((c) => {
+  claimsOnly(getStoredClaims()).map((c) => {
     const wf = getClaimWorkflow(c.processId) || getClaimWorkflows()[0];
     const stage = findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel);
     const ageMs = Math.max(0, now.getTime() - (Date.parse(c.updatedAt) || now.getTime()));
