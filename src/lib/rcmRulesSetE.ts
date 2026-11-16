@@ -35,7 +35,7 @@ export function buildSetERules(): SampleRuleDef[] {
   return [
     {
       id: "sample-rule-A1",
-      name: "A1 Start coverage check when an appointment is booked (Sample)",
+      name: "A1 Start coverage check when an appointment is booked",
       description: "Creates a Coverage & authorization instance for the appointment, then checks eligibility (30-day window, copy-fresh).",
       entityType: "appointment",
       trigger: { event: "appointment.booked" },
@@ -49,7 +49,7 @@ export function buildSetERules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A2",
-      name: "A2 Daily: re-check visits in the next 3 days (Sample)",
+      name: "A2 Daily: re-check visits in the next 3 days",
       entityType: "appointment",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "upcoming_visits"), cond("c2", "daysUntil", "less_than_or_equal", 3)],
@@ -58,39 +58,39 @@ export function buildSetERules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A3",
-      name: "A3 Coverage changed: re-check future visits (Sample)",
+      name: "A3 Coverage changed: re-check future visits",
       entityType: "client",
       trigger: { event: "coverage.updated" },
       action: NOOP_ACTION,
       actions: [step("a3-elig", "run_eligibility", { scope: "future_appointments", targets: ["instance", "appointment"], windowDays: 0, stageMap: ELIGIBILITY_STAGE_MAP })],
     },
-    stageEntry("sample-rule-A4", "A4 Needs fix: task in Insurance fixes (Sample)", "Needs fix", [
+    stageEntry("sample-rule-A4", "A4 Needs fix: task in Insurance fixes", "Needs fix", [
       step("a4-task", "create_task", { title: "Fix insurance for {{client.name}}", queue: "Insurance fixes", priority: "high", dueInDays: 1 }),
     ]),
-    stageEntry("sample-rule-A5", "A5 Inactive: task and message to update insurance (Sample)", "Inactive", [
+    stageEntry("sample-rule-A5", "A5 Inactive: task and message to update insurance", "Inactive", [
       step("a5-task", "create_task", { title: "Insurance inactive: {{client.name}}", queue: "Insurance fixes", priority: "high", dueInDays: 1 }),
       step("a5-msg", "send_message", { channel: "sms", template: "update_insurance" }),
     ]),
-    stageEntry("sample-rule-A6", "A6 Provider setup issue: task in Enrollment (Sample)", "Provider setup issue", [
+    stageEntry("sample-rule-A6", "A6 Provider setup issue: task in Enrollment", "Provider setup issue", [
       step("a6-task", "create_task", { title: "Check provider enrollment for {{client.name}}", queue: "Enrollment", priority: "normal", dueInDays: 3 }),
     ]),
     stageEntry(
       "sample-rule-A7",
-      "A7 Inconclusive with voice on: call the payer (Sample)",
+      "A7 Inconclusive with voice on: call the payer",
       "Inconclusive",
       [step("a7-call", "start_call", { purpose: "payer_benefits", resultStage: "Pending review" })],
       { conditions: [cond("c1", "_voiceEnabled", "equals", "true")] }
     ),
     stageEntry(
       "sample-rule-A8",
-      "A8 Inconclusive with voice off: task in Benefits to verify (Sample)",
+      "A8 Inconclusive with voice off: task in Benefits to verify",
       "Inconclusive",
       [step("a8-task", "create_task", { title: "Verify benefits by phone: {{client.name}}", queue: "Benefits to verify", priority: "normal", dueInDays: 1 })],
       { conditions: [cond("c1", "_voiceEnabled", "equals", "false")] }
     ),
     {
       id: "sample-rule-A9",
-      name: "A9 Daily: send the estimate 2 days before a verified visit (Sample)",
+      name: "A9 Daily: send the estimate 2 days before a verified visit",
       entityType: "client",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "instance_visit_countdown"), cond("c2", "daysUntil", "equals", 2), cond("c3", "elig_status", "equals", "active")],
@@ -99,7 +99,7 @@ export function buildSetERules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A10",
-      name: "A10 Booked: check and request prior authorization (Sample)",
+      name: "A10 Booked: check and request prior authorization",
       description: "Order 20: runs after A1 on the same event so the instance exists. With no instance (A1 disabled) it writes to the appointment only and creates no instance.",
       entityType: "appointment",
       trigger: { event: "appointment.booked" },
@@ -121,7 +121,7 @@ export function buildSetERules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A13",
-      name: "A13 Checked in: re-verify if the last check is older than a day (Sample)",
+      name: "A13 Checked in: re-verify if the last check is older than a day",
       entityType: "appointment",
       trigger: { event: "appointment.checked_in" },
       conditions: [cond("c1", "_daysSinceLastCheck", "greater_than", 1)],

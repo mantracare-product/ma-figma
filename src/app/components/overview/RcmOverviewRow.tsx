@@ -24,15 +24,13 @@ export default function RcmOverviewRow() {
   const queues = queueCounts();
   const k = rcmKpis();
   const hasData = queues.length > 0 || k.claimsTotal > 0 || k.eligibilityChecked > 0;
-  const mock = queues.some((q) => q.sample);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 mb-6" data-testid="rcm-overview-row">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-900">Revenue cycle</h2>
-        {mock && <span className="text-[10px] font-bold uppercase text-amber-700">Includes mock data</span>}
       </div>
-      {!hasData && <p className="text-xs text-slate-500">No revenue-cycle data yet. Load sample templates on the Automation page to see this row filled.</p>}
+      {!hasData && <p className="text-xs text-slate-500">No revenue-cycle data yet. Claims, tasks and eligibility checks will appear here as they are created.</p>}
       {queues.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {queues.map((q) => (

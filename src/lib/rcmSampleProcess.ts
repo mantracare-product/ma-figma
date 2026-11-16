@@ -47,8 +47,8 @@ export function buildCoverageSampleProcess(): Process {
   }));
   return {
     id: SAMPLE_COVERAGE_PROCESS_ID,
-    name: `${SAMPLE_COVERAGE_PROCESS_NAME} (Sample)`,
-    description: "Sample: one instance per appointment tracks eligibility and prior authorization",
+    name: SAMPLE_COVERAGE_PROCESS_NAME,
+    description: "One instance per appointment tracks eligibility and prior authorization",
     assignedToUserId: 1,
     entityType: "client",
     aiSettings: { platform: "OpenAI - GPT-4o", voiceSpeed: 1.0, voice: "Ava", tone: "Professional", style: "Balanced" },

@@ -13,7 +13,7 @@ export function buildSetE2Rules(): SampleRuleDef[] {
   return [
     {
       id: "sample-rule-A11",
-      name: "A11 Daily: authorization expires within 14 days or 80% of units used, renew it (Sample)",
+      name: "A11 Daily: authorization expires within 14 days or 80% of units used, renew it",
       entityType: "client",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "instance_visit_countdown"), cond("c2", "authRenewalDue", "equals", "true")],
@@ -26,7 +26,7 @@ export function buildSetE2Rules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A12",
-      name: "A12 Daily: visit in 2 days and the authorization is not approved, notify front desk and biller (Sample)",
+      name: "A12 Daily: visit in 2 days and the authorization is not approved, notify front desk and biller",
       entityType: "client",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "instance_visit_countdown"), cond("c2", "daysUntil", "equals", 2), cond("c3", "auth_status", "equals", "requested")],

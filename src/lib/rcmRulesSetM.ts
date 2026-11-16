@@ -23,7 +23,7 @@ export function buildSetMRules(): SampleRuleDef[] {
   return [
     {
       id: "sample-rule-A21",
-      name: "A21 Daily: accepted claims with no payment after 30 days, check status (Sample)",
+      name: "A21 Daily: accepted claims with no payment after 30 days, check status",
       entityType: "claim",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "claims"), cond("c2", "stageCategory", "equals", "accepted"), cond("c3", "ageDays", "greater_than", 30)],
@@ -35,7 +35,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A22",
-      name: "A22 ERA received: post the payments (Sample)",
+      name: "A22 ERA received: post the payments",
       entityType: "claim",
       trigger: { event: "era.received" },
       action: NOOP,
@@ -43,7 +43,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A23",
-      name: "A23 ERA lines that match no claim: task in Posting (Sample)",
+      name: "A23 ERA lines that match no claim: task in Posting",
       entityType: "claim",
       trigger: { event: "era.unmatched" },
       action: NOOP,
@@ -51,7 +51,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A24",
-      name: "A24 Underpaid by more than $5: Partially paid + task in Posting (Sample)",
+      name: "A24 Underpaid by more than $5: Partially paid + task in Posting",
       entityType: "claim",
       trigger: { event: "claim.partially_paid" },
       conditions: [cond("c1", "underpaidBy", "greater_than", 5)],
@@ -63,7 +63,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A25",
-      name: "A25 Denied: move to Denial & appeal, set priority, queue a Denials and A/R task (Sample)",
+      name: "A25 Denied: move to Denial & appeal, set priority, queue a Denials and A/R task",
       entityType: "claim",
       trigger: { event: "claim.denied" },
       action: NOOP,
@@ -73,31 +73,31 @@ export function buildSetMRules(): SampleRuleDef[] {
         step("a25-task", "create_task", { title: "Work the denial: {{client.name}}", queue: "Denials and A/R", priority: "high", dueInDays: 2, workflowId: W.denial, stage: "New denial" }),
       ],
     },
-    { ...claimStageEntry("sample-rule-A25b", "A25 New denial that can be appealed: draft the appeal (Sample)", W.denial, sid(W.denial, "New denial"), [step("a25b-appeal", "draft_appeal", {})]), conditions: [cond("c1", "denialNext", "equals", "appeal")] },
+    { ...claimStageEntry("sample-rule-A25b", "A25 New denial that can be appealed: draft the appeal", W.denial, sid(W.denial, "New denial"), [step("a25b-appeal", "draft_appeal", {})]), conditions: [cond("c1", "denialNext", "equals", "appeal")] },
     {
       id: "sample-rule-A26",
-      name: "A26 Daily: appeal deadline within 14 days, notify the manager and raise priority (Sample)",
+      name: "A26 Daily: appeal deadline within 14 days, notify the manager and raise priority",
       entityType: "claim",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "claims"), cond("c2", "stageCategory", "equals", "denied"), cond("c3", "daysToAppealDeadline", "less_than_or_equal", 14)],
       action: NOOP,
       actions: [step("a26-notify", "notify", { title: "Appeal deadline close", message: "A denied claim's appeal deadline is within 14 days" }), step("a26-fields", "update_fields", { targets: ["this"], fields: { priority: "urgent" } })],
     },
-    claimStageEntry("sample-rule-A27a", "A27 Claim paid: update the invoice and send the statement (Sample)", W.claim, sid(W.claim, "Paid"), [
+    claimStageEntry("sample-rule-A27a", "A27 Claim paid: update the invoice and send the statement", W.claim, sid(W.claim, "Paid"), [
       step("a27a-inv", "update_invoice_from_claim", { invoiceStage: "Sent" }),
       step("a27a-msg", "send_message", { channel: "sms", template: "payment_link" }),
     ]),
-    claimStageEntry("sample-rule-A27b", "A27 Claim partially paid: update the invoice and send the statement (Sample)", W.claim, sid(W.claim, "Partially paid"), [
+    claimStageEntry("sample-rule-A27b", "A27 Claim partially paid: update the invoice and send the statement", W.claim, sid(W.claim, "Partially paid"), [
       step("a27b-inv", "update_invoice_from_claim", { invoiceStage: "Sent" }),
       step("a27b-msg", "send_message", { channel: "sms", template: "payment_link" }),
     ]),
-    claimStageEntry("sample-rule-A27c", "A27 Written off: update the invoice and send the statement (Sample)", W.denial, sid(W.denial, "Written off"), [
+    claimStageEntry("sample-rule-A27c", "A27 Written off: update the invoice and send the statement", W.denial, sid(W.denial, "Written off"), [
       step("a27c-inv", "update_invoice_from_claim", { invoiceStage: "Sent" }),
       step("a27c-msg", "send_message", { channel: "sms", template: "payment_link" }),
     ]),
     {
       id: "sample-rule-A28a",
-      name: "A28 Daily: invoice sent 15 days ago and unpaid, Reminder 1 (Sample)",
+      name: "A28 Daily: invoice sent 15 days ago and unpaid, Reminder 1",
       entityType: "invoice",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "invoices"), cond("c2", "stageCategory", "equals", "sent"), cond("c3", "ageDays", "greater_than_or_equal", 15)],
@@ -106,7 +106,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A28b",
-      name: "A28 Daily: Reminder 1 sent 30 days ago and still unpaid, Reminder 2 (Sample)",
+      name: "A28 Daily: Reminder 1 sent 30 days ago and still unpaid, Reminder 2",
       entityType: "invoice",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "invoices"), cond("c2", "stageName", "equals", "Reminder 1"), cond("c3", "ageDays", "greater_than_or_equal", 30)],
@@ -115,7 +115,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A29",
-      name: "A29 Daily: unpaid 45 days and the patient consented to voice, call about the balance (Sample)",
+      name: "A29 Daily: unpaid 45 days and the patient consented to voice, call about the balance",
       entityType: "invoice",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "invoices"), cond("c2", "ageDays", "greater_than_or_equal", 45), cond("c3", "voiceConsent", "equals", "true")],
@@ -124,7 +124,7 @@ export function buildSetMRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A30",
-      name: "A30 Daily: unpaid 60 days, mark Overdue and queue a Patient balances task (Sample)",
+      name: "A30 Daily: unpaid 60 days, mark Overdue and queue a Patient balances task",
       description: "The spec triggers on invoice.overdue; nothing emits that after 60 days, so this runs from the daily job.",
       entityType: "invoice",
       trigger: { event: "job.daily" },

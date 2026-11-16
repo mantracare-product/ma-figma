@@ -38,13 +38,17 @@
         }
         submittedClaim(w, "k1", {});
         submittedClaim(w, "k2", { denialCategory: "appealable", amountPaid: 0 });
+        sessionStorage.setItem("overview_slide", "claims"); // open the Claims overview slide
       },
       phases: [
         {
           nav: "/",
           async verify() {
             const r = T.rcm();
+            await T.ui.wait("claims-overview", 15000);
             await T.ui.wait("rcm-overview-row", 15000);
+            for (const chartTitle of ["Claims by stage", "Claims by workflow", "Denial rate by month", "A/R aging", "Payer mix", "First-pass acceptance", "Eligibility results", "Task queues"]) assert(document.body.innerText.includes(chartTitle), "chart card: " + chartTitle);
+            assert(!/(Sample)|mock data/i.test(T.ui.textOf("claims-overview")), "no Sample / mock wording on the Claims overview: " + (T.ui.textOf("claims-overview").match(/.{0,30}((Sample)|mock data).{0,30}/i) || [""])[0]);
             const txt = T.ui.textOf("rcm-overview-row");
             const q = r.kpis.queueCounts().find((x) => x.name.indexOf("Claim fixes") === 0);
             eq(q.open, 3, "selector says 3 open Claim fixes tasks");
@@ -151,7 +155,8 @@
           async verify() {
             await T.ui.waitText("Overview Analytics", 15000);
             await T.h.settle(500);
-            assert(!T.ui.has("rcm-overview-row"), "RCM row hidden without rcmReports");
+            assert(!T.ui.has("rcm-overview-row") && !T.ui.has("claims-overview"), "RCM row hidden without rcmReports");
+            assert(!document.body.innerText.includes("Claims overview"), "no Claims overview toggle without rcmReports");
           },
         },
         {
@@ -171,8 +176,8 @@
       title: "UI: a user WITH rcmReports (biller role) sees the Overview RCM row",
       usesAuth: true,
       reloadAfter: true,
-      arrange(ctx) { arrangeRole(ctx, "sample-rcm-biller", "rcmtest-biller@example.test"); },
-      phases: [{ nav: "/", async verify() { await T.ui.wait("rcm-overview-row", 15000); } }],
+      arrange(ctx) { arrangeRole(ctx, "sample-rcm-biller", "rcmtest-biller@example.test"); sessionStorage.setItem("overview_slide", "claims"); },
+      phases: [{ nav: "/", async verify() { await T.ui.wait("rcm-overview-row", 15000); await T.ui.waitText("Claims overview"); } }],
     },
     {
       title: "Audit entries are written for user-initiated RCM changes (manual claim move, coverage, auth decision, ERA, plan)",

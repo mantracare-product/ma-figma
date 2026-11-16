@@ -25,7 +25,7 @@ export function buildSetCRules(): SampleRuleDef[] {
   return [
     {
       id: "sample-rule-A14",
-      name: "A14 Visit completed: create the claim in Charge capture (Sample)",
+      name: "A14 Visit completed: create the claim in Charge capture",
       description: "Default timing. Variants A14-scribe / A14-checkin / A14-paid create the claim at another moment; enable only one.",
       entityType: "appointment",
       trigger: { event: "appointment.completed" },
@@ -34,7 +34,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A14-scribe",
-      name: "A14 variant: create the claim when the note is signed (Sample)",
+      name: "A14 variant: create the claim when the note is signed",
       description: "Variant of A14 (enable one). Needs the scribe note to be signed with accepted codes.",
       entityType: "client",
       trigger: { event: "scribe.note_signed" },
@@ -44,7 +44,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A14-checkin",
-      name: "A14 variant: create the claim at check-in (Sample)",
+      name: "A14 variant: create the claim at check-in",
       entityType: "appointment",
       trigger: { event: "appointment.checked_in" },
       action: NOOP,
@@ -53,7 +53,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A14-paid",
-      name: "A14 variant: create the claim when the invoice is paid (Sample)",
+      name: "A14 variant: create the claim when the invoice is paid",
       entityType: "invoice",
       trigger: { event: "invoice.paid" },
       action: NOOP,
@@ -62,7 +62,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A15",
-      name: "A15 Daily: nudge the provider about notes waiting over 24 h (Sample)",
+      name: "A15 Daily: nudge the provider about notes waiting over 24 h",
       entityType: "claim",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "claims"), cond("c2", "stageCategory", "equals", "awaiting_note"), cond("c3", "ageHours", "greater_than", 24)],
@@ -71,19 +71,19 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A16a",
-      name: "A16 Note signed and codes accepted: mark ready to bill (Sample)",
+      name: "A16 Note signed and codes accepted: mark ready to bill",
       entityType: "claim",
       trigger: { event: "claim.note_signed" },
       action: NOOP,
       actions: [step("a16a-move", "update_to_stage", { stageEntity: "claim", processId: W.chargeCapture, stageName: "Ready to bill" })],
     },
-    claimStageEntry("sample-rule-A16b", "A16 Ready to bill: move the claim to the Claim workflow (Sample)", W.chargeCapture, "Ready to bill", [
+    claimStageEntry("sample-rule-A16b", "A16 Ready to bill: move the claim to the Claim workflow", W.chargeCapture, "Ready to bill", [
       step("a16b-mtw", "move_to_workflow", { workflowId: W.claim, stageName: "Draft" }),
     ]),
-    claimStageEntry("sample-rule-A16c", "A16 Draft: scrub the claim (Sample)", W.claim, "Draft", [step("a16c-scrub", "scrub_claim", { onPass: "Ready to submit" })]),
+    claimStageEntry("sample-rule-A16c", "A16 Draft: scrub the claim", W.claim, "Draft", [step("a16c-scrub", "scrub_claim", { onPass: "Ready to submit" })]),
     {
       id: "sample-rule-A17",
-      name: "A17 Scrub failed: move to Scrub failed and queue a Claim fixes task (Sample)",
+      name: "A17 Scrub failed: move to Scrub failed and queue a Claim fixes task",
       entityType: "claim",
       trigger: { event: "claim.scrub_failed" },
       action: NOOP,
@@ -94,7 +94,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A18",
-      name: "A18 Daily: submit claims that are ready (Sample)",
+      name: "A18 Daily: submit claims that are ready",
       entityType: "claim",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "claims"), cond("c2", "stageCategory", "equals", "ready")],
@@ -103,7 +103,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A19",
-      name: "A19 Daily: tell the biller about claims submitted over 2 days without a response (Sample)",
+      name: "A19 Daily: tell the biller about claims submitted over 2 days without a response",
       entityType: "claim",
       trigger: { event: "job.daily" },
       conditions: [cond("c1", "job", "equals", "claims"), cond("c2", "stageCategory", "equals", "submitted"), cond("c3", "ageDays", "greater_than", 2)],
@@ -112,7 +112,7 @@ export function buildSetCRules(): SampleRuleDef[] {
     },
     {
       id: "sample-rule-A20",
-      name: "A20 Rejected: queue a Claim fixes task (Sample)",
+      name: "A20 Rejected: queue a Claim fixes task",
       entityType: "claim",
       trigger: { event: "claim.rejected" },
       action: NOOP,

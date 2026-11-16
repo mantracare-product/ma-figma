@@ -35,7 +35,7 @@ function stagesFor(processId: string, rows: Row[]): Stage[] {
 const base = (id: string, name: string, description: string, rows: Row[], requiredCategories: string[]): Process =>
   ({
     id,
-    name: `${name} (Sample)`,
+    name,
     description,
     assignedToUserId: 1,
     entityType: "claim",
@@ -48,13 +48,13 @@ const base = (id: string, name: string, description: string, rows: Row[], requir
 export function buildSampleClaimWorkflows(): Process[] {
   const { chargeCapture, claim, denial } = SAMPLE_CLAIM_WORKFLOW_IDS;
   return [
-    base(chargeCapture, "Charge capture", "Sample: the visit's charges are coded before a claim is built", [
+    base(chargeCapture, "Charge capture", "The visit's charges are coded before a claim is built", [
       ["Awaiting note", "awaiting_note", "initial", "in_progress", "#64748B"],
       ["Coding review", "coding", "intermediate", "in_progress", "#3B82F6"],
       ["Hold", "hold", "intermediate", "in_progress", "#F59E0B"],
       ["Ready to bill", "ready_to_bill", "final", "success", "#10B981"],
     ], []),
-    base(claim, "Claim", "Sample: scrub, submit and follow the claim to payment", [
+    base(claim, "Claim", "Scrub, submit and follow the claim to payment", [
       ["Draft", "draft", "initial", "in_progress", "#64748B"],
       ["Scrub failed", "scrub_failed", "intermediate", "in_progress", "#F59E0B"],
       ["Ready to submit", "ready", "intermediate", "in_progress", "#06B6D4"],
@@ -66,7 +66,7 @@ export function buildSampleClaimWorkflows(): Process[] {
       ["Paid", "paid", "final", "success", "#10B981"],
       ["Closed", "closed", "final", "success", "#14B8A6"],
     ], ["submitted", "paid"]),
-    base(denial, "Denial & appeal", "Sample: work a denied claim until it is corrected, appealed or written off", [
+    base(denial, "Denial & appeal", "Work a denied claim until it is corrected, appealed or written off", [
       ["New denial", "denied", "initial", "in_progress", "#EF4444"],
       ["Correct & resubmit", "correct", "intermediate", "in_progress", "#F59E0B"],
       ["Appeal drafted", "appeal_drafted", "intermediate", "in_progress", "#8B5CF6"],

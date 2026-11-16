@@ -42,7 +42,7 @@ export const queueIdFromName = (name: string) => name.trim().toLowerCase().repla
 
 export const SAMPLE_TASK_VIEWS: TaskView[] = SAMPLE_QUEUE_NAMES.map((name) => ({
   id: `view-sample-${queueIdFromName(name)}`,
-  name: `${name} (Sample)`,
+  name,
   queueIds: [queueIdFromName(name)],
   columns: DEFAULT_VIEW_COLUMNS,
   sample: true,

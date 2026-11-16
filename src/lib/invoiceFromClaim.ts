@@ -104,7 +104,7 @@ export function seedInvoiceSampleStages(): number {
   const fresh: Stage[] = SAMPLE_INVOICE_STAGE_NAMES.filter((n) => !have.has(n.toLowerCase())).map((n) => ({
     id: `${proc.id}-sample-${n.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name: n,
-    description: "Sample stage",
+    description: "",
     systemCategory: n.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
     status: "active",
     color: n === "Written off" ? "#64748B" : "#F59E0B",

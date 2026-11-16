@@ -1,4 +1,8 @@
-import RcmOverviewRow from "../components/overview/RcmOverviewRow";
+import ClaimsOverview from "../components/overview/ClaimsOverview";
+import { PageTopBar } from "../components/layout/PageTopBar";
+import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
+import { getStoredClaims } from "../../lib/claimsStore";
+import { Phone as PhoneIcon, FileText as FileTextIcon } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -126,7 +130,7 @@ const CustomPerformanceTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export default function Overview() {
+function CallsOverview() {
   const navigate = useNavigate();
 
   const [filterProcess, setFilterProcess] = useState("All Processes");
@@ -197,8 +201,6 @@ export default function Overview() {
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full">
-        <RcmOverviewRow />
-
         {/* ── Strict 6-Column Grid ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-start">
           {/* ROW 1: Page Header & Dropdown Filter Pills (Col-span 6) */}
@@ -681,6 +683,58 @@ export default function Overview() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Overview with two slides: Call overview (unchanged) and Claims overview (revenue cycle; needs rcmReports). */
+export default function Overview() {
+  const { hasPermission } = useCurrentPermissions();
+  const canClaims = hasPermission("rcmReports", "read");
+  const [slide, setSlide] = useState<"calls" | "claims">(() => (sessionStorage.getItem("overview_slide") === "claims" ? "claims" : "calls"));
+  const [payer, setPayer] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const active = canClaims ? slide : "calls";
+  const payers = useMemo(() => Array.from(new Set(getStoredClaims().map((c) => c.payer?.name).filter(Boolean) as string[])).sort(), [slide]);
+  const select = (id: string) => { setSlide(id as "calls" | "claims"); try { sessionStorage.setItem("overview_slide", id); } catch { /* ignore */ } };
+
+  return (
+    <div data-testid="overview-slider">
+      {canClaims && (
+        <div className="px-10 sm:px-12 pt-6">
+          <PageTopBar
+            showSearch={false}
+            modes={[
+              { id: "calls", label: "Call overview", icon: <PhoneIcon className="w-3.5 h-3.5" /> },
+              { id: "claims", label: "Claims overview", icon: <FileTextIcon className="w-3.5 h-3.5" /> },
+            ]}
+            activeMode={active}
+            onModeChange={select}
+            leftElement={
+              active === "claims" ? (
+                <div className="flex items-center gap-2">
+                  <select value={payer} onChange={(e) => setPayer(e.target.value)} className="h-[36px] px-3 text-xs font-semibold border border-gray-200 rounded-lg bg-white" aria-label="Payer">
+                    <option value="all">All payers</option>
+                    {payers.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-[36px] px-2 text-xs border border-gray-200 rounded-lg bg-white" aria-label="From" />
+                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-[36px] px-2 text-xs border border-gray-200 rounded-lg bg-white" aria-label="To" />
+                </div>
+              ) : undefined
+            }
+          />
+        </div>
+      )}
+      {active === "calls" ? (
+        <CallsOverview />
+      ) : (
+        <div className="min-h-screen bg-[#fafafa]">
+          <div className="px-10 sm:px-12 py-6 w-full">
+            <ClaimsOverview payer={payer} from={from} to={to} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -126,7 +126,7 @@ describe("move_to_workflow action", () => {
   const ev = (id = "E1"): any => ({ id, event: "claim.denied", recordType: "claim", recordId: "clm-T", data: {}, timestamp: "" });
 
   it("moves the claim, accepts the workflow by name, and a repeat to the same place is a no-op", () => {
-    const r1 = mtw.executeMoveToWorkflowStep({ rule, stepId: "s", params: { workflowId: "Denial & appeal (Sample)" }, event: ev("E1"), cause });
+    const r1 = mtw.executeMoveToWorkflowStep({ rule, stepId: "s", params: { workflowId: "Denial & appeal" }, event: ev("E1"), cause });
     expect(r1.status).toBe("success");
     expect(r1.result).toMatchObject({ moved: true, workflowId: IDS().denial });
     const r2 = mtw.executeMoveToWorkflowStep({ rule, stepId: "s", params: { workflowId: IDS().denial }, event: ev("E2"), cause });

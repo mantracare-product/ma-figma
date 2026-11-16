@@ -35,13 +35,13 @@ export const MESSAGE_VARIABLES = [
 ] as const;
 
 export const SAMPLE_MESSAGE_TEMPLATES: MessageTemplate[] = [
-  { id: "update_insurance", name: "Update your insurance (Sample)", channel: "sms", sample: true,
+  { id: "update_insurance", name: "Update your insurance", channel: "sms", sample: true,
     body: "Hi {{client.name}}, we could not verify your insurance for your visit on {{appointment.date}}. Please update it here: {{billing.payment_link}}" },
-  { id: "estimate", name: "Visit estimate (Sample)", channel: "sms", sample: true,
+  { id: "estimate", name: "Visit estimate", channel: "sms", sample: true,
     body: "Hi {{client.name}}, your visit on {{appointment.date}} is covered by {{insurance.payer}}. Estimated copay {{insurance.copay}}; deductible remaining {{insurance.deductible_remaining}}." },
-  { id: "payment_link", name: "Statement and payment link (Sample)", channel: "sms", sample: true,
+  { id: "payment_link", name: "Statement and payment link", channel: "sms", sample: true,
     body: "Hi {{client.name}}, your statement is ready. Balance {{billing.balance}}. Pay securely: {{billing.payment_link}}" },
-  { id: "balance_reminder", name: "Balance reminder (Sample)", channel: "sms", sample: true,
+  { id: "balance_reminder", name: "Balance reminder", channel: "sms", sample: true,
     body: "Reminder for {{client.name}}: balance {{billing.balance}} is still open. Pay here: {{billing.payment_link}}" },
 ];
 

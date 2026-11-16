@@ -73,7 +73,7 @@ describe("send_message (mock dispatch)", () => {
 
   it("insurance variables read the primary coverage payer", () => {
     msg.executeSendMessageStep({ rule, stepId: "s", params: { channel: "sms", body: "Payer: {{insurance.payer}}" }, event: ev() });
-    expect(convFor()!.messages.slice(-1)[0].text).toBe("Payer: Blue Cross Blue Shield (Sample)");
+    expect(convFor()!.messages.slice(-1)[0].text).toBe("Payer: Blue Cross Blue Shield");
   });
 
   it("no SMS consent: nothing is sent and the result says so (not a failure)", () => {

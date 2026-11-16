@@ -142,26 +142,26 @@ const P = (id: string, name: string, code: string, type: Payer["type"], enrolled
 });
 
 export const SAMPLE_PAYERS: Payer[] = [
-  P("bcbs", "Blue Cross Blue Shield (Sample)", "BCBS1", "commercial"),
-  P("aetna", "Aetna (Sample)", "AETNA", "commercial"),
-  P("uhc", "UnitedHealthcare (Sample)", "UHC01", "commercial"),
-  P("cigna", "Cigna (Sample)", "CIGNA", "commercial"),
-  P("medicare", "Medicare (Sample)", "MCARE", "medicare"),
-  P("medicaid", "Medicaid (Sample)", "MCAID", "medicaid"),
-  P("humana", "Humana (Sample)", "HUMAN", "commercial"),
-  P("anthem", "Anthem (Sample)", "ANTHM", "commercial"),
-  P("kaiser", "Kaiser Permanente (Sample)", "KAISR", "commercial"),
-  P("tricare", "Tricare (Sample)", "TRICR", "other"),
-  P("molina", "Molina Healthcare (Sample)", "MOLNA", "medicaid", false),
-  P("centene", "Centene (Sample)", "CENTN", "commercial"),
-  P("oscar", "Oscar Health (Sample)", "OSCAR", "commercial", false),
-  P("emblem", "EmblemHealth (Sample)", "EMBLM", "commercial"),
-  P("highmark", "Highmark (Sample)", "HGHMK", "commercial"),
+  P("bcbs", "Blue Cross Blue Shield", "BCBS1", "commercial"),
+  P("aetna", "Aetna", "AETNA", "commercial"),
+  P("uhc", "UnitedHealthcare", "UHC01", "commercial"),
+  P("cigna", "Cigna", "CIGNA", "commercial"),
+  P("medicare", "Medicare", "MCARE", "medicare"),
+  P("medicaid", "Medicaid", "MCAID", "medicaid"),
+  P("humana", "Humana", "HUMAN", "commercial"),
+  P("anthem", "Anthem", "ANTHM", "commercial"),
+  P("kaiser", "Kaiser Permanente", "KAISR", "commercial"),
+  P("tricare", "Tricare", "TRICR", "other"),
+  P("molina", "Molina Healthcare", "MOLNA", "medicaid", false),
+  P("centene", "Centene", "CENTN", "commercial"),
+  P("oscar", "Oscar Health", "OSCAR", "commercial", false),
+  P("emblem", "EmblemHealth", "EMBLM", "commercial"),
+  P("highmark", "Highmark", "HGHMK", "commercial"),
 ];
 
 export const SAMPLE_LOCATIONS: BillingLocation[] = [
-  { id: "loc-sample-main", name: "Main clinic (Sample)", pos: "11", address: "100 Sample Street", sample: true },
-  { id: "loc-sample-branch", name: "Branch clinic (Sample)", pos: "11", address: "200 Sample Avenue", sample: true },
+  { id: "loc-sample-main", name: "Main clinic", pos: "11", address: "100 Sample Street", sample: true },
+  { id: "loc-sample-branch", name: "Branch clinic", pos: "11", address: "200 Sample Avenue", sample: true },
 ];
 
 export const SAMPLE_ENTITY: BillingEntity = {
@@ -178,7 +178,7 @@ export const SAMPLE_ENTITY: BillingEntity = {
 export const SAMPLE_FEE_SCHEDULES: FeeSchedule[] = [
   {
     id: "fee-sample-default",
-    name: "Default fee schedule (Sample)",
+    name: "Default fee schedule",
     lines: [
       { cpt: "99214", amount: 150 },
       { cpt: "92014", amount: 180 },
@@ -191,7 +191,7 @@ export const SAMPLE_FEE_SCHEDULES: FeeSchedule[] = [
   },
   {
     id: "fee-sample-bcbs",
-    name: "BCBS contracted (Sample)",
+    name: "BCBS contracted",
     payerId: "payer-bcbs",
     lines: [
       { cpt: "99214", amount: 120 },
