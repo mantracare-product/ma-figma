@@ -5,6 +5,7 @@
 import type { BusEvent } from "./eventBus";
 import { appointmentService, type Appointment } from "./appointmentService";
 import { getStoredClients } from "./clientsStore";
+import { getStoredClaims } from "./claimsStore";
 import { getProcessInstanceById, getProcessInstances, type CallLog } from "./processLogsStore";
 
 export interface RecordContext {
@@ -52,6 +53,9 @@ export function resolveRecordContext(event: BusEvent, opts?: { processId?: strin
   } else if (data.appointmentId) {
     ctx.appointmentId = String(data.appointmentId);
     ctx.appointment = appointmentService.getAppointmentById(data.appointmentId);
+  } else if (event.recordType === "claim" && getStoredClaims().find((c) => c.id === String(event.recordId))?.appointmentId) {
+    ctx.appointmentId = String(getStoredClaims().find((c) => c.id === String(event.recordId))!.appointmentId);
+    ctx.appointment = appointmentService.getAppointmentById(ctx.appointmentId);
   } else if (ctx.instance?.source?.type === "appointment") {
     ctx.appointmentId = String(ctx.instance.source.id);
     ctx.appointment = appointmentService.getAppointmentById(ctx.appointmentId);

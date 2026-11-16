@@ -50,3 +50,39 @@ export function computeDerivedFields(event: BusEvent, needed: Set<string>): Reco
   }
   return out;
 }
+
+/**
+ * Condition fields of the LINKED APPOINTMENT (R4.3): a rule on a claim / insurance record can test the appointment's
+ * payment mode, service, provider, channel and its registry values (copay, deductible remaining, plan end date, auth
+ * status, units ...). Only keys the rule actually uses are merged and the event's own data always wins.
+ */
+export function linkedAppointmentFields(event: BusEvent, rules: AutomationRule[]): Record<string, any> {
+  const keys = new Set<string>();
+  for (const r of rules) {
+    for (const c of [...(r.conditions || []), ...(((r.trigger?.params as any)?.triggerConditions as any[]) || [])]) {
+      const k = (c as any)?.field || (c as any)?.fieldKey;
+      if (k && typeof k === "string" && !k.startsWith("_")) keys.add(k);
+    }
+  }
+  if (keys.size === 0) return {};
+  const ctx = resolveRecordContext(event);
+  const appt: any = ctx.appointment;
+  if (!appt) return {};
+  const local = readLocalRecordFields("appointment", appt.id) || {};
+  const typed: Record<string, any> = {
+    ...appt,
+    payment_mode: appt.paymentMode,
+    service: appt.serviceName,
+    provider: appt.employeeName,
+    channel: appt.source,
+    appointment_date: appt.date,
+    appointment_time: appt.time,
+  };
+  const out: Record<string, any> = {};
+  for (const k of keys) {
+    if ((event.data as any)?.[k] !== undefined) continue;
+    const v = typed[k] ?? (local as any)[k];
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}

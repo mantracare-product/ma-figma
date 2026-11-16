@@ -11,6 +11,7 @@
   import { seedDemoWorkspace, restoreDemoScribeSessions } from "./lib/rcmDemoWorkspace";
   import { migrateStartCallToStageCalls } from "./lib/stageCallMigration";
   import { migratePaymentModes } from "./lib/paymentMode";
+  import { ensureRound4Defaults } from "./lib/rcmDefaultsR4";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -28,6 +29,9 @@
 
   // Round 4: services get the Billable flag and existing appointments a payment mode (once, logged).
   try { if (!testRunActive()) { const r = migratePaymentModes(); if (r.services || r.appointments) logMigration("R4.2", `Payment modes: ${r.services} service(s) marked billable to insurance (they had a CPT code or prior-auth default), ${r.appointments} appointment(s) given a payment mode (insurance only with a coverage and a billable service, else self-pay)`); } } catch { /* ignore */ }
+
+  // Round 4 starting set (flagged steps, ordinary editable items): appointment workflow "Appointment via Insurance"
+  try { if (!testRunActive()) ensureRound4Defaults(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

@@ -4,11 +4,14 @@
  * already in (at that stage) is a no-op. Cycles are bounded by the engine's chain depth + loop guard.
  *
  * Params: workflowId (or processId / workflowName), stageId | stageName (optional).
- * TODO(rcm): process-instance records are not supported yet (only claims).
+ * R4.3: also moves an APPOINTMENT to another appointment workflow (the record is the appointment of the event, or the
+ * one the event's record is linked to). A move to the workflow it is already in is a no-op.
  */
 import type { BusEvent } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { claimService } from "./claimService";
+import { appointmentService } from "./appointmentService";
+import { getStoredProcesses } from "./useProcessStore";
 import { getClaimWorkflows } from "./claimWorkflows";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 
@@ -36,6 +39,24 @@ export function performMoveToWorkflow(p: MoveToWorkflowPayload): { moved: boolea
 
 registerActionRetryHandler("move_to_workflow", (run) => performMoveToWorkflow(run.payload as MoveToWorkflowPayload) as any);
 
+function appointmentWorkflow(ref: string) {
+  const q = ref.trim().toLowerCase();
+  return getStoredProcesses().find((p) => p.entityType === "appointment" && (p.id === ref || (p.name || "").trim().toLowerCase() === q));
+}
+
+/** Move an appointment to another appointment workflow (initial stage unless a stage is named). */
+export function performMoveAppointmentToWorkflow(appointmentId: string, workflowRef: string, stageRef: string | undefined, cause: StageMove["cause"]): { moved: boolean; workflowId: string; stageName: string } {
+  const wf = appointmentWorkflow(workflowRef);
+  if (!wf) throw new Error(`move_to_workflow: appointment workflow "${workflowRef}" not found`);
+  const appt: any = appointmentService.getAppointmentById(appointmentId);
+  if (!appt) throw new Error(`Appointment ${appointmentId} not found`);
+  const stage = (stageRef ? wf.stages.find((s) => s.id === stageRef || (s.name || "").toLowerCase() === stageRef.toLowerCase()) : undefined) || wf.stages.find((s) => s.isInitial || s.stagePosition === "initial") || wf.stages[0];
+  if (!stage) throw new Error(`Workflow "${wf.name}" has no stages`);
+  if (appt.processId === wf.id && (!stageRef || appt.currentStageId === stage.id)) return { moved: false, workflowId: wf.id, stageName: stage.name };
+  appointmentService.moveToStage(appointmentId, stage.id, { ...(cause as any), processId: wf.id });
+  return { moved: true, workflowId: wf.id, stageName: stage.name };
+}
+
 export function executeMoveToWorkflowStep(args: {
   rule: AutomationRule;
   stepId?: string;
@@ -44,6 +65,14 @@ export function executeMoveToWorkflowStep(args: {
   cause: StageMove["cause"];
 }): RunOnceResult<any> {
   const { rule, stepId, params, event, cause } = args;
+  // appointment workflows: the record is an appointment (or is linked to one) and the target is an appointment workflow
+  const apptId = event.recordType === "appointment" ? String(event.recordId) : params.entity === "appointment" ? String((event.data as any)?.appointmentId || "") : "";
+  const wfRef = String(params.workflowId || params.processId || params.workflowName || "");
+  if (apptId && wfRef && !resolveWorkflowId(wfRef)) {
+    const stage = (params.stageId || params.stageName || undefined) as string | undefined;
+    const akey = actionIdempotencyKey("move_to_workflow", apptId, wfRef, event.id);
+    return runActionOnce(akey, { actionKey: "move_to_workflow", ruleId: rule.id, ruleName: rule.name, stepId }, () => performMoveAppointmentToWorkflow(apptId, wfRef, stage, cause) as any);
+  }
   const claimId = event.recordType === "claim" ? String(event.recordId) : params.claimId || (event.data as any)?.claimId;
   const rawWorkflow = String(params.workflowId || params.processId || params.workflowName || "");
   const workflowId = rawWorkflow ? resolveWorkflowId(rawWorkflow) : undefined;

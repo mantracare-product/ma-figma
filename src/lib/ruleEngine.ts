@@ -37,7 +37,7 @@ import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, 
 import { claimService } from "./claimService";
 import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
 import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
-import { computeDerivedFields, derivedFieldsNeeded } from "./ruleContextFields";
+import { computeDerivedFields, derivedFieldsNeeded, linkedAppointmentFields } from "./ruleContextFields";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
 import { executeAuthStep, isCheckAuthStep, isRequestAuthStep } from "./authActions";
 
@@ -335,6 +335,12 @@ export async function executeRulesForEvent(
   // rule's whole action chain completes (is awaited) before the next rule starts, so a later rule can rely on what an
   // earlier one did. (Before this, rules ran in stored-array order, i.e. newest-created first, with no explicit order.)
   matchingRules.sort(compareRulesByOrder);
+
+  // Fields of the linked appointment that the matching rules test (payment mode, service, provider, results ...)
+  try {
+    const linked = linkedAppointmentFields(event, matchingRules);
+    if (Object.keys(linked).length > 0) event.data = { ...linked, ...(event.data || {}) };
+  } catch { /* ignore */ }
 
   // Derived "_" condition fields (e.g. _hasCoverage) are computed once per event, only when a matching rule uses them.
   const neededDerived = derivedFieldsNeeded(matchingRules);

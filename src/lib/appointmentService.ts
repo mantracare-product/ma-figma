@@ -15,6 +15,7 @@
 
 import { resolvePaymentMode } from "./paymentMode";
 import { getCoveragesForClient, saveCoverage } from "./coveragesStore";
+import { getStoredServices } from "./servicesStore";
 import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules, type RuleChainContext } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
@@ -305,6 +306,13 @@ function evaluateAppointmentCondition(condition: any, data: Record<string, any> 
   }
 }
 
+/** A workflow reference (id or name) of an APPOINTMENT workflow, or undefined. */
+function resolveAppointmentWorkflowRef(ref?: string): string | undefined {
+  if (!ref) return undefined;
+  const q = String(ref).trim().toLowerCase();
+  return getStoredProcesses().find((p) => p.entityType === "appointment" && (p.id === ref || (p.name || "").trim().toLowerCase() === q))?.id;
+}
+
 export function findMatchingAppointmentBookingRule(appointmentData: Record<string, any>): {
   rule: any;
   targetProcessId?: string;
@@ -382,10 +390,12 @@ export function findMatchingAppointmentBookingRule(appointmentData: Record<strin
               "stage_movement",
               "stagemovement",
               "processmovement",
+              "move_to_workflow",
+              "move-to-workflow",
             ].includes(stepKey)
           ) {
-            targetProcessId = act.params?.processId || act.params?.stepDetailProcess || targetProcessId;
-            targetStageId = act.params?.stageId || act.params?.stepDetailStage || targetStageId;
+            targetProcessId = resolveAppointmentWorkflowRef(act.params?.workflowId || act.params?.workflowName) || act.params?.processId || act.params?.stepDetailProcess || targetProcessId;
+            targetStageId = act.params?.stageId || act.params?.stageName || act.params?.stepDetailStage || targetStageId;
             break;
           }
         }
@@ -665,9 +675,19 @@ class AppointmentService {
     const all = this.getAppointments();
     const nextId = all.length > 0 ? Math.max(...all.map((a) => Number(a.id) || 0)) + 1 : 101;
 
-    // Check if an automation rule with condition triggers matches this booking
+    const pm = resolvePaymentMode({ serviceId: payload.serviceId, requested: payload.paymentMode, source: payload.source });
+    const bookedService: any = payload.serviceId ? getStoredServices().find((x) => String(x.id) === String(payload.serviceId)) : undefined;
+
+    // Check if an automation rule with condition triggers matches this booking (rules can test the payment mode, service,
+    // provider and channel of the booking)
     const matchingRule = findMatchingAppointmentBookingRule({
       ...payload,
+      paymentMode: pm.mode,
+      payment_mode: pm.mode,
+      serviceName: bookedService?.name,
+      service: bookedService?.name,
+      provider: (payload as any).employeeName || payload.employeeId,
+      channel: payload.source || "screen",
       source: payload.source || "screen",
     });
 
@@ -739,7 +759,6 @@ class AppointmentService {
     const roomStationId = payload.roomStationId || resolvedRoom?.id;
     const roomName = payload.roomName || resolvedRoom?.name;
 
-    const pm = resolvePaymentMode({ serviceId: payload.serviceId, requested: payload.paymentMode, source: payload.source });
     if (payload.payerId && payload.memberId && resolvedClientId && !getCoveragesForClient(resolvedClientId).some((c) => c.priority === "primary")) {
       try { saveCoverage({ clientId: resolvedClientId, payerId: payload.payerId, memberId: payload.memberId, priority: "primary" } as any); } catch { /* ignore */ }
     }

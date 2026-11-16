@@ -73,6 +73,10 @@ import * as rcmDefaults from "../lib/rcmDefaults";
 import * as demoWorkspace from "../lib/rcmDemoWorkspace";
 import * as sampleSuffix from "../lib/sampleSuffixMigration";
 import * as stageCallMigration from "../lib/stageCallMigration";
+import * as paymentMode from "../lib/paymentMode";
+import * as rcmDefaultsR4 from "../lib/rcmDefaultsR4";
+import * as moveToWorkflow from "../lib/moveToWorkflowAction";
+import * as ruleContextFields from "../lib/ruleContextFields";
 import * as rcmCatalog from "../lib/rcmCatalog";
 import * as automationTypes from "../app/types/automation";
 import * as automationMapping from "../lib/automationRuleMapping";
@@ -164,7 +168,7 @@ const api = {
   appointments, clients, rolesStore, permissions, defaultRoles, sampleRoles, billing, priorAuth, eligibility, runEligibility, authActions, coverages,
   invoices, invoiceFromClaim, reports, kpis, jobs, sampleBundles, era, remittance, voice, scribeBilling, scribe, recordWriter, recordContext, actionRuns,
   audit, notifSettings, team, processStore, dealCards, claimSamples, sampleIds, ruleContext, fieldSeeds, fieldRegistry, messages, conversations, taskLinks,
-  orgBilling, rcmDefaults, rcmCatalog, automationTypes, automationMapping, demoWorkspace, sampleSuffix, stageCallMigration,
+  orgBilling, rcmDefaults, rcmCatalog, automationTypes, automationMapping, demoWorkspace, sampleSuffix, stageCallMigration, paymentMode, rcmDefaultsR4, moveToWorkflow, ruleContextFields,
   demoData, reseedDemoData: () => demoData.ensureDemoData(), coverageProcess, verifyNow, startProcess, notifications, activity, cptCodes,
 };
 
