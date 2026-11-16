@@ -1,5 +1,8 @@
 # RCM Page-by-Page Mapping — Revision 4 (architecture and capabilities)
 
+> **Round 2 amendment (R2.3).** Wherever this document says "Load sample templates", "Enable demo set", "Sample" labels, or that all sample rules ship disabled, read instead: the RCM starting set (workflows, stages, queue views, rules A1-A30, payers, prior-auth rules, message templates, field groups) is created once per workspace by `ensureRcmDefaults()` as ordinary, editable, plainly named items. Rules ship enabled, except alternates of a choice and rules that act outside the clinic on their own (send_message, start_call, submit_claim), which start off. There are no buttons for this and nothing is overwritten.
+
+
 > Planning document only; no application code was changed. Previous versions: `docs/rcm-page-mapping.rev2.md`, `docs/rcm-page-mapping.rev3.md`. Inputs: `docs/rcm-flow-spec.md.md` (misnamed, untracked; spec sections: §2 Where RCM lives, §3 flow, §4 Pipelines P1–P6, §5 Flows F1–F9, §6 Automations A1–A30, §7 Fields, §8 Queues/roles, §9 Slices), the Entity Workflows PRD, `IMPLEMENTATION_PROGRESS_REPORT.md`, and the `main` working tree (uncommitted edits to task files, `useProcessStore.ts`, `Process.tsx`). Only `main`'s pages, UI and entity-wise workflow structure are used.
 > **Verification:** I read the PRD, the progress report and `useProcessStore.ts` (types L85-204, required categories L381-388, defaults L725-818) directly (✔); everything else is from explorer reads of the working tree. Nothing was built or run. Line numbers are approximate — re-confirm before editing. **NC** = needs confirmation.
 

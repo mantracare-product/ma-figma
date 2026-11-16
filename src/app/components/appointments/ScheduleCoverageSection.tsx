@@ -6,7 +6,7 @@ import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 
 /**
  * Coverage block for the Schedule drawer: the client's primary coverage on the visit date and a "Verify now" that
- * previews the (mock) payer answer. Nothing is written from here; booking runs the sample rules, which write results.
+ * previews the payer answer. Nothing is written from here; booking runs the automation rules, which write results.
  */
 export default function ScheduleCoverageSection({ clientId, date }: { clientId?: string; date: string }) {
   const { hasPermission } = useCurrentPermissions();
@@ -33,14 +33,14 @@ export default function ScheduleCoverageSection({ clientId, date }: { clientId?:
             type="button"
             disabled={!canVerify}
             onClick={() => setPreview(previewEligibility(clientId, date))}
-            title={canVerify ? "Ask the payer now (mock)" : "You need the eligibility permission"}
+            title={canVerify ? "Ask the payer now" : "You need the eligibility permission"}
             className="px-2.5 py-1 font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
           >
             Verify now
           </button>
           {preview && (
             <span className="text-slate-700">
-              {preview.summary} <span className="text-amber-700">(mock data)</span>
+              {preview.summary}
             </span>
           )}
         </div>

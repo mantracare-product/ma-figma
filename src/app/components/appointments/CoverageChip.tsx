@@ -17,7 +17,7 @@ export default function CoverageChip({ appointment, compact = false }: { appoint
   return (
     <span
       className={`inline-flex items-center rounded-full border px-1.5 ${compact ? "py-0 text-[9px]" : "py-0.5 text-[10px]"} font-semibold shrink-0 ${s.cls}`}
-      title={`${c.summary || s.label}${c.checkedAt ? ` (checked ${c.checkedAt.slice(0, 16).replace("T", " ")})` : ""} - mock data`}
+      title={`${c.summary || s.label}${c.checkedAt ? ` (checked ${c.checkedAt.slice(0, 16).replace("T", " ")})` : ""}`}
       data-testid="coverage-chip"
     >
       {s.label}

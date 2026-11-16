@@ -375,7 +375,7 @@ export default function Reports() {
           isOpen={showHelp}
           onClose={() => setShowHelp(false)}
           title="How Reports Works"
-          summary="Reports provides live aggregated operational & financial reporting directly from your shared in-memory mock system."
+          summary="Reports provides live aggregated operational & financial reporting directly from your workspace data."
           bullets={[
             "View pre-built templates or click '+ Create Report' to build from a template or scratch",
             "Duplicate any template to create a fully editable custom report",

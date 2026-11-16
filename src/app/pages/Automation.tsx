@@ -26,7 +26,12 @@ import { useProcessStore, isProcessMatchingOrg } from "../../lib/useProcessStore
 import { useOrganization } from "../context/OrganizationContext";
 import { toast } from "sonner";
 import ActionRunsPanel from "../components/automation/ActionRunsPanel";
-import SampleTemplatesPanel from "../components/automation/SampleTemplatesPanel";
+import { runDaily } from "../../lib/rcmJobs";
+
+/** Real name of a trigger event (catalog label, else the event written out in words). */
+const triggerLabel = (ev: string) =>
+  GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === ev)?.label ||
+  ev.replace(/[._]+/g, " ").replace(/^./, (m) => m.toUpperCase());
 
 export default function Automation() {
   const { processes } = useProcessStore();
@@ -36,6 +41,8 @@ export default function Automation() {
   // Filter state
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "failed">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [entityFilter, setEntityFilter] = useState("all");
+  const [triggerFilter, setTriggerFilter] = useState("all");
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
@@ -52,6 +59,8 @@ export default function Automation() {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
       if (statusFilter === "failed" && r.health !== "failed") return false;
+      if (entityFilter !== "all" && (r.entityType || "client") !== entityFilter) return false;
+      if (triggerFilter !== "all" && r.trigger.event !== triggerFilter) return false;
 
       // Product-level rules must match active organization scope
       if (isAdminAutomationRule(r) && activeOrganization) {
@@ -72,7 +81,10 @@ export default function Automation() {
       }
       return true;
     });
-  }, [rules, statusFilter, searchQuery, activeOrganization]);
+  }, [rules, statusFilter, entityFilter, triggerFilter, searchQuery, activeOrganization]);
+
+  const entityOptions = useMemo(() => Array.from(new Set(rules.map((r) => r.entityType || "client"))).sort(), [rules]);
+  const triggerOptions = useMemo(() => Array.from(new Set(rules.map((r) => r.trigger.event))).sort(), [rules]);
 
   // Automation stats for capsule pills
   const stats = useMemo(() => {
@@ -278,8 +290,6 @@ export default function Automation() {
 
         <ActionRunsPanel />
 
-        <SampleTemplatesPanel />
-
         {/* Stats Cards — thin capsule style matching WebForms */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
           {/* Pill 1: Total Automations */}
@@ -429,6 +439,38 @@ export default function Automation() {
               onClick: () => setStatusFilter("failed"),
             },
           ]}
+          secondaryActions={
+            <div className="flex items-center gap-2" data-testid="automation-filters">
+              <select aria-label="Entity" data-testid="automation-filter-entity" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All entities</option>
+                {entityOptions.map((en) => <option key={en} value={en}>{en.charAt(0).toUpperCase() + en.slice(1)}</option>)}
+              </select>
+              <select aria-label="Trigger" data-testid="automation-filter-trigger" value={triggerFilter} onChange={(e) => setTriggerFilter(e.target.value)} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All triggers</option>
+                {triggerOptions.map((t) => <option key={t} value={t}>{triggerLabel(t)}</option>)}
+              </select>
+              <select aria-label="Status" data-testid="automation-filter-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          }
+          afterPrimaryAction={
+            <button
+              type="button"
+              data-testid="run-daily-jobs"
+              title="Runs every daily job once, now (the rule engine has no scheduler)"
+              onClick={async () => {
+                const r = await runDaily();
+                toast.success(`Daily jobs ran: ${r.emitted} record${r.emitted === 1 ? "" : "s"} processed`);
+              }}
+              className="px-3 h-[36px] text-xs font-semibold rounded-lg border border-border bg-white hover:bg-slate-50 shadow-2xs"
+            >
+              Run daily jobs now
+            </button>
+          }
           primaryAction={{
             label: "New Rule",
             icon: <Plus className="w-3.5 h-3.5" />,

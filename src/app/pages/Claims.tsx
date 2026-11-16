@@ -1,10 +1,10 @@
-import MockDataBanner from "../components/common/MockDataBanner";
 import { receiveMockEra } from "../../lib/eraStore";
 import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
 import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
 import { claimService } from "../../lib/claimService";
-import { getClaimWorkflows } from "../../lib/claimWorkflows";
+import { getClaimWorkflow, getClaimWorkflows } from "../../lib/claimWorkflows";
+import { stageNameOf } from "../../lib/claimsOverviewData";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
@@ -47,6 +47,10 @@ export default function Claims() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>("all");
   const [selectedPayerFilter, setSelectedPayerFilter] = useState<string>("all");
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>("all");
+  const [selectedAssigneeFilter, setSelectedAssigneeFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
   const [storeTick, setStoreTick] = useState(0);
 
@@ -71,7 +75,8 @@ export default function Claims() {
   // Claim workflows (any number). A claim belongs to one; the selected workflow filters the list.
   const insuranceProcesses = useMemo(() => getClaimWorkflows(), [storeTick]);
 
-  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
+  // "all" (default) shows every claim; picking a workflow narrows the list and the board columns.
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("all");
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -84,13 +89,11 @@ export default function Claims() {
         (p) => p.name.trim().toLowerCase() === procName.trim().toLowerCase()
       );
       if (found) setSelectedProcessFilter(found.id);
-    } else if (!procId && !procName && insuranceProcesses.length > 0) {
-      setSelectedProcessFilter(insuranceProcesses[0].id);
     }
   }, [location.search, insuranceProcesses]);
 
   const insuranceProcess = useMemo(() => {
-    if (selectedProcessFilter) {
+    if (selectedProcessFilter && selectedProcessFilter !== "all") {
       const found = insuranceProcesses.find((p) => p.id === selectedProcessFilter);
       if (found) return found;
     }
@@ -148,10 +151,11 @@ export default function Claims() {
       toast.error(`You don't have permission to move this claim (needs ${needed} edit).`);
       return;
     }
-    const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
+    const wf = getClaimWorkflow(target.processId) || insuranceProcesses[0] || insuranceProcess;
+    const stageObj = wf.stages.find((s) => s.id === stageId);
     const name = stageName || stageObj?.name || stageId;
     // Claim fields required at the target stage must be filled before a manual move (rules are not blocked).
-    const missing = getMissingRequiredClaimFields(target, name, insuranceProcess.id);
+    const missing = getMissingRequiredClaimFields(target, name, wf.id);
     if (missing.length > 0) {
       toast.error(`Fill in before moving to ${name}: ${missing.map((m) => m.label).join(", ")}`);
       return;
@@ -168,14 +172,13 @@ export default function Claims() {
   // Filtered claims
   const filteredClaims = useMemo(() => {
     return claims.filter((claim) => {
-      // Workflow: claims without one (not migrated yet) count as the first workflow's.
-      if ((claim.processId || insuranceProcesses[0]?.id) !== insuranceProcess.id) return false;
-      // Tab filter
-      if (selectedStatusTab === "ready" && claim.status !== "Ready to Submit") return false;
-      if (selectedStatusTab === "submitted" && !["Submitted", "Under Review"].includes(claim.status)) return false;
-      if (selectedStatusTab === "accepted" && claim.status !== "Accepted") return false;
-      if (selectedStatusTab === "paid" && claim.status !== "Paid") return false;
-      if (selectedStatusTab === "draft" && claim.status !== "Draft") return false;
+      // Workflow: "All" shows every claim; claims without one (not migrated yet) count as the first workflow's.
+      if (selectedProcessFilter !== "all" && (claim.processId || insuranceProcesses[0]?.id) !== selectedProcessFilter) return false;
+      if (selectedStageFilter !== "all" && stageNameOf(claim).toLowerCase() !== selectedStageFilter.toLowerCase()) return false;
+      if (selectedAssigneeFilter === "none" ? !!claim.assignee : selectedAssigneeFilter !== "all" && (claim.assignee || "") !== selectedAssigneeFilter) return false;
+      const when = (claim.submittedAt || claim.serviceDate || claim.createdAt || "").slice(0, 10);
+      if (dateFrom && when < dateFrom) return false;
+      if (dateTo && when > dateTo) return false;
 
       // Payer filter
       if (selectedPayerFilter !== "all" && claim.payer.name !== selectedPayerFilter) return false;
@@ -199,7 +202,7 @@ export default function Claims() {
 
       return true;
     });
-  }, [claims, selectedStatusTab, selectedPayerFilter, searchQuery]);
+  }, [claims, selectedProcessFilter, selectedStageFilter, selectedAssigneeFilter, dateFrom, dateTo, selectedPayerFilter, searchQuery, insuranceProcesses]);
 
   // Statistics for tab counts
   const stats = useMemo(() => {
@@ -224,6 +227,12 @@ export default function Claims() {
     claims.forEach((c) => set.add(c.payer.name));
     return Array.from(set);
   }, [claims]);
+
+  const assignees = useMemo(() => Array.from(new Set(claims.map((c) => c.assignee).filter(Boolean) as string[])).sort(), [claims]);
+  const stageOptions = useMemo(() => {
+    const wfs = selectedProcessFilter === "all" ? insuranceProcesses : insuranceProcesses.filter((w) => w.id === selectedProcessFilter);
+    return Array.from(new Set(wfs.flatMap((w) => w.stages.map((st) => st.name))));
+  }, [insuranceProcesses, selectedProcessFilter]);
 
   const getStatusBadge = (status: ClaimStatus) => {
     switch (status) {
@@ -273,164 +282,31 @@ export default function Claims() {
             setCurrentPage(1);
           }}
           searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
-          filterPresets={[
-            {
-              id: "all",
-              label: "All Claims",
-              count: claims.length,
-              isActive: selectedStatusTab === "all",
-              onClick: () => {
-                setSelectedStatusTab("all");
-                setCurrentPage(1);
-              },
-            },
-            {
-              id: "ready",
-              label: "Ready to Submit",
-              count: stats.readyCount,
-              isActive: selectedStatusTab === "ready",
-              onClick: () => {
-                setSelectedStatusTab("ready");
-                setCurrentPage(1);
-              },
-            },
-            {
-              id: "submitted",
-              label: "Submitted & Review",
-              count: stats.submittedCount,
-              isActive: selectedStatusTab === "submitted",
-              onClick: () => {
-                setSelectedStatusTab("submitted");
-                setCurrentPage(1);
-              },
-            },
-            {
-              id: "paid",
-              label: "Paid Claims",
-              count: stats.paidCount,
-              isActive: selectedStatusTab === "paid",
-              onClick: () => {
-                setSelectedStatusTab("paid");
-                setCurrentPage(1);
-              },
-            },
-            {
-              id: "draft",
-              label: "Drafts",
-              count: stats.draftCount,
-              isActive: selectedStatusTab === "draft",
-              onClick: () => {
-                setSelectedStatusTab("draft");
-                setCurrentPage(1);
-              },
-            },
-          ]}
-          filterFields={[
-            {
-              id: "query",
-              label: "Patient Name / Claim #",
-              type: "text",
-              placeholder: "Filter by patient or ID...",
-              value: searchQuery,
-              onChange: (val) => {
-                setSearchQuery(val || "");
-                setCurrentPage(1);
-              },
-            },
-            {
-              id: "status",
-              label: "Claim Status",
-              type: "select",
-              value: selectedStatusTab,
-              onChange: (val) => {
-                setSelectedStatusTab(val || "all");
-                setCurrentPage(1);
-              },
-              options: [
-                { label: `All Claims (${claims.length})`, value: "all" },
-                { label: `Ready to Submit (${stats.readyCount})`, value: "ready" },
-                { label: `Submitted & Review (${stats.submittedCount})`, value: "submitted" },
-                { label: `Paid (${stats.paidCount})`, value: "paid" },
-                { label: `Drafts (${stats.draftCount})`, value: "draft" },
-              ],
-            },
-            {
-              id: "payer",
-              label: "Insurance Payer",
-              type: "select",
-              value: selectedPayerFilter,
-              onChange: (val) => {
-                setSelectedPayerFilter(val || "all");
-                setCurrentPage(1);
-              },
-              options: [
-                { label: "All Payers", value: "all" },
-                ...uniquePayers.map((p) => ({ label: p, value: p })),
-              ],
-            },
-          ]}
           secondaryActions={
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedStatusTab}
-                onChange={(e) => {
-                  setSelectedStatusTab(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Claims ({claims.length})</option>
-                <option value="ready">Ready to Submit ({stats.readyCount})</option>
-                <option value="submitted">Submitted & Review ({stats.submittedCount})</option>
-                <option value="paid">Paid ({stats.paidCount})</option>
-                <option value="draft">Drafts ({stats.draftCount})</option>
+            <div className="flex items-center gap-2 flex-wrap" data-testid="claims-filters">
+              <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { setSelectedProcessFilter(e.target.value); setSelectedStageFilter("all"); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All workflows</option>
+                {insuranceProcesses.map((proc) => <option key={proc.id} value={proc.id}>{proc.name}</option>)}
               </select>
-
-              <select
-                value={selectedPayerFilter}
-                onChange={(e) => {
-                  setSelectedPayerFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Payers</option>
-                {uniquePayers.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
+              <select aria-label="Stage" data-testid="claims-filter-stage" value={selectedStageFilter} onChange={(e) => { setSelectedStageFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All stages</option>
+                {stageOptions.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
-              {isProcessFixed ? (
-                <div
-                  className="h-[36px] flex items-center px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 select-none shadow-2xs cursor-default"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title={`Fixed workflow: ${insuranceProcess.name}`}
-                >
-                  <span className="truncate max-w-[160px]">{insuranceProcess.name}</span>
-                </div>
-              ) : (
-                insuranceProcesses.length > 1 && (
-                  <select
-                    value={selectedProcessFilter || insuranceProcesses[0].id}
-                    onChange={(e) => {
-                      const newId = e.target.value;
-                      setSelectedProcessFilter(newId);
-                      setCurrentPage(1);
-                    }}
-                    className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {insuranceProcesses.map((proc) => (
-                      <option key={proc.id} value={proc.id}>
-                        {proc.name}
-                      </option>
-                    ))}
-                  </select>
-                )
-              )}
+              <select aria-label="Payer" data-testid="claims-filter-payer" value={selectedPayerFilter} onChange={(e) => { setSelectedPayerFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All payers</option>
+                {uniquePayers.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select aria-label="Assignee" data-testid="claims-filter-assignee" value={selectedAssigneeFilter} onChange={(e) => { setSelectedAssigneeFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <option value="all">All assignees</option>
+                <option value="none">Unassigned</option>
+                {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <input aria-label="From date" data-testid="claims-filter-from" type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="h-[36px] px-2 text-xs border border-border rounded-xl bg-white shadow-2xs" />
+              <input aria-label="To date" data-testid="claims-filter-to" type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="h-[36px] px-2 text-xs border border-border rounded-xl bg-white shadow-2xs" />
+              <div className="flex items-center rounded-xl border border-border overflow-hidden shadow-2xs">
+                <button type="button" data-testid="claims-view-list" onClick={() => setClaimViewMode("list")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "list" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>List</button>
+                <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "board" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>Board</button>
+              </div>
             </div>
           }
           primaryAction={!hasClaimPermission("claims", "add") ? undefined : {
@@ -444,6 +320,19 @@ export default function Claims() {
           }}
           afterPrimaryAction={
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="claims-receive-era"
+                disabled={!canPostPayments}
+                title={canPostPayments ? "Stage a remittance (ERA) for claims that are out with the payer" : "You need the rcmPayments permission"}
+                onClick={() => {
+                  const era = receiveMockEra({ includeUnmatched: true });
+                  toast.success(`ERA ${era.traceNumber} received (${era.lines.length} lines)`);
+                }}
+                className="px-3 h-[36px] text-xs font-semibold rounded-lg border border-border bg-white hover:bg-slate-50 disabled:opacity-50 shadow-2xs"
+              >
+                Receive ERA
+              </button>
               <Tooltip text="Export Claims">
                 <button
                   type="button"
@@ -640,42 +529,38 @@ export default function Claims() {
 
           return (
             <>
-            <MockDataBanner />
-            <div className="flex items-center gap-2">
-              <button type="button" data-testid="claims-view-list" onClick={() => setClaimViewMode("list")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "list" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>List</button>
-              <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"px-3 py-1.5 text-xs font-semibold rounded-lg border " + (claimViewMode === "board" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200")}>Board</button>
-              <span className="text-xs text-slate-500">{insuranceProcess.name}</span>
-              <button
-                type="button"
-                disabled={!canPostPayments}
-                title={canPostPayments ? "Mock: stage an ERA for claims that are out with the payer" : "You need the rcmPayments permission"}
-                onClick={() => {
-                  const era = receiveMockEra({ includeUnmatched: true });
-                  toast.success(`Mock ERA ${era.traceNumber} received (${era.lines.length} lines)`);
-                }}
-                className="ml-auto px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
-              >
-                Receive ERA (mock)
-              </button>
-            </div>
-            {claimViewMode === "board" ? (
+            {claimViewMode === "board" && selectedProcessFilter !== "all" ? (
               <ClaimBoard
                 stages={insuranceProcess.stages}
                 claims={filteredClaims}
                 onMove={(id, stageId) => handleStageChange(id, stageId)}
                 onOpen={(c) => { setSelectedClaimForDetail(c); setIsDetailDrawerOpen(true); }}
               />
+            ) : claimViewMode === "board" ? (
+              <div className="space-y-6" data-testid="claims-grouped">
+                <p className="text-xs text-slate-500">Choose a workflow to see its board. All workflows are listed below, grouped.</p>
+                {insuranceProcesses.map((wf) => {
+                  const rows = filteredClaims.filter((c) => (c.processId || insuranceProcesses[0]?.id) === wf.id);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={wf.id}>
+                      <h3 className="text-sm font-bold text-slate-800 mb-2">{wf.name} ({rows.length})</h3>
+                      <TableComponent data={rows} columns={claimColumns} getRowId={(claim) => claim.id} rowActions={claimRowActions} selectedIds={new Set(selectedClaimIds)} onSelectionChange={(ids) => setSelectedClaimIds(Array.from(ids) as string[])} defaultRowsPerPage={20} emptyMessage="No insurance claims found matching your filters." />
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
-            <TableComponent
-              data={filteredClaims}
-              columns={claimColumns}
-              getRowId={(claim) => claim.id}
-              rowActions={claimRowActions}
-              selectedIds={new Set(selectedClaimIds)}
-              onSelectionChange={(ids) => setSelectedClaimIds(Array.from(ids) as string[])}
-              defaultRowsPerPage={20}
-              emptyMessage="No insurance claims found matching your filters."
-            />
+              <TableComponent
+                data={filteredClaims}
+                columns={claimColumns}
+                getRowId={(claim) => claim.id}
+                rowActions={claimRowActions}
+                selectedIds={new Set(selectedClaimIds)}
+                onSelectionChange={(ids) => setSelectedClaimIds(Array.from(ids) as string[])}
+                defaultRowsPerPage={20}
+                emptyMessage="No insurance claims found matching your filters."
+              />
             )}
             </>
           );

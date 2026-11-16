@@ -73,7 +73,7 @@ export interface EnsureDemoResult {
 
 /** Idempotent. Purges test leftovers, then lets empty demo stores fall back to their seeds. */
 /** A browser test run is in progress (its state lives in sessionStorage); the purge must not eat the records it just created. */
-function testRunActive(): boolean {
+export function testRunActive(): boolean {
   try {
     const r = JSON.parse(sessionStorage.getItem("__rcmtest_run") || "null");
     return !!(r && r.running);

@@ -6,7 +6,7 @@ import { readLocalRecordFields } from "../../../../lib/recordWriter";
 
 /**
  * Kiosk check-in: insurance + copay steps (Slice 3, item 3.7). Shows the coverage on file for today's visit, the copay
- * due from the latest (mock) eligibility result, and lets the patient correct the member ID (saved as a coverage update,
+ * due from the latest eligibility result, and lets the patient correct the member ID (saved as a coverage update,
  * which re-runs eligibility through the sample rule). Renders nothing when the client has no coverage and no visit.
  */
 export default function KioskInsuranceStep({ clientId, clientName }: { clientId: string; clientName: string }) {
@@ -40,7 +40,7 @@ export default function KioskInsuranceStep({ clientId, clientName }: { clientId:
       )}
       {copay !== undefined && copay !== "" && (
         <div className="rounded-xl bg-blue-50 px-3 py-2 text-blue-900">
-          Copay due today: <b>{String(copay)}</b> <span className="text-[10px] uppercase text-amber-700">(mock estimate)</span>
+          Copay due today: <b>{String(copay)}</b> <span className="text-[10px] uppercase text-slate-500">(estimate)</span>
         </div>
       )}
       {cov && (
