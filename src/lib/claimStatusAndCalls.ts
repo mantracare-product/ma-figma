@@ -171,7 +171,7 @@ export function performStageCall(event: BusEvent): RcmCall | null {
       payerPhone: payer?.phone,
       recordType: event.recordType,
       recordId: String(event.recordId),
-      instanceId: ctx.instance ? ctx.instance.instanceId || ctx.instance.id : undefined,
+      instanceId: ctx.instance ? ctx.instance.instanceId || ctx.instance.id : event.recordType === "claim" ? String(event.recordId) : undefined,
       resultStage: settings.resultStage,
       cause: { type: "manual" } as any,
     };

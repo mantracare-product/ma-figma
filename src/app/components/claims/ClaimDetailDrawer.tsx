@@ -1,4 +1,4 @@
-import { getClaimWorkflows } from "../../../lib/claimWorkflows";
+import { getClaimWorkflows, isPreClaimWorkflow } from "../../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -225,6 +225,12 @@ export default function ClaimDetailDrawer({
     const workflows = getClaimWorkflows();
     return workflows.find((p) => p.id === (liveClaim || claim)?.processId) || workflows[0];
   }, [liveClaim, claim]);
+
+  // R4.4: a record in an Eligibility / Prior auth workflow is not a claim yet: claim-only parts (CPT & diagnoses, scrub,
+  // denial, appeal, filing deadline, payments) are hidden there; the Eligibility and Authorization sections show.
+  const preClaim = isPreClaimWorkflow(insuranceProcess);
+  useEffect(() => { if (preClaim && activeTab === "billing") setActiveTab("overview"); }, [preClaim, activeTab]);
+  const CLAIM_ONLY_FIELDS = useMemo(() => new Set(["rcm_timely_filing", "rcm_denial_category", "rcm_denial_summary", "rcm_appeal_deadline", "rcm_appeal_draft", "rcm_scrub_issues"]), []);
 
   const claimStages: Stage[] = useMemo(() => {
     return insuranceProcess.stages || DEFAULT_ENTITY_PROCESSES.insurance.stages;
@@ -783,19 +789,21 @@ export default function ClaimDetailDrawer({
               <span>Documents</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("billing")}
-              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-                activeTab === "billing"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Receipt className="w-3.5 h-3.5" />
-              <span>CPT & Diagnoses</span>
-            </button>
+            {!preClaim && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("billing")}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+                  activeTab === "billing"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>CPT & Diagnoses</span>
+              </button>
+            )}
           </div>
 
           {/* Manage Fields & Custom Sections Dropdown */}
@@ -861,7 +869,7 @@ export default function ClaimDetailDrawer({
                   <DraggableOverviewSections
                     mode="claim"
                     customFieldsModule="claim"
-                    sections={claimSections}
+                    sections={preClaim ? claimSections.filter((s) => s.id !== "sec-clm-billing").map((s) => (s.id === "sec-clm-revenue-cycle" ? { ...s, fieldKeys: s.fieldKeys.filter((k) => !CLAIM_ONLY_FIELDS.has(k)) } : s)) : claimSections}
                     onSectionsChange={handleSectionsChange}
                     fieldValues={fieldValues}
                     onFieldValueChange={handleFieldValueChange}

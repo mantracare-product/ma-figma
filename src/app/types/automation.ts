@@ -212,6 +212,7 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     description: "Trigger when a record enters or leaves a stage of a process",
     iconKey: "gitbranch",
     events: [
+      { event: "auth.checked", label: "Authorization check finished", description: "Whether a prior authorization is required was worked out (condition: auth status = required / not_required / unknown)" },
       { event: "stage.entered", label: "Enters a stage", description: "A record moves into a stage of a process or claim workflow" },
       { event: "stage.exited", label: "Leaves a stage", description: "A record moves out of a stage of a process or claim workflow" },
     ],

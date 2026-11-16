@@ -88,14 +88,19 @@ describe("create_claim", () => {
     expect(c.timelyFilingDeadline).toBe("2031-01-30");
   });
 
-  it("is idempotent per source+workflow (returns the existing claim); a different workflow makes another", () => {
+  it("ONE insurance record per appointment: the same record is returned for any workflow; ifExists=move moves it", () => {
     const id = bookedAppointment();
     const a = act.executeCreateClaimStep({ rule, stepId: "s", params: { startWorkflow: IDS().claim }, event: apptEvent(id), cause });
     const b = act.executeCreateClaimStep({ rule, stepId: "s", params: { startWorkflow: IDS().claim }, event: { ...apptEvent(id), id: "E-other" }, cause });
     expect(b.alreadyRan || b.result.claimId === a.result.claimId).toBe(true);
     expect(claimsLib.getStoredClaims().filter((c) => c.appointmentId === id)).toHaveLength(1);
     const c = act.executeCreateClaimStep({ rule, stepId: "s2", params: { startWorkflow: IDS().chargeCapture }, event: apptEvent(id), cause });
-    expect(c.result.claimId).not.toBe(a.result.claimId);
+    expect(c.result.claimId).toBe(a.result.claimId);
+    expect(claimsLib.getStoredClaims().find((x) => x.id === a.result.claimId)!.processId).toBe(IDS().claim);
+    const d = act.executeCreateClaimStep({ rule, stepId: "s3", params: { startWorkflow: IDS().chargeCapture, ifExists: "move" }, event: { ...apptEvent(id), id: "E-move" }, cause });
+    expect(d.result.claimId).toBe(a.result.claimId);
+    expect(claimsLib.getStoredClaims().find((x) => x.id === a.result.claimId)!.processId).toBe(IDS().chargeCapture);
+    expect(claimsLib.getStoredClaims().filter((x) => x.appointmentId === id)).toHaveLength(1);
   });
 
   it("missing optional data is recorded, not fatal: no provider credential, no coverage", () => {

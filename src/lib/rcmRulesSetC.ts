@@ -11,7 +11,9 @@ import { SAMPLE_CLAIM_WORKFLOW_IDS as W, claimStageId } from "./rcmSampleClaimWo
 const NOOP = { type: "moveToStage" as const, processId: "", stageId: "" };
 const cond = (id: string, field: string, op: any, value: any) => ({ id, field, op, value });
 const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepDisplayName({ stepKey }), params });
-const CAPTURE_START = { startWorkflow: W.chargeCapture, startStage: "Awaiting note" };
+// ifExists "move": the appointment already has its ONE insurance record (from Eligibility / Prior auth): continue it here, create it here for walk-ins
+const CAPTURE_START = { startWorkflow: W.chargeCapture, startStage: "Awaiting note", ifExists: "move" };
+const INSURANCE_VISIT = [cond("c-pay", "paymentMode", "equals", "insurance")];
 
 const claimStageEntry = (id: string, name: string, processId: string, stage: string, actions: any[]): SampleRuleDef => ({
   id,
@@ -30,6 +32,7 @@ export function buildSetCRules(): SampleRuleDef[] {
       description: "Default timing. Variants A14-scribe / A14-checkin / A14-paid create the claim at another moment; enable only one.",
       entityType: "appointment",
       trigger: { event: "appointment.completed" },
+      conditions: INSURANCE_VISIT,
       action: NOOP,
       actions: [step("a14-claim", "create_claim", CAPTURE_START), step("a14-notify", "notify", { title: "Visit completed", message: "Document and code the visit for {{client.name}}" })],
     },
@@ -39,6 +42,7 @@ export function buildSetCRules(): SampleRuleDef[] {
       description: "Variant of A14 (enable one). Needs the scribe note to be signed with accepted codes.",
       entityType: "client",
       trigger: { event: "scribe.note_signed" },
+      conditions: INSURANCE_VISIT,
       action: NOOP,
       demoDefault: false,
       actions: [step("a14s-claim", "create_claim", { ...CAPTURE_START, source: "scribe", linesFrom: "scribe_codes", startStage: "Ready to bill" })],
@@ -48,6 +52,7 @@ export function buildSetCRules(): SampleRuleDef[] {
       name: "A14 variant: create the claim at check-in",
       entityType: "appointment",
       trigger: { event: "appointment.checked_in" },
+      conditions: INSURANCE_VISIT,
       action: NOOP,
       demoDefault: false,
       actions: [step("a14c-claim", "create_claim", CAPTURE_START)],
@@ -57,6 +62,7 @@ export function buildSetCRules(): SampleRuleDef[] {
       name: "A14 variant: create the claim when the invoice is paid",
       entityType: "invoice",
       trigger: { event: "invoice.paid" },
+      conditions: INSURANCE_VISIT,
       action: NOOP,
       demoDefault: false,
       actions: [step("a14p-claim", "create_claim", CAPTURE_START)],

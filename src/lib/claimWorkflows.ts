@@ -63,3 +63,8 @@ export function assignClaimsToWorkflows(claims: Claim[], workflows: Process[]): 
   });
   return { claims: next, changed };
 }
+
+/** True for workflows that hold an insurance record before any claim exists (decided by workflow TYPE, never by name). */
+export const isPreClaimWorkflow = (p?: { workflowType?: string } | null): boolean => p?.workflowType === "eligibility" || p?.workflowType === "prior_auth";
+/** True when a claim record currently sits in a pre-claim (eligibility / prior auth) workflow. */
+export const isPreClaimClaim = (c: { processId?: string }): boolean => isPreClaimWorkflow(getClaimWorkflow(c.processId));

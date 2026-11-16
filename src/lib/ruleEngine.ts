@@ -35,6 +35,7 @@ import { executeUpdateInvoiceFromClaimStep, isUpdateInvoiceFromClaimStep } from 
 import { executeDraftAppealStep, executePostRemittanceStep, isDraftAppealStep, isPostRemittanceStep } from "./remittanceActions";
 import { executeCreateClaimStep, executeScrubClaimStep, executeSubmitClaimStep, isCreateClaimStep, isScrubClaimStep, isSubmitClaimStep } from "./claimActions";
 import { claimService } from "./claimService";
+import { getClaimWorkflow } from "./claimWorkflows";
 import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
 import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
 import { computeDerivedFields, derivedFieldsNeeded, linkedAppointmentFields } from "./ruleContextFields";
@@ -599,6 +600,21 @@ export async function executeRulesForEvent(
       ) {
         const rawTargetEntity = act.params?.stageEntity || act.params?.entityType;
         const targetStageId = act.params?.stageId || act.params?.stepDetailStage || act.params?.stageName || act.params?.stepDetailStageName;
+
+        // "Close the record as won / lost" (R4.4): moves the appointment's insurance record (or this claim) to the first stage of
+        // its own workflow whose category is `closeAs` ("lost" | "success"). No stage names are involved.
+        if (act.params?.closeAs && (rawTargetEntity === "claim" || event.recordType === "claim")) {
+          try {
+            const apptKey = event.recordType === "appointment" ? String(event.recordId) : String((event.data as any)?.appointmentId || "");
+            const rec = event.recordType === "claim" ? getStoredClaims().find((c) => c.id === String(event.recordId)) : apptKey ? getStoredClaims().find((c) => c.sourceType === "appointment" && c.sourceId === apptKey) || getStoredClaims().find((c) => c.appointmentId === apptKey) : undefined;
+            const wf = rec ? getClaimWorkflow(rec.processId) : undefined;
+            const st = wf?.stages.find((s) => s.stageCategory === act.params.closeAs);
+            if (rec && st && rec.currentStageId !== st.id) claimService.moveToStage(rec.id, st.id, ruleCause(rule, event, depth, visitedRules));
+          } catch (e) {
+            console.warn("[RuleEngine] Failed to close the insurance record:", e);
+          }
+          continue;
+        }
 
         // A claim event moves the CLAIM (this branch used to fall through and move the client instead).
         if (event.recordType === "claim" && (!rawTargetEntity || rawTargetEntity === "claim")) {

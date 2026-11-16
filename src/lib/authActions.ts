@@ -19,7 +19,9 @@ import { getCoverageOn } from "./coveragesStore";
 import { getStoredServices } from "./servicesStore";
 import { isAuthRequired, type AuthRequirement } from "./priorAuthRulesStore";
 import { getStoredProcesses } from "./useProcessStore";
-import { getProcessInstanceById, logInstanceStageMove, updateProcessInstanceStage } from "./processLogsStore";
+import { moveTargetStage, readTargetFields, resolveInstanceLike, targetType } from "./recordTarget";
+import { getStoredClaims } from "./claimsStore";
+import { eventBus } from "./eventBus";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 
 export const CHECK_AUTH_STEP_KEYS = ["check_auth_required", "check-auth-required"];
@@ -31,6 +33,8 @@ export interface AuthStepInput {
   clientId: string;
   appointmentId?: string;
   instanceId?: string;
+  /** The appointment's insurance record (claim); used like an instance. */
+  claimId?: string;
   serviceDate: string;
   trigger: string;
   params: Record<string, any>;
@@ -67,20 +71,11 @@ function stageByRef(processId: string | undefined, ref: string): { name: string 
 }
 
 function moveInstance(instanceId: string, stageRef: string | undefined, cause: StageMove["cause"]): string | undefined {
-  if (!stageRef) return undefined;
-  const inst = getProcessInstanceById(instanceId);
-  if (!inst) return undefined;
-  const stage = stageByRef(inst.processId, stageRef);
-  if (!stage) throw new Error(`stage "${stageRef}" not found in the instance's process`);
-  if ((inst.currentStage || "").trim().toLowerCase() === stage.name.trim().toLowerCase()) return undefined;
-  const moved = updateProcessInstanceStage(instanceId, stage.name);
-  if (!moved) return undefined;
-  logInstanceStageMove(moved, inst.currentStage, cause);
-  return stage.name;
+  return moveTargetStage(instanceId, stageRef, cause);
 }
 
 function appendHistory(instanceId: string, row: Record<string, any>): Record<string, any> {
-  const existing = ((getProcessInstanceById(instanceId) as any)?.elig_history as any[]) || [];
+  const existing = ((readTargetFields(instanceId) as any)?.elig_history as any[]) || [];
   return { elig_history: [...existing, row] };
 }
 
@@ -89,7 +84,7 @@ function evaluate(input: AuthStepInput): AuthRequirement {
 }
 
 export function performCheckAuth(input: AuthStepInput): AuthStepResult {
-  const instance = input.instanceId ? getProcessInstanceById(input.instanceId) : undefined;
+  const instance = resolveInstanceLike(input.instanceId || input.claimId);
   const apptId = input.appointmentId;
   if (!instance && !apptId) throw new Error("check_auth_required: no write target (no instance and no appointment)");
   const req = evaluate(input);
@@ -105,7 +100,7 @@ export function performCheckAuth(input: AuthStepInput): AuthStepResult {
 
   if (instance) {
     const id = instance.instanceId || instance.id;
-    const w = writeRecordFields({ type: "process_instance", id }, {
+    const w = writeRecordFields({ type: targetType(instance), id }, {
       ...fields,
       ...appendHistory(id, { checkedAt: new Date().toISOString(), trigger: input.trigger, source: "prior_auth_rules", status: `auth_${status}`, reasonCode: "", summary: `Authorization ${status.replace("_", " ")}`, sourceRecord: apptId ? `appointment:${apptId}` : "", rawRef: req.rule?.id || "" }),
     });
@@ -120,11 +115,13 @@ export function performCheckAuth(input: AuthStepInput): AuthStepResult {
     if (!w.ok) throw new Error(w.error);
     result.appointmentId = apptId;
   }
+  // Tell the rules what the answer was (required / not_required / unknown) so they can move the record and the appointment.
+  void eventBus.emit("auth.checked", instance ? (instance.__claim ? "claim" : "client") : "appointment", String(instance ? instance.instanceId || instance.id : apptId), { auth_status: status, authStatus: status, claimId: instance?.__claim ? instance.id : undefined, appointmentId: apptId, clientId: input.clientId });
   return result;
 }
 
 export function performRequestAuth(input: AuthStepInput): AuthStepResult {
-  const instance = input.instanceId ? getProcessInstanceById(input.instanceId) : undefined;
+  const instance = resolveInstanceLike(input.instanceId || input.claimId);
   const apptId = input.appointmentId;
   if (!instance && !apptId) throw new Error("request_prior_auth: no write target (no instance and no appointment)");
   const req = evaluate(input);
@@ -149,7 +146,7 @@ export function performRequestAuth(input: AuthStepInput): AuthStepResult {
 
   if (instance) {
     const id = instance.instanceId || instance.id;
-    const w = writeRecordFields({ type: "process_instance", id }, {
+    const w = writeRecordFields({ type: targetType(instance), id }, {
       ...fields,
       ...appendHistory(id, { checkedAt: new Date().toISOString(), trigger: input.trigger, source: "prior_auth_request", status: "auth_requested", reasonCode: "", summary, sourceRecord: apptId ? `appointment:${apptId}` : "", rawRef: req.rule?.id || "" }),
     });
@@ -182,6 +179,7 @@ function buildInput(rule: AutomationRule, params: Record<string, any>, event: Bu
     clientId: ctx.clientId || "",
     appointmentId: ctx.appointmentId,
     instanceId: ctx.instance ? ctx.instance.instanceId || ctx.instance.id : undefined,
+    claimId: event.recordType === "claim" ? String(event.recordId) : undefined,
     serviceDate,
     trigger: event.event,
     params,
@@ -209,7 +207,7 @@ export function executeAuthStep(args: {
   const actionKey = kind === "check" ? "check_auth_required" : "request_prior_auth";
   const key =
     kind === "check"
-      ? actionIdempotencyKey(actionKey, input.instanceId || input.appointmentId || input.clientId, rule.id, event.id)
+      ? actionIdempotencyKey(actionKey, input.claimId || input.instanceId || input.appointmentId || input.clientId, rule.id, event.id)
       : actionIdempotencyKey(actionKey, input.clientId, input.payerId, input.serviceRef.serviceId ?? input.serviceRef.cptCode, input.serviceDate);
   return runActionOnce(key, { actionKey, ruleId: rule.id, ruleName: rule.name, stepId, payload: input as any }, () => {
     if (!input.clientId) throw new Error(`${actionKey}: cannot resolve a client from ${event.recordType} ${event.recordId}`);
@@ -220,8 +218,9 @@ export function executeAuthStep(args: {
 // ── Authorization decision (manual) ────────────────────────────────────────────────────────────────
 
 export interface AuthDecisionInput {
-  /** Process instance and/or appointment to record it on (at least one). */
+  /** Process instance or insurance record (claim) and/or appointment to record it on (at least one). */
   instanceId?: string;
+  claimId?: string;
   appointmentId?: string;
   decision: "approved" | "denied";
   authNumber?: string;
@@ -232,7 +231,7 @@ export interface AuthDecisionInput {
 
 /** Record the payer's decision on a prior-auth request (the mock request never decides on its own). */
 export function recordAuthDecision(input: AuthDecisionInput): { instanceId?: string; appointmentId?: string; stageMoved?: string } {
-  const instance = input.instanceId ? getProcessInstanceById(input.instanceId) : undefined;
+  const instance = resolveInstanceLike(input.instanceId || input.claimId);
   if (!instance && !input.appointmentId) throw new Error("recordAuthDecision: no record to write to");
   recordRcmAudit({ action: "updated", entityType: "authorization", entityId: String(input.appointmentId || input.instanceId), summary: `Authorization ${input.decision}${input.authNumber ? ` (${input.authNumber})` : ""}`, after: { decision: input.decision, authNumber: input.authNumber, unitsApproved: input.unitsApproved } });
   const fields: Record<string, any> = {
@@ -244,7 +243,7 @@ export function recordAuthDecision(input: AuthDecisionInput): { instanceId?: str
   const out: { instanceId?: string; appointmentId?: string; stageMoved?: string } = {};
   if (instance) {
     const id = instance.instanceId || instance.id;
-    const w = writeRecordFields({ type: "process_instance", id }, {
+    const w = writeRecordFields({ type: targetType(instance), id }, {
       ...fields,
       ...appendHistory(id, { checkedAt: new Date().toISOString(), trigger: "manual.auth_decision", source: "prior_auth_decision", status: `auth_${input.decision}`, reasonCode: "", summary: `Authorization ${input.decision}${input.authNumber ? ` (${input.authNumber})` : ""}`, sourceRecord: input.appointmentId ? `appointment:${input.appointmentId}` : "", rawRef: "" }),
     });

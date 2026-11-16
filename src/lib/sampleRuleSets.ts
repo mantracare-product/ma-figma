@@ -10,5 +10,6 @@ import "./rcmRulesSetE";
 import "./rcmRulesSetE2";
 import "./rcmRulesSetC";
 import "./rcmRulesSetM";
+import "./rcmRulesSetR";
 
 export {};

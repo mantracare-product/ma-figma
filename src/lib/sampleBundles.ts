@@ -11,7 +11,7 @@
  */
 import { getStoredRules, saveStoredRules, type AutomationRule } from "./useAutomationStore";
 
-export type SampleSetId = "E" | "E2" | "C" | "M";
+export type SampleSetId = "E" | "E2" | "C" | "M" | "R";
 
 export interface TemplateSeeder {
   id: string;

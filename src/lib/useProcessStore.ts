@@ -175,6 +175,8 @@ export interface Process {
   chatbotSettings?: ChatbotSettings;
   connectedToPatientPortal?: boolean;
   connectedToAiReceptionist?: boolean;
+  /** Claim-entity workflows only (R4.4): "eligibility" / "prior_auth" workflows hold the insurance record BEFORE any claim exists; counts, A/R and denial KPIs exclude them. Default (unset) = claim. */
+  workflowType?: "eligibility" | "prior_auth" | "claim";
   entityType?: EntityType; // "client" | "appointment" | "invoice" | "insurance" | "claim" (default: "client")
   assignedServiceIds?: (number | string)[]; // Assigned products & services for this workflow
   assignedProductIds?: (number | string)[];

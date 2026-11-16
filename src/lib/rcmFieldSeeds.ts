@@ -109,6 +109,8 @@ export const SEC_INSURANCE = "sec-insurance";
 export const SEC_APPT_ELIGIBILITY = "sec-appt-eligibility";
 export const SEC_APPT_AUTHORIZATION = "sec-appt-authorization";
 export const SEC_CLAIM_RCM = "sec-clm-revenue-cycle";
+export const SEC_CLAIM_ELIGIBILITY = "sec-clm-eligibility";
+export const SEC_CLAIM_AUTH = "sec-clm-authorization";
 
 /** Client Overview > Insurance section: the Coverages table (rows sync to the coverages store) + guarantor, self-pay, consents. */
 export const CLIENT_FIELDS: SeedField[] = [
@@ -153,6 +155,8 @@ export const CLAIM_RCM_FIELDS: SeedField[] = [
 /** Sections registered in the section registry (module -> list). */
 const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
   { module: "client", id: SEC_INSURANCE, title: "Insurance", description: "Coverages in priority order, guarantor, self-pay and consents", iconName: "shield", fieldKeys: ["ins_coverages", "guarantor", "selfPay", "consent_sms", "consent_voice", "consent_cardOnFile", "dob", "sex", "address"] },
+  { module: "claim", id: SEC_CLAIM_ELIGIBILITY, title: "Eligibility", description: "Result of the insurance check", iconName: "shield", fieldKeys: [...EG1, ...EG2, EG4, EG5].map((f) => f.key) },
+  { module: "claim", id: SEC_CLAIM_AUTH, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: EG3.map((f) => f.key) },
   { module: "appointment", id: SEC_APPT_ELIGIBILITY, title: "Eligibility", description: "Latest eligibility result for this visit", iconName: "shield", fieldKeys: ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at"] },
   { module: "appointment", id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
   { module: "claim", id: SEC_CLAIM_RCM, title: "Revenue cycle", description: "Assignee, priority, deadlines, authorization, denial and appeal", iconName: "layers", fieldKeys: CLAIM_RCM_FIELDS.map((f) => f.key) },
@@ -170,7 +174,8 @@ function plan(): Record<Mod, SeedField[]> {
   return {
     process: [...EG1, ...EG2, ...EG3, EG4, EG5],
     appointment: [...APPT_SUMMARY.map(byKey), T("elig_instance_id", "Eligibility instance"), { key: "paymentMode", label: "Payment mode", inputType: "list_select", options: DEFAULT_PAYMENT_MODES }],
-    claim: [...CLAIM_SUMMARY.map(byKey), ...CLAIM_RCM_FIELDS],
+    // R4.4: the claim module carries the full eligibility / authorization groups (the insurance record's journey)
+    claim: [...[...EG1, ...EG2, EG4, EG5].map((f) => ({ ...f, sectionId: SEC_CLAIM_ELIGIBILITY })), ...EG3.map((f) => ({ ...f, sectionId: SEC_CLAIM_AUTH })), ...CLAIM_RCM_FIELDS],
     client: CLIENT_FIELDS,
   };
 }

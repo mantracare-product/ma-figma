@@ -1,43 +1,31 @@
 /**
- * Voice results into an instance (Slice 6, item 6.4). A MOCK payer call (start_call, purpose payer_benefits) "captures"
+ * Voice results into an instance or insurance record (Slice 6, item 6.4; R4.4: the record is a claim in the Eligibility workflow). A MOCK payer call (start_call, purpose payer_benefits) "captures"
  * benefits: they are written to the process instance as a PENDING REVIEW result (EG1 fields, source "voice", history
  * row) and the instance moves to the configured review stage. A person then accepts the result (acceptCallResult),
  * which turns it into a verified eligibility result on the instance and the appointment.
  */
 import { recordRcmAudit } from "./rcmAudit";
-import { getProcessInstanceById, logInstanceStageMove, updateProcessInstanceStage } from "./processLogsStore";
+import { moveTargetStage, readTargetFields, resolveInstanceLike, targetType } from "./recordTarget";
 import { writeRecordFields } from "./recordWriter";
 import { getCoverageOn } from "./coveragesStore";
 import { getPayer } from "./billingSetupStore";
 import { findClientByRef } from "./recordContext";
 import { mockEligibilityCheck, normalizeBenefits } from "./eligibility";
-import { getStoredProcesses } from "./useProcessStore";
 import type { StageMove } from "./useAutomationStore";
 
 type Cause = StageMove["cause"];
 
 function moveByRef(instanceId: string, ref: string | undefined, cause: Cause): string | undefined {
-  if (!ref) return undefined;
-  const inst = getProcessInstanceById(instanceId);
-  if (!inst) return undefined;
-  const proc = getStoredProcesses().find((p) => p.id === inst.processId);
-  const q = ref.trim().toLowerCase();
-  const stage = proc ? proc.stages?.find((s) => s.id === ref) || proc.stages?.find((s) => (s.name || "").trim().toLowerCase() === q) : { name: ref };
-  if (!stage) throw new Error(`stage "${ref}" not found in the instance's process`);
-  if ((inst.currentStage || "").trim().toLowerCase() === stage.name.trim().toLowerCase()) return undefined;
-  const moved = updateProcessInstanceStage(instanceId, stage.name);
-  if (!moved) return undefined;
-  logInstanceStageMove(moved, inst.currentStage, cause);
-  return stage.name;
+  return moveTargetStage(instanceId, ref, cause);
 }
 
 function appendHistory(instanceId: string, row: Record<string, any>) {
-  const existing = ((getProcessInstanceById(instanceId) as any)?.elig_history as any[]) || [];
+  const existing = ((readTargetFields(instanceId) as any)?.elig_history as any[]) || [];
   return { elig_history: [...existing, row] };
 }
 
 export function captureVoiceBenefits(input: { instanceId: string; callId: string; resultStage?: string; cause: Cause }): { stageMoved?: string; copay?: number } {
-  const inst = getProcessInstanceById(input.instanceId);
+  const inst = resolveInstanceLike(input.instanceId);
   if (!inst) throw new Error(`Instance ${input.instanceId} not found`);
   const client: any = findClientByRef(inst.clientId);
   const apptId = inst.source?.type === "appointment" ? String(inst.source.id) : undefined;
@@ -47,7 +35,7 @@ export function captureVoiceBenefits(input: { instanceId: string; callId: string
   const n = normalizeBenefits(res.benefits, ["30"]);
   const now = new Date().toISOString();
   const w = writeRecordFields(
-    { type: "process_instance", id: input.instanceId },
+    { type: targetType(inst), id: input.instanceId },
     {
       elig_status: "pending_review",
       elig_source: "voice",
@@ -69,13 +57,13 @@ export function captureVoiceBenefits(input: { instanceId: string; callId: string
 
 /** Accept a captured voice result: it becomes a verified result on the instance and its appointment. */
 export function acceptCallResult(input: { instanceId: string; stage?: string; cause?: Cause }): { stageMoved?: string } {
-  const inst: any = getProcessInstanceById(input.instanceId);
+  const inst: any = resolveInstanceLike(input.instanceId);
   if (!inst) throw new Error(`Instance ${input.instanceId} not found`);
   if (inst.elig_status !== "pending_review") throw new Error("There is no call result waiting for review on this instance");
   recordRcmAudit({ action: "updated", entityType: "process_instance", entityId: input.instanceId, summary: "Accepted the phone call benefits result", after: { elig_status: "active" } });
   const now = new Date().toISOString();
   const w = writeRecordFields(
-    { type: "process_instance", id: input.instanceId },
+    { type: targetType(inst), id: input.instanceId },
     { elig_status: "active", elig_checked_at: now, ...appendHistory(input.instanceId, { checkedAt: now, trigger: "manual.accept_call_result", source: "voice_accepted", status: "active", reasonCode: "", summary: "Call result accepted", sourceRecord: "", rawRef: inst.voice_call_id || "" }) }
   );
   if (!w.ok) throw new Error(w.error);

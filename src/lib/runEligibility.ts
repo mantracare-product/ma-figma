@@ -24,7 +24,10 @@ import { writeRecordFields } from "./recordWriter";
 import { getCoverageOn, type Coverage } from "./coveragesStore";
 import { getPayer } from "./billingSetupStore";
 import { getStoredProcesses } from "./useProcessStore";
-import { getProcessInstanceById, logInstanceStageMove, updateProcessInstanceStage } from "./processLogsStore";
+import { getProcessInstanceById } from "./processLogsStore";
+import { moveTargetStage, readTargetFields, resolveInstanceLike, targetType } from "./recordTarget";
+import { getStoredClaims } from "./claimsStore";
+import { isPreClaimClaim } from "./claimWorkflows";
 import {
   mockEligibilityCheck,
   normalizeBenefits,
@@ -74,6 +77,8 @@ export interface RunEligibilityInput {
   clientId: string;
   appointmentId?: string;
   instanceId?: string;
+  /** The appointment's insurance record (a claim in the Eligibility workflow); written like an instance. */
+  claimId?: string;
   serviceDate: string;
   trigger: string;
   params: RunEligibilityParams;
@@ -148,7 +153,7 @@ export function performRunEligibility(input: RunEligibilityInput): RunEligibilit
 
   const wantInstance = !params.targets || params.targets.includes("instance");
   const wantAppt = !params.targets || params.targets.includes("appointment");
-  const instance = wantInstance && instanceId ? getProcessInstanceById(instanceId) : undefined;
+  const instance = wantInstance && (instanceId || input.claimId) ? resolveInstanceLike(instanceId || input.claimId) : undefined;
   const apptId = wantAppt ? appointmentId : undefined;
   if (!instance && !apptId) throw new Error("run_eligibility: no write target (no instance and no appointment)");
 
@@ -230,9 +235,9 @@ export function performRunEligibility(input: RunEligibilityInput): RunEligibilit
   const result: RunEligibilityResult = { status, copied, payerCalls, reasonCode: fields.elig_reason_code || undefined, coverageId: cov?.id };
 
   if (instance) {
-    const existing = ((getProcessInstanceById(instance.instanceId || instance.id) as any)?.elig_history as any[]) || [];
+    const existing = ((readTargetFields(instance.instanceId || instance.id) as any)?.elig_history as any[]) || [];
     const w = writeRecordFields(
-      { type: "process_instance", id: instance.instanceId || instance.id },
+      { type: targetType(instance), id: instance.instanceId || instance.id },
       { ...fields, elig_history: [...existing, historyRow] }
     );
     if (!w.ok) throw new Error(w.error || "instance write failed");
@@ -240,17 +245,7 @@ export function performRunEligibility(input: RunEligibilityInput): RunEligibilit
 
     const wantStage = params.stageMap?.[status];
     if (wantStage) {
-      const stage = stageByRef(instance.processId, wantStage);
-      if (!stage) throw new Error(`run_eligibility: stage "${wantStage}" not found in the instance's process`);
-      const current = getProcessInstanceById(result.instanceId)!;
-      if ((current.currentStage || "").trim().toLowerCase() !== stage.name.trim().toLowerCase()) {
-        const from = current.currentStage;
-        const moved = updateProcessInstanceStage(result.instanceId, stage.name);
-        if (moved) {
-          logInstanceStageMove(moved, from, input.cause);
-          result.stageMoved = stage.name;
-        }
-      }
+      result.stageMoved = moveTargetStage(result.instanceId, wantStage, input.cause);
     }
   }
 
@@ -300,20 +295,31 @@ export function executeRunEligibilityStep(args: {
           performRunEligibility({ clientId, appointmentId: String(appt.id), instanceId: inst.instanceId || inst.id, serviceDate: appt.date, trigger: event.event, params: params as RunEligibilityParams, cause })
         );
       }
+      // insurance records (claims in a pre-claim workflow) of this client for a future appointment
+      for (const c of getStoredClaims()) {
+        if (c.patientId !== clientId || !c.appointmentId || !isPreClaimClaim(c)) continue;
+        const appt = appointmentService.getAppointmentById(c.appointmentId);
+        if (!appt || appt.date < today || (appt as any).status === "cancelled") continue;
+        results.push(performRunEligibility({ clientId, appointmentId: String(appt.id), claimId: c.id, serviceDate: appt.date, trigger: event.event, params: params as RunEligibilityParams, cause }));
+      }
       return { count: results.length, statuses: results.map((r) => r.status) } as any;
     });
   }
 
+  let claim = event.recordType === "claim" ? getStoredClaims().find((c) => c.id === String(event.recordId)) : undefined;
+  // an appointment event (daily job, check-in): the appointment's insurance record while it is still before the claim stage
+  if (!claim && ctx.appointmentId) claim = getStoredClaims().find((c) => c.appointmentId === String(ctx.appointmentId) && isPreClaimClaim(c));
   const input: RunEligibilityInput = {
-    clientId: ctx.clientId || "",
+    clientId: ctx.clientId || claim?.patientId || "",
     appointmentId: ctx.appointmentId,
     instanceId: ctx.instance ? ctx.instance.instanceId || ctx.instance.id : undefined,
-    serviceDate: ctx.appointment?.date || todayStr(),
+    claimId: claim?.id,
+    serviceDate: ctx.appointment?.date || claim?.serviceDate || todayStr(),
     trigger: event.event,
     params: params as RunEligibilityParams,
     cause,
   };
-  const key = actionIdempotencyKey("run_eligibility", rule.id, stepId, event.id, input.instanceId || input.appointmentId || input.clientId);
+  const key = actionIdempotencyKey("run_eligibility", rule.id, stepId, event.id, input.claimId || input.instanceId || input.appointmentId || input.clientId);
   return runActionOnce(key, { actionKey: "run_eligibility", ruleId: rule.id, ruleName: rule.name, stepId, payload: input as any }, () => {
     if (!input.clientId) throw new Error(`run_eligibility: cannot resolve a client from ${event.recordType} ${event.recordId}`);
     return performRunEligibility(input) as any;

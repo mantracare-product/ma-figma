@@ -9,7 +9,7 @@ import { eventBus } from "./eventBus";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { getStoredClaims, saveClaim, generateClaimNumber, type Claim, type ClaimDiagnosisCode, type ClaimPayer, type ClaimServiceLine } from "./claimsStore";
 import { claimService } from "./claimService";
-import { getClaimWorkflow, getClaimWorkflows, findStage } from "./claimWorkflows";
+import { getClaimWorkflow, getClaimWorkflows, findStage, isPreClaimWorkflow } from "./claimWorkflows";
 import { resolveRecordContext } from "./recordContext";
 import { getCoverageOn, getClientDemographics } from "./coveragesStore";
 import {
@@ -47,6 +47,8 @@ export interface CreateClaimInput {
   startStage?: string;
   /** "service_cpt" (the appointment's service -> CPT) | "scribe_codes" | "none" */
   linesFrom?: "service_cpt" | "scribe_codes" | "none";
+  /** The appointment already has an insurance record: "keep" (default) returns it; "move" moves it to the start workflow / stage. */
+  ifExists?: "keep" | "move";
   payerId?: string;
   assignee?: string;
   cause: StageMove["cause"];
@@ -64,9 +66,17 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   const stage = input.startStage ? findStage(workflow, input.startStage) : undefined;
   if (input.startStage && !stage) throw new Error(`create_claim: stage "${input.startStage}" not found in "${workflow.name}"`);
 
-  const dedupeKey = `claim:${input.sourceType}:${input.sourceId}:${workflow.id}`;
-  const existing = getStoredClaims().find((c) => c.dedupeKey === dedupeKey);
-  if (existing) return { claimId: existing.id, created: false, missingData: existing.missingData || [], workflowId: workflow.id, stage: existing.statusLabel || "" };
+  // ONE insurance record per appointment: the dedupe key is the appointment id (not the workflow), so the same record
+  // moves through the workflows. Other sources keep one record per source and workflow.
+  const dedupeKey = input.sourceType === "appointment" ? `claim:appointment:${input.sourceId}` : `claim:${input.sourceType}:${input.sourceId}:${workflow.id}`;
+  const existing = getStoredClaims().find((c) => c.dedupeKey === dedupeKey) || (input.sourceType === "appointment" ? getStoredClaims().find((c) => c.sourceType === "appointment" && c.sourceId === input.sourceId) : undefined);
+  if (existing) {
+    if (input.ifExists === "move" && (existing.processId !== workflow.id || (stage && existing.currentStageId !== stage.id))) {
+      const r = claimService.moveToWorkflow(existing.id, workflow.id, stage?.id, input.cause);
+      return { claimId: existing.id, created: false, missingData: existing.missingData || [], workflowId: workflow.id, stage: r?.stageName || existing.statusLabel || "" };
+    }
+    return { claimId: existing.id, created: false, missingData: existing.missingData || [], workflowId: workflow.id, stage: existing.statusLabel || "" };
+  }
 
   const ctx = resolveRecordContext({ id: "x", event: "x", recordType: "appointment", recordId: input.appointmentId || "", data: { clientId: input.clientId, appointmentId: input.appointmentId }, timestamp: "" } as any);
   const client: any = ctx.client || {};
@@ -146,8 +156,11 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
       claim = { ...claim, lines: [line], totalCharge: line.chargeAmount };
     }
   }
-  if (claim.lines.length === 0) missing.push("lines");
-  if (claim.diagnosisCodes.length === 0) missing.push("diagnosis");
+  // claim-only facts are not missing on an insurance record that has not become a claim yet (Eligibility / Prior auth)
+  if (!isPreClaimWorkflow(workflow)) {
+    if (claim.lines.length === 0) missing.push("lines");
+    if (claim.diagnosisCodes.length === 0) missing.push("diagnosis");
+  }
   claim = { ...claim, missingData: missing };
 
   const created = claimService.create(claim, workflow.id, stage?.id, input.cause);
@@ -167,20 +180,23 @@ export function executeCreateClaimStep(args: { rule: AutomationRule; stepId?: st
     : ctx.instance ? "instance"
     : "client";
   const sourceId = sourceType === "scribe" ? String(sessionId || event.recordId) : sourceType === "appointment" ? String(ctx.appointmentId) : sourceType === "instance" ? String(ctx.instance!.instanceId || ctx.instance!.id) : String(event.recordId);
+  // a note signed for an appointment continues that appointment's insurance record
+  const apptLinked = sourceType === "scribe" && !!ctx.appointmentId;
   const input: CreateClaimInput = {
     clientId: ctx.clientId || "",
-    sourceType,
-    sourceId,
+    sourceType: apptLinked ? "appointment" : sourceType,
+    sourceId: apptLinked ? String(ctx.appointmentId) : sourceId,
     appointmentId: ctx.appointmentId,
     sessionId,
     startWorkflow: params.startWorkflow || params.workflowId,
     startStage: params.startStage || params.stageName,
     linesFrom: params.linesFrom,
+    ifExists: params.ifExists,
     payerId: params.payerId,
     assignee: params.assignee,
     cause,
   };
-  const key = actionIdempotencyKey("create_claim", sourceType, sourceId, input.startWorkflow || "default");
+  const key = actionIdempotencyKey("create_claim", sourceType, sourceId, input.startWorkflow || "default", event.id);
   return runActionOnce(key, { actionKey: "create_claim", ruleId: rule.id, ruleName: rule.name, stepId, payload: input as any }, () => {
     if (!input.clientId) throw new Error(`create_claim: cannot resolve a client from ${event.recordType} ${event.recordId}`);
     return performCreateClaim(input) as any;

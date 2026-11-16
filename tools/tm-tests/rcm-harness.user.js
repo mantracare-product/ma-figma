@@ -359,9 +359,9 @@
     },
     standardServices() {
       T.h.setServices([
-        { id: 701, name: "RCMTEST MRI brain", description: "", cptCode: "70553", duration: 30, price: 1200, currency: "USD", isActive: true },
-        { id: 702, name: "RCMTEST Office visit", description: "", cptCode: "99214", duration: 30, price: 150, currency: "USD", isActive: true },
-        { id: 703, name: "RCMTEST Cataract surgery", description: "", cptCode: "66984", duration: 60, price: 2400, currency: "USD", isActive: true },
+        { id: 701, name: "RCMTEST MRI brain", description: "", cptCode: "70553", duration: 30, price: 1200, currency: "USD", isActive: true, billableToInsurance: true },
+        { id: 702, name: "RCMTEST Office visit", description: "", cptCode: "99214", duration: 30, price: 150, currency: "USD", isActive: true, billableToInsurance: true },
+        { id: 703, name: "RCMTEST Cataract surgery", description: "", cptCode: "66984", duration: 60, price: 2400, currency: "USD", isActive: true, billableToInsurance: true },
       ]);
     },
     /** fresh world + standard services + sample templates + a BCBS coverage for the test client. */

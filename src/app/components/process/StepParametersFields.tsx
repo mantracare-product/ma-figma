@@ -4074,6 +4074,11 @@ export default function StepParametersFields({
               <div className="space-y-4">
                 {stepKey === "create_claim" && (<>
                   {renderField("Start workflow (id or name)", <input value={params.startWorkflow || ""} onChange={(e) => onChange({ startWorkflow: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
+                  {renderField("If the appointment already has its insurance record", (
+                    <select value={params.ifExists || "keep"} onChange={(e) => onChange({ ifExists: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                      <option value="keep">Keep it where it is</option><option value="move">Move it to this workflow / stage</option>
+                    </select>
+                  ))}
                   {renderField("Start stage (blank = first stage)", <input value={params.startStage || ""} onChange={(e) => onChange({ startStage: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
                   {renderField("Lines from", (
                     <select value={params.linesFrom || ""} onChange={(e) => onChange({ linesFrom: e.target.value || undefined })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
@@ -4095,7 +4100,12 @@ export default function StepParametersFields({
 
             {(stepKey === "move_to_workflow" || stepKey === "move-to-workflow") && (
               <div className="space-y-4">
-                <p className="text-xs text-slate-600">Moves the claim to another claim workflow and keeps all of its values. Leave the stage blank to start at the workflow's first stage.</p>
+                <p className="text-xs text-slate-600">Moves the record to another workflow and keeps all of its values. Leave the stage blank to start at the workflow's first stage.</p>
+                {renderField("What to move", (
+                  <select value={params.entity || ""} onChange={(e) => onChange({ entity: e.target.value || undefined })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                    <option value="">This record (insurance record / claim)</option><option value="appointment">The linked appointment (to an appointment workflow)</option>
+                  </select>
+                ))}
                 {renderField("Target workflow (id or name)", <input value={params.workflowId || ""} onChange={(e) => onChange({ workflowId: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
                 {renderField("Target stage (id or name, optional)", <input value={params.stageName || ""} onChange={(e) => onChange({ stageName: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
               </div>
@@ -4228,6 +4238,16 @@ export default function StepParametersFields({
                 </div>
               );
             })()}
+
+            {(stepKey === "update_to_stage" || stepKey === "update-stage") && (
+              <div className="space-y-2 mb-4" data-testid="close-as">
+                {renderField("Close the insurance record (instead of choosing a stage)", (
+                  <select value={params.closeAs || ""} onChange={(e) => onChange(e.target.value ? { closeAs: e.target.value, stageEntity: "claim" } : { closeAs: undefined })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
+                    <option value="">No: move to the stage chosen below</option><option value="lost">As lost (first lost stage of its workflow)</option><option value="success">As won (first won stage of its workflow)</option>
+                  </select>
+                ))}
+              </div>
+            )}
 
             {(stepKey === "update_to_stage" || stepKey === "update-stage" || stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (() => {
               const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";

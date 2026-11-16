@@ -63,7 +63,7 @@ beforeEach(async () => {
   act.clearinghouseSettingsStore.save({ scenario: "auto" });
   localStorage.setItem("clients", JSON.stringify([{ id: "CL-T", name: "Test Patient", phone: "555", contactType: "Client", stage: "x", processes: [], dob: "1980-01-01" }]));
   localStorage.setItem("mantra_tasks_store", JSON.stringify([]));
-  const svc = [{ id: 701, name: "Cataract surgery", description: "", cptCode: "66984", duration: 30, price: 2400, currency: "USD", isActive: true }];
+  const svc = [{ id: 701, name: "Cataract surgery", description: "", cptCode: "66984", duration: 30, price: 2400, currency: "USD", isActive: true, billableToInsurance: true }];
   for (const k of ["ma_services_store", "ma_services_demo", "ma_services_store_signup"]) localStorage.setItem(k, JSON.stringify(svc));
   sb.loadSampleTemplates();
   (await import("../orgBilling")).saveOrgBilling((await import("../orgBilling")).getActiveOrgId(), { legalName: "Test Clinic LLC", groupNpi: "1234567893", ein: "12-3456789" });
@@ -75,7 +75,7 @@ const claimTasks = () => tasks.getStoredTasks().filter((t) => t.queueId === "cla
 
 async function completedVisit(): Promise<string> {
   const a: any = appts.appointmentService.createAppointment(
-    { clientName: "Test Patient", clientEmail: "t@x.com", clientPhone: "1", employeeId: 1, serviceId: 701, date: "2030-12-01", time: "10:00", duration: 30, clientId: "CL-T" } as any,
+    { clientName: "Test Patient", clientEmail: "t@x.com", clientPhone: "1", employeeId: 1, serviceId: 701, date: "2030-12-01", time: "10:00", duration: 30, clientId: "CL-T", paymentMode: "insurance" } as any,
     { force: true, createdBy: "user" } as any
   );
   const id = String(a.id ?? a.appointment?.id);
@@ -176,7 +176,7 @@ describe("Set C demo (Slice 4)", () => {
     auto.updateRule("sample-rule-A14", { enabled: false });
     auto.updateRule("sample-rule-A14-scribe", { enabled: true });
     const a: any = appts.appointmentService.createAppointment(
-      { clientName: "Test Patient", clientEmail: "t@x.com", clientPhone: "1", employeeId: 1, serviceId: 701, date: "2030-12-02", time: "10:00", duration: 30, clientId: "CL-T" } as any,
+      { clientName: "Test Patient", clientEmail: "t@x.com", clientPhone: "1", employeeId: 1, serviceId: 701, date: "2030-12-02", time: "10:00", duration: 30, clientId: "CL-T", paymentMode: "insurance" } as any,
       { force: true, createdBy: "user" } as any
     );
     const id = String(a.id ?? a.appointment?.id);
@@ -190,7 +190,7 @@ describe("Set C demo (Slice 4)", () => {
     await wait(500);
     const c: any = myClaims()[0];
     expect(c).toBeTruthy();
-    expect(c.sourceType).toBe("scribe");
+    expect(c.sourceType).toBe("appointment"); // the note continues the appointment insurance record
     expect(c.lines[0]).toMatchObject({ cptCode: "66984", modifier: "RT" });
   });
 });

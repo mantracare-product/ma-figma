@@ -20,7 +20,9 @@ export const RCM_DEFAULTS_FLAG = "mantra_rcm_defaults_v1";
 export const OUTBOUND_STEPS = ["send_message", "submit_claim"];
 
 /** Groups that are demo content for the demo org only (not part of the product starting set). */
-const SKIP_SEEDERS = new Set(["coverages", "sample-roles"]);
+const SKIP_SEEDERS = new Set(["coverages", "sample-roles", "coverage-process"]);
+/** Rule sets replaced in Round 4: the old Coverage & authorization instance rules (E, E2) are no longer part of the starting set. */
+const SKIP_RULE_SETS = new Set(["E", "E2"]);
 
 export function isUnsafeByDefault(def: SampleRuleDef): boolean {
   return (def.actions || []).some((a: any) => OUTBOUND_STEPS.includes(a.stepKey));
@@ -47,6 +49,7 @@ export function ensureRcmDefaults(): DefaultsResult {
   let rules = 0;
   let enabled = 0;
   for (const set of listSampleRuleSets()) {
+    if (SKIP_RULE_SETS.has(set.id)) continue;
     const defs = set.rules();
     const before = new Set(getStoredRules().map((r) => r.id));
     rules += loadSampleRules(set.id);

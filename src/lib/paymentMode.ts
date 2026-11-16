@@ -48,7 +48,9 @@ const CALL_SOURCES = new Set(["inbound call", "call", "ai", "walked in", "webhoo
 export function resolvePaymentMode(input: { serviceId?: number | string; requested?: string; source?: string }): ResolvedPaymentMode {
   const billable = isServiceBillable(input.serviceId);
   if (input.requested) {
-    return { mode: billable || input.requested !== PAYMENT_MODE_INSURANCE ? input.requested : PAYMENT_MODE_SELF_PAY, unconfirmed: false };
+    // only a KNOWN service that is not billable forces self-pay
+    const known = input.serviceId !== undefined && input.serviceId !== null && getStoredServices().some((x) => String(x.id) === String(input.serviceId));
+    return { mode: billable || !known || input.requested !== PAYMENT_MODE_INSURANCE ? input.requested : PAYMENT_MODE_SELF_PAY, unconfirmed: false };
   }
   const mode = billable ? PAYMENT_MODE_INSURANCE : PAYMENT_MODE_SELF_PAY;
   return { mode, unconfirmed: CALL_SOURCES.has(String(input.source || "").toLowerCase()) };
