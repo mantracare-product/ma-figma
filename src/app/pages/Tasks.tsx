@@ -16,7 +16,6 @@ import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import TaskQuickCreateDrawer from "../components/tasks/TaskQuickCreateDrawer";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
-import TaskQueueBar from "../components/tasks/TaskQueueBar";
 import { applyTaskView, taskViewsStore, isTaskOverdue, type TaskView } from "../../lib/taskViewsStore";
 import { describeEntityRef } from "../../lib/taskLinks";
 
@@ -56,12 +55,6 @@ export default function Tasks() {
     return taskWorkflows[0]?.id || "process-task-default";
   });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
-  // Work queue = saved task view; when set it replaces the My/By-me tab filter.
-  const [activeViewId, setActiveViewId] = useState<string>(() => searchParams.get("view") || "");
-  useEffect(() => {
-    const v = searchParams.get("view");
-    if (v) setActiveViewId(v);
-  }, [searchParams]);
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
@@ -208,7 +201,8 @@ export default function Tasks() {
     return { myTasksCount: myCount, tasksByMeCount: byMeCount };
   }, [tasks, currentUserName]);
 
-  const activeView: TaskView | undefined = activeViewId ? taskViewsStore.find(activeViewId) : undefined;
+  // No Queue selector / saved views on the Tasks page (queueId and entityRef stay on the data); the list is My Tasks / Tasks by me.
+  const activeView: TaskView | undefined = undefined as TaskView | undefined;
 
   const filteredTasks = useMemo(() => {
     if (activeView) {
@@ -716,8 +710,6 @@ export default function Tasks() {
                 }
           }
         />
-
-        <TaskQueueBar tasks={tasks} activeViewId={activeViewId} onChange={setActiveViewId} />
 
         {/* ── Main Viewport: Standard 32px Table ── */}
         <TableComponent<TaskEntity>

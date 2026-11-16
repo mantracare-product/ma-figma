@@ -47,16 +47,18 @@
             const r = T.rcm();
             await T.ui.wait("claims-overview", 15000);
             await T.ui.wait("rcm-overview-row", 15000);
-            for (const chartTitle of ["Claims by stage", "Claims by workflow", "Denial rate by month", "A/R aging", "Payer mix", "First-pass acceptance", "Eligibility results", "Task queues"]) assert(document.body.innerText.includes(chartTitle), "chart card: " + chartTitle);
+            for (const chartTitle of ["Claims by stage", "Claims by workflow", "Denial rate by month", "A/R aging", "Payer mix", "First-pass acceptance", "Eligibility results", "Work queues"]) assert(document.body.innerText.includes(chartTitle), "chart card: " + chartTitle);
             assert(!/(Sample)|mock data/i.test(T.ui.textOf("claims-overview")), "no Sample / mock wording on the Claims overview: " + (T.ui.textOf("claims-overview").match(/.{0,30}((Sample)|mock data).{0,30}/i) || [""])[0]);
-            const txt = T.ui.textOf("rcm-overview-row");
             const q = r.kpis.queueCounts().find((x) => x.name.indexOf("Claim fixes") === 0);
             eq(q.open, 3, "selector says 3 open Claim fixes tasks");
-            assert(txt.indexOf(q.name) >= 0, "queue name on the row");
-            const card = Array.from(T.ui.q("rcm-overview-row").querySelectorAll("a")).find((a) => a.innerText.indexOf("Claim fixes") >= 0);
-            assert(card && card.innerText.replace(/\s+/g, " ").indexOf(" 3") >= 0, "queue card shows 3: " + (card && card.innerText));
+            await T.ui.wait("work-queues", 8000);
+            const wq = T.ui.q("work-queues");
+            const row = Array.from(wq.querySelectorAll("li")).find((li) => li.innerText.indexOf("Claim fixes") >= 0);
+            assert(row && row.innerText.replace(/s+/g, " ").trim().endsWith("3"), "Work queues card shows 3: " + (row && row.innerText));
+            assert(wq.querySelectorAll("a").length === 0, "work queue rows are counts only (no links)");
+            assert(Array.from(wq.querySelectorAll("li")).every((li) => !/s0$/.test(li.innerText.replace(/s+/g, " ").trim())), "zero rows hidden");
             const k = r.kpis.rcmKpis();
-            const cell = (label) => { const el = Array.from(T.ui.q("rcm-overview-row").querySelectorAll("div")).find((d) => d.children.length === 2 && d.children[0].innerText.trim().toLowerCase() === label.toLowerCase()); return el && el.children[1].innerText.trim(); };
+            const cell = (label) => { const el = Array.from(T.ui.q("rcm-overview-row").querySelectorAll("div")).find((d) => d.children.length === 3 && d.children[0].innerText.trim().toLowerCase() === label.toLowerCase()); return el && el.children[1].innerText.trim(); };
             eq(cell("Claims"), String(k.claimsTotal), "Claims KPI");
             eq(cell("Submitted"), String(k.claimsSubmitted), "Submitted KPI");
           },

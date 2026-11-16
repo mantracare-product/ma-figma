@@ -179,7 +179,7 @@
       },
     },
     {
-      title: "UI: Tasks page queue bar selects the view and the task shows with its linked record",
+      title: "UI: Tasks page has no Queue selector or Save view; the queue task still lists (queueId / entityRef kept on the data)",
       arrange(ctx) {
         const r = T.rcm();
         const w = ctx.fresh();
@@ -195,10 +195,13 @@
         {
           nav: "/tasks?view=view-sample-insurance-fixes",
           async verify() {
-            await T.ui.wait("task-queue-bar", 10000);
-            eq(T.ui.q("task-queue-select").value, "view-sample-insurance-fixes", "queue select shows the view from the URL");
-            await T.ui.waitText("RCMTEST queue task");
-            await T.ui.waitText("RCMTEST Linked Visit");
+            await T.ui.waitText("RCMTEST queue task", 15000);
+            assert(!T.ui.has("task-queue-bar") && !T.ui.has("task-queue-select"), "no Queue selector");
+            assert(!/save view/i.test(T.ui.appText()), "no Save view button");
+            assert(!/QUEUE/.test(Array.from(document.querySelectorAll("thead th")).map((t) => t.innerText).join(" ")), "no QUEUE column");
+            const t = T.rcm().tasks.getStoredTasks().find((x) => x.title === "RCMTEST queue task");
+            eq(t.queueId, "insurance-fixes", "queueId kept on the task");
+            assert(t.entityRef && t.entityRef.instanceId, "entityRef kept on the task");
           },
         },
       ],

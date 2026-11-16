@@ -171,3 +171,6 @@ PageTopBar (used by every list page) is now strictly one line: flex-nowrap, the 
 
 ### 6. Insurance & Claims top bar (done, commit "R3.6")
 Claims top bar now holds only: Claims | Setup toggle, search, workflow switcher, payer filter, assignee filter, List | Board, Create Claim, Receive ERA, export, settings gear. "All workflows", "All stages" and both date pickers are gone. The workflow switcher lists only the workflows that exist, each with its claim count ("Claim (14)"), no All option, one at a time; it defaults to the workflow with the most claims (and still honours ?processId= / ?process=). List and Board both follow the selected workflow (the grouped "all workflows" board is removed); stage stays visible in the Stage column and the board columns. Counts are per workflow over all claims, before payer/assignee/search filters. tm-test S4 updated. Gate at baseline.
+
+### 5. Tasks page: Queue and Save view removed (done, commit "R3.5")
+The Queue selector bar (TaskQueueBar, deleted), Save view and the extra view columns (QUEUE, LINKED RECORD, PRIORITY, DUE, SLA, AMOUNT) are gone from the Tasks page; ?view= is ignored. queueId / entityRef stay on tasks and saved-view data stays in the store (used by the rules and Overview). Overview's "Work queues" card shows counts only (no links, zero rows hidden). tm-tests S2/S6 updated. Gate at baseline.
