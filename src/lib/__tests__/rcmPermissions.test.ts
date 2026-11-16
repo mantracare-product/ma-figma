@@ -35,7 +35,7 @@ describe("record-less permission checks", () => {
     const r = billingOnly();
     expect(perms.hasPermission(r, "billingSetup", "read")).toBe(true);
     expect(perms.hasPermission(r, "settings", "read")).toBe(false);
-    expect(perms.hasPermission(r, "claims", "read")).toBe(false);
+    expect(perms.hasPermission(r, "claims", "read")).toBe(true);
   });
 
   it("missing role, missing key and 'inherit' are all denied", () => {

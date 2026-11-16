@@ -6,6 +6,7 @@ import { getStoredClaims, type Claim } from "./claimsStore";
 import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
 import { buildRcmReportRows } from "./rcmReportSources";
 import { queueCounts } from "./rcmKpis";
+import { stripSampleSuffix } from "./sampleSuffixMigration";
 import { getProcessInstances } from "./processLogsStore";
 
 export interface OverviewFilters {
@@ -44,7 +45,7 @@ function countBy<T>(items: T[], key: (t: T) => string): Slice[] {
 
 export function stageNameOf(c: Claim): string {
   const wf = getClaimWorkflow(c.processId) || getClaimWorkflows()[0];
-  return (findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel))?.name || c.statusLabel || "No stage";
+  return stripSampleSuffix((findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel))?.name || c.statusLabel || "No stage");
 }
 
 export interface ClaimsOverviewData {
@@ -97,7 +98,7 @@ export function buildClaimsOverview(f: OverviewFilters = {}, now: number = Date.
   return {
     payers: Array.from(new Set(all.map((c) => c.payer?.name).filter(Boolean) as string[])).sort(),
     claimsByStage: countBy(claims, stageNameOf),
-    claimsByWorkflow: countBy(claims, (c) => (getClaimWorkflow(c.processId) || getClaimWorkflows()[0])?.name || "No workflow"),
+    claimsByWorkflow: countBy(claims, (c) => stripSampleSuffix((getClaimWorkflow(c.processId) || getClaimWorkflows()[0])?.name || "No workflow")),
     denialTrend,
     arAging,
     payerMix: Array.from(payerMixMap, ([name, value]) => ({ name, value: Math.round(value * 100) / 100 })),
@@ -105,5 +106,32 @@ export function buildClaimsOverview(f: OverviewFilters = {}, now: number = Date.
     eligibility,
     queues: queueCounts(now).map((q) => ({ name: q.name, value: q.open })),
     total: claims.length,
+  };
+}
+
+export interface KpiDeltas {
+  /** Change of the last 30 days vs the 30 days before (counts, or percentage points for rates); null when nothing to compare. */
+  claims: number | null;
+  submitted: number | null;
+  denialRate: number | null;
+  firstPass: number | null;
+}
+
+export function kpiDeltas(now: number = Date.now()): KpiDeltas {
+  const claims = getStoredClaims();
+  const DAY = 86400000;
+  const inWin = (c: Claim, a: number, b: number) => { const t = Date.parse(c.submittedAt || c.createdAt || ""); return !Number.isNaN(t) && t > now - b * DAY && t <= now - a * DAY; };
+  const cur = claims.filter((c) => inWin(c, 0, 30));
+  const prev = claims.filter((c) => inWin(c, 30, 60));
+  const rate = (arr: Claim[], f: (c: Claim) => boolean, d: (c: Claim) => boolean) => { const den = arr.filter(d); return den.length ? (arr.filter(f).length / den.length) * 100 : null; };
+  const sub = (arr: Claim[]) => arr.filter((c) => !!c.submittedAt).length;
+  const denial = (arr: Claim[]) => rate(arr, (c) => !!c.denialCategory, (c) => !!c.denialCategory || (c.amountPaid || 0) > 0);
+  const first = (arr: Claim[]) => rate(arr, (c) => (c.submissionCount || 1) === 1 && c.status !== "Rejected", (c) => !!c.submittedAt);
+  const diff = (a: number | null, b: number | null) => (a === null || b === null ? null : Math.round((a - b) * 10) / 10);
+  return {
+    claims: prev.length || cur.length ? cur.length - prev.length : null,
+    submitted: sub(prev) || sub(cur) ? sub(cur) - sub(prev) : null,
+    denialRate: diff(denial(cur), denial(prev)),
+    firstPass: diff(first(cur), first(prev)),
   };
 }

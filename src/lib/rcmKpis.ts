@@ -7,6 +7,7 @@ import { countTasksInView, isTaskOverdue, taskMatchesView, taskViewsStore, type 
 import { getStoredClaims } from "./claimsStore";
 import { outstandingOf } from "./rcmReportSources";
 import { getProcessInstances } from "./processLogsStore";
+import { stripSampleSuffix } from "./sampleSuffixMigration";
 import type { TaskEntity } from "../types/task";
 
 export interface QueueCount {
@@ -23,7 +24,7 @@ export function queueCounts(now: number = Date.now(), tasks: TaskEntity[] = getS
     const open = tasks.filter((t) => taskMatchesView(t, v, now));
     return {
       viewId: v.id,
-      name: v.name,
+      name: stripSampleSuffix(v.name),
       open: countTasksInView(tasks, v, now),
       overdue: open.filter((t) => isTaskOverdue(t, now)).length,
       amountAtStake: open.reduce((a, t) => a + (t.amountAtStake || 0), 0),

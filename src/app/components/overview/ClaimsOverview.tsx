@@ -7,11 +7,29 @@ import { PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import RcmOverviewRow from "./RcmOverviewRow";
 
 const PALETTE = ["#1456f0", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#64748B"];
-const card = "bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 flex flex-col";
-const title = "text-base font-bold text-[#222222] mb-2";
+const card = "bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-5 flex flex-col min-h-[320px] min-w-0";
+const title = "text-xs font-bold uppercase tracking-wider text-[#1E293B] mb-3";
+
+/** One compact card: open tasks per work queue as horizontal bars with counts; zero rows are hidden. Counts only. */
+function WorkQueues({ rows }: { rows: Slice[] }) {
+  const shown = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
+  const max = Math.max(1, ...shown.map((r) => r.value));
+  if (shown.length === 0) return <Empty />;
+  return (
+    <ul className="space-y-2.5" data-testid="work-queues">
+      {shown.map((r) => (
+        <li key={r.name} className="flex items-center gap-3 text-xs">
+          <span className="w-40 shrink-0 truncate text-slate-600" title={r.name}>{r.name}</span>
+          <span className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden"><span className="block h-full rounded-full bg-[#1456f0]" style={{ width: `${Math.max(4, (r.value / max) * 100)}%` }} /></span>
+          <span className="w-8 text-right font-semibold text-slate-800 tabular-nums">{r.value}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Empty() {
-  return <div className="flex-1 flex items-center justify-center text-xs text-slate-400 italic min-h-[160px]">No data for this selection.</div>;
+  return <div className="flex-1 flex items-center justify-center text-xs text-slate-400 italic min-h-[160px]">Nothing to show for this selection.</div>;
 }
 
 function Donut({ data, label }: { data: Slice[]; label: string }) {
@@ -20,7 +38,7 @@ function Donut({ data, label }: { data: Slice[]; label: string }) {
   if (rows.length === 0) return <Empty />;
   return (
     <>
-      <div className="relative w-full h-56 my-1">
+      <div className="relative w-full h-60 my-1">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={rows} cx="50%" cy="50%" innerRadius={62} outerRadius={88} paddingAngle={2} dataKey="value" strokeWidth={0}>
@@ -50,7 +68,7 @@ function Donut({ data, label }: { data: Slice[]; label: string }) {
 function BarBox({ data, xKey, yKey, horizontal, color = "#1456f0" }: { data: any[]; xKey: string; yKey: string; horizontal?: boolean; color?: string }) {
   if (data.length === 0 || data.every((d) => !d[yKey])) return <Empty />;
   return (
-    <div className="w-full h-56">
+    <div className="w-full h-60">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout={horizontal ? "vertical" : "horizontal"} margin={{ left: horizontal ? 24 : 0, right: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -76,7 +94,7 @@ function BarBox({ data, xKey, yKey, horizontal, color = "#1456f0" }: { data: any
 function LineBox({ data, yKey, unit }: { data: any[]; yKey: string; unit: string }) {
   if (data.length === 0 || data.every((d) => d[yKey] === null)) return <Empty />;
   return (
-    <div className="w-full h-56">
+    <div className="w-full h-60">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ left: 0, right: 12 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -102,9 +120,9 @@ export default function ClaimsOverview({ payer, from, to }: { payer: string; fro
   const d = useMemo(() => buildClaimsOverview({ payer, from, to }), [payer, from, to, tick]);
 
   return (
-    <div className="space-y-6" data-testid="claims-overview">
+    <div className="space-y-5" data-testid="claims-overview">
       <RcmOverviewRow />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         <div className={card}><h3 className={title}>Claims by stage</h3><BarBox data={d.claimsByStage} xKey="name" yKey="value" /></div>
         <div className={card}><h3 className={title}>Claims by workflow</h3><Donut data={d.claimsByWorkflow} label="CLAIMS" /></div>
         <div className={card}><h3 className={title}>Denial rate by month</h3><LineBox data={d.denialTrend} yKey="rate" unit="%" /></div>
@@ -112,7 +130,7 @@ export default function ClaimsOverview({ payer, from, to }: { payer: string; fro
         <div className={card}><h3 className={title}>Payer mix (charges)</h3><Donut data={d.payerMix} label="CHARGES" /></div>
         <div className={card}><h3 className={title}>First-pass acceptance by month</h3><LineBox data={d.firstPassTrend} yKey="rate" unit="%" /></div>
         <div className={card}><h3 className={title}>Eligibility results</h3><Donut data={d.eligibility} label="CHECKS" /></div>
-        <div className={`${card} md:col-span-2`}><h3 className={title}>Task queues (open)</h3><BarBox data={d.queues} xKey="name" yKey="value" horizontal color="#10B981" /></div>
+        <div className={card}><h3 className={title}>Work queues (open tasks)</h3><WorkQueues rows={d.queues} /></div>
       </div>
     </div>
   );

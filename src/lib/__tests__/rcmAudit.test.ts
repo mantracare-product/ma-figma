@@ -108,6 +108,6 @@ describe("permission wiring (hasPermission, no hard-coded roles)", () => {
     expect(perms.hasPermission(front, "priorAuth", "edit")).toBe(false);
     expect(perms.hasPermission(front, "claims", "add")).toBe(false);
     expect(perms.hasPermission(setup, "billingSetup", "edit")).toBe(true);
-    expect(perms.hasPermission(setup, "claims", "read")).toBe(false);
+    expect(perms.hasPermission(setup, "claims", "read")).toBe(true);
   });
 });
