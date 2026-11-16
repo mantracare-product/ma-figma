@@ -203,7 +203,7 @@
       },
     },
     {
-      title: "UI: Claims page shows ALL claims, filters and List/Board in the top bar (no banner, no separate strip), board follows the workflow filter",
+      title: "UI: Claims top bar has workflow switcher (no All, counts, default = most claims), payer, assignee, List/Board; no stage or date filters; board follows the workflow",
       async arrange(ctx) {
         const r = T.rcm();
         const w = worldC(ctx);
@@ -216,17 +216,16 @@
           async verify() {
             await T.ui.wait("claims-filters", 15000);
             assert(!T.ui.has("mock-data-banner"), "no Mock data banner");
-            for (const id of ["workflow", "stage", "payer", "assignee", "from", "to"]) assert(T.ui.has("claims-filter-" + id), "filter " + id);
-            eq(T.ui.q("claims-filter-workflow").value, "all", "workflow filter defaults to All");
-            eq(T.ui.q("claims-filter-stage").value, "all");
-            await T.ui.click("claims-view-board", 8000);
-            await T.ui.wait("claims-grouped", 8000);
+            for (const id of ["workflow", "payer", "assignee"]) assert(T.ui.has("claims-filter-" + id), "filter " + id);
+            for (const id of ["stage", "from", "to"]) assert(!T.ui.has("claims-filter-" + id), "no " + id + " filter any more");
             const wfSel = T.ui.q("claims-filter-workflow");
-            const one = Array.from(wfSel.options).find((op) => op.value !== "all");
-            assert(one, "a workflow to pick");
-            T.ui.setInput(wfSel, one.value);
+            const opts = Array.from(wfSel.options);
+            assert(opts.length >= 1 && !opts.some((op) => op.value === "all" || /^all/i.test(op.text)), "workflow switcher has no All option");
+            assert(opts.every((op) => /(d+)$/.test(op.text)), "each workflow shows its claim count: " + opts.map((o) => o.text).join(" | "));
+            const counts = opts.map((op) => Number(/((d+))$/.exec(op.text)[1]));
+            eq(Number(/((d+))$/.exec(wfSel.selectedOptions[0].text)[1]), Math.max.apply(null, counts), "default workflow is the one with the most claims");
+            await T.ui.click("claims-view-board", 8000);
             await T.ui.wait("claim-board", 8000);
-            T.ui.setInput(wfSel, "all");
             await T.ui.click("claims-view-list");
           },
         },
