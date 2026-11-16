@@ -81,6 +81,8 @@
     },
     textOf(id) { const el = T.ui.q(id); return el ? el.innerText : ""; },
     path() { return location.pathname + location.search; },
+    /** Text of the app itself (excludes this test panel). */
+    appText() { const r = document.getElementById("root"); return r ? r.innerText : document.body.innerText; },
     async clickByText(selector, text, timeout) {
       const el = await T.waitFor(() => Array.from(document.querySelectorAll(selector)).find((e) => (e.innerText || "").trim().includes(text)), { timeout: timeout || 6000, msg: selector + " containing '" + text + "'" });
       el.click();
@@ -605,12 +607,12 @@
         const role = r.sampleRoles.buildSampleRcmRoles().find((x) => x.id === "sample-rcm-billing-setup");
         assert(r.permissions.hasPermission(role, "billingSetup", "read"), "billingSetup read");
         assert(!r.permissions.hasPermission(role, "settings", "read"), "settings denied");
-        assert(!r.permissions.hasPermission(role, "claims", "read"), "claims denied");
+        assert(r.permissions.hasPermission(role, "claims", "read") && !r.permissions.hasPermission(role, "claims", "add"), "claims read-only (the Setup tab lives on the Claims page)");
         assert(!r.permissions.hasPermission(undefined, "billingSetup"), "no role = denied");
       },
     },
     {
-      title: "UI: billingSetup-only user opens /settings/billing-setup; /settings/team and /settings/organization stay blocked",
+      title: "UI: billingSetup user opens Insurance & Claims > Setup; /settings/team and /settings/organization stay blocked",
       usesAuth: true,
       reloadAfter: true,
       arrange(ctx) {
@@ -625,10 +627,10 @@
       },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
-            await T.waitFor(() => T.ui.has("billing-section-entity"), { timeout: 8000, msg: "Billing setup tab to render" });
-            eq(location.pathname, "/settings/billing-setup", "stayed on the billing setup route");
+            await T.waitFor(() => T.ui.has("claims-setup"), { timeout: 10000, msg: "Setup to render on the Claims page" });
+            eq(location.pathname, "/claims", "stayed on the Claims page");
           },
         },
         {
@@ -719,19 +721,19 @@
 
   T.slice(2, [
     {
-      title: "Billing setup stores: entity, locations, payers, fee schedules, claim defaults, scrub rules, provider credentials save and load",
+      title: "Setup stores: payers, fee schedules, claim defaults, scrub rules, provider credentials save and load; billing entity and POS live on the organization",
       run(ctx) {
         const b = T.rcm().billing;
         ctx.fresh();
-        b.billingEntityStore.save({ legalName: "RCMTEST LLC", dbaName: "", ein: "99-9999999", npi: "1234567893", taxonomy: "207W00000X", address: "1 Test St", phone: "5550" });
-        eq(b.billingEntityStore.get().ein, "99-9999999");
-        b.billingLocationsStore.upsert({ id: "RCMTEST-loc", name: "RCMTEST Loc", pos: "11" });
-        eq(b.billingLocationsStore.get().map((x) => x.id), ["RCMTEST-loc"]);
+        const ob = T.rcm().orgBilling;
+        ob.saveOrgBilling(ob.getActiveOrgId(), { legalName: "RCMTEST LLC", ein: "99-9999999", groupNpi: "1234567893", taxonomy: "207W00000X", address: "1 Test St", phone: "5550" });
+        eq(ob.getOrgBilling().ein, "99-9999999");
+        assert(ob.hasBillingEntity(), "legal name + group NPI = complete billing entity");
         b.payersStore.upsert({ id: "RCMTEST-payer", name: "RCMTEST Payer", payerIdCode: "RT1", enrollment: { status: "enrolled" } });
         eq(b.getPayer("RCMTEST-payer").name, "RCMTEST Payer");
         b.feeSchedulesStore.upsert({ id: "RCMTEST-fee", name: "fees", payerId: "RCMTEST-payer", lines: [{ cpt: "99214", amount: 111 }] });
         eq(b.lookupFee("99214", "RCMTEST-payer"), 111, "payer fee");
-        b.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 120, defaultBillingLocationId: "RCMTEST-loc" });
+        b.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 120, defaultBillingLocationId: "" });
         eq(b.claimDefaultsStore.get().timelyFilingDays, 120);
         b.scrubRulesStore.upsert({ id: "RCMTEST-scrub", name: "r", check: "icd_required", severity: "error", enabled: true });
         eq(b.scrubRulesStore.get().length, 1);
@@ -740,21 +742,37 @@
       },
     },
     {
-      title: "UI: Billing setup tab renders its sections and Save writes the billing entity",
+      title: "UI: Insurance & Claims > Setup has its sections and no Billing entity / Locations sections",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
-            await T.ui.wait("billing-section-entity", 10000);
-            for (const id of ["locations", "payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
-            const input = await T.waitFor(() => labelInput("Legal name"), { msg: "Legal name input" });
-            T.ui.setInput(input, "RCMTEST UI LLC");
-            await T.ui.clickByText("button", "Save");
-            await T.waitFor(() => T.rcm().billing.billingEntityStore.get().legalName === "RCMTEST UI LLC", { msg: "entity saved from the UI" });
+            await T.ui.wait("claims-setup", 12000);
+            for (const id of ["payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
+            for (const id of ["entity", "locations"]) assert(!T.ui.has("billing-section-" + id), "no " + id + " section (organization is the source)");
+            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Setup page");
           },
         },
       ],
+    },
+    {
+      title: "Claim builder reads the billing entity and POS from the organization record",
+      run(ctx) {
+        const r = T.rcm();
+        const w = ctx.fresh();
+        const ob = r.orgBilling;
+        ob.saveOrgBilling(ob.getActiveOrgId(), { legalName: "RCMTEST Org LLC", ein: "99-1234567", groupNpi: "1234567893", address: "9 Org Way" });
+        localStorage.setItem("mantra_org_locations_" + ob.getActiveOrgId(), JSON.stringify([{ id: "RCMTEST-L1", name: "RCMTEST Main", type: "physical", address: "9 Org Way", pos: "22", isPrimary: true }]));
+        r.billing.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 90, defaultBillingLocationId: "RCMTEST-L1" });
+        const res = r.claimActions.performCreateClaim({ clientId: w.clientId, sourceType: "client", sourceId: "RCMTEST-org-src", linesFrom: "none", cause: { type: "manual" } });
+        const c = T.h.claim(res.claimId);
+        eq(c.billingProviderName, "RCMTEST Org LLC");
+        eq(c.billingProviderNpi, "1234567893");
+        eq(c.billingProviderTaxId, "99-1234567");
+        eq(c.placeOfService, "22", "POS comes from the organization location");
+        assert(res.missingData.indexOf("billing_entity") < 0, "billing entity not reported missing");
+      },
     },
     {
       title: "Coverages: add primary + secondary, a new primary demotes the old one, typed demographics save, coverage.updated fires",
@@ -792,67 +810,54 @@
           async verify() {
             await T.ui.click("profile-tab-insurance", 12000);
             await T.ui.wait("client-insurance-tab");
-            await T.ui.waitText("RCMTEST-UIM1");
+            const tab = T.ui.q("client-insurance-tab");
+            const has = () => tab.innerText.indexOf("RCMTEST-UIM1") >= 0 || Array.from(tab.querySelectorAll("input,select,textarea")).some((i) => i.value === "RCMTEST-UIM1");
+            try { await T.waitFor(has, { timeout: 8000, msg: "coverage member id in the Insurance tab" }); } catch (e) { throw new Error(String(e.message) + " | tab text: " + tab.innerText.slice(0, 400).split(String.fromCharCode(10)).join(" / ") + " | inputs: " + Array.from(tab.querySelectorAll("input,select")).map((i) => i.value).join(",")); }
           },
         },
       ],
     },
     {
-      title: "Load sample templates is idempotent and never overwrites edits",
+      title: "RCM defaults are created once as ordinary items: rules enabled except outbound/alternates; edits and deletions are never undone",
       run(ctx) {
         const r = T.rcm();
         ctx.fresh();
-        const first = r.sampleBundles.loadSampleTemplates();
-        assert(first.total > 0, "first load adds items");
-        const p = r.billing.getPayer("payer-bcbs");
-        r.billing.payersStore.upsert(Object.assign({}, p, { name: "RCMTEST edited payer", sample: false }));
-        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: true });
-        const second = r.sampleBundles.loadSampleTemplates();
-        eq(second.total, 0, "second load adds nothing");
-        eq(r.billing.getPayer("payer-bcbs").name, "RCMTEST edited payer", "payer edit kept");
-        const a1 = r.automation.getStoredRules().find((x) => x.id === "sample-rule-A1");
-        eq(a1.name, "RCMTEST edited A1", "rule edit kept");
-        assert(a1.enabled === true, "enabled choice kept");
-        eq(r.billing.getPayers().length, 15, "15 mock payers");
+        localStorage.removeItem(r.rcmDefaults.RCM_DEFAULTS_FLAG);
+        const first = r.rcmDefaults.ensureRcmDefaults();
+        assert(!first.already && first.rules > 20 && first.enabled > 10, "defaults created: " + JSON.stringify(first));
+        const byId2 = (id) => r.automation.getStoredRules().find((x) => x.id === id);
+        assert(byId2("sample-rule-A1").enabled, "A1 ships enabled");
+        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A29").enabled, "outbound rules (message / submit / call) ship off");
+        assert(!byId2("sample-rule-A14-scribe").enabled, "alternates ship off");
+        assert(r.automation.getStoredRules().every((x) => !/\(sample\)/i.test(x.name)), "no (Sample) in rule names");
+        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: false });
+        r.automation.deleteRule("sample-rule-A2");
+        const second = r.rcmDefaults.ensureRcmDefaults();
+        assert(second.already, "second run is a no-op");
+        eq(byId2("sample-rule-A1").name, "RCMTEST edited A1", "rule edit kept");
+        assert(!byId2("sample-rule-A2"), "deleted rule not brought back");
+        eq(r.billing.getPayers().length, 15, "payers list seeded");
         eq(r.taskViews.taskViewsStore.get().length, 8, "8 queue views");
       },
     },
     {
-      title: "Sample rules load DISABLED; Enable demo set toggles them (E, E2, C, M)",
-      run(ctx) {
-        const r = T.rcm();
-        ctx.fresh();
-        r.sampleBundles.loadSampleTemplates();
-        const sampleRules = r.automation.getStoredRules().filter((x) => x.id.indexOf("sample-rule-") === 0);
-        assert(sampleRules.length >= 39, "sample rules loaded (" + sampleRules.length + ")");
-        assert(sampleRules.every((x) => !x.enabled), "all sample rules start disabled");
-        for (const id of ["E", "E2", "C", "M"]) {
-          const st0 = r.sampleBundles.getSampleSetStatus(id);
-          eq(st0.enabled, 0, "set " + id + " starts off");
-          const n = r.sampleBundles.enableDemoSet(id);
-          assert(n > 0, "set " + id + " enabled " + n);
-          const st1 = r.sampleBundles.getSampleSetStatus(id);
-          eq(st1.enabled, st1.total, "set " + id + " fully on");
-          r.sampleBundles.disableDemoSet(id);
-          eq(r.sampleBundles.getSampleSetStatus(id).enabled, 0, "set " + id + " off again");
-        }
-        r.sampleBundles.enableDemoSet("C");
-        assert(!T.h.rulesOn("sample-rule-A14-").length, "A14 variants stay off when the set is enabled");
-      },
-    },
-    {
-      title: "UI: Automation page Load sample templates + Enable demo set buttons",
+      title: "UI: Automation page has no Sample templates panel or demo-set buttons; Run daily jobs and filters are in the top bar",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
           nav: "/automation",
           async verify() {
-            await T.ui.click("load-sample-templates", 12000);
-            await T.waitFor(() => T.rcm().automation.getStoredRules().some((x) => x.id === "sample-rule-A1"), { msg: "sample rules after the click" });
-            assert(T.rcm().automation.getStoredRules().filter((x) => x.id.indexOf("sample-rule-") === 0).every((x) => !x.enabled), "loaded disabled");
-            await T.ui.click("demo-set-E");
-            await T.waitFor(() => T.rcm().sampleBundles.getSampleSetStatus("E").enabled > 0, { msg: "set E enabled via the button" });
-            assert(T.ui.has("run-daily-jobs"), "Run daily jobs now button present");
+            await T.ui.wait("run-daily-jobs", 12000);
+            for (const id of ["sample-templates-panel", "load-sample-templates", "demo-set-E"]) assert(!T.ui.has(id), id + " must be gone");
+            for (const id of ["automation-filter-entity", "automation-filter-trigger", "automation-filter-status"]) assert(T.ui.has(id), id + " present");
+            assert(!/sample templates|enable demo set/i.test(T.ui.appText()), "no sample / demo-set wording");
+          },
+        },
+        {
+          nav: "/process",
+          async verify() {
+            await T.h.settle(1200);
+            assert(!T.ui.has("sample-templates-panel") && !/sample templates|enable demo set/i.test(T.ui.appText()), "Process page has no Sample templates panel");
           },
         },
       ],
@@ -1185,15 +1190,16 @@
       ],
     },
     {
-      title: "UI: Billing setup > Payers shows the prior-auth rules table and the mock scenario picker",
+      title: "UI: Claims Setup > Payers shows the prior-auth rules table (the eligibility scenario picker is dev-only)",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
             await T.ui.click("billing-section-payers", 12000);
             await T.ui.waitText("Prior-auth rules");
-            await T.ui.waitText("Mock eligibility scenario");
+            await T.ui.waitText("Eligibility scenario (development only)");
+            assert(!/mock data/i.test(T.ui.appText()), "no Mock data wording");
           },
         },
       ],
@@ -1412,7 +1418,7 @@
       },
     },
     {
-      title: "UI: Claims page shows the Mock data banner, the workflow board toggle and the board",
+      title: "UI: Claims page shows ALL claims, filters and List/Board in the top bar (no banner, no separate strip), board follows the workflow filter",
       async arrange(ctx) {
         const r = T.rcm();
         const w = worldC(ctx);
@@ -1423,9 +1429,19 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("mock-data-banner", 15000);
+            await T.ui.wait("claims-filters", 15000);
+            assert(!T.ui.has("mock-data-banner"), "no Mock data banner");
+            for (const id of ["workflow", "stage", "payer", "assignee", "from", "to"]) assert(T.ui.has("claims-filter-" + id), "filter " + id);
+            eq(T.ui.q("claims-filter-workflow").value, "all", "workflow filter defaults to All");
+            eq(T.ui.q("claims-filter-stage").value, "all");
             await T.ui.click("claims-view-board", 8000);
+            await T.ui.wait("claims-grouped", 8000);
+            const wfSel = T.ui.q("claims-filter-workflow");
+            const one = Array.from(wfSel.options).find((op) => op.value !== "all");
+            assert(one, "a workflow to pick");
+            T.ui.setInput(wfSel, one.value);
             await T.ui.wait("claim-board", 8000);
+            T.ui.setInput(wfSel, "all");
             await T.ui.click("claims-view-list");
           },
         },
@@ -1440,6 +1456,40 @@
       title: "Scribe Codes panel layout and the claim drawer sections per workflow",
       run() { T.manual("Needs a human: open an AI Scribe transcript to see the Codes panel; claim drawer does not hide fields per workflow (known TODO)"); },
     },
+    {
+      title: "UI: Create Claim opens the session picker; a session creates a prefilled claim (patient, DOS, provider, codes, coverage) and opens it; manual option exists",
+      async arrange(ctx) {
+        const r = T.rcm();
+        const w = worldC(ctx);
+        r.orgBilling.saveOrgBilling(r.orgBilling.getActiveOrgId(), { legalName: "RCMTEST Org LLC", groupNpi: "1234567893" });
+        r.coverages.saveCoverage({ clientId: w.clientId, payerId: "payer-bcbs", memberId: "RCMTEST-M9", priority: "primary", effectiveDate: "2020-01-01" });
+        r.scribe.saveScribeSession({ id: "RCMTEST-scribe-1", clientId: w.clientId, clientName: "RCMTEST Patient", doctorId: "d1", doctorName: "Dr RCMTEST", sessionDate: new Date().toISOString(), durationSeconds: 60, transcript: { fullText: "", utterances: [] }, extractedData: {}, status: "completed", createdAt: Date.now(), codes: { icd: [{ code: "H25.11", description: "Cataract" }], cpt: [{ code: "66984", description: "Cataract surgery", modifier: "RT", units: 1 }], accepted: true } });
+      },
+      phases: [
+        {
+          nav: "/claims",
+          async verify() {
+            await T.ui.clickByText("button", "Create Claim", 15000);
+            await T.ui.wait("create-claim-modal", 8000);
+            assert(T.ui.has("create-claim-manual"), "manual option present");
+            const before = T.rcm().claims.getStoredClaims().length;
+            const row = await T.waitFor(() => Array.from(document.querySelectorAll('[data-testid="create-claim-session"]')).find((e) => e.innerText.indexOf("RCMTEST Patient") >= 0), { msg: "the RCMTEST session in the list" });
+            assert(/H25\.11/.test(row.innerText) && /66984/.test(row.innerText), "row shows diagnosis and CPT");
+            row.click();
+            await T.waitFor(() => T.rcm().claims.getStoredClaims().length === before + 1, { msg: "claim created from the session" });
+            const c = T.rcm().claims.getStoredClaims().find((x) => x.scribeSessionId === "RCMTEST-scribe-1");
+            assert(c, "claim linked to the session");
+            eq(c.diagnosisCodes[0].code, "H25.11");
+            eq(c.lines[0].cptCode, "66984");
+            eq(c.lines[0].modifier, "RT");
+            eq(c.insuredId, "RCMTEST-M9", "coverage from the client's primary coverage");
+            eq(c.billingProviderName, "RCMTEST Org LLC", "billing entity from the organization");
+            await T.waitFor(() => !T.ui.has("create-claim-modal"), { msg: "modal closes" });
+          },
+        },
+      ],
+    },
+
   ]);
 })();
 
@@ -1610,7 +1660,7 @@
       },
     },
     {
-      title: "UI: Invoices page opens the Statement drawer (mock payment link label) and the Claims page has Receive ERA",
+      title: "UI: Invoices page opens the Statement drawer and the Claims page has Receive ERA in the top bar",
       async arrange(ctx) {
         const w = T.h.rcmWorld(ctx);
         submitted(w, "pay", "RCMTEST-M1", 200, "RCMTEST-apt-pay");
@@ -1627,9 +1677,9 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.waitText("Receive ERA (mock)", 15000);
+            await T.ui.wait("claims-receive-era", 15000);
             const n0 = T.rcm().era.erasStore.get().length;
-            await T.ui.clickByText("button", "Receive ERA (mock)");
+            await T.ui.click("claims-receive-era");
             await T.waitFor(() => T.rcm().era.erasStore.get().length === n0 + 1, { msg: "an ERA staged from the button" });
           },
         },
@@ -1639,6 +1689,30 @@
       title: "Portal statement block, payment plan drawer layout, invoice stage editing",
       run() { T.manual("Needs a human: patient portal bill screen, plan creation form, and editing the new invoice stages on the Process page"); },
     },
+    {
+      title: "Flow builder catalogs: every seeded step key and trigger event is registered with a real name; seeded rules re-save unchanged",
+      run() {
+        const r = T.rcm();
+        const known = new Set(r.rcmCatalog.RCM_ACTION_KEYS.concat(r.rcmCatalog.OTHER_STEP_KEYS));
+        const events = new Set(r.automationTypes.GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events.map((e) => e.event)));
+        const keys = (steps) => (steps || []).flatMap((s) => [s.stepKey].concat(keys((s.branches || []).flatMap((b) => b.steps || []))));
+        const defs = r.sampleBundles.listSampleRuleSets().flatMap((s) => s.rules());
+        assert(defs.length >= 39, "rule definitions found (" + defs.length + ")");
+        const badKey = keys(defs.flatMap((d) => d.actions || [])).filter((k) => !known.has(k));
+        eq(badKey.length, 0, "step keys missing from the catalog: " + badKey.join(","));
+        const badEvt = defs.map((d) => d.trigger.event).filter((e) => !events.has(e));
+        eq(badEvt.length, 0, "trigger events missing from the catalog: " + badEvt.join(","));
+        eq(r.automationTypes.triggerEventLabel("job.daily"), "Daily job");
+        for (const d of defs) {
+          const rule = Object.assign({}, d, { orgId: "default", enabled: true, createdAt: "x", updatedAt: "x" });
+          const patch = r.automationMapping.buildRulePatch(Object.assign({}, r.automationMapping.ruleToInitialAutomation(rule), { status: "active" }), rule);
+          eq(patch.trigger.event, rule.trigger.event, d.id + " trigger event");
+          eq(patch.entityType, rule.entityType, d.id + " entity type");
+          eq(JSON.stringify(patch.action), JSON.stringify(rule.action), d.id + " legacy action");
+        }
+      },
+    },
+
   ]);
 })();
 
@@ -1787,7 +1861,7 @@
         assert(has("sample-rcm-biller", "claims", "edit") && has("sample-rcm-biller", "denials", "edit") && has("sample-rcm-biller", "rcmPayments", "add") && has("sample-rcm-biller", "rcmReports", "read"), "biller area");
         assert(!has("sample-rcm-biller", "billingSetup", "read"), "biller cannot open billing setup");
         assert(has("sample-rcm-front-desk", "eligibility", "add") && !has("sample-rcm-front-desk", "priorAuth", "edit") && !has("sample-rcm-front-desk", "claims", "add") && !has("sample-rcm-front-desk", "rcmReports", "read"), "front desk area");
-        assert(has("sample-rcm-billing-setup", "billingSetup", "edit") && !has("sample-rcm-billing-setup", "claims", "read"), "setup admin area");
+        assert(has("sample-rcm-billing-setup", "billingSetup", "edit") && has("sample-rcm-billing-setup", "claims", "read") && !has("sample-rcm-billing-setup", "claims", "add"), "setup admin area");
       },
     },
     {
@@ -1808,7 +1882,7 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("mock-data-banner", 15000);
+            await T.ui.wait("claims-filters", 15000);
             assert(!Array.from(document.querySelectorAll("button")).some((b) => (b.innerText || "").trim() === "Create Claim"), "Create Claim hidden without claims add");
             const exp = document.querySelector('button[aria-label="Export Claims"]');
             assert(exp && exp.disabled, "Export disabled without claims export");
@@ -1845,11 +1919,12 @@
       },
     },
     {
-      title: "'Mock data' labels: Billing setup banner (sample rows) and the Claims page banner",
+      title: "No Sample / Mock data / Demo set wording on the Claims, Setup and Automation screens",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
-        { nav: "/settings/billing-setup", async verify() { await T.ui.waitText("Mock data:", 15000); } },
-        { nav: "/claims", async verify() { await T.ui.wait("mock-data-banner", 15000); } },
+        { nav: "/claims?view=setup", async verify() { await T.ui.wait("claims-setup", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Setup is clean"); } },
+        { nav: "/claims", async verify() { await T.ui.wait("claims-filters", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
+        { nav: "/automation", async verify() { await T.ui.wait("run-daily-jobs", 15000); assert(!/mock data|\(sample\)|demo set|sample templates/i.test(T.ui.appText()), "Automation is clean"); } },
       ],
     },
     {

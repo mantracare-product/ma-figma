@@ -1,6 +1,6 @@
 # RCM browser tests (Tampermonkey)
 
-Browser tests for RCM Slices 1-6. 81 tests: 75 automated checks, 6 MANUAL items (layout/colour things a script cannot judge).
+Browser tests for RCM Slices 1-6. 84 tests: 78 automated checks, 6 MANUAL items (layout/colour things a script cannot judge).
 
 ## Install
 1. `node tools/tm-tests/build.mjs` (from the repo root) builds `tools/tm-tests/rcm-all.user.js` from the harness + the six slice files.
@@ -32,4 +32,10 @@ Tests are re-runnable.
 - `verify-playwright.mjs` loads the bundle into the dev app with headless Chromium: `PW_DIR=<folder with node_modules/playwright-core> node tools/tm-tests/verify-playwright.mjs http://localhost:5173 [1-6|all] [testId]`.
 
 ## Not automatable (MANUAL)
-Deals/process-drawer visuals, form layouts (Billing setup, Insurance tab), kiosk insurance screens and chip colours, Scribe Codes panel, portal statement block, report-builder RCM source cards.
+Deals/process-drawer visuals, form layouts (Claims Setup, Insurance tab, Create Claim modal), kiosk insurance screens and chip colours, Scribe Codes panel, portal statement block, report-builder RCM source cards.
+
+## Round 2 changes
+- Billing setup is now **Insurance & Claims > Setup** (`/claims?view=setup`); the billing entity and POS are on the **Organization** record (tested through `__rcm.orgBilling`).
+- There are no demo-set / sample-template buttons any more: the starting set is created once by `ensureRcmDefaults` (tested via `__rcm.rcmDefaults`). Tests that need the E/E2/C/M rules still call the internal `__rcm.sampleBundles.enableDemoSet` to arrange state; that is test setup, not UI.
+- New checks: Create Claim session picker, Claims filters + List/Board in the top bar, Claims overview slider, flow-builder catalog completeness and re-save round trip, no Sample / Mock wording on Claims, Setup and Automation.
+- Every run backs up storage first, restores it after each test, and ends with a RUN row proving storage is identical.

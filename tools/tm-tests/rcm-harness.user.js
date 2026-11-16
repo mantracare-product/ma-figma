@@ -81,6 +81,8 @@
     },
     textOf(id) { const el = T.ui.q(id); return el ? el.innerText : ""; },
     path() { return location.pathname + location.search; },
+    /** Text of the app itself (excludes this test panel). */
+    appText() { const r = document.getElementById("root"); return r ? r.innerText : document.body.innerText; },
     async clickByText(selector, text, timeout) {
       const el = await T.waitFor(() => Array.from(document.querySelectorAll(selector)).find((e) => (e.innerText || "").trim().includes(text)), { timeout: timeout || 6000, msg: selector + " containing '" + text + "'" });
       el.click();

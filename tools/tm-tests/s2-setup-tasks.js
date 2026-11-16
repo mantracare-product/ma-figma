@@ -10,19 +10,19 @@
 
   T.slice(2, [
     {
-      title: "Billing setup stores: entity, locations, payers, fee schedules, claim defaults, scrub rules, provider credentials save and load",
+      title: "Setup stores: payers, fee schedules, claim defaults, scrub rules, provider credentials save and load; billing entity and POS live on the organization",
       run(ctx) {
         const b = T.rcm().billing;
         ctx.fresh();
-        b.billingEntityStore.save({ legalName: "RCMTEST LLC", dbaName: "", ein: "99-9999999", npi: "1234567893", taxonomy: "207W00000X", address: "1 Test St", phone: "5550" });
-        eq(b.billingEntityStore.get().ein, "99-9999999");
-        b.billingLocationsStore.upsert({ id: "RCMTEST-loc", name: "RCMTEST Loc", pos: "11" });
-        eq(b.billingLocationsStore.get().map((x) => x.id), ["RCMTEST-loc"]);
+        const ob = T.rcm().orgBilling;
+        ob.saveOrgBilling(ob.getActiveOrgId(), { legalName: "RCMTEST LLC", ein: "99-9999999", groupNpi: "1234567893", taxonomy: "207W00000X", address: "1 Test St", phone: "5550" });
+        eq(ob.getOrgBilling().ein, "99-9999999");
+        assert(ob.hasBillingEntity(), "legal name + group NPI = complete billing entity");
         b.payersStore.upsert({ id: "RCMTEST-payer", name: "RCMTEST Payer", payerIdCode: "RT1", enrollment: { status: "enrolled" } });
         eq(b.getPayer("RCMTEST-payer").name, "RCMTEST Payer");
         b.feeSchedulesStore.upsert({ id: "RCMTEST-fee", name: "fees", payerId: "RCMTEST-payer", lines: [{ cpt: "99214", amount: 111 }] });
         eq(b.lookupFee("99214", "RCMTEST-payer"), 111, "payer fee");
-        b.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 120, defaultBillingLocationId: "RCMTEST-loc" });
+        b.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 120, defaultBillingLocationId: "" });
         eq(b.claimDefaultsStore.get().timelyFilingDays, 120);
         b.scrubRulesStore.upsert({ id: "RCMTEST-scrub", name: "r", check: "icd_required", severity: "error", enabled: true });
         eq(b.scrubRulesStore.get().length, 1);
@@ -31,21 +31,37 @@
       },
     },
     {
-      title: "UI: Billing setup tab renders its sections and Save writes the billing entity",
+      title: "UI: Insurance & Claims > Setup has its sections and no Billing entity / Locations sections",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
-            await T.ui.wait("billing-section-entity", 10000);
-            for (const id of ["locations", "payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
-            const input = await T.waitFor(() => labelInput("Legal name"), { msg: "Legal name input" });
-            T.ui.setInput(input, "RCMTEST UI LLC");
-            await T.ui.clickByText("button", "Save");
-            await T.waitFor(() => T.rcm().billing.billingEntityStore.get().legalName === "RCMTEST UI LLC", { msg: "entity saved from the UI" });
+            await T.ui.wait("claims-setup", 12000);
+            for (const id of ["payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
+            for (const id of ["entity", "locations"]) assert(!T.ui.has("billing-section-" + id), "no " + id + " section (organization is the source)");
+            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Setup page");
           },
         },
       ],
+    },
+    {
+      title: "Claim builder reads the billing entity and POS from the organization record",
+      run(ctx) {
+        const r = T.rcm();
+        const w = ctx.fresh();
+        const ob = r.orgBilling;
+        ob.saveOrgBilling(ob.getActiveOrgId(), { legalName: "RCMTEST Org LLC", ein: "99-1234567", groupNpi: "1234567893", address: "9 Org Way" });
+        localStorage.setItem("mantra_org_locations_" + ob.getActiveOrgId(), JSON.stringify([{ id: "RCMTEST-L1", name: "RCMTEST Main", type: "physical", address: "9 Org Way", pos: "22", isPrimary: true }]));
+        r.billing.claimDefaultsStore.save({ frequencyCode: "1", defaultPos: "11", acceptAssignment: true, timelyFilingDays: 90, defaultBillingLocationId: "RCMTEST-L1" });
+        const res = r.claimActions.performCreateClaim({ clientId: w.clientId, sourceType: "client", sourceId: "RCMTEST-org-src", linesFrom: "none", cause: { type: "manual" } });
+        const c = T.h.claim(res.claimId);
+        eq(c.billingProviderName, "RCMTEST Org LLC");
+        eq(c.billingProviderNpi, "1234567893");
+        eq(c.billingProviderTaxId, "99-1234567");
+        eq(c.placeOfService, "22", "POS comes from the organization location");
+        assert(res.missingData.indexOf("billing_entity") < 0, "billing entity not reported missing");
+      },
     },
     {
       title: "Coverages: add primary + secondary, a new primary demotes the old one, typed demographics save, coverage.updated fires",
@@ -83,67 +99,54 @@
           async verify() {
             await T.ui.click("profile-tab-insurance", 12000);
             await T.ui.wait("client-insurance-tab");
-            await T.ui.waitText("RCMTEST-UIM1");
+            const tab = T.ui.q("client-insurance-tab");
+            const has = () => tab.innerText.indexOf("RCMTEST-UIM1") >= 0 || Array.from(tab.querySelectorAll("input,select,textarea")).some((i) => i.value === "RCMTEST-UIM1");
+            try { await T.waitFor(has, { timeout: 8000, msg: "coverage member id in the Insurance tab" }); } catch (e) { throw new Error(String(e.message) + " | tab text: " + tab.innerText.slice(0, 400).split(String.fromCharCode(10)).join(" / ") + " | inputs: " + Array.from(tab.querySelectorAll("input,select")).map((i) => i.value).join(",")); }
           },
         },
       ],
     },
     {
-      title: "Load sample templates is idempotent and never overwrites edits",
+      title: "RCM defaults are created once as ordinary items: rules enabled except outbound/alternates; edits and deletions are never undone",
       run(ctx) {
         const r = T.rcm();
         ctx.fresh();
-        const first = r.sampleBundles.loadSampleTemplates();
-        assert(first.total > 0, "first load adds items");
-        const p = r.billing.getPayer("payer-bcbs");
-        r.billing.payersStore.upsert(Object.assign({}, p, { name: "RCMTEST edited payer", sample: false }));
-        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: true });
-        const second = r.sampleBundles.loadSampleTemplates();
-        eq(second.total, 0, "second load adds nothing");
-        eq(r.billing.getPayer("payer-bcbs").name, "RCMTEST edited payer", "payer edit kept");
-        const a1 = r.automation.getStoredRules().find((x) => x.id === "sample-rule-A1");
-        eq(a1.name, "RCMTEST edited A1", "rule edit kept");
-        assert(a1.enabled === true, "enabled choice kept");
-        eq(r.billing.getPayers().length, 15, "15 mock payers");
+        localStorage.removeItem(r.rcmDefaults.RCM_DEFAULTS_FLAG);
+        const first = r.rcmDefaults.ensureRcmDefaults();
+        assert(!first.already && first.rules > 20 && first.enabled > 10, "defaults created: " + JSON.stringify(first));
+        const byId2 = (id) => r.automation.getStoredRules().find((x) => x.id === id);
+        assert(byId2("sample-rule-A1").enabled, "A1 ships enabled");
+        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A29").enabled, "outbound rules (message / submit / call) ship off");
+        assert(!byId2("sample-rule-A14-scribe").enabled, "alternates ship off");
+        assert(r.automation.getStoredRules().every((x) => !/\(sample\)/i.test(x.name)), "no (Sample) in rule names");
+        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: false });
+        r.automation.deleteRule("sample-rule-A2");
+        const second = r.rcmDefaults.ensureRcmDefaults();
+        assert(second.already, "second run is a no-op");
+        eq(byId2("sample-rule-A1").name, "RCMTEST edited A1", "rule edit kept");
+        assert(!byId2("sample-rule-A2"), "deleted rule not brought back");
+        eq(r.billing.getPayers().length, 15, "payers list seeded");
         eq(r.taskViews.taskViewsStore.get().length, 8, "8 queue views");
       },
     },
     {
-      title: "Sample rules load DISABLED; Enable demo set toggles them (E, E2, C, M)",
-      run(ctx) {
-        const r = T.rcm();
-        ctx.fresh();
-        r.sampleBundles.loadSampleTemplates();
-        const sampleRules = r.automation.getStoredRules().filter((x) => x.id.indexOf("sample-rule-") === 0);
-        assert(sampleRules.length >= 39, "sample rules loaded (" + sampleRules.length + ")");
-        assert(sampleRules.every((x) => !x.enabled), "all sample rules start disabled");
-        for (const id of ["E", "E2", "C", "M"]) {
-          const st0 = r.sampleBundles.getSampleSetStatus(id);
-          eq(st0.enabled, 0, "set " + id + " starts off");
-          const n = r.sampleBundles.enableDemoSet(id);
-          assert(n > 0, "set " + id + " enabled " + n);
-          const st1 = r.sampleBundles.getSampleSetStatus(id);
-          eq(st1.enabled, st1.total, "set " + id + " fully on");
-          r.sampleBundles.disableDemoSet(id);
-          eq(r.sampleBundles.getSampleSetStatus(id).enabled, 0, "set " + id + " off again");
-        }
-        r.sampleBundles.enableDemoSet("C");
-        assert(!T.h.rulesOn("sample-rule-A14-").length, "A14 variants stay off when the set is enabled");
-      },
-    },
-    {
-      title: "UI: Automation page Load sample templates + Enable demo set buttons",
+      title: "UI: Automation page has no Sample templates panel or demo-set buttons; Run daily jobs and filters are in the top bar",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
           nav: "/automation",
           async verify() {
-            await T.ui.click("load-sample-templates", 12000);
-            await T.waitFor(() => T.rcm().automation.getStoredRules().some((x) => x.id === "sample-rule-A1"), { msg: "sample rules after the click" });
-            assert(T.rcm().automation.getStoredRules().filter((x) => x.id.indexOf("sample-rule-") === 0).every((x) => !x.enabled), "loaded disabled");
-            await T.ui.click("demo-set-E");
-            await T.waitFor(() => T.rcm().sampleBundles.getSampleSetStatus("E").enabled > 0, { msg: "set E enabled via the button" });
-            assert(T.ui.has("run-daily-jobs"), "Run daily jobs now button present");
+            await T.ui.wait("run-daily-jobs", 12000);
+            for (const id of ["sample-templates-panel", "load-sample-templates", "demo-set-E"]) assert(!T.ui.has(id), id + " must be gone");
+            for (const id of ["automation-filter-entity", "automation-filter-trigger", "automation-filter-status"]) assert(T.ui.has(id), id + " present");
+            assert(!/sample templates|enable demo set/i.test(T.ui.appText()), "no sample / demo-set wording");
+          },
+        },
+        {
+          nav: "/process",
+          async verify() {
+            await T.h.settle(1200);
+            assert(!T.ui.has("sample-templates-panel") && !/sample templates|enable demo set/i.test(T.ui.appText()), "Process page has no Sample templates panel");
           },
         },
       ],

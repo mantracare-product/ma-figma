@@ -203,7 +203,7 @@
       },
     },
     {
-      title: "UI: Claims page shows the Mock data banner, the workflow board toggle and the board",
+      title: "UI: Claims page shows ALL claims, filters and List/Board in the top bar (no banner, no separate strip), board follows the workflow filter",
       async arrange(ctx) {
         const r = T.rcm();
         const w = worldC(ctx);
@@ -214,9 +214,19 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("mock-data-banner", 15000);
+            await T.ui.wait("claims-filters", 15000);
+            assert(!T.ui.has("mock-data-banner"), "no Mock data banner");
+            for (const id of ["workflow", "stage", "payer", "assignee", "from", "to"]) assert(T.ui.has("claims-filter-" + id), "filter " + id);
+            eq(T.ui.q("claims-filter-workflow").value, "all", "workflow filter defaults to All");
+            eq(T.ui.q("claims-filter-stage").value, "all");
             await T.ui.click("claims-view-board", 8000);
+            await T.ui.wait("claims-grouped", 8000);
+            const wfSel = T.ui.q("claims-filter-workflow");
+            const one = Array.from(wfSel.options).find((op) => op.value !== "all");
+            assert(one, "a workflow to pick");
+            T.ui.setInput(wfSel, one.value);
             await T.ui.wait("claim-board", 8000);
+            T.ui.setInput(wfSel, "all");
             await T.ui.click("claims-view-list");
           },
         },
@@ -231,5 +241,39 @@
       title: "Scribe Codes panel layout and the claim drawer sections per workflow",
       run() { T.manual("Needs a human: open an AI Scribe transcript to see the Codes panel; claim drawer does not hide fields per workflow (known TODO)"); },
     },
+    {
+      title: "UI: Create Claim opens the session picker; a session creates a prefilled claim (patient, DOS, provider, codes, coverage) and opens it; manual option exists",
+      async arrange(ctx) {
+        const r = T.rcm();
+        const w = worldC(ctx);
+        r.orgBilling.saveOrgBilling(r.orgBilling.getActiveOrgId(), { legalName: "RCMTEST Org LLC", groupNpi: "1234567893" });
+        r.coverages.saveCoverage({ clientId: w.clientId, payerId: "payer-bcbs", memberId: "RCMTEST-M9", priority: "primary", effectiveDate: "2020-01-01" });
+        r.scribe.saveScribeSession({ id: "RCMTEST-scribe-1", clientId: w.clientId, clientName: "RCMTEST Patient", doctorId: "d1", doctorName: "Dr RCMTEST", sessionDate: new Date().toISOString(), durationSeconds: 60, transcript: { fullText: "", utterances: [] }, extractedData: {}, status: "completed", createdAt: Date.now(), codes: { icd: [{ code: "H25.11", description: "Cataract" }], cpt: [{ code: "66984", description: "Cataract surgery", modifier: "RT", units: 1 }], accepted: true } });
+      },
+      phases: [
+        {
+          nav: "/claims",
+          async verify() {
+            await T.ui.clickByText("button", "Create Claim", 15000);
+            await T.ui.wait("create-claim-modal", 8000);
+            assert(T.ui.has("create-claim-manual"), "manual option present");
+            const before = T.rcm().claims.getStoredClaims().length;
+            const row = await T.waitFor(() => Array.from(document.querySelectorAll('[data-testid="create-claim-session"]')).find((e) => e.innerText.indexOf("RCMTEST Patient") >= 0), { msg: "the RCMTEST session in the list" });
+            assert(/H25\.11/.test(row.innerText) && /66984/.test(row.innerText), "row shows diagnosis and CPT");
+            row.click();
+            await T.waitFor(() => T.rcm().claims.getStoredClaims().length === before + 1, { msg: "claim created from the session" });
+            const c = T.rcm().claims.getStoredClaims().find((x) => x.scribeSessionId === "RCMTEST-scribe-1");
+            assert(c, "claim linked to the session");
+            eq(c.diagnosisCodes[0].code, "H25.11");
+            eq(c.lines[0].cptCode, "66984");
+            eq(c.lines[0].modifier, "RT");
+            eq(c.insuredId, "RCMTEST-M9", "coverage from the client's primary coverage");
+            eq(c.billingProviderName, "RCMTEST Org LLC", "billing entity from the organization");
+            await T.waitFor(() => !T.ui.has("create-claim-modal"), { msg: "modal closes" });
+          },
+        },
+      ],
+    },
+
   ]);
 })();

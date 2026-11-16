@@ -162,12 +162,12 @@
         const role = r.sampleRoles.buildSampleRcmRoles().find((x) => x.id === "sample-rcm-billing-setup");
         assert(r.permissions.hasPermission(role, "billingSetup", "read"), "billingSetup read");
         assert(!r.permissions.hasPermission(role, "settings", "read"), "settings denied");
-        assert(!r.permissions.hasPermission(role, "claims", "read"), "claims denied");
+        assert(r.permissions.hasPermission(role, "claims", "read") && !r.permissions.hasPermission(role, "claims", "add"), "claims read-only (the Setup tab lives on the Claims page)");
         assert(!r.permissions.hasPermission(undefined, "billingSetup"), "no role = denied");
       },
     },
     {
-      title: "UI: billingSetup-only user opens /settings/billing-setup; /settings/team and /settings/organization stay blocked",
+      title: "UI: billingSetup user opens Insurance & Claims > Setup; /settings/team and /settings/organization stay blocked",
       usesAuth: true,
       reloadAfter: true,
       arrange(ctx) {
@@ -182,10 +182,10 @@
       },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
-            await T.waitFor(() => T.ui.has("billing-section-entity"), { timeout: 8000, msg: "Billing setup tab to render" });
-            eq(location.pathname, "/settings/billing-setup", "stayed on the billing setup route");
+            await T.waitFor(() => T.ui.has("claims-setup"), { timeout: 10000, msg: "Setup to render on the Claims page" });
+            eq(location.pathname, "/claims", "stayed on the Claims page");
           },
         },
         {

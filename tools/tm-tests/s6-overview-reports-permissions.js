@@ -141,7 +141,7 @@
         assert(has("sample-rcm-biller", "claims", "edit") && has("sample-rcm-biller", "denials", "edit") && has("sample-rcm-biller", "rcmPayments", "add") && has("sample-rcm-biller", "rcmReports", "read"), "biller area");
         assert(!has("sample-rcm-biller", "billingSetup", "read"), "biller cannot open billing setup");
         assert(has("sample-rcm-front-desk", "eligibility", "add") && !has("sample-rcm-front-desk", "priorAuth", "edit") && !has("sample-rcm-front-desk", "claims", "add") && !has("sample-rcm-front-desk", "rcmReports", "read"), "front desk area");
-        assert(has("sample-rcm-billing-setup", "billingSetup", "edit") && !has("sample-rcm-billing-setup", "claims", "read"), "setup admin area");
+        assert(has("sample-rcm-billing-setup", "billingSetup", "edit") && has("sample-rcm-billing-setup", "claims", "read") && !has("sample-rcm-billing-setup", "claims", "add"), "setup admin area");
       },
     },
     {
@@ -162,7 +162,7 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("mock-data-banner", 15000);
+            await T.ui.wait("claims-filters", 15000);
             assert(!Array.from(document.querySelectorAll("button")).some((b) => (b.innerText || "").trim() === "Create Claim"), "Create Claim hidden without claims add");
             const exp = document.querySelector('button[aria-label="Export Claims"]');
             assert(exp && exp.disabled, "Export disabled without claims export");
@@ -199,11 +199,12 @@
       },
     },
     {
-      title: "'Mock data' labels: Billing setup banner (sample rows) and the Claims page banner",
+      title: "No Sample / Mock data / Demo set wording on the Claims, Setup and Automation screens",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
-        { nav: "/settings/billing-setup", async verify() { await T.ui.waitText("Mock data:", 15000); } },
-        { nav: "/claims", async verify() { await T.ui.wait("mock-data-banner", 15000); } },
+        { nav: "/claims?view=setup", async verify() { await T.ui.wait("claims-setup", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Setup is clean"); } },
+        { nav: "/claims", async verify() { await T.ui.wait("claims-filters", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
+        { nav: "/automation", async verify() { await T.ui.wait("run-daily-jobs", 15000); assert(!/mock data|\(sample\)|demo set|sample templates/i.test(T.ui.appText()), "Automation is clean"); } },
       ],
     },
     {

@@ -216,15 +216,16 @@
       ],
     },
     {
-      title: "UI: Billing setup > Payers shows the prior-auth rules table and the mock scenario picker",
+      title: "UI: Claims Setup > Payers shows the prior-auth rules table (the eligibility scenario picker is dev-only)",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
         {
-          nav: "/settings/billing-setup",
+          nav: "/claims?view=setup",
           async verify() {
             await T.ui.click("billing-section-payers", 12000);
             await T.ui.waitText("Prior-auth rules");
-            await T.ui.waitText("Mock eligibility scenario");
+            await T.ui.waitText("Eligibility scenario (development only)");
+            assert(!/mock data/i.test(T.ui.appText()), "no Mock data wording");
           },
         },
       ],

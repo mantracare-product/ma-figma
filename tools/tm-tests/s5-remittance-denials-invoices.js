@@ -163,7 +163,7 @@
       },
     },
     {
-      title: "UI: Invoices page opens the Statement drawer (mock payment link label) and the Claims page has Receive ERA",
+      title: "UI: Invoices page opens the Statement drawer and the Claims page has Receive ERA in the top bar",
       async arrange(ctx) {
         const w = T.h.rcmWorld(ctx);
         submitted(w, "pay", "RCMTEST-M1", 200, "RCMTEST-apt-pay");
@@ -180,9 +180,9 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.waitText("Receive ERA (mock)", 15000);
+            await T.ui.wait("claims-receive-era", 15000);
             const n0 = T.rcm().era.erasStore.get().length;
-            await T.ui.clickByText("button", "Receive ERA (mock)");
+            await T.ui.click("claims-receive-era");
             await T.waitFor(() => T.rcm().era.erasStore.get().length === n0 + 1, { msg: "an ERA staged from the button" });
           },
         },
@@ -192,5 +192,29 @@
       title: "Portal statement block, payment plan drawer layout, invoice stage editing",
       run() { T.manual("Needs a human: patient portal bill screen, plan creation form, and editing the new invoice stages on the Process page"); },
     },
+    {
+      title: "Flow builder catalogs: every seeded step key and trigger event is registered with a real name; seeded rules re-save unchanged",
+      run() {
+        const r = T.rcm();
+        const known = new Set(r.rcmCatalog.RCM_ACTION_KEYS.concat(r.rcmCatalog.OTHER_STEP_KEYS));
+        const events = new Set(r.automationTypes.GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events.map((e) => e.event)));
+        const keys = (steps) => (steps || []).flatMap((s) => [s.stepKey].concat(keys((s.branches || []).flatMap((b) => b.steps || []))));
+        const defs = r.sampleBundles.listSampleRuleSets().flatMap((s) => s.rules());
+        assert(defs.length >= 39, "rule definitions found (" + defs.length + ")");
+        const badKey = keys(defs.flatMap((d) => d.actions || [])).filter((k) => !known.has(k));
+        eq(badKey.length, 0, "step keys missing from the catalog: " + badKey.join(","));
+        const badEvt = defs.map((d) => d.trigger.event).filter((e) => !events.has(e));
+        eq(badEvt.length, 0, "trigger events missing from the catalog: " + badEvt.join(","));
+        eq(r.automationTypes.triggerEventLabel("job.daily"), "Daily job");
+        for (const d of defs) {
+          const rule = Object.assign({}, d, { orgId: "default", enabled: true, createdAt: "x", updatedAt: "x" });
+          const patch = r.automationMapping.buildRulePatch(Object.assign({}, r.automationMapping.ruleToInitialAutomation(rule), { status: "active" }), rule);
+          eq(patch.trigger.event, rule.trigger.event, d.id + " trigger event");
+          eq(patch.entityType, rule.entityType, d.id + " entity type");
+          eq(JSON.stringify(patch.action), JSON.stringify(rule.action), d.id + " legacy action");
+        }
+      },
+    },
+
   ]);
 })();
