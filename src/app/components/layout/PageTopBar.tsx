@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, ReactNode } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, ReactNode } from "react";
 import {
   Search,
   X,
@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Check,
   RotateCcw,
+  MoreHorizontal,
 } from "lucide-react";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { Tooltip } from "../ui/Tooltip";
@@ -169,6 +170,37 @@ export function PageTopBar({
     }
   };
 
+  // One line, always: when the controls do not fit, secondary actions move into a "More" menu (never wrap / never scroll the page).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const collapsedAtWidth = useRef(0);
+  const [collapsed, setCollapsed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const check = () => {
+      const w = row.clientWidth;
+      if (!collapsed) {
+        if (row.scrollWidth > w + 1) { collapsedAtWidth.current = w; setCollapsed(true); }
+      } else if (w > collapsedAtWidth.current + 320) {
+        setCollapsed(false);
+      }
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(check);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [collapsed, secondaryActions, children, modes, viewToggles, primaryAction, afterPrimaryAction]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [moreOpen]);
+  const hasMoreContent = Boolean(secondaryActions || children);
+
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const addFieldDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -202,7 +234,7 @@ export function PageTopBar({
         isBottomPanelAttached ? "rounded-t-xl rounded-b-none border-b-0" : "rounded-xl"
       } ${className}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2.5 min-w-0">
+      <div ref={rowRef} className="flex flex-nowrap items-center justify-between gap-2.5 min-w-0" data-testid="page-top-bar-row">
         {/* ── Left Dynamics (Modes / Sections / Fields Segment) ── */}
         {(leftElement || (modes && modes.length > 0)) && (
           <div className="flex items-center gap-1.5 shrink-0">
@@ -247,7 +279,7 @@ export function PageTopBar({
 
         {/* ── Middle Search Bar & Advanced Filter Modal Popup ── */}
         {showSearch ? (
-        <div className="flex-1 min-w-[240px] relative" ref={searchContainerRef}>
+        <div className="flex-1 min-w-[140px] relative" ref={searchContainerRef}>
           <div className="relative search-bar-container">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
 
@@ -676,8 +708,29 @@ export function PageTopBar({
           )}
 
           {/* Additional Secondary Actions or Custom Content */}
-          {secondaryActions}
-          {children}
+          {hasMoreContent && !collapsed && (<>{secondaryActions}{children}</>)}
+          {hasMoreContent && collapsed && (
+            <div className="relative shrink-0" ref={moreRef}>
+              <button
+                type="button"
+                onClick={() => setMoreOpen((o) => !o)}
+                className="h-[36px] px-3 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full flex items-center gap-1.5 text-xs font-semibold shadow-2xs cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                data-testid="top-bar-more"
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+                <span>More</span>
+              </button>
+              {moreOpen && (
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white border border-border rounded-xl shadow-2xl p-3 flex flex-col items-stretch gap-2 min-w-[220px] max-w-[min(420px,90vw)]" data-testid="top-bar-more-menu">
+                  {secondaryActions}
+                  {children}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Primary Action Button (e.g. + Add Client, + New Process) */}
           {primaryAction && (

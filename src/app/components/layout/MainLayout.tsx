@@ -93,7 +93,7 @@ export default function MainLayout() {
       {/* ── Docked Collapsible / Expandable Sidebar + Main Content Layout ── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto relative min-w-0 bg-[#fafafa]">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden relative min-w-0 bg-[#fafafa]">
           <Outlet />
           <AIAssistantCapsule />
         </main>

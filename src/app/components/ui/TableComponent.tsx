@@ -261,7 +261,7 @@ export function TableComponent<T>({
   };
 
   return (
-    <div className={`bg-white border border-gray-200 shadow-2xs overflow-hidden rounded-none ${className}`}>
+    <div className={`bg-white border border-gray-200 shadow-2xs overflow-hidden rounded-none min-w-0 max-w-full ${className}`}>
       {/* ── Selection Action Banner ── */}
       {enableSelection && selectedIds.size > 0 && (
         <div className="bg-[#E8F0FE] border-b border-[#D2E3FC] px-4 py-2 flex items-center justify-between rounded-none">
