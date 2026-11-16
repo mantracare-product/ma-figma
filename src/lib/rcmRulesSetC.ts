@@ -5,11 +5,12 @@
  * workflows; the clinic can point the rules at its own workflows.
  */
 import { registerSampleRuleSet, type SampleRuleDef } from "./sampleBundles";
+import { stepDisplayName } from "./rcmCatalog";
 import { SAMPLE_CLAIM_WORKFLOW_IDS as W, claimStageId } from "./rcmSampleClaimWorkflows";
 
 const NOOP = { type: "moveToStage" as const, processId: "", stageId: "" };
 const cond = (id: string, field: string, op: any, value: any) => ({ id, field, op, value });
-const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepKey, params });
+const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepDisplayName({ stepKey }), params });
 const CAPTURE_START = { startWorkflow: W.chargeCapture, startStage: "Awaiting note" };
 
 const claimStageEntry = (id: string, name: string, processId: string, stage: string, actions: any[]): SampleRuleDef => ({

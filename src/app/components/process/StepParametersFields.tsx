@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
 import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
@@ -1861,39 +1862,16 @@ export default function StepParametersFields({
 
 
   const renderTriggerConfigEditor = () => {
-    const activeCategory = (params.category || (
-      params.selectedEvent?.startsWith("process") ? "process" :
-      params.selectedEvent?.startsWith("client") ? "client" :
-      params.selectedEvent?.startsWith("appointment") ? "appointment" :
-      params.selectedEvent?.startsWith("invoice") ? "invoice" :
-      params.selectedEvent?.startsWith("call") ? "call" :
-      "process"
-    )).toLowerCase();
+    const catalogCategoryOf = (ev?: string) => GLOBAL_TRIGGER_CATALOG.find((c) => c.events.some((e) => e.event === ev))?.type;
+    const activeCategory = String(
+      params.category || catalogCategoryOf(params.selectedEvent || params.triggerEvent) || (params.selectedEvent || params.triggerEvent || "process").split(".")[0]
+    ).toLowerCase();
 
-    const currentEvent = params.selectedEvent || `${activeCategory}.created`;
+    const currentEvent = params.selectedEvent || params.triggerEvent || `${activeCategory}.created`;
 
-    const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
-      process: [
-        { event: "process.created", label: "Created", desc: "Fires when a new process workflow is enrolled or created", iconKey: "workflow" },
-        { event: "process.updated", label: "Updated", desc: "Fires when an existing process workflow record or stage is updated", iconKey: "workflow" },
-      ],
-      client: [
-        { event: "client.created", label: "Created", desc: "Fires when a new client record is added to CRM", iconKey: "user" },
-        { event: "client.updated", label: "Updated", desc: "Fires when client profile details or fields are modified", iconKey: "user" },
-      ],
-      appointment: [
-        { event: "appointment.created", label: "Created", desc: "Fires when a new appointment booking is created", iconKey: "calendar" },
-        { event: "appointment.updated", label: "Updated", desc: "Fires when appointment details or schedule are updated", iconKey: "calendar" },
-      ],
-      invoice: [
-        { event: "invoice.created", label: "Created", desc: "Fires when a billing invoice is created or drafted", iconKey: "receipt" },
-        { event: "invoice.updated", label: "Updated", desc: "Fires when an invoice record or status is modified", iconKey: "receipt" },
-      ],
-      call: [
-        { event: "call.created", label: "Created", desc: "Fires when a new call session is initiated or logged", iconKey: "phone" },
-        { event: "call.updated", label: "Updated", desc: "Fires when call metadata, transcript, or status updates", iconKey: "phone" },
-      ],
-    };
+    const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = Object.fromEntries(
+      GLOBAL_TRIGGER_CATALOG.map((c) => [c.type, c.events.map((e) => ({ event: e.event, label: e.label, desc: e.description, iconKey: c.iconKey }))])
+    );
 
     const currentOptions = triggerOptionsByCategory[activeCategory] || triggerOptionsByCategory.process;
 
@@ -1901,7 +1879,7 @@ export default function StepParametersFields({
       onChange({
         selectedEvent: opt.event,
         triggerEvent: opt.event,
-        triggerLabel: opt.label === "Created" ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Created` : opt.label === "Updated" ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Updated` : opt.label,
+        triggerLabel: opt.label,
         triggerDescription: opt.desc,
         triggerIconKey: opt.iconKey,
       });
@@ -1940,10 +1918,42 @@ export default function StepParametersFields({
           </div>
         )}
 
-        {/* Events: Created or Updated */}
+        {activeCategory === "stage" && (
+          <div className="grid grid-cols-2 gap-2.5" data-testid="trigger-stage-pickers">
+            <label className="block text-xs font-semibold text-slate-800">Process
+              <select
+                value={params.triggerProcessId || "all"}
+                onChange={(e) => {
+                  const proc = effectiveProcesses.find((p: any) => p.id === e.target.value);
+                  onChange({ triggerProcessId: e.target.value, processId: e.target.value, triggerProcessName: proc?.name || "Any Process", processName: proc?.name || "Any Process", triggerStageId: "all", stageId: "all", triggerStageName: "Any Stage", stageName: "Any Stage" });
+                }}
+                className="mt-1 w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+              >
+                <option value="all">Any process</option>
+                {effectiveProcesses.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <label className="block text-xs font-semibold text-slate-800">Stage
+              <select
+                value={params.triggerStageId || "all"}
+                onChange={(e) => {
+                  const proc = effectiveProcesses.find((p: any) => p.id === (params.triggerProcessId || params.processId));
+                  const st = proc?.stages?.find((x: any) => x.id === e.target.value);
+                  onChange({ triggerStageId: e.target.value, stageId: e.target.value, triggerStageName: st?.name || "Any Stage", stageName: st?.name || "Any Stage" });
+                }}
+                className="mt-1 w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+              >
+                <option value="all">Any stage</option>
+                {(effectiveProcesses.find((p: any) => p.id === (params.triggerProcessId || params.processId))?.stages || []).map((st: any) => <option key={st.id} value={st.id}>{st.name}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {/* Events */}
         <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-            Event: Created or Updated
+            Event
           </label>
           <div className="grid grid-cols-2 gap-2.5">
             {currentOptions.map((opt) => {
@@ -4113,6 +4123,10 @@ export default function StepParametersFields({
                 {renderField("Or inline text ({{client.name}}, {{insurance.copay}}, {{billing.payment_link}} ...)", <textarea value={params.body || ""} onChange={(e) => onChange({ body: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" rows={3} />)}
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={params.requireConsent !== false} onChange={(e) => onChange({ requireConsent: e.target.checked })} /> Require the client's SMS consent</label>
               </div>
+            )}
+
+            {stepKey === "draft_appeal" && (
+              <p className="text-xs text-slate-600">Writes a proposed appeal letter on the denied claim for someone to review. It never sends the letter or moves the claim.</p>
             )}
 
             {stepKey === "notify" && (

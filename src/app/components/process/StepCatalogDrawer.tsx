@@ -22,7 +22,13 @@ import {
   Clock,
   LayoutGrid,
   Volume2,
+  ShieldCheck,
+  Check,
+  Send,
+  Bell,
+  DollarSign,
 } from "lucide-react";
+import { RCM_ACTIONS, RCM_ACTION_GROUPS } from "../../../lib/rcmCatalog";
 
 export interface StepItem {
   key: string;
@@ -33,25 +39,10 @@ export interface StepItem {
   popular?: boolean;
 }
 
+const groupId = (g: string) => RCM_ACTION_GROUPS.find((x) => x.label === g)?.id || "records";
+
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "update_to_stage", name: "Update to stage", desc: "Update the stage for a process, appointment, or invoice.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
-  { key: "check_claim_status", name: "Check Claim Status", desc: "Ask the clearinghouse where a submitted claim is and move it on.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "start_call", name: "Start Call", desc: "Place an outbound call for a purpose (payer benefits or balance reminder). Balance calls need voice consent.", iconKey: "phone", cats: ["all", "communication"], popular: false },
-  { key: "update_invoice_from_claim", name: "Update Invoice From Claim", desc: "Copy the claim's insurance payment, adjustments and patient responsibility to its invoice, move the invoice and mark a statement.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "post_remittance", name: "Post Remittance", desc: "Post an ERA to its claims (paid, partial, denied). Unmatched lines are kept and raise era.unmatched.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "draft_appeal", name: "Draft Appeal", desc: "Propose an appeal letter for a denied claim (never sends or moves anything).", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "create_claim", name: "Create Claim", desc: "Create a claim from the visit (reads Billing setup, coverage and the service/scribe codes); never creates two for the same source.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "scrub_claim", name: "Scrub Claim", desc: "Check the claim against the scrub rules (Billing setup) and move it on pass or fail.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "submit_claim", name: "Submit Claim", desc: "Submit the claim to the clearinghouse and handle the acknowledgement.", iconKey: "filetext", cats: ["all", "records"], popular: false },
-  { key: "move_to_workflow", name: "Move To Workflow", desc: "Move a claim to another claim workflow (keeps all its values).", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
-  { key: "send_message", name: "Send Message", desc: "Send a templated message to the client (added to Chats; checks consent).", iconKey: "messagecircle", cats: ["all", "communication"], popular: false },
-  { key: "notify", name: "Notify", desc: "Raise an in-app notification for the team.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-  { key: "check_auth_required", name: "Check Auth Required", desc: "Look up whether this payer and service need prior authorization (rules in Billing setup > Payers) and record the answer.", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
-  { key: "request_prior_auth", name: "Request Prior Auth", desc: "Record a prior-authorization request when one is required; writes Authorization fields and a history row.", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
-  { key: "run_eligibility", name: "Run Eligibility", desc: "Check the client's coverage with the payer and write the result to the instance and appointment; fresh results inside the window are copied.", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
-  { key: "create_task", name: "Create Task", desc: "Create a work-queue task linked to this record; it closes itself when the record leaves the stage.", iconKey: "check", cats: ["all", "records", "workflow"], popular: true },
-  { key: "update_fields", name: "Update Fields", desc: "Write field values to this record, its instance, appointment or client (saved, merge-safe).", iconKey: "filetext", cats: ["all", "records", "workflow"], popular: false },
-  { key: "start_process", name: "Start Process", desc: "Start a new instance of a process for this client, linked to the record that triggered it (idempotent).", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
   { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the record as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
   { key: "scheduleappointment", name: "Schedule Appointment", desc: "Book or schedule an appointment for this client/contact.", iconKey: "calendar", cats: ["all", "records", "workflow"], popular: true },
   { key: "generate_invoice", name: "Generate Invoice", desc: "Generate invoice in Draft for appointment or record (strictly idempotent).", iconKey: "filetext", cats: ["all", "records"], popular: true },
@@ -62,6 +53,8 @@ export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value on a workflow entity.", iconKey: "edit", cats: ["all", "data"], popular: true },
   { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this record.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
   { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
+  // Revenue-cycle actions (one definition, shared with the flow builder sidebar and the canvas)
+  ...RCM_ACTIONS.map((a): StepItem => ({ key: a.key, name: a.label, desc: a.desc, iconKey: a.iconKey, cats: ["all", groupId(a.group)], popular: false })),
 ];
 
 export const STEP_ICON_MAP: Record<string, React.ReactNode> = {
@@ -83,6 +76,13 @@ export const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   webhook: <Webhook className="w-4 h-4 text-white" />,
   phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
   creditcard: <CreditCard className="w-4 h-4 text-white" />,
+  shield: <ShieldCheck className="w-4 h-4 text-white" />,
+  check: <Check className="w-4 h-4 text-white" />,
+  send: <Send className="w-4 h-4 text-white" />,
+  bell: <Bell className="w-4 h-4 text-white" />,
+  dollar: <DollarSign className="w-4 h-4 text-white" />,
+  phone: <Phone className="w-4 h-4 text-white" />,
+  search: <Search className="w-4 h-4 text-white" />,
 };
 
 interface StepCatalogDrawerProps {
@@ -112,6 +112,7 @@ export default function StepCatalogDrawer({
     { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
     { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
     { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook" },
+    ...RCM_ACTION_GROUPS.map((g) => ({ key: g.id, icon: <FileText className="w-4 h-4" />, name: g.label })),
   ];
 
   const filteredSteps = ALL_WORKFLOW_STEPS.filter((s) => {

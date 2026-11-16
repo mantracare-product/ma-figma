@@ -5,8 +5,10 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronUp, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
-  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode,
+  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode, Send, Bell, DollarSign, Check,
 } from "lucide-react";
+import { RCM_ACTIONS, RCM_ACTION_GROUPS, stepDisplayName } from "../../../lib/rcmCatalog";
+import { GLOBAL_TRIGGER_CATALOG, triggerEventLabel } from "../../types/automation";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
 import type { WorkflowStep } from "../../types/workflow";
@@ -228,7 +230,29 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "idle-messages": "messagesquare",
 };
 
-const NODE_CATEGORIES = [
+const iconForKey = (k: string) => {
+  switch (k) {
+    case "shield": return <ShieldCheck className="w-4 h-4" />;
+    case "filetext": case "file": return <FileText className="w-4 h-4" />;
+    case "check": return <CheckCircle2 className="w-4 h-4" />;
+    case "send": return <Send className="w-4 h-4" />;
+    case "search": return <Search className="w-4 h-4" />;
+    case "dollar": return <DollarSign className="w-4 h-4" />;
+    case "messagecircle": return <MessageSquare className="w-4 h-4" />;
+    case "phone": return <Phone className="w-4 h-4" />;
+    case "bell": return <Bell className="w-4 h-4" />;
+    case "gitbranch": return <GitBranch className="w-4 h-4" />;
+    case "edit": return <Sliders className="w-4 h-4" />;
+    case "receipt": return <Receipt className="w-4 h-4" />;
+    case "calendar": return <Calendar className="w-4 h-4" />;
+    case "user": return <User className="w-4 h-4" />;
+    case "clock": return <Clock className="w-4 h-4" />;
+    case "workflow": return <Workflow className="w-4 h-4" />;
+    default: return <Zap className="w-4 h-4" />;
+  }
+};
+
+const BASE_NODE_CATEGORIES = [
   {
     id: "logic",
     label: "Logic & Routing",
@@ -297,110 +321,29 @@ const NODE_CATEGORIES = [
   },
 ];
 
-export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: string): TriggerCatalogItem[] => {
-  return [
-    // Process Triggers
-    {
-      id: "trig-process-created",
-      triggerType: "process",
-      triggerEvent: "process.created",
-      label: "Process Created",
-      desc: "Fires when a new process workflow is enrolled or created",
-      icon: <Workflow className="w-4 h-4" />,
-      iconKey: "workflow",
-    },
-    {
-      id: "trig-process-updated",
-      triggerType: "process",
-      triggerEvent: "process.updated",
-      label: "Process Updated",
-      desc: "Fires when a process workflow record or stage is updated",
-      icon: <Workflow className="w-4 h-4" />,
-      iconKey: "workflow",
-    },
+/** Every revenue-cycle executor action, grouped (Eligibility & Auth, Claims, Payments, Tasks & Messages, Processes). */
+const NODE_CATEGORIES = [
+  ...BASE_NODE_CATEGORIES,
+  ...RCM_ACTION_GROUPS.map((g) => ({
+    id: g.id,
+    label: g.label,
+    icon: <Zap className="w-3.5 h-3.5" />,
+    nodes: RCM_ACTIONS.filter((a) => a.group === g.label).map((a) => ({ type: a.key as NodeType, label: a.label, icon: iconForKey(a.iconKey), desc: a.desc })),
+  })),
+];
 
-    // Client Triggers
-    {
-      id: "trig-client-created",
-      triggerType: "client",
-      triggerEvent: "client.created",
-      label: "Client Created",
-      desc: "Fires when a new client record is added to CRM",
-      icon: <User className="w-4 h-4" />,
-      iconKey: "user",
-    },
-    {
-      id: "trig-client-updated",
-      triggerType: "client",
-      triggerEvent: "client.updated",
-      label: "Client Updated",
-      desc: "Fires when existing client profile details or fields are modified",
-      icon: <User className="w-4 h-4" />,
-      iconKey: "user",
-    },
-
-    // Appointment Triggers
-    {
-      id: "trig-appointment-created",
-      triggerType: "appointment",
-      triggerEvent: "appointment.created",
-      label: "Appointment Created",
-      desc: "Fires when a new appointment booking is scheduled",
-      icon: <Calendar className="w-4 h-4" />,
-      iconKey: "calendar",
-    },
-    {
-      id: "trig-appointment-updated",
-      triggerType: "appointment",
-      triggerEvent: "appointment.updated",
-      label: "Appointment Updated",
-      desc: "Fires when appointment details or schedule are updated",
-      icon: <Calendar className="w-4 h-4" />,
-      iconKey: "calendar",
-    },
-
-    // Invoice Triggers
-    {
-      id: "trig-invoice-created",
-      triggerType: "invoice",
-      triggerEvent: "invoice.created",
-      label: "Invoice Created",
-      desc: "Fires when a new billing invoice is created or drafted",
-      icon: <Receipt className="w-4 h-4" />,
-      iconKey: "receipt",
-    },
-    {
-      id: "trig-invoice-updated",
-      triggerType: "invoice",
-      triggerEvent: "invoice.updated",
-      label: "Invoice Updated",
-      desc: "Fires when an invoice record or status is modified",
-      icon: <Receipt className="w-4 h-4" />,
-      iconKey: "receipt",
-    },
-
-    // Call Triggers
-    {
-      id: "trig-call-created",
-      triggerType: "call",
-      triggerEvent: "call.created",
-      label: "Call Created",
-      desc: "Fires when a new call session is initiated or logged",
-      icon: <Phone className="w-4 h-4" />,
-      iconKey: "phone",
-    },
-    {
-      id: "trig-call-updated",
-      triggerType: "call",
-      triggerEvent: "call.updated",
-      label: "Call Updated",
-      desc: "Fires when call metadata, transcript, or status updates",
-      icon: <Phone className="w-4 h-4" />,
-      iconKey: "phone",
-    },
-
-  ];
-};
+export const getTriggerCatalogItems = (_scope: "stage" | "global", _stageName: string): TriggerCatalogItem[] =>
+  GLOBAL_TRIGGER_CATALOG.flatMap((cat) =>
+    cat.events.map((e) => ({
+      id: `trig-${e.event.replace(/[._]/g, "-")}`,
+      triggerType: cat.type as string,
+      triggerEvent: e.event,
+      label: e.label,
+      desc: e.description,
+      icon: iconForKey(cat.iconKey),
+      iconKey: cat.iconKey,
+    }))
+  );
 
 // ─── Node visual config ───────────────────────────────────────────────────────
 
@@ -685,6 +628,20 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
 
 const FALLBACK_NODE_TYPE: NodeType = "wait";
 
+const RCM_GROUP_STYLE: Record<string, { bg: string; border: string; text: string }> = {
+  "Eligibility & Auth": { bg: "bg-cyan-50 dark:bg-cyan-900/20", border: "border-cyan-400", text: "text-cyan-700 dark:text-cyan-400" },
+  Claims: { bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-400", text: "text-blue-700 dark:text-blue-400" },
+  Payments: { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
+  "Tasks & Messages": { bg: "bg-amber-50 dark:bg-amber-900/20", border: "border-amber-400", text: "text-amber-700 dark:text-amber-400" },
+  Processes: { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+};
+for (const a of RCM_ACTIONS) {
+  (NODE_TYPE_TO_STEP_KEY as Record<string, string>)[a.key] = a.key;
+  NODE_TYPE_TO_ICON_KEY[a.key] = a.iconKey;
+  STEP_KEY_TO_NODE_TYPE[a.key] = a.key as NodeType;
+  NODE_STYLE[a.key] = RCM_GROUP_STYLE[a.group];
+}
+
 const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
   const allSteps: WorkflowStep[] = [];
   function collectSteps(list: WorkflowStep[]) {
@@ -791,7 +748,15 @@ export default function FlowBuilderTab({
       (t.triggerEvent === "stage.exited" && activeTriggerEvent === "stage.exit") ||
       (t.triggerEvent === "stage.entry" && activeTriggerEvent === "stage.entered") ||
       (t.triggerEvent === "stage.exit" && activeTriggerEvent === "stage.exited")
-    ) || allTriggers[0];
+    ) || {
+      id: `trig-${activeTriggerEvent.replace(/[._]/g, "-")}`,
+      triggerType: GLOBAL_TRIGGER_CATALOG.find((c) => c.events.some((e) => e.event === activeTriggerEvent))?.type || activeTriggerEvent.split(".")[0] || "process",
+      triggerEvent: activeTriggerEvent,
+      label: triggerEventLabel(activeTriggerEvent),
+      desc: "",
+      icon: iconForKey("zap"),
+      iconKey: "zap",
+    };
   }, [allTriggers, activeTriggerEvent]);
 
   const defaultStartLabel = activeTriggerItem?.label || (
@@ -1811,50 +1776,15 @@ export default function FlowBuilderTab({
     nodes: cat.nodes.filter((n) => !q || n.label.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q)),
   })).filter((cat) => cat.nodes.length > 0);
 
-    const triggerCategories = useMemo(() => {
-    return [
-      {
-        id: "process",
-        type: "process",
-        label: "Process Triggers",
-        desc: "Created or updated",
-        icon: <Workflow className="w-4 h-4 text-indigo-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "process" && t.triggerEvent === "process.created") || allTriggers[0],
-      },
-      {
-        id: "client",
-        type: "client",
-        label: "Client Triggers",
-        desc: "Created or updated",
-        icon: <User className="w-4 h-4 text-emerald-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "client" && t.triggerEvent === "client.created") || allTriggers[0],
-      },
-      {
-        id: "appointment",
-        type: "appointment",
-        label: "Appointment Triggers",
-        desc: "Created or updated",
-        icon: <Calendar className="w-4 h-4 text-purple-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "appointment" && t.triggerEvent === "appointment.created") || allTriggers[0],
-      },
-      {
-        id: "invoice",
-        type: "invoice",
-        label: "Invoice Triggers",
-        desc: "Created or updated",
-        icon: <Receipt className="w-4 h-4 text-amber-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice" && t.triggerEvent === "invoice.created") || allTriggers[0],
-      },
-      {
-        id: "call",
-        type: "call",
-        label: "Call Triggers",
-        desc: "Created or updated",
-        icon: <Phone className="w-4 h-4 text-blue-600" />,
-        defaultTrigger: allTriggers.find((t) => t.triggerType === "call" && t.triggerEvent === "call.created") || allTriggers[0],
-      },
-
-    ];
+  const triggerCategories = useMemo(() => {
+    return GLOBAL_TRIGGER_CATALOG.map((cat) => ({
+      id: cat.type as string,
+      type: cat.type as string,
+      label: `${cat.label} Triggers`,
+      desc: cat.events.length > 2 ? `${cat.events.length} events` : "Created or updated",
+      icon: iconForKey(cat.iconKey),
+      defaultTrigger: allTriggers.find((t) => t.triggerType === cat.type) || allTriggers[0],
+    }));
   }, [allTriggers]);
 
   const filteredTriggerCategories = useMemo(() => {

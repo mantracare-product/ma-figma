@@ -4,12 +4,13 @@
  * A5, A7 and A9 use actions built later (send_message S3.6, start_call S5.4); until then those steps are inert.
  */
 import { registerSampleRuleSet, type SampleRuleDef } from "./sampleBundles";
+import { stepDisplayName } from "./rcmCatalog";
 import { SAMPLE_COVERAGE_PROCESS_ID } from "./rcmSampleIds";
 import { covStageId } from "./rcmSampleProcess";
 
 const NOOP_ACTION = { type: "moveToStage" as const, processId: "", stageId: "" };
 const cond = (id: string, field: string, op: any, value: any) => ({ id, field, op, value });
-const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepKey, params });
+const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepDisplayName({ stepKey }), params });
 
 /** Result -> stage names of the sample process (names resolve against the process at run time). */
 export const ELIGIBILITY_STAGE_MAP = {

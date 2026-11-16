@@ -1,5 +1,6 @@
 import type { WorkflowStep, AutomationBranch } from "../app/types/workflow.ts";
 import { isParallelStep } from "./automationTree.ts";
+import { stepDisplayName } from "./rcmCatalog.ts";
 
 export interface LayoutNode {
   id: string;
@@ -236,7 +237,7 @@ export function computeTreeCanvasLayout(
         const regularNode: LayoutNode = {
           id: step.id,
           type: nodeType,
-          label: step.name,
+          label: stepDisplayName(step),
           stepKey: step.stepKey,
           x: centerX,
           y: yCursor,

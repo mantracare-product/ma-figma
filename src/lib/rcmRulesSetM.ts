@@ -4,11 +4,12 @@
  * for 60 days) is a daily-job rule (job "invoices"), because nothing emits invoice.overdue after 60 days.
  */
 import { registerSampleRuleSet, type SampleRuleDef } from "./sampleBundles";
+import { stepDisplayName } from "./rcmCatalog";
 import { SAMPLE_CLAIM_WORKFLOW_IDS as W } from "./rcmSampleClaimWorkflows";
 
 const NOOP = { type: "moveToStage" as const, processId: "", stageId: "" };
 const cond = (id: string, field: string, op: any, value: any) => ({ id, field, op, value });
-const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepKey, params });
+const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepDisplayName({ stepKey }), params });
 const claimStageEntry = (id: string, name: string, processId: string, stageId: string, actions: any[]): SampleRuleDef => ({
   id,
   name,

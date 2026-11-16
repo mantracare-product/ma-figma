@@ -3,11 +3,12 @@
  * They run from the daily job "instance_visit_countdown", whose rows carry the authorization dates/units.
  */
 import { registerSampleRuleSet, type SampleRuleDef } from "./sampleBundles";
+import { stepDisplayName } from "./rcmCatalog";
 import { ELIGIBILITY_STAGE_MAP } from "./rcmRulesSetE";
 
 const NOOP = { type: "moveToStage" as const, processId: "", stageId: "" };
 const cond = (id: string, field: string, op: any, value: any) => ({ id, field, op, value });
-const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepKey, params });
+const step = (id: string, stepKey: string, params: Record<string, any> = {}): any => ({ id, stepKey, name: stepDisplayName({ stepKey }), params });
 
 export function buildSetE2Rules(): SampleRuleDef[] {
   return [

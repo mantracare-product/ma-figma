@@ -27,6 +27,7 @@ import { useOrganization } from "../context/OrganizationContext";
 import { toast } from "sonner";
 import ActionRunsPanel from "../components/automation/ActionRunsPanel";
 import { runDaily } from "../../lib/rcmJobs";
+import { buildRulePatch, ruleToInitialAutomation } from "../../lib/automationRuleMapping";
 
 /** Real name of a trigger event (catalog label, else the event written out in words). */
 const triggerLabel = (ev: string) =>
@@ -132,37 +133,7 @@ export default function Automation() {
 
   const initialAutomationData = useMemo(() => {
     if (isCreatingNewRule || !activeRule) return null;
-    return {
-      id: activeRule.id,
-      orgId: activeRule.orgId || "default",
-      name: activeRule.name,
-      description: activeRule.description,
-      scope: "global" as const,
-      status: activeRule.enabled ? ("active" as const) : ("draft" as const),
-      trigger: {
-        type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
-          c.events.some((e) => e.event === activeRule.trigger.event)
-        )?.type || "call") as EventTriggerType,
-        event: activeRule.trigger.event,
-      },
-      steps: (activeRule.actions || []).map((s, idx) => ({
-        ...s,
-        id: s.id,
-        name: s.name,
-        stepKey: s.stepKey,
-        iconKey: s.iconKey,
-        kind: (s.kind || (s.executionType === "parallel" ? "parallel" : "wait")) as any,
-        executionType: s.executionType || "wait",
-        branches: s.branches,
-        delay:
-          (s.delayValue ?? 0) > 0
-            ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
-            : undefined,
-        params: s.params || {},
-        order: idx + 1,
-      })) as any,
-      updatedAt: activeRule.updatedAt || "",
-    } as any;
+    return ruleToInitialAutomation(activeRule);
   }, [isCreatingNewRule, activeRule]);
 
   // Open flow builder view in creation mode without saving until the user explicitly clicks Save
@@ -510,103 +481,7 @@ export default function Automation() {
           processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
           workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
           onSaveAutomation={(saved) => {
-          const triggerEvtStr = String((saved.trigger as any)?.event || "").toLowerCase();
-          const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
-            (e) => e.event.toLowerCase() === triggerEvtStr
-          );
-          const triggerCategory = GLOBAL_TRIGGER_CATALOG.find((cat) =>
-            cat.events.some((e) => e.event.toLowerCase() === triggerEvtStr)
-          );
-          const detectedEntityType =
-            triggerCategory?.type === "appointment" || triggerEvtStr.startsWith("appointment")
-              ? "appointment"
-              : triggerCategory?.type === "invoice" || triggerEvtStr.startsWith("invoice")
-              ? "invoice"
-              : "client";
-
-          const mappedActions: WorkflowStep[] = (saved.steps || []).map((s: any) => ({
-            ...s,
-            id: s.id,
-            name: s.name,
-            description: s.description || "",
-            iconKey: s.iconKey || "zap",
-            stepKey: s.stepKey,
-            trigger: s.trigger || "stage",
-            executionType: s.executionType || "wait",
-            delayValue: s.delay?.value ?? s.delayValue ?? 0,
-            delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
-            params: s.params || {},
-            branches: s.branches,
-          }));
-
-          // Find any update_to_stage / stage movement action in the steps tree
-          let stageMovementStep: WorkflowStep | undefined;
-          const findStageMovement = (stepsList: WorkflowStep[]): WorkflowStep | undefined => {
-            for (const s of stepsList) {
-              if (
-                s.stepKey === "update_to_stage" ||
-                s.stepKey === "update-stage" ||
-                s.stepKey === "movetostage" ||
-                s.stepKey === "stagemovement" ||
-                s.stepKey === "processmovement" ||
-                s.stepKey === "move-process" ||
-                s.stepKey === "move-stage" ||
-                s.stepKey === "move-new-process"
-              ) {
-                return s;
-              }
-              if (s.branches && s.branches.length > 0) {
-                for (const b of s.branches) {
-                  const found = findStageMovement(b.steps || []);
-                  if (found) return found;
-                }
-              }
-            }
-            return undefined;
-          };
-          stageMovementStep = findStageMovement(mappedActions);
-
-          const trigParams = (saved.trigger as any)?.params || {};
-          const isStageTrigger =
-            triggerEvtStr.startsWith("stage.") ||
-            triggerEvtStr.includes("stage") ||
-            (saved.trigger as any)?.type === "stage" ||
-            trigParams?.category === "stage";
-
-          // If trigger is a stage trigger, resolve process/stage from trigger params
-          const trigStageId = trigParams.stageId || trigParams.triggerStageId || (saved.trigger as any)?.stage?.stageId || "";
-          const trigStageName = trigParams.stageName || trigParams.triggerStageName || "";
-          const trigProcessId = trigParams.processId || trigParams.triggerProcessId || (saved.trigger as any)?.stage?.processId || "";
-          const trigProcessName = trigParams.processName || trigParams.triggerProcessName || "";
-
-          // Resolve destination stage/process from movement step if present
-          const actionStageId = stageMovementStep?.params?.stageId || stageMovementStep?.params?.stepDetailStage || trigStageId;
-          const actionStageName = stageMovementStep?.params?.stageName || stageMovementStep?.params?.stepDetailStageName || trigStageName;
-          const actionProcessId = stageMovementStep?.params?.processId || stageMovementStep?.params?.stepDetailProcess || trigProcessId;
-          const actionProcessName = stageMovementStep?.params?.processName || stageMovementStep?.params?.stepDetailProcessName || trigProcessName;
-
-          // Normalized trigger params ensuring stageId and processId are populated
-          const normalizedTriggerParams = {
-            ...trigParams,
-            ...(isStageTrigger || trigStageId ? {
-              stageId: trigStageId || actionStageId,
-              stageName: trigStageName || actionStageName,
-              processId: trigProcessId || actionProcessId,
-              processName: trigProcessName || actionProcessName,
-              triggerStageId: trigStageId || actionStageId,
-              triggerStageName: trigStageName || actionStageName,
-              triggerProcessId: trigProcessId || actionProcessId,
-              triggerProcessName: trigProcessName || actionProcessName,
-            } : {}),
-          };
-
-          const actionPayload = {
-            type: "moveToStage" as const,
-            processId: actionProcessId || "",
-            stageId: actionStageId || "",
-            processName: actionProcessName || "",
-            stageName: actionStageName || "",
-          };
+          const patch = buildRulePatch(saved, isCreatingNewRule ? null : activeRule);
 
           if (isCreatingNewRule || !activeRule) {
             try {
@@ -614,19 +489,14 @@ export default function Automation() {
                 orgId: activeOrganization?.id || "default",
                 name: saved.name || "New Automation",
                 description: saved.description || "",
-                entityType: detectedEntityType,
+                entityType: patch.entityType,
                 isAdmin: false,
                 createdIn: "client",
                 isClientCustomization: true,
                 source: "custom",
-                trigger: {
-                  event: (saved.trigger as any).event || "call.inbound",
-                  label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
-                  source: "any",
-                  params: normalizedTriggerParams,
-                },
-                action: actionPayload,
-                actions: mappedActions,
+                trigger: { ...patch.trigger, event: patch.trigger.event || "call.inbound" },
+                action: patch.action,
+                actions: patch.actions,
                 enabled: saved.status === "active",
                 health: "ok",
               });
@@ -641,19 +511,14 @@ export default function Automation() {
                 name: saved.name,
                 description: saved.description,
                 enabled: saved.status === "active",
-                entityType: detectedEntityType,
+                entityType: patch.entityType,
                 isAdmin: false,
                 createdIn: "client",
                 isClientCustomization: true,
                 source: "custom",
-                trigger: {
-                  event: (saved.trigger as any).event,
-                  label: catalogEvt?.label || (saved.trigger as any).event,
-                  source: "any",
-                  params: normalizedTriggerParams,
-                },
-                action: actionPayload,
-                actions: mappedActions,
+                trigger: patch.trigger,
+                action: patch.action,
+                actions: patch.actions,
                 updatedAt: new Date().toISOString(),
               });
               setIsCreatingNewRule(false);
