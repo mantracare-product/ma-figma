@@ -32,7 +32,8 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import ClientInsuranceTab from "../components/profile/ClientInsuranceTab";
+import { INSURANCE_SECTION_ID, insuranceValuesFor, isInsuranceKey, saveInsuranceField } from "../../lib/clientInsurance";
+import { COVERAGES_EVENT } from "../../lib/coveragesStore";
 import { getStoredCallLogs, getCallsOnly, getPrimaryInstance, getInstancesForClient, logInstanceStageMove, isProcessInstanceRow, startProcessInstance, updateProcessRowStage, appointmentInstanceTitle, CallLog, type ProcessInstanceSource, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
@@ -482,6 +483,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     // Filter out hardcoded sec-custom-fields and sec-process-pipeline, and any custom section that does NOT match current org scope
     let updatedSections = baseSections.filter((s) => {
       if (s.id === "sec-custom-fields" || s.id === "sec-process-pipeline") return false;
+      if (s.id === "sec-billing-demographics" || s.id === "sec-coverages") return false; // R3.2: replaced by "sec-insurance"
       if (SYSTEM_SEC_IDS.has(s.id) || !s.isCustom) return true;
       return matchingCustomSecIds.has(s.id);
     });
@@ -744,6 +746,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     }
   }, [client?.id]);
 
+  // ?section=insurance (also the old ?tab=insurance): open Overview, scroll to the Insurance section and highlight it
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get("section") !== "insurance" && q.get("tab") !== "insurance") return;
+    setActiveProfileTab("overview");
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.querySelector(`[data-section-id="${INSURANCE_SECTION_ID}"]`) as HTMLElement | null;
+      if (el) {
+        window.clearInterval(timer);
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-blue-500");
+        window.setTimeout(() => el.classList.remove("ring-2", "ring-blue-500"), 2500);
+      } else if (++tries > 30) window.clearInterval(timer);
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [location.search, client?.id]);
+
+  const [insuranceTick, setInsuranceTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setInsuranceTick((t) => t + 1);
+    window.addEventListener(COVERAGES_EVENT, bump);
+    return () => window.removeEventListener(COVERAGES_EVENT, bump);
+  }, []);
+
   const fieldValues = useMemo(() => {
     return {
       name: clientName,
@@ -758,6 +785,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       country: clientCountry,
       processes: selectedProcesses,
       ...dynamicFieldValues,
+      ...(client?.id ? insuranceValuesFor(String(client.id)) : {}),
     };
   }, [
     clientName,
@@ -771,9 +799,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     clientCountry,
     selectedProcesses,
     dynamicFieldValues,
+    client?.id,
+    insuranceTick,
   ]);
 
   const handleFieldValueChange = (key: string, val: any) => {
+    // Insurance section: coverages table rows and consents are stored in the coverages store / client demographics
+    if (client?.id && isInsuranceKey(key)) {
+      saveInsuranceField(String(client.id), key, val);
+      setInsuranceTick((t) => t + 1);
+      return;
+    }
     if (key === "name") setClientName(val);
     else if (key === "contact_type" || key === "contactType") setClientContactType(val);
     else if (key === "email") setClientEmail(val);
@@ -931,7 +967,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products" | "insurance">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
 
   // Assign Process Multi-select & Stage state
   const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
@@ -2361,7 +2397,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "products" as const, label: "Product/Services" },
-                { id: "insurance" as const, label: "Insurance" },
               ] as const
             ).map((tab) => (
               <button
@@ -3768,7 +3803,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           )}
 
           {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
-          {activeProfileTab === "insurance" && client && <ClientInsuranceTab clientId={String(client.id)} />}
 
           {activeProfileTab === "products" && (() => {
             const assignedIds = new Set(clientProductList.map((p) => p.id));

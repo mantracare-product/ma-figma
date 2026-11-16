@@ -86,7 +86,7 @@
       },
     },
     {
-      title: "UI: client Insurance tab opens and lists the coverage",
+      title: "UI: client has no Insurance tab; the Overview tab has an Insurance section listing the coverage; ?section=insurance opens it",
       arrange(ctx) {
         const r = T.rcm();
         const w = ctx.fresh();
@@ -95,13 +95,15 @@
       },
       phases: [
         {
-          nav: "/clients/RCMTEST-CL-1",
+          nav: "/clients/RCMTEST-CL-1?section=insurance",
           async verify() {
-            await T.ui.click("profile-tab-insurance", 12000);
-            await T.ui.wait("client-insurance-tab");
-            const tab = T.ui.q("client-insurance-tab");
-            const has = () => tab.innerText.indexOf("RCMTEST-UIM1") >= 0 || Array.from(tab.querySelectorAll("input,select,textarea")).some((i) => i.value === "RCMTEST-UIM1");
-            try { await T.waitFor(has, { timeout: 8000, msg: "coverage member id in the Insurance tab" }); } catch (e) { throw new Error(String(e.message) + " | tab text: " + tab.innerText.slice(0, 400).split(String.fromCharCode(10)).join(" / ") + " | inputs: " + Array.from(tab.querySelectorAll("input,select")).map((i) => i.value).join(",")); }
+            await T.ui.wait("profile-tab-overview", 12000);
+            assert(!T.ui.q("profile-tab-insurance"), "no Insurance tab on the profile");
+            await T.waitFor(() => document.querySelector('[data-section-id="sec-insurance"]'), { timeout: 12000, msg: "Insurance section on the Overview tab" });
+            const sec = document.querySelector('[data-section-id="sec-insurance"]');
+            const has = () => sec.innerText.indexOf("RCMTEST-UIM1") >= 0 || Array.from(sec.querySelectorAll("input,select,textarea")).some((i) => i.value === "RCMTEST-UIM1");
+            await T.waitFor(has, { timeout: 8000, msg: "coverage member id in the Insurance section" });
+            assert(!document.querySelector('[data-section-id="sec-billing-demographics"]'), "old Billing demographics section is gone");
           },
         },
       ],

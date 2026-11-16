@@ -1,6 +1,7 @@
 /** Human label + route for the record a task is linked to (entityRef). */
 import type { TaskEntity } from "../types/task";
 import { getProcessInstanceById } from "./processLogsStore";
+import { insuranceLink } from "./clientInsurance";
 
 export interface LinkedRecord {
   label: string;
@@ -8,7 +9,9 @@ export interface LinkedRecord {
   href?: string;
 }
 
-export function describeEntityRef(task: Pick<TaskEntity, "entityRef">): LinkedRecord | undefined {
+const INSURANCE_QUEUE = /elig|coverage|insurance|auth/i;
+
+export function describeEntityRef(task: Pick<TaskEntity, "entityRef"> & { queueId?: string }): LinkedRecord | undefined {
   const r = task.entityRef;
   if (!r) return undefined;
   switch (r.type) {
@@ -25,7 +28,7 @@ export function describeEntityRef(task: Pick<TaskEntity, "entityRef">): LinkedRe
     case "invoice":
       return { label: `Invoice ${r.id}`, kindLabel: "Invoice", href: "/invoices" };
     case "client":
-      return { label: `Client ${r.id}`, kindLabel: "Client", href: `/clients/${r.id}` };
+      return { label: `Client ${r.id}`, kindLabel: "Client", href: INSURANCE_QUEUE.test(task.queueId || "") ? insuranceLink(r.id) : `/clients/${r.id}` };
     default:
       return { label: `${r.type} ${r.id}`, kindLabel: String(r.type) };
   }

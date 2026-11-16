@@ -1791,6 +1791,7 @@ export default function DraggableOverviewSections({
           return (
             <div
               key={section.id}
+              data-section-id={section.id}
               draggable
               onDragStart={(e) => handleSectionDragStart(e, sIdx)}
               onDragOver={(e) => handleSectionDragOver(e, sIdx)}

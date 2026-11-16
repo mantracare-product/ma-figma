@@ -101,29 +101,29 @@ const opts = (...vals: string[]) => vals.map((v) => ({ id: v, label: v.charAt(0)
 const SEL = (key: string, label: string, values: string[], sectionId?: string): SeedField => ({ key, label, inputType: "list_select", options: opts(...values), sectionId });
 const TS = (key: string, label: string, sectionId: string, inputType = "text"): SeedField => ({ key, label, inputType, sectionId });
 
+/** Legacy section ids (R2.2 Insurance tab). Replaced by the single "Insurance" section on the Overview tab. */
 export const SEC_BILLING_DEMOGRAPHICS = "sec-billing-demographics";
 export const SEC_COVERAGES = "sec-coverages";
+export const SEC_INSURANCE = "sec-insurance";
 export const SEC_APPT_ELIGIBILITY = "sec-appt-eligibility";
 export const SEC_APPT_AUTHORIZATION = "sec-appt-authorization";
 export const SEC_CLAIM_RCM = "sec-clm-revenue-cycle";
 
-/** Client Insurance tab: billing demographics + the Coverages table (rows sync to the coverages store). */
+/** Client Overview > Insurance section: the Coverages table (rows sync to the coverages store) + guarantor, self-pay, consents. */
 export const CLIENT_FIELDS: SeedField[] = [
-  TS("legalFirstName", "Legal first name", SEC_BILLING_DEMOGRAPHICS),
-  TS("legalLastName", "Legal last name", SEC_BILLING_DEMOGRAPHICS),
-  TS("dob", "Date of birth", SEC_BILLING_DEMOGRAPHICS, "date"),
-  SEL("sex", "Sex", ["female", "male", "other", "unknown"], SEC_BILLING_DEMOGRAPHICS),
-  TS("address", "Address", SEC_BILLING_DEMOGRAPHICS),
-  TS("guarantor", "Guarantor", SEC_BILLING_DEMOGRAPHICS),
-  TS("selfPay", "Self-pay", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
-  TS("consent_sms", "Consent: SMS", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
-  TS("consent_voice", "Consent: voice calls", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
-  TS("consent_cardOnFile", "Consent: card on file", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
+  TS("dob", "Date of birth", SEC_INSURANCE, "date"),
+  SEL("sex", "Sex", ["female", "male", "other", "unknown"], SEC_INSURANCE),
+  TS("address", "Address", SEC_INSURANCE),
+  TS("guarantor", "Guarantor", SEC_INSURANCE),
+  TS("selfPay", "Self-pay", SEC_INSURANCE, "yes_no"),
+  TS("consent_sms", "Consent: SMS", SEC_INSURANCE, "yes_no"),
+  TS("consent_voice", "Consent: voice calls", SEC_INSURANCE, "yes_no"),
+  TS("consent_cardOnFile", "Consent: card on file", SEC_INSURANCE, "yes_no"),
   {
     key: "ins_coverages",
     label: "Coverages",
     inputType: "table",
-    sectionId: SEC_COVERAGES,
+    sectionId: SEC_INSURANCE,
     subFields: [
       { id: "payer", name: "Payer", inputType: "list_select" },
       { id: "member_id", name: "Member ID", inputType: "text" },
@@ -151,8 +151,7 @@ export const CLAIM_RCM_FIELDS: SeedField[] = [
 
 /** Sections registered in the section registry (module -> list). */
 const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
-  { module: "client", id: SEC_BILLING_DEMOGRAPHICS, title: "Billing demographics", description: "Legal name, date of birth, guarantor and consents used for billing", iconName: "user", fieldKeys: CLIENT_FIELDS.filter((f) => f.sectionId === SEC_BILLING_DEMOGRAPHICS).map((f) => f.key) },
-  { module: "client", id: SEC_COVERAGES, title: "Coverages", description: "Insurance coverages in priority order", iconName: "shield", fieldKeys: ["ins_coverages"] },
+  { module: "client", id: SEC_INSURANCE, title: "Insurance", description: "Coverages in priority order, guarantor, self-pay and consents", iconName: "shield", fieldKeys: ["ins_coverages", "guarantor", "selfPay", "consent_sms", "consent_voice", "consent_cardOnFile", "dob", "sex", "address"] },
   { module: "appointment", id: SEC_APPT_ELIGIBILITY, title: "Eligibility", description: "Latest eligibility result for this visit", iconName: "shield", fieldKeys: ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at"] },
   { module: "appointment", id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
   { module: "claim", id: SEC_CLAIM_RCM, title: "Revenue cycle", description: "Assignee, priority, deadlines, authorization, denial and appeal", iconName: "layers", fieldKeys: CLAIM_RCM_FIELDS.map((f) => f.key) },
@@ -236,6 +235,15 @@ export function ensureRcmFieldSeeds(): number {
       }
     }
   }
+  // R3.2: the Insurance tab is gone; its two sections are one "Insurance" section on the Overview tab. Existing field
+  // definitions are re-pointed (nothing is deleted); the legal-name fields simply stop being placed in a section.
+  for (const f of Array.isArray(registry.client) ? registry.client : []) {
+    if (f.sectionId === SEC_BILLING_DEMOGRAPHICS || f.sectionId === SEC_COVERAGES) {
+      if (f.key === "legalFirstName" || f.key === "legalLastName") delete f.sectionId;
+      else f.sectionId = SEC_INSURANCE;
+      added += 1;
+    }
+  }
   // keep the Coverages table's payer options in step with the payers list (only touches our own sub-field)
   try {
     const payers = JSON.parse(localStorage.getItem("mantra_payers_v1") || "[]") as Array<{ id: string; name: string }>;
@@ -251,6 +259,10 @@ export function ensureRcmFieldSeeds(): number {
     const raw = localStorage.getItem(SECTION_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     const secs: Record<string, any[]> = Array.isArray(parsed) ? {} : parsed && typeof parsed === "object" ? parsed : {};
+    if (Array.isArray(secs.client) && secs.client.some((x: any) => x.id === SEC_BILLING_DEMOGRAPHICS || x.id === SEC_COVERAGES)) {
+      secs.client = secs.client.filter((x: any) => x.id !== SEC_BILLING_DEMOGRAPHICS && x.id !== SEC_COVERAGES);
+      added += 1;
+    }
     for (const s of SECTIONS) {
       const list: any[] = Array.isArray(secs[s.module]) ? secs[s.module] : [];
       if (!list.some((x) => x.id === s.id)) {
