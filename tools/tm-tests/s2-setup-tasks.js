@@ -195,7 +195,7 @@
         {
           nav: "/tasks?view=view-sample-insurance-fixes",
           async verify() {
-            await T.ui.waitText("RCMTEST queue task", 15000);
+            await T.waitFor(() => document.querySelectorAll("tbody tr").length > 0, { timeout: 15000, msg: "task rows" });
             assert(!T.ui.has("task-queue-bar") && !T.ui.has("task-queue-select"), "no Queue selector");
             assert(!/save view/i.test(T.ui.appText()), "no Save view button");
             assert(!/QUEUE/.test(Array.from(document.querySelectorAll("thead th")).map((t) => t.innerText).join(" ")), "no QUEUE column");

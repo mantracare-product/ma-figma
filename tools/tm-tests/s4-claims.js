@@ -214,18 +214,23 @@
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("claims-filters", 15000);
+            await T.ui.wait("claims-filter-workflow", 15000);
             assert(!T.ui.has("mock-data-banner"), "no Mock data banner");
+            await T.ui.openMore();
             for (const id of ["workflow", "payer", "assignee"]) assert(T.ui.has("claims-filter-" + id), "filter " + id);
             for (const id of ["stage", "from", "to"]) assert(!T.ui.has("claims-filter-" + id), "no " + id + " filter any more");
             const wfSel = T.ui.q("claims-filter-workflow");
             const opts = Array.from(wfSel.options);
             assert(opts.length >= 1 && !opts.some((op) => op.value === "all" || /^all/i.test(op.text)), "workflow switcher has no All option");
-            assert(opts.every((op) => /(d+)$/.test(op.text)), "each workflow shows its claim count: " + opts.map((o) => o.text).join(" | "));
-            const counts = opts.map((op) => Number(/((d+))$/.exec(op.text)[1]));
-            eq(Number(/((d+))$/.exec(wfSel.selectedOptions[0].text)[1]), Math.max.apply(null, counts), "default workflow is the one with the most claims");
+            const t0 = (t) => t.charAt(t.length - 1) === ")" && !isNaN(Number(t.slice(t.lastIndexOf("(") + 1, t.length - 1)));
+            const countOf = (t) => Number(t.slice(t.lastIndexOf("(") + 1, t.length - 1));
+            assert(opts.every((op) => t0(op.text)), "each workflow shows its claim count: " + opts.map((o) => o.text).join(" | "));
+            const counts = opts.map((op) => countOf(op.text));
+            eq(countOf(wfSel.selectedOptions[0].text), Math.max.apply(null, counts), "default workflow is the one with the most claims");
+            await T.ui.openMore();
             await T.ui.click("claims-view-board", 8000);
             await T.ui.wait("claim-board", 8000);
+            await T.ui.openMore();
             await T.ui.click("claims-view-list");
           },
         },

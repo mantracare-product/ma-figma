@@ -39,3 +39,9 @@ Deals/process-drawer visuals, form layouts (Claims Setup, Insurance tab, Create 
 - There are no demo-set / sample-template buttons any more: the starting set is created once by `ensureRcmDefaults` (tested via `__rcm.rcmDefaults`). Tests that need the E/E2/C/M rules still call the internal `__rcm.sampleBundles.enableDemoSet` to arrange state; that is test setup, not UI.
 - New checks: Create Claim session picker, Claims filters + List/Board in the top bar, Claims overview slider, flow-builder catalog completeness and re-save round trip, no Sample / Mock wording on Claims, Setup and Automation.
 - Every run backs up storage first, restores it after each test, and ends with a RUN row proving storage is identical.
+
+## Round 3 changes
+- Client profile has no Insurance tab: the Overview tab has an **Insurance** section (`data-section-id="sec-insurance"`, `?section=insurance` scrolls to it).
+- Claims top bar: workflow switcher (no All, counts, default = most claims), payer, assignee, List/Board, no stage or date filters. Payer, assignee and List/Board may sit in the top bar's **More** menu on narrow windows: tests call `T.ui.openMore()` first.
+- Tasks page has no Queue selector / Save view. Overview shows one "Work queues" card (counts only).
+- New checks (S6.12-S6.16): "(Sample)" suffix migration, realistic data present (flag `mantra_demo_workspace_v1`), single-line top bars and no horizontal page scroll on eight pages, no Insurance tab. The realistic data is seeded by the app at start-up (never during a test run) and read-only here.

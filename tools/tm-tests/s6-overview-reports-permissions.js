@@ -47,7 +47,7 @@
             const r = T.rcm();
             await T.ui.wait("claims-overview", 15000);
             await T.ui.wait("rcm-overview-row", 15000);
-            for (const chartTitle of ["Claims by stage", "Claims by workflow", "Denial rate by month", "A/R aging", "Payer mix", "First-pass acceptance", "Eligibility results", "Work queues"]) assert(document.body.innerText.includes(chartTitle), "chart card: " + chartTitle);
+            for (const chartTitle of ["Claims by stage", "Claims by workflow", "Denial rate by month", "A/R aging", "Payer mix", "First-pass acceptance", "Eligibility results", "Work queues"]) assert(T.ui.appText().toLowerCase().includes(chartTitle.toLowerCase()), "chart card: " + chartTitle);
             assert(!/(Sample)|mock data/i.test(T.ui.textOf("claims-overview")), "no Sample / mock wording on the Claims overview: " + (T.ui.textOf("claims-overview").match(/.{0,30}((Sample)|mock data).{0,30}/i) || [""])[0]);
             const q = r.kpis.queueCounts().find((x) => x.name.indexOf("Claim fixes") === 0);
             eq(q.open, 3, "selector says 3 open Claim fixes tasks");
@@ -158,13 +158,13 @@
             await T.ui.waitText("Overview Analytics", 15000);
             await T.h.settle(500);
             assert(!T.ui.has("rcm-overview-row") && !T.ui.has("claims-overview"), "RCM row hidden without rcmReports");
-            assert(!document.body.innerText.includes("Claims overview"), "no Claims overview toggle without rcmReports");
+            assert(!T.ui.appText().includes("Claims overview"), "no Claims overview toggle without rcmReports");
           },
         },
         {
           nav: "/claims",
           async verify() {
-            await T.ui.wait("claims-filters", 15000);
+            await T.ui.wait("claims-filter-workflow", 15000);
             assert(!Array.from(document.querySelectorAll("button")).some((b) => (b.innerText || "").trim() === "Create Claim"), "Create Claim hidden without claims add");
             const exp = document.querySelector('button[aria-label="Export Claims"]');
             assert(exp && exp.disabled, "Export disabled without claims export");
@@ -205,7 +205,7 @@
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
         { nav: "/claims?view=setup", async verify() { await T.ui.wait("claims-setup", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Setup is clean"); } },
-        { nav: "/claims", async verify() { await T.ui.wait("claims-filters", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
+        { nav: "/claims", async verify() { await T.ui.wait("claims-filter-workflow", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
         { nav: "/automation", async verify() { await T.ui.wait("run-daily-jobs", 15000); assert(!/mock data|\(sample\)|demo set|sample templates/i.test(T.ui.appText()), "Automation is clean"); } },
       ],
     },
@@ -225,6 +225,73 @@
     {
       title: "Report builder source cards, Overview row layout, Tasks view link, voice settings",
       run() { T.manual("Needs a human: open the custom report builder (RCM sources appear for users with rcmReports), judge the Overview row layout and the link into Tasks"); },
+    },
+    {
+      title: "Round 3: no (Sample) suffix is stored or shown; the migration strips it once and is idempotent",
+      run(ctx) {
+        const r = T.rcm();
+        ctx.fresh();
+        localStorage.setItem("mantra_r3_probe", JSON.stringify([{ name: "Coverage & authorization (Sample)", stages: [{ name: "Intake (Sample)" }] }]));
+        localStorage.removeItem("mantra_strip_sample_suffix_v1");
+        const res = r.sampleSuffix.migrateStripSampleSuffix();
+        assert(res.keys >= 1, "migration rewrote the probe key");
+        const probe = JSON.parse(localStorage.getItem("mantra_r3_probe"));
+        eq(probe[0].name, "Coverage & authorization");
+        eq(probe[0].stages[0].name, "Intake");
+        eq(r.sampleSuffix.migrateStripSampleSuffix().keys, 0, "second run changes nothing");
+        const keys = Object.keys(localStorage).filter((k) => k.indexOf("mantra_") === 0 && (localStorage.getItem(k) || "").toLowerCase().indexOf("(sample)") >= 0);
+        assert(keys.length === 0, "no stored name still carries a suffix: " + keys.join(","));
+        localStorage.removeItem("mantra_r3_probe");
+      },
+    },
+    {
+      title: "Round 3: the demo organization has realistic data on every RCM screen (claims in all stages, ERAs, invoices, tasks in every queue, instances in all stages)",
+      run() {
+        const r = T.rcm();
+        const arr = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch (e) { return []; } };
+        if (localStorage.getItem(r.demoWorkspace.DEMO_WORKSPACE_FLAG) !== "1") { T.manual("Needs a human: the demo organization is not the active one (the realistic data is only seeded for it)"); return; }
+        const claims = arr("mantra_claims_v1").filter((x) => String(x.id).indexOf("dm-") === 0);
+        assert(claims.length >= 60, "claims: " + claims.length);
+        assert(new Set(claims.map((x) => x.processId)).size === 3, "claims in all three workflows");
+        assert(new Set(claims.map((x) => x.statusLabel)).size >= 17, "claims across the stages: " + new Set(claims.map((x) => x.statusLabel)).size);
+        assert(new Set(claims.map((x) => x.payer.id)).size >= 6, "6+ payers");
+        assert(arr("mantra_eras_v1").some((e) => e.status === "unmatched") && arr("mantra_eras_v1").some((e) => e.status === "partial"), "ERAs incl. partial and unmatched");
+        assert(new Set(arr("mantra_invoices_v1").map((i) => i.statusLabel)).size >= 6, "invoice states");
+        assert(new Set(arr("mantra_tasks_store").map((t) => t.queueId).filter(Boolean)).size >= 8, "tasks in every queue");
+        assert(r.processLogs.getProcessInstances().filter((i) => i.processId === "proc-sample-coverage-auth").length >= 30, "coverage instances (Deals is not empty)");
+        assert(arr("appointments_v1").length >= 40 && arr("mantra_coverages_v1").length >= 20, "appointments and coverages");
+        assert(!/RCMTEST/.test(localStorage.getItem("mantra_claims_v1") || ""), "no test prefix in the data");
+      },
+    },
+    {
+      title: "Round 3: top bars stay on ONE line and the page never scrolls horizontally (Claims, Tasks, Deals, Automation, Appointments, Invoices, Contacts, Call Logs)",
+      phases: ["/claims", "/tasks", "/deals", "/automation", "/appointments", "/invoices", "/clients", "/call-logs"].map((path) => ({
+        nav: path,
+        async verify() {
+          await T.waitFor(() => document.querySelector('[data-testid="page-top-bar-row"]'), { timeout: 15000, msg: "top bar on " + path });
+          await new Promise((res) => setTimeout(res, 1500));
+          const bar = document.querySelector('[data-testid="page-top-bar-row"]');
+          assert(bar.getBoundingClientRect().height < 60, path + ": top bar is one line (height " + bar.getBoundingClientRect().height + ")");
+          assert(bar.scrollWidth <= bar.clientWidth + 1, path + ": top bar controls do not overflow");
+          assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, path + ": no horizontal page scroll (" + document.documentElement.scrollWidth + " > " + document.documentElement.clientWidth + ")");
+          assert(!/mock data|demo set/i.test(T.ui.appText()) && T.ui.appText().toLowerCase().indexOf("(sample)") < 0, path + ": no Sample / mock wording");
+        },
+      })),
+    },
+    {
+      title: "Round 3: client profile has no Insurance tab and the Overview tab has the Insurance section",
+      phases: [{
+        nav: "/clients/CL-001?section=insurance",
+        async verify() {
+          await T.waitFor(() => document.querySelector('[data-testid="profile-tab-overview"]'), { timeout: 15000, msg: "profile tabs" });
+          assert(!document.querySelector('[data-testid="profile-tab-insurance"]'), "no Insurance tab");
+          await T.waitFor(() => document.querySelector('[data-section-id="sec-insurance"]'), { timeout: 12000, msg: "Insurance section" });
+        },
+      }],
+    },
+    {
+      title: "Round 3: Insurance section layout, Claims overview chart look, More menu, Setup",
+      run() { T.manual("Needs a human: judge the Insurance section (drag, Configure Sections), the Claims overview cards/charts against DESIGN.md, and the More menu on a narrow window"); },
     },
   ]);
 })();
