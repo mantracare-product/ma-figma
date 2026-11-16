@@ -115,15 +115,6 @@ export function buildSetMRules(): SampleRuleDef[] {
       actions: [step("a28b-move", "update_to_stage", { stageEntity: "invoice", stageName: "Reminder 2" }), step("a28b-msg", "send_message", { channel: "sms", template: "balance_reminder" })],
     },
     {
-      id: "sample-rule-A29",
-      name: "A29 Daily: unpaid 45 days and the patient consented to voice, call about the balance",
-      entityType: "invoice",
-      trigger: { event: "job.daily" },
-      conditions: [cond("c1", "job", "equals", "invoices"), cond("c2", "ageDays", "greater_than_or_equal", 45), cond("c3", "voiceConsent", "equals", "true")],
-      action: NOOP,
-      actions: [step("a29-call", "start_call", { purpose: "balance_reminder" })],
-    },
-    {
       id: "sample-rule-A30",
       name: "A30 Daily: unpaid 60 days, mark Overdue and queue a Patient balances task",
       description: "The spec triggers on invoice.overdue; nothing emits that after 60 days, so this runs from the daily job.",

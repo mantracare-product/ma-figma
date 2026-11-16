@@ -1,7 +1,7 @@
 /**
  * SAMPLE rules, Set E (eligibility and prior auth): A1-A10 and A13 (spec 3.0.5). All ship DISABLED, all are
  * editable, and they reference the sample process by id. Run order on the same event: A1 = 10, A10 = 20, A13 = 10.
- * A5, A7 and A9 use actions built later (send_message S3.6, start_call S5.4); until then those steps are inert.
+ * A7 (payer call on Inconclusive) is now the stage call setting of that stage, not a rule (R4.1).
  */
 import { registerSampleRuleSet, type SampleRuleDef } from "./sampleBundles";
 import { stepDisplayName } from "./rcmCatalog";
@@ -75,13 +75,6 @@ export function buildSetERules(): SampleRuleDef[] {
     stageEntry("sample-rule-A6", "A6 Provider setup issue: task in Enrollment", "Provider setup issue", [
       step("a6-task", "create_task", { title: "Check provider enrollment for {{client.name}}", queue: "Enrollment", priority: "normal", dueInDays: 3 }),
     ]),
-    stageEntry(
-      "sample-rule-A7",
-      "A7 Inconclusive with voice on: call the payer",
-      "Inconclusive",
-      [step("a7-call", "start_call", { purpose: "payer_benefits", resultStage: "Pending review" })],
-      { conditions: [cond("c1", "_voiceEnabled", "equals", "true")] }
-    ),
     stageEntry(
       "sample-rule-A8",
       "A8 Inconclusive with voice off: task in Benefits to verify",

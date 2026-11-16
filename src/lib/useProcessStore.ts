@@ -27,6 +27,8 @@ export interface TransferNumberItem {
 export interface CallTriggerSettings {
   /** What the call is for (RCM): payer benefits, balance reminder, or a general call. */
   callPurpose?: "payer_benefits" | "balance_reminder" | "general";
+  /** payer_benefits: stage the record moves to once the (pending-review) call result is captured. */
+  resultStage?: string;
   timingType: "immediate" | "wait";
   waitDuration: number;
   waitUnit: "minutes" | "hours" | "days" | "weeks" | "months";

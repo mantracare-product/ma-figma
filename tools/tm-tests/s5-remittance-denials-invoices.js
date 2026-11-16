@@ -151,7 +151,7 @@
       },
     },
     {
-      title: "start_call (mock): balance reminders need voice consent; CARC categories resolve",
+      title: "Stage call library (mock): balance reminders need voice consent; there is NO Start Call node in the catalog",
       run(ctx) {
         const r = T.rcm();
         const w = ctx.fresh();
@@ -160,6 +160,7 @@
         const no = r.claimStatusAndCalls.performStartCall({ purpose: "balance_reminder", clientId: w.clientId, voiceConsent: false, phone: "555", recordType: "invoice", recordId: "RCMTEST-INV2" });
         match(no, { status: "skipped", skipped: "no_consent" });
         eq(T.rcm().claimStatusAndCalls.rcmCallsStore.get().length >= 2, true);
+        assert(!T.rcm().rcmCatalog.RCM_ACTION_KEYS.includes("start_call"), "Start Call is not an automation action");
       },
     },
     {

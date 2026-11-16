@@ -4054,17 +4054,6 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {stepKey === "start_call" && (
-              <div className="space-y-4">
-                {renderField("Purpose", (
-                  <select value={params.purpose || "payer_benefits"} onChange={(e) => onChange({ purpose: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm">
-                    <option value="payer_benefits">Payer benefits</option><option value="balance_reminder">Balance reminder</option>
-                  </select>
-                ))}
-                {(params.purpose || "payer_benefits") === "payer_benefits" && renderField("Move the instance to stage when the result is captured (pending review)", <input value={params.resultStage || ""} onChange={(e) => onChange({ resultStage: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}
-              </div>
-            )}
-
             {stepKey === "update_invoice_from_claim" && (
               <div className="space-y-4">
                 {renderField("Move the invoice to stage (blank = leave it)", <input value={params.invoiceStage || ""} onChange={(e) => onChange({ invoiceStage: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm" />)}

@@ -118,7 +118,7 @@
         assert(!first.already && first.rules > 20 && first.enabled > 10, "defaults created: " + JSON.stringify(first));
         const byId2 = (id) => r.automation.getStoredRules().find((x) => x.id === id);
         assert(byId2("sample-rule-A1").enabled, "A1 ships enabled");
-        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A29").enabled, "outbound rules (message / submit / call) ship off");
+        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A28a").enabled, "outbound rules (message / submit) ship off");
         assert(!byId2("sample-rule-A14-scribe").enabled, "alternates ship off");
         assert(r.automation.getStoredRules().every((x) => !/\(sample\)/i.test(x.name)), "no (Sample) in rule names");
         r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: false });

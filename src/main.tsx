@@ -9,6 +9,7 @@
   import { migrateBillingSetupToOrg } from "./lib/orgBilling";
   import { migrateStripSampleSuffix } from "./lib/sampleSuffixMigration";
   import { seedDemoWorkspace, restoreDemoScribeSessions } from "./lib/rcmDemoWorkspace";
+  import { migrateStartCallToStageCalls } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
   // Billing entity and locations (POS) now live on the Organization record: copy the old Billing setup values once.
@@ -19,6 +20,9 @@
   try { ensureRcmFieldSeeds(); } catch { /* registry unavailable */ }
   // One-time RCM starting set (workflows, queue views, rules, payers, templates), ordinary editable items. Skipped during browser test runs.
   try { if (!testRunActive()) ensureRcmDefaults(); } catch { /* ignore */ }
+
+  // Round 4: calls are stage settings (the Start Call action is gone): migrate stored rules once, logged to mantra_migration_log_v1.
+  try { if (!testRunActive()) migrateStartCallToStageCalls(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

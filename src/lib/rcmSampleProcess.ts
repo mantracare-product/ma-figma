@@ -14,6 +14,8 @@ interface Row {
   position: "initial" | "intermediate" | "final";
   category: "in_progress" | "success" | "lost";
   color: string;
+  /** Stage call setting (R4.1): a call placed when a record enters the stage. */
+  call?: { purpose: "payer_benefits" | "balance_reminder"; enabled: boolean; resultStage?: string };
 }
 
 const ROWS: Row[] = [
@@ -21,7 +23,7 @@ const ROWS: Row[] = [
   { name: "Checking", meaning: "Request in flight", position: "intermediate", category: "in_progress", color: "#3B82F6" },
   { name: "Needs fix", meaning: "Name, DOB or member ID mismatch after retries", position: "intermediate", category: "in_progress", color: "#F59E0B" },
   { name: "Provider setup issue", meaning: "Provider not enrolled with this payer", position: "intermediate", category: "in_progress", color: "#F97316" },
-  { name: "Inconclusive", meaning: "No usable answer after retries", position: "intermediate", category: "in_progress", color: "#EAB308" },
+  { name: "Inconclusive", meaning: "No usable answer after retries", position: "intermediate", category: "in_progress", color: "#EAB308", call: { purpose: "payer_benefits", enabled: true, resultStage: "Pending review" } },
   { name: "Pending review", meaning: "Voice or manual benefits captured", position: "intermediate", category: "in_progress", color: "#8B5CF6" },
   { name: "Auth required", meaning: "A rule says authorization is needed", position: "intermediate", category: "in_progress", color: "#EC4899" },
   { name: "Auth submitted", meaning: "Authorization request sent", position: "intermediate", category: "in_progress", color: "#06B6D4" },
@@ -32,6 +34,8 @@ const ROWS: Row[] = [
   { name: "Self-pay", meaning: "No coverage or chose self-pay", position: "final", category: "success", color: "#14B8A6" },
 ];
 
+import { defaultCallSettings } from "./stageCallDefaults";
+
 export function buildCoverageSampleProcess(): Process {
   const stages: Stage[] = ROWS.map((r) => ({
     id: covStageId(r.name),
@@ -41,6 +45,7 @@ export function buildCoverageSampleProcess(): Process {
     color: r.color,
     stageCategory: r.category,
     stagePosition: r.position,
+    ...(r.call ? { enableCalling: r.call.enabled, callTriggerSettings: defaultCallSettings(r.call.purpose, r.call.resultStage) } : {}),
     isInitial: r.position === "initial",
     isFinal: r.position === "final",
     isFinalStage: r.position === "final",

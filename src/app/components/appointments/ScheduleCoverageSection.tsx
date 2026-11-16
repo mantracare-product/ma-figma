@@ -26,7 +26,7 @@ export default function ScheduleCoverageSection({ clientId, date }: { clientId?:
             {cov.groupNumber ? ` · Group ${cov.groupNumber}` : ""}
           </div>
         ) : (
-          <div className="text-slate-500">No coverage on file for this date. Add it on the client's Insurance tab.</div>
+          <div className="text-slate-500">No coverage on file for this date. Add it in the Insurance section of the client's Overview.</div>
         )}
         <div className="flex items-center gap-2">
           <button

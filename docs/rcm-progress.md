@@ -180,3 +180,16 @@ src/lib/rcmDemoWorkspace.ts (`seedDemoWorkspace`, flag mantra_demo_workspace_v1,
 
 ### 7. Tests and docs (done, commit "R3.7")
 tools/tm-tests updated for the removed Insurance tab, the Tasks page without Queue/Save view, the new Claims top bar (workflow switcher, More menu via T.ui.openMore) and the Work queues card; new S6.12-S6.16: "(Sample)" migration, realistic data present, one-line top bars + no horizontal scroll on 8 pages, no Insurance tab, one MANUAL layout check. Bundle rebuilt. Playwright (headless Chrome, dev server, full run): 90 tests, 83 PASS, 7 MANUAL, 0 FAIL, RUN row (storage identical before and after) PASS. Gate: tsc and vitest at baseline (15 pre-existing failing lines, one pre-existing Tasks.tsx type error), build OK. Not scripted: visual judgement against DESIGN.md of the Insurance section, Claims overview cards, More menu and Setup.
+
+## Round 4
+
+Checklist (resume from the first unchecked phase):
+- [x] Phase 1: calls are stage settings, not an automation node (start_call removed, stage-entry call with callPurpose, migration)
+- [ ] Phase 2: payment mode and "Billable to insurance"
+- [ ] Phase 3: appointment workflows chosen by rule; condition fields listed
+- [ ] Phase 4: one insurance record per appointment (Eligibility / Prior auth workflows, seeded rules, per-workflow drawer sections)
+- [ ] Phase 5: counts, reports, KPIs, tasks exclude pre-claim workflows
+- [ ] Phase 6: dummy data, tests, docs
+
+### Phase 1: calls are stage settings (done, commit "R4.1")
+The Start Call action is gone from the step catalog, flow-builder sidebar, params UI, step-key maps and rule engine (executeStartCallStep removed); the mock call stays as library function `performStartCall`. New `performStageCall` (claimStatusAndCalls.ts) subscribes to `stage.entered`: when the entered stage has calling ON and a call purpose it places the call once per record/stage/day. Payer-benefits calls need the payer phone from the payer record (skipped `no_payer_phone` otherwise) and the clinic voice switch (mantra_rcm_voice_enabled); balance reminders need the patient voice consent and phone. A payer call writes its mock result as Pending review and moves the record to the stage setting `resultStage`; accepting it verifies (voiceBenefits unchanged). The stage call drawer (CallTriggerDrawer) now has a Call purpose select (general / payer benefits / balance reminder) and the result stage; hours and retries are kept. Seeds: A7 and A29 removed from the rule sets; the sample Coverage process stage Inconclusive carries the payer-benefits call (ON). Migration `migrateStartCallToStageCalls` (src/lib/stageCallMigration.ts, flag mantra_stage_calls_migrated_v1, run at app start, logged to mantra_migration_log_v1): for stored rules with a start_call step it sets the call on the rule trigger stage (payer ON; balance OFF, resolved to the invoice reminder stage when the rule is the daily job), removes the step and deletes the rule only when nothing else is left in it (legacy action must be a no-op). Tests: stageCallMigration.test.ts, stage-call test in rcmSetM, voiceBenefits now goes through the stage call. Not browser-verified: the new Call purpose card in the drawer.

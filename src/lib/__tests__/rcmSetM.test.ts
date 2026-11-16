@@ -133,7 +133,7 @@ describe("Set M demo (Slice 5)", () => {
     expect(posting[0].entityRef!.type).toBe("era");
   });
 
-  it("advancing the clock: Sent -> Reminder 1 -> Reminder 2 (+ messages), 45 days -> balance call, 60 days -> Overdue + Patient balances task", async () => {
+  it("advancing the clock: Sent -> Reminder 1 -> Reminder 2 (+ messages), 60 days -> Overdue + Patient balances task", async () => {
     sb.enableDemoSet("M");
     submitted("pay", "M1", 200);
     const invId = invoiceFor("apt-pay");
@@ -158,7 +158,6 @@ describe("Set M demo (Slice 5)", () => {
     setSent(46);
     await jobs.runDaily(new Date(), ["invoices"]);
     await wait(400);
-    expect(csc.rcmCallsStore.get().some((c) => c.purpose === "balance_reminder" && c.status === "completed")).toBe(true);
 
     setSent(61);
     await jobs.runDaily(new Date(), ["invoices"]);
@@ -198,12 +197,16 @@ describe("check_claim_status and start_call (mock)", () => {
     expect(csc.executeCheckClaimStatusStep({ rule, stepId: "s", params: { minAgeDays: 30 }, event: ev("c4"), cause }).result.status).toBe("too_recent");
   });
 
-  it("start_call: balance reminders need voice consent; payer calls do not", () => {
-    const invEv: any = { id: "E2", event: "job.daily", recordType: "invoice", recordId: "INV-1", data: { clientId: "CL-T" }, timestamp: "" };
-    expect(csc.executeStartCallStep({ rule, stepId: "s", params: { purpose: "balance_reminder" }, event: invEv }).result.status).toBe("completed");
+  it("stage call: a stage with calling ON and a purpose places the call on entry; balance calls need consent; payer calls need the payer phone", () => {
+    const proc: any = { id: "p-inv", name: "Invoices", entityType: "invoice", stages: [{ id: "s-bal", name: "Balance", enableCalling: true, callTriggerSettings: { callPurpose: "balance_reminder" } }, { id: "s-pay", name: "Payer", enableCalling: true, callTriggerSettings: { callPurpose: "payer_benefits" } }, { id: "s-off", name: "Off", enableCalling: false, callTriggerSettings: { callPurpose: "balance_reminder" } }] };
+    localStorage.setItem("process_store_processes", JSON.stringify([proc]));
+    localStorage.setItem("mantra_rcm_voice_enabled", "1");
     localStorage.setItem("clients", JSON.stringify([{ id: "CL-T", name: "Test Patient", phone: "555", stage: "x", processes: [] }]));
-    const r = csc.executeStartCallStep({ rule, stepId: "s2", params: { purpose: "balance_reminder" }, event: { ...invEv, recordId: "INV-2" } });
-    expect(r.result).toMatchObject({ status: "skipped", skipped: "no_consent" });
-    expect(csc.executeStartCallStep({ rule, stepId: "s3", params: { purpose: "payer_benefits" }, event: { ...invEv, recordId: "INV-3" } }).result.status).toBe("completed");
+    const ev = (id: string, stage: string): any => ({ id: "E" + id, event: "stage.entered", recordType: "invoice", recordId: id, data: { clientId: "CL-T", processId: "p-inv", stageId: stage }, timestamp: "" });
+    expect(csc.performStageCall(ev("INV-1", "s-bal"))).toMatchObject({ status: "skipped", skipped: "no_consent" });
+    expect(csc.performStageCall(ev("INV-2", "s-off"))).toBeNull();
+    expect(csc.performStageCall(ev("INV-3", "s-pay"))).toMatchObject({ status: "skipped", skipped: "no_payer_phone" });
+    localStorage.setItem("clients", JSON.stringify([{ id: "CL-T", name: "Test Patient", phone: "555", consents: { voice: true }, stage: "x", processes: [] }]));
+    expect(csc.performStageCall(ev("INV-4", "s-bal"))).toMatchObject({ status: "completed" });
   });
 });

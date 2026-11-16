@@ -38,7 +38,6 @@ export const RCM_ACTIONS: RcmActionDef[] = [
 
   { key: "create_task", label: "Create Task", group: "Tasks & Messages", iconKey: "check", desc: "Create a work-queue task linked to this record; it closes itself when the record leaves the stage." },
   { key: "send_message", label: "Send Message", group: "Tasks & Messages", iconKey: "messagecircle", desc: "Send a templated message to the client (added to Chats; checks consent)." },
-  { key: "start_call", label: "Start Call", group: "Tasks & Messages", iconKey: "phone", desc: "Place an outbound call for a purpose (payer benefits or balance reminder). Balance calls need voice consent." },
   { key: "notify", label: "Notify", group: "Tasks & Messages", iconKey: "bell", desc: "Raise an in-app notification for the team." },
 
   { key: "start_process", label: "Start Process", group: "Processes", iconKey: "gitbranch", desc: "Start a new instance of a process for this client, linked to the record that triggered it (idempotent)." },

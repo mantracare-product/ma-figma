@@ -162,7 +162,7 @@ export function resolveEligibilityResponse(res: EligibilityResponse): Resolution
     if (!r) return { status: "inconclusive", category: "payer_unavailable", code: res.aaaCode, action: "review", message: `Unrecognised payer reject ${res.aaaCode}`, retry: false };
     const status: ResultStatus = r.category === "name_dob_id" ? "not_found" : r.category === "provider_setup" ? "provider_setup" : "inconclusive";
     const action =
-      r.category === "name_dob_id" ? "Fix name, date of birth or member ID on the client's Insurance tab"
+      r.category === "name_dob_id" ? "Fix name, date of birth or member ID in the Insurance section of the client's Overview"
       : r.category === "provider_setup" ? "Check the provider's enrollment with this payer"
       : "Payer unavailable, will retry";
     return { status, category: r.category, code: res.aaaCode, action, message: r.text, retry: !!r.retry };

@@ -17,7 +17,7 @@ import { getStoredRules, saveStoredRules } from "./useAutomationStore";
 export const RCM_DEFAULTS_FLAG = "mantra_rcm_defaults_v1";
 
 /** Steps that act outside the clinic without a person looking first. */
-export const OUTBOUND_STEPS = ["send_message", "start_call", "submit_claim"];
+export const OUTBOUND_STEPS = ["send_message", "submit_claim"];
 
 /** Groups that are demo content for the demo org only (not part of the product starting set). */
 const SKIP_SEEDERS = new Set(["coverages", "sample-roles"]);

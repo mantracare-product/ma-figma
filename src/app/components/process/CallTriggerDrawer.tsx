@@ -156,6 +156,8 @@ export default function CallTriggerDrawer({
   const [callDurationMinutes, setCallDurationMinutes] = useState<number>(15);
   const [hangupWindowMinutes, setHangupWindowMinutes] = useState<number>(2);
   const [detectVoicemail, setDetectVoicemail] = useState<boolean>(true);
+  const [callPurpose, setCallPurpose] = useState<"payer_benefits" | "balance_reminder" | "general">("general");
+  const [resultStage, setResultStage] = useState<string>("");
   const [retryRulesEnabled, setRetryRulesEnabled] = useState<boolean>(false);
   const [retryAttempts, setRetryAttempts] = useState<number>(3);
   const [retryDelay, setRetryDelay] = useState<number>(5);
@@ -244,6 +246,8 @@ export default function CallTriggerDrawer({
       setRetryRulesEnabled(current.retryRulesEnabled ?? false);
       setRetryAttempts(current.retryAttempts ?? 3);
       setRetryDelay(current.retryDelay ?? 5);
+      setCallPurpose((current as any).callPurpose ?? "general");
+      setResultStage((current as any).resultStage ?? "");
       // Transfer Call
       setTransferCallEnabled(current.transferCallEnabled ?? false);
       let parsedNumbers: TransferNumberItem[] = [];
@@ -375,6 +379,8 @@ export default function CallTriggerDrawer({
       callDurationMinutes: Number(callDurationMinutes) || 15,
       hangupWindowMinutes: Number(hangupWindowMinutes) || 2,
       detectVoicemail,
+      callPurpose,
+      resultStage: resultStage || undefined,
       retryRulesEnabled,
       retryAttempts: Number(retryAttempts) || 3,
       retryDelay: Number(retryDelay) || 5,
@@ -439,6 +445,8 @@ export default function CallTriggerDrawer({
     setRetryRulesEnabled(defaults.retryRulesEnabled ?? false);
     setRetryAttempts(defaults.retryAttempts ?? 3);
     setRetryDelay(defaults.retryDelay ?? 5);
+    setCallPurpose("general");
+    setResultStage("");
     // Transfer Call
     setTransferCallEnabled(defaults.transferCallEnabled ?? false);
     setTransferNumbers(
@@ -688,6 +696,30 @@ export default function CallTriggerDrawer({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Call purpose (what the call placed when a record enters this stage is for) */}
+        <div className="border border-slate-200/80 rounded-2xl bg-white shadow-xs p-4 space-y-3" data-testid="call-purpose-card">
+          <div>
+            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">Call purpose</label>
+            <select
+              value={callPurpose}
+              onChange={(e) => setCallPurpose(e.target.value as any)}
+              data-testid="call-purpose"
+              className="w-full h-9 text-xs px-3 bg-white border border-[#E2E8F0] rounded-xl font-medium text-[#1E293B] outline-none"
+            >
+              <option value="general">General call</option>
+              <option value="payer_benefits">Payer benefits call (uses the payer phone from the payer record)</option>
+              <option value="balance_reminder">Balance reminder (needs the patient's voice consent)</option>
+            </select>
+          </div>
+          {callPurpose === "payer_benefits" && (
+            <div>
+              <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-1.5">Move the record to this stage once the result is captured</label>
+              <input value={resultStage} onChange={(e) => setResultStage(e.target.value)} placeholder="e.g. Pending review" className="w-full h-9 text-xs px-3 bg-white border border-[#E2E8F0] rounded-xl outline-none" />
+              <p className="text-[11px] text-slate-500 mt-1">The captured benefits wait for a person to accept them before they count as the verified result.</p>
             </div>
           )}
         </div>
