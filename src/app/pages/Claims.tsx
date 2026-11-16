@@ -40,6 +40,7 @@ import CMS1500Modal from "../components/claims/CMS1500Modal";
 import ClaimProgressBar from "../components/claims/ClaimProgressBar";
 import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
 import CreateClaimModal from "../components/claims/CreateClaimModal";
+import ClaimsSetup from "../components/claims/ClaimsSetup";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -113,6 +114,10 @@ export default function Claims() {
   const canPostPayments = hasClaimPermission("rcmPayments", "add");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Claims | Setup toggle (Setup needs the billingSetup permission; deep link: ?view=setup)
+  const canSetup = hasClaimPermission("billingSetup", "read");
+  const [view, setView] = useState<"claims" | "setup">(() => (new URLSearchParams(window.location.search).get("view") === "setup" ? "setup" : "claims"));
+  const activeView = view === "setup" && canSetup ? "setup" : "claims";
 
   // Load claims
   const refreshClaims = () => {
@@ -278,13 +283,17 @@ export default function Claims() {
         {/* Filter and Search Bar powered by PageTopBar */}
         <PageTopBar
           isBottomPanelAttached={true}
+          modes={canSetup ? [{ id: "claims", label: "Claims" }, { id: "setup", label: "Setup" }] : undefined}
+          activeMode={activeView}
+          onModeChange={(m) => setView(m === "setup" ? "setup" : "claims")}
+          showSearch={activeView === "claims"}
           searchQuery={searchQuery}
           onSearchChange={(v) => {
             setSearchQuery(v);
             setCurrentPage(1);
           }}
           searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
-          secondaryActions={
+          secondaryActions={activeView === "setup" ? undefined : (
             <div className="flex items-center gap-2 flex-wrap" data-testid="claims-filters">
               <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { setSelectedProcessFilter(e.target.value); setSelectedStageFilter("all"); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
                 <option value="all">All workflows</option>
@@ -310,13 +319,13 @@ export default function Claims() {
                 <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "board" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>Board</button>
               </div>
             </div>
-          }
-          primaryAction={!hasClaimPermission("claims", "add") ? undefined : {
+          )}
+          primaryAction={activeView === "setup" || !hasClaimPermission("claims", "add") ? undefined : {
             label: "Create Claim",
             icon: <Plus className="w-4 h-4" />,
             onClick: () => setShowCreateModal(true),
           }}
-          afterPrimaryAction={
+          afterPrimaryAction={activeView === "setup" ? undefined : (
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -350,7 +359,7 @@ export default function Claims() {
                 buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
               />
             </div>
-          }
+          )}
         />
 
         <CreateClaimModal
@@ -396,7 +405,7 @@ export default function Claims() {
         />
 
         {/* Claims Table View Connected with TableComponent */}
-        {(() => {
+        {activeView === "setup" ? <ClaimsSetup /> : (() => {
           const claimColumns: TableColumn<Claim>[] = [
             {
               id: "claimNumber",

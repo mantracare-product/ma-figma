@@ -35,7 +35,7 @@ function role(id: string, name: string, description: string, grants: Partial<Rec
 
 export function buildSampleRcmRoles(): Role[] {
   return [
-    role("sample-rcm-billing-setup", "Billing Setup Admin", "Can open and edit Billing setup only", { billingSetup: FULL }),
+    role("sample-rcm-billing-setup", "Billing Setup Admin", "Can open and edit the Setup tab of Insurance & Claims only", { billingSetup: FULL }),
     role("sample-rcm-front-desk", "Front Desk (Eligibility)", "Runs eligibility checks and views prior auths", { eligibility: FULL, priorAuth: READ }),
     role("sample-rcm-biller", "Biller", "Works claims, payments and denials", {
       claims: FULL,

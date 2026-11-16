@@ -13,6 +13,7 @@
  * Appointments have no seed in code (INITIAL_APPOINTMENTS is empty): if they were created by hand they cannot be rebuilt.
  */
 import { initialClients as canonicalClients } from "../data/canonicalClients";
+import { getActiveOrgId, getOrgBilling, migrateBillingSetupToOrg, saveOrgBilling } from "./orgBilling";
 import { isDemoMantraActive } from "./onboardingWorkspace";
 
 export const TEST_MARKER = "RCMTEST";
@@ -103,6 +104,13 @@ export function ensureDemoData(): EnsureDemoResult {
     if ((!clients || clients.length === 0) && (!clientsDemo || clientsDemo.length === 0)) {
       localStorage.setItem("clients", JSON.stringify(canonicalClients));
       result.reseeded.push("clients");
+    }
+    // The demo organization carries a billing identity so claims can be built end to end (never over an entered one).
+    migrateBillingSetupToOrg();
+    const b = getOrgBilling();
+    if (!b.legalName && !b.ein && !b.groupNpi) {
+      saveOrgBilling(getActiveOrgId(), { legalName: "Demo Mantra Care LLC", ein: "12-3456789", groupNpi: "1234567893", taxonomy: "207Q00000X", phone: "(555) 123-4567", address: "123 Innovation Blvd, Suite 400, San Francisco, CA 94107", contactName: "Finance Lead", contactEmail: "billing@mantraassist.com" });
+      result.reseeded.push("org_billing");
     }
     // Services written by a test would hide DEFAULT_SERVICES: an empty list falls back (handled above); nothing else to do.
   } catch (e) {

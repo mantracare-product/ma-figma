@@ -56,7 +56,7 @@ beforeAll(async () => {
   bus = await import("../eventBus");
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   fresh();
   runs.__resetActionRunsForTests();
   claimsLib.__resetClaimMigrationForTests();
@@ -66,6 +66,7 @@ beforeEach(() => {
   const svc = [{ id: 701, name: "Cataract surgery", description: "", cptCode: "66984", duration: 30, price: 2400, currency: "USD", isActive: true }];
   for (const k of ["ma_services_store", "ma_services_demo", "ma_services_store_signup"]) localStorage.setItem(k, JSON.stringify(svc));
   sb.loadSampleTemplates();
+  (await import("../orgBilling")).saveOrgBilling((await import("../orgBilling")).getActiveOrgId(), { legalName: "Test Clinic LLC", groupNpi: "1234567893", ein: "12-3456789" });
   cov.saveCoverage({ clientId: "CL-T", payerId: "payer-bcbs", memberId: "M100", priority: "primary", effectiveDate: "2025-01-01" });
 });
 

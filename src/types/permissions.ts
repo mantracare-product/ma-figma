@@ -68,7 +68,7 @@ export const RCM_PERMISSION_KEYS = [
 export type RcmPermissionKey = (typeof RCM_PERMISSION_KEYS)[number];
 
 export const RCM_PERMISSION_LABELS: Record<RcmPermissionKey, string> = {
-  billingSetup: "Billing setup",
+  billingSetup: "Claims setup",
   eligibility: "Eligibility",
   priorAuth: "Prior authorization",
   claims: "Claims",

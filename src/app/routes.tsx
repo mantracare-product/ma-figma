@@ -4,9 +4,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
 import SettingsGuard from "./components/auth/SettingsGuard";
-import PermissionGuard from "./components/auth/PermissionGuard";
 
-const BillingSetupGuard = () => <PermissionGuard moduleKey="billingSetup" action="read" />;
 import Login from "./pages/auth/Login";
 import PageContentLoader from "./components/layout/PageContentLoader";
 
@@ -252,11 +250,6 @@ export const router = createBrowserRouter([
           { path: "claims", Component: Claims },
           { path: "reports", Component: Reports },
           { path: "transactions", Component: Transactions },
-          {
-            // Billing setup opens with the billingSetup permission alone (no SystemAdmin needed).
-            Component: BillingSetupGuard,
-            children: [{ path: "settings/billing-setup", Component: Settings }],
-          },
           {
             Component: SettingsGuard,
             children: [

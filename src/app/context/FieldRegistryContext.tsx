@@ -1779,6 +1779,11 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     },
     // Billing contact fields
     { key: "billingContactName", label: "Billing Contact Name", module: "organization", inputType: "text", placeholder: "Billing contact person", showAlways: true },
+    { key: "legalName", label: "Legal Name", module: "organization", inputType: "text", placeholder: "Legal entity name on claims", showAlways: true },
+    { key: "ein", label: "EIN / Tax ID", module: "organization", inputType: "text", placeholder: "12-3456789", showAlways: true },
+    { key: "groupNpi", label: "Group NPI", module: "organization", inputType: "text", placeholder: "10-digit billing NPI", showAlways: true },
+    { key: "taxonomy", label: "Taxonomy Code", module: "organization", inputType: "text", placeholder: "e.g. 207Q00000X", showAlways: true },
+    { key: "billingPhone", label: "Billing Phone", module: "organization", inputType: "text", placeholder: "Billing office phone", showAlways: true },
     { key: "billingContactEmail", label: "Billing Contact Email", module: "organization", inputType: "email", placeholder: "billing@company.com", validation: "email", showAlways: true },
     // Billing address individual fields
     { key: "bill_street", label: "Billing Street", module: "organization", inputType: "text", placeholder: "Billing street address", showAlways: true },
@@ -2367,7 +2372,7 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Official contact numbers, emails, addresses, and registration details",
       module: "organization",
       source: "system",
-      fieldKeys: ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "registrationNumber", "website"],
+      fieldKeys: ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "legalName", "ein", "groupNpi", "taxonomy", "billingPhone", "registrationNumber", "website"],
       createdAt: 0,
     },
     {

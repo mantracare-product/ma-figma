@@ -4,14 +4,11 @@ import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import { useTeamMembers } from "../../../lib/teamStore";
 import {
   BILLING_SETUP_EVENT,
-  billingEntityStore,
-  billingLocationsStore,
   claimDefaultsStore,
   feeSchedulesStore,
   payersStore,
   providerCredentialsStore,
   scrubRulesStore,
-  type BillingEntity,
   type ClaimDefaults,
   type EnrollmentStatus,
   type Payer,
@@ -20,21 +17,20 @@ import {
 } from "../../../lib/billingSetupStore";
 import { KNOWN_RCM_NOTIFICATIONS, RCM_NOTIFICATION_EVENT, isRcmNotificationEnabled, setRcmNotificationEnabled } from "../../../lib/rcmNotificationSettings";
 import { newId } from "../../../lib/refStore";
+import { getOrgLocations } from "../../../lib/orgBilling";
 import { VOICE_ENABLED_KEY } from "../../../lib/ruleContextFields";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
 import { ELIGIBILITY_SETTINGS_EVENT, getMockScenario, setMockScenario, type MockScenario } from "../../../lib/eligibility";
 
-type Section = "entity" | "locations" | "payers" | "fees" | "defaults" | "scrub" | "providers" | "notifications";
+type Section = "payers" | "fees" | "defaults" | "scrub" | "providers" | "notifications";
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
-  { id: "entity", label: "Billing entity" },
-  { id: "locations", label: "Locations & POS" },
   { id: "payers", label: "Payers & enrollment" },
   { id: "fees", label: "Fee schedules" },
   { id: "defaults", label: "Claim defaults" },
   { id: "scrub", label: "Scrub rules" },
   { id: "providers", label: "Provider credentials" },
-  { id: "notifications", label: "Notifications" },
+  { id: "notifications", label: "Notification toggles" },
 ];
 
 const inputCls = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white disabled:bg-slate-50 disabled:text-slate-500";
@@ -59,46 +55,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function EntitySection({ canEdit }: { canEdit: boolean }) {
-  useStoreTick();
-  const [form, setForm] = useState<BillingEntity>(() => billingEntityStore.get());
-  const set = (k: keyof BillingEntity) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
-  return (
-    <div className="space-y-3 max-w-2xl">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Legal name"><input className={inputCls} disabled={!canEdit} value={form.legalName} onChange={set("legalName")} /></Field>
-        <Field label="DBA name"><input className={inputCls} disabled={!canEdit} value={form.dbaName} onChange={set("dbaName")} /></Field>
-        <Field label="EIN"><input className={inputCls} disabled={!canEdit} value={form.ein} onChange={set("ein")} /></Field>
-        <Field label="Group NPI"><input className={inputCls} disabled={!canEdit} value={form.npi} onChange={set("npi")} /></Field>
-        <Field label="Taxonomy code"><input className={inputCls} disabled={!canEdit} value={form.taxonomy} onChange={set("taxonomy")} /></Field>
-        <Field label="Phone"><input className={inputCls} disabled={!canEdit} value={form.phone} onChange={set("phone")} /></Field>
-      </div>
-      <Field label="Address"><input className={inputCls} disabled={!canEdit} value={form.address} onChange={set("address")} /></Field>
-      <button className={btnCls} disabled={!canEdit} onClick={() => { billingEntityStore.save({ ...form, sample: false }); toast.success("Billing entity saved"); }}>
-        Save
-      </button>
-    </div>
-  );
-}
-
-function LocationsSection({ canEdit }: { canEdit: boolean }) {
-  useStoreTick();
-  const rows = billingLocationsStore.get();
-  return (
-    <div className="space-y-2">
-      {rows.map((r) => (
-        <div key={r.id} className="grid grid-cols-[2fr_1fr_3fr_auto] gap-2 items-center">
-          <input className={inputCls} disabled={!canEdit} value={r.name} onChange={(e) => billingLocationsStore.upsert({ ...r, name: e.target.value, sample: false })} />
-          <input className={inputCls} disabled={!canEdit} value={r.pos} placeholder="POS" onChange={(e) => billingLocationsStore.upsert({ ...r, pos: e.target.value, sample: false })} />
-          <input className={inputCls} disabled={!canEdit} value={r.address || ""} placeholder="Address" onChange={(e) => billingLocationsStore.upsert({ ...r, address: e.target.value, sample: false })} />
-          <button className={btnCls} disabled={!canEdit} onClick={() => billingLocationsStore.remove(r.id)}>Remove</button>
-        </div>
-      ))}
-      <button className={btnCls} disabled={!canEdit} onClick={() => billingLocationsStore.upsert({ id: newId("loc"), name: "New location", pos: "11" })}>Add location</button>
-    </div>
-  );
-}
-
 const ENROLLMENT: EnrollmentStatus[] = ["not_started", "pending", "enrolled", "rejected"];
 
 function PayersSection({ canEdit }: { canEdit: boolean }) {
@@ -119,7 +75,7 @@ function PayersSection({ canEdit }: { canEdit: boolean }) {
       ))}
       <button className={btnCls} disabled={!canEdit} onClick={() => payersStore.upsert({ id: newId("payer"), name: "New payer", payerIdCode: "", enrollment: { status: "not_started" } })}>Add payer</button>
       <PriorAuthRulesTable canEdit={canEdit} payers={rows} />
-      <MockScenarioPicker canEdit={canEdit} />
+      {import.meta.env.DEV && <MockScenarioPicker canEdit={canEdit} />}
     </div>
   );
 }
@@ -136,7 +92,6 @@ function PriorAuthRulesTable({ canEdit, payers }: { canEdit: boolean; payers: Pa
   return (
     <div className="mt-6 space-y-2">
       <h3 className="text-sm font-semibold">Prior-auth rules (payer x service)</h3>
-      {rules.some((r) => r.sample) && <p className="text-xs text-amber-700">Mock data: sample rules. Editing a row marks it as yours.</p>}
       {rules.map((r) => (
         <div key={r.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.7fr_0.8fr_1.5fr_auto] gap-2 items-center">
           <select className={inputCls} disabled={!canEdit} value={r.payerId} onChange={(e) => upd(r, { payerId: e.target.value })}>
@@ -170,8 +125,8 @@ function MockScenarioPicker({ canEdit }: { canEdit: boolean }) {
   }, []);
   return (
     <div className="mt-6 space-y-1">
-      <h3 className="text-sm font-semibold">Mock eligibility scenario</h3>
-      <p className="text-xs text-amber-700">Mock data: the payer adapter is simulated. Pick what it answers (auto = derived from the member ID and enrollment).</p>
+      <h3 className="text-sm font-semibold">Eligibility scenario (development only)</h3>
+      <p className="text-xs text-slate-500">Pick what the development payer adapter answers (auto = derived from the member ID and enrollment). Not shown in production.</p>
       <select className={inputCls + " max-w-xs"} disabled={!canEdit} value={getMockScenario()} onChange={(e) => setMockScenario(e.target.value as MockScenario)}>
         {SCENARIOS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
       </select>
@@ -190,7 +145,7 @@ function NotificationsSection({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-2 max-w-2xl">
       <label className="flex items-center gap-2 text-sm font-medium">
         <input type="checkbox" disabled={!canEdit} checked={(() => { try { return localStorage.getItem(VOICE_ENABLED_KEY) === "1"; } catch { return false; } })()} onChange={(e) => { try { localStorage.setItem(VOICE_ENABLED_KEY, e.target.checked ? "1" : "0"); } catch { /* ignore */ } setTick((t) => t + 1); }} />
-        Voice calls for payer benefits (mock). When on, the sample Inconclusive rule calls the payer instead of creating a task.
+        Voice calls for payer benefits. When on, the Inconclusive rule calls the payer instead of creating a task.
       </label>
       <p className="text-xs text-slate-500">Switch off the automation notifications you do not want. Everything is on by default.</p>
       {KNOWN_RCM_NOTIFICATIONS.map((n) => (
@@ -237,12 +192,12 @@ function FeesSection({ canEdit }: { canEdit: boolean }) {
 function DefaultsSection({ canEdit }: { canEdit: boolean }) {
   useStoreTick();
   const [form, setForm] = useState<ClaimDefaults>(() => claimDefaultsStore.get());
-  const locations = billingLocationsStore.get();
+  const locations = getOrgLocations();
   return (
     <div className="space-y-3 max-w-xl">
       <Field label="Claim frequency code"><input className={inputCls} disabled={!canEdit} value={form.frequencyCode} onChange={(e) => setForm({ ...form, frequencyCode: e.target.value })} /></Field>
       <Field label="Default place of service"><input className={inputCls} disabled={!canEdit} value={form.defaultPos} onChange={(e) => setForm({ ...form, defaultPos: e.target.value })} /></Field>
-      <Field label="Default billing location">
+      <Field label="Default billing location (set up under Organization > Locations)">
         <select className={inputCls} disabled={!canEdit} value={form.defaultBillingLocationId} onChange={(e) => setForm({ ...form, defaultBillingLocationId: e.target.value })}>
           <option value="">None</option>
           {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -302,29 +257,22 @@ function ProvidersSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-/** Settings > Billing setup (gated by the billingSetup permission; editing needs the edit action). */
-export default function BillingSetupTab() {
+/** Insurance & Claims > Setup (gated by the billingSetup permission; editing needs the edit action). */
+export default function ClaimsSetup() {
   const { hasPermission } = useCurrentPermissions();
   const canEdit = hasPermission("billingSetup", "edit");
-  const [section, setSection] = useState<Section>("entity");
+  const [section, setSection] = useState<Section>("payers");
   useStoreTick();
-  const hasSample =
-    payersStore.get().some((p) => p.sample) || billingLocationsStore.get().some((l) => l.sample) || !!billingEntityStore.get().sample;
 
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-[#0F172A]" style={{ fontFamily: "DM Sans, sans-serif" }}>Billing setup</h2>
+        <h2 className="text-lg font-semibold text-[#0F172A]" style={{ fontFamily: "DM Sans, sans-serif" }} data-testid="claims-setup">Setup</h2>
         <p className="text-sm text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-          Enter your billing entity, payers and defaults once; eligibility, claims and the scrubber read them from here.
+          Payers, fees, claim defaults, scrub rules and provider credentials. The billing entity, NPI and place of service are on the Organization (Settings, then Organization).
           {!canEdit && " You have read-only access."}
         </p>
       </div>
-      {hasSample && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Mock data: some rows below are sample data loaded for demonstration. Editing a row marks it as yours.
-        </div>
-      )}
       <div className="flex flex-wrap gap-1.5">
         {SECTIONS.map((s) => (
           <button
@@ -338,8 +286,6 @@ export default function BillingSetupTab() {
         ))}
       </div>
       <div>
-        {section === "entity" && <EntitySection canEdit={canEdit} />}
-        {section === "locations" && <LocationsSection canEdit={canEdit} />}
         {section === "payers" && <PayersSection canEdit={canEdit} />}
         {section === "fees" && <FeesSection canEdit={canEdit} />}
         {section === "defaults" && <DefaultsSection canEdit={canEdit} />}

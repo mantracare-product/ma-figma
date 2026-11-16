@@ -14,6 +14,7 @@ let act: typeof import("../claimActions");
 let claimsLib: typeof import("../claimsStore");
 let samples: typeof import("../rcmSampleClaimWorkflows");
 let billing: typeof import("../billingSetupStore");
+let orgB: typeof import("../orgBilling");
 let cov: typeof import("../coveragesStore");
 let appts: typeof import("../appointmentService");
 let runs: typeof import("../actionRuns");
@@ -37,6 +38,7 @@ beforeAll(async () => {
   claimsLib = await import("../claimsStore");
   samples = await import("../rcmSampleClaimWorkflows");
   billing = await import("../billingSetupStore");
+  orgB = await import("../orgBilling");
   cov = await import("../coveragesStore");
   appts = await import("../appointmentService");
   runs = await import("../actionRuns");
@@ -48,6 +50,7 @@ beforeEach(() => {
   claimsLib.__resetClaimMigrationForTests();
   samples.seedSampleClaimWorkflows();
   billing.seedBillingSetupSamples();
+  orgB.saveOrgBilling(orgB.getActiveOrgId(), { legalName: "Test Clinic LLC", groupNpi: "1234567893", ein: "12-3456789", address: "1 Test St" });
   localStorage.setItem("clients", JSON.stringify([{ id: "CL-T", name: "Test Patient", phone: "555", stage: "x", processes: [], dob: "1980-01-01" }]));
   const svc = [{ id: 701, name: "Cataract surgery", description: "", cptCode: "66984", duration: 30, price: 2400, currency: "USD", isActive: true }];
   for (const k of ["ma_services_store", "ma_services_demo", "ma_services_store_signup"]) localStorage.setItem(k, JSON.stringify(svc));
@@ -76,7 +79,7 @@ describe("create_claim", () => {
     const c: any = find(r.result.claimId);
     expect(c).toMatchObject({
       processId: IDS().chargeCapture, statusLabel: "Awaiting note", status: "Unmapped", appointmentId: id, patientId: "CL-T",
-      renderingProviderNpi: "1111111112", billingProviderName: "Sample Eye Care Group LLC", billingProviderNpi: "1234567893", placeOfService: "11", insuredId: "M100",
+      renderingProviderNpi: "1111111112", billingProviderName: "Test Clinic LLC", billingProviderNpi: "1234567893", placeOfService: "11", insuredId: "M100",
     });
     expect(c.payer).toMatchObject({ id: "payer-bcbs", payerId: "BCBS1" });
     expect(c.lines).toHaveLength(1);

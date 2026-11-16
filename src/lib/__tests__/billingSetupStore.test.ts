@@ -27,24 +27,25 @@ describe("billing setup stores", () => {
     expect(s.billingEntityStore.get().legalName).toBe("");
   });
 
-  it("seeds 15 payers, 2 POS-11 locations, 3 providers, 1 entity - flagged as sample", () => {
+  it("seeds 15 payers, 3 providers and the default POS (entity and locations live on the organization)", () => {
     const r = s.seedBillingSetupSamples();
     expect(r.added).toBeGreaterThan(20);
     expect(s.getPayers()).toHaveLength(15);
     expect(s.getPayers().every((p) => p.sample)).toBe(true);
-    expect(s.billingLocationsStore.get().filter((l) => l.pos === "11")).toHaveLength(2);
+    expect(s.billingLocationsStore.get()).toHaveLength(0);
     expect(s.providerCredentialsStore.get()).toHaveLength(3);
-    expect(s.billingEntityStore.get().sample).toBe(true);
+    expect(s.billingEntityStore.get().legalName).toBe("");
+    expect(s.claimDefaultsStore.get().defaultPos).toBe("11");
   });
 
   it("seeding is idempotent and never overwrites edits", () => {
     s.seedBillingSetupSamples();
     s.payersStore.upsert({ ...s.getPayer("payer-bcbs")!, name: "My BCBS", sample: false });
-    s.billingEntityStore.patch({ legalName: "Edited LLC" });
+    s.claimDefaultsStore.patch({ defaultPos: "22" });
     const again = s.seedBillingSetupSamples();
     expect(again.added).toBe(0);
     expect(s.getPayer("payer-bcbs")!.name).toBe("My BCBS");
-    expect(s.billingEntityStore.get().legalName).toBe("Edited LLC");
+    expect(s.claimDefaultsStore.get().defaultPos).toBe("22");
     expect(s.getPayers()).toHaveLength(15);
   });
 

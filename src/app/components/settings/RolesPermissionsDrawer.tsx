@@ -49,7 +49,7 @@ export const ROLE_PERMISSION_MODULES: RoleModuleItem[] = [
   { id: "settings", label: "Settings" },
   { id: "webForms", label: "WebForms" },
   // RCM
-  { id: "billingSetup", label: "Billing setup" },
+  { id: "billingSetup", label: "Claims setup" },
   { id: "eligibility", label: "Eligibility" },
   { id: "priorAuth", label: "Prior authorization" },
   { id: "claims", label: "Claims" },

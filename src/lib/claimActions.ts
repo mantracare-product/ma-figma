@@ -13,8 +13,9 @@ import { getClaimWorkflow, getClaimWorkflows, findStage } from "./claimWorkflows
 import { resolveRecordContext } from "./recordContext";
 import { getCoverageOn, getClientDemographics } from "./coveragesStore";
 import {
-  billingEntityStore, billingLocationsStore, claimDefaultsStore, getPayer, getProviderCredential, lookupFee, scrubRulesStore, type ScrubRule,
+  claimDefaultsStore, getPayer, getProviderCredential, lookupFee, scrubRulesStore, type ScrubRule,
 } from "./billingSetupStore";
+import { getOrgBilling, getOrgLocations } from "./orgBilling";
 import { getStoredServices } from "./servicesStore";
 import { getStoredTeamMembers } from "./teamStore";
 import { getScribeSessionById } from "./scribeSessionStore";
@@ -81,10 +82,13 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   const cred = member ? getProviderCredential(member.id) : undefined;
   if (!cred?.npi) missing.push("rendering_npi");
 
-  const entity = billingEntityStore.get();
+  // Billing entity, NPI and place of service come from the Organization record (Billing Info + Locations).
+  const org = getOrgBilling();
+  const entity = { legalName: org.legalName, npi: org.groupNpi, ein: org.ein, address: org.address };
   if (!entity.legalName || !entity.npi) missing.push("billing_entity");
   const defaults = claimDefaultsStore.get();
-  const loc = billingLocationsStore.get().find((l) => l.id === defaults.defaultBillingLocationId) || billingLocationsStore.get().find((l) => appt?.location && l.name === appt.location);
+  const orgLocs = getOrgLocations();
+  const loc = orgLocs.find((l) => l.id === defaults.defaultBillingLocationId) || orgLocs.find((l) => appt?.location && l.name === appt.location);
   const pos = loc?.pos || defaults.defaultPos || "";
   if (!pos) missing.push("place_of_service");
   if (!payer) missing.push("coverage");
@@ -201,7 +205,7 @@ export function scrubClaim(claim: Claim, rules: ScrubRule[] = scrubRulesStore.ge
         if (!claim.diagnosisCodes || claim.diagnosisCodes.length === 0) add(r, "At least one diagnosis code is required");
         break;
       case "billing_entity":
-        if (!claim.billingProviderName || !claim.billingProviderNpi) add(r, "Billing entity / NPI is missing");
+        if ((!claim.billingProviderName || !claim.billingProviderNpi) && !(getOrgBilling().legalName && getOrgBilling().groupNpi)) add(r, "Billing entity / NPI is missing");
         break;
       case "rendering_npi":
         if (!claim.renderingProviderNpi) add(r, "Rendering provider NPI is missing");

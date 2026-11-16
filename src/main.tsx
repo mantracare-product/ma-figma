@@ -6,8 +6,11 @@
   import { ensureDemoData, testRunActive } from "./lib/demoData";
   import { ensureRcmFieldSeeds } from "./lib/rcmFieldSeeds";
   import { ensureRcmDefaults } from "./lib/rcmDefaults";
+  import { migrateBillingSetupToOrg } from "./lib/orgBilling";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
+  // Billing entity and locations (POS) now live on the Organization record: copy the old Billing setup values once.
+  try { if (!testRunActive()) migrateBillingSetupToOrg(); } catch { /* ignore */ }
   ensureDemoData();
   // Registers the revenue-cycle fields and sections in the field registry once (never overwrites edits).
   try { ensureRcmFieldSeeds(); } catch { /* registry unavailable */ }

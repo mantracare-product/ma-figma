@@ -35,6 +35,8 @@ export interface OrganizationLocationItem {
   state?: string;
   zip?: string;
   country?: string;
+  /** Place-of-service code used on claims for this location (11 office, 02 telehealth ...). */
+  pos?: string;
   isPrimary: boolean;
   workingHours: WeeklyAvailability;
   daysOff?: LocationDayOff[];
@@ -77,6 +79,7 @@ export default function OrganizationLocationsSection({ isEditing = false, organi
             state: l.state || "",
             zip: l.zip || "",
             country: FIXED_ORG_COUNTRY,
+            pos: l.pos || undefined,
             isPrimary: !!l.isPrimary,
             workingHours: l.workingHours || createDefaultAvailability(),
             daysOff: l.daysOff || [
@@ -876,6 +879,19 @@ export default function OrganizationLocationsSection({ isEditing = false, organi
                         <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+                      Place of service code (claims)
+                    </label>
+                    <Input
+                      value={loc.pos ?? (isLocOnline ? "02" : "11")}
+                      onChange={(e) => handleUpdateLocationField(loc.id, "pos", e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+                      placeholder={isLocOnline ? "02" : "11"}
+                      data-testid={`org-location-pos-${loc.id}`}
+                      className="w-32 text-xs bg-white"
+                    />
                   </div>
 
                   {/* Physical Address Section — Only when not Online */}

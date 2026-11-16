@@ -103,8 +103,10 @@ const DEFAULT_CLAIM_DEFAULTS: ClaimDefaults = {
   defaultBillingLocationId: "",
 };
 
+/** @deprecated Billing entity: use the Organization record (orgBilling.ts). Kept only so the one-time migration can read it. */
 export const billingEntityStore = createObjectStore<BillingEntity>("mantra_billing_entity_v1", BILLING_SETUP_EVENT, EMPTY_ENTITY);
 export const claimDefaultsStore = createObjectStore<ClaimDefaults>("mantra_claim_defaults_v1", BILLING_SETUP_EVENT, DEFAULT_CLAIM_DEFAULTS);
+/** @deprecated Locations and POS: use the Organization record (orgBilling.ts). Kept only for the one-time migration. */
 export const billingLocationsStore = createListStore<BillingLocation>("mantra_billing_locations_v1", BILLING_SETUP_EVENT);
 export const payersStore = createListStore<Payer>("mantra_payers_v1", BILLING_SETUP_EVENT);
 export const feeSchedulesStore = createListStore<FeeSchedule>("mantra_fee_schedules_v1", BILLING_SETUP_EVENT);
@@ -204,7 +206,7 @@ export const SAMPLE_FEE_SCHEDULES: FeeSchedule[] = [
 
 export const SAMPLE_SCRUB_RULES: ScrubRule[] = [
   { id: "scrub-sample-icd", name: "At least one diagnosis code", check: "icd_required", severity: "error", enabled: true, message: "Add at least one ICD-10 code", sample: true },
-  { id: "scrub-sample-entity", name: "Billing entity is set", check: "billing_entity", severity: "error", enabled: true, message: "Fill in Billing setup > Billing entity", sample: true },
+  { id: "scrub-sample-entity", name: "Billing entity is set", check: "billing_entity", severity: "error", enabled: true, message: "Fill in Billing Info on the Organization (legal name and group NPI)", sample: true },
   { id: "scrub-sample-npi", name: "Rendering provider NPI", check: "rendering_npi", severity: "error", enabled: true, message: "Rendering provider NPI is missing", sample: true },
   { id: "scrub-sample-modifier", name: "Laterality modifier on cataract surgery", check: "line_modifier", target: "66984", severity: "error", enabled: true, message: "Add RT/LT modifier", sample: true },
   { id: "scrub-sample-auth", name: "Prior auth number present", check: "required_field", target: "priorAuthNumber", severity: "warning", enabled: false, message: "Prior authorization number is empty", sample: true },
@@ -224,18 +226,13 @@ export const SAMPLE_PROVIDER_CREDENTIALS: ProviderCredential[] = [
 export function seedBillingSetupSamples(): { added: number } {
   let added = 0;
   added += seedMissing(payersStore, SAMPLE_PAYERS);
-  added += seedMissing(billingLocationsStore, SAMPLE_LOCATIONS);
   added += seedMissing(feeSchedulesStore, SAMPLE_FEE_SCHEDULES);
   added += seedMissing(scrubRulesStore, SAMPLE_SCRUB_RULES);
   added += seedMissing(providerCredentialsStore, SAMPLE_PROVIDER_CREDENTIALS);
-  const entity = billingEntityStore.get();
-  if (!entity.legalName && !entity.ein && !entity.npi) {
-    billingEntityStore.save({ ...SAMPLE_ENTITY });
-    added += 1;
-  }
+  // The billing entity and the locations (with their POS) live on the Organization record now (see orgBilling.ts).
   const defaults = claimDefaultsStore.get();
-  if (!defaults.defaultPos && !defaults.defaultBillingLocationId) {
-    claimDefaultsStore.save({ ...defaults, defaultPos: "11", defaultBillingLocationId: SAMPLE_LOCATIONS[0].id });
+  if (!defaults.defaultPos) {
+    claimDefaultsStore.save({ ...defaults, defaultPos: "11" });
     added += 1;
   }
   return { added };

@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { getOrgBilling, saveOrgBilling, type OrgBilling } from "../../../lib/orgBilling";
 import { Modal } from "../ui/Modal";
 import { Tooltip } from "../ui/Tooltip";
 import { Switch } from "../ui/switch";
@@ -167,6 +168,10 @@ export default function OrganizationDetailDrawer({
   const [billingCustomFieldKeys, setBillingCustomFieldKeys] = useState<string[]>([]);
   const [languageCustomFieldKeys, setLanguageCustomFieldKeys] = useState<string[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+  // Billing identity (single source for claims, scrubber and eligibility): stored with the organization.
+  const [billing, setBilling] = useState<OrgBilling>(() => getOrgBilling(organization?.id));
+  useEffect(() => { if (organization?.id) setBilling(getOrgBilling(organization.id)); }, [organization?.id, isOpen]);
+  const setBill = (patch: Partial<OrgBilling>) => setBilling((b) => ({ ...b, ...patch }));
 
   const systemBasicSec = allOrgSections.find((s) => s.id === "sec-org-basic");
   const effectiveBasicCustomKeys = useMemo(() => {
@@ -177,7 +182,7 @@ export default function OrganizationDetailDrawer({
 
   const systemBillingSec = allOrgSections.find((s) => s.id === "sec-org-contact-billing");
   const effectiveBillingCustomKeys = useMemo(() => {
-    const CORE_BILLING_KEYS = ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "registrationNumber", "website"];
+    const CORE_BILLING_KEYS = ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "legalName", "ein", "groupNpi", "taxonomy", "billingPhone", "registrationNumber", "website"];
     const fromRegistry = (systemBillingSec?.fieldKeys || []).filter((k) => !CORE_BILLING_KEYS.includes(k));
     return Array.from(new Set([...fromRegistry, ...billingCustomFieldKeys]));
   }, [systemBillingSec, billingCustomFieldKeys]);
@@ -343,6 +348,7 @@ export default function OrganizationDetailDrawer({
       return;
     }
     onSave(formData);
+    saveOrgBilling(formData.id, { ...billing, address: formData.address || billing.address });
     toast.success("Organization details saved successfully");
     onClose();
   };
@@ -897,8 +903,8 @@ export default function OrganizationDetailDrawer({
                 <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
                   <input
                     type="text"
-                    value={formData.billingContactName || "John Smith"}
-                    onChange={(e) => handleFieldChange("billingContactName", e.target.value)}
+                    value={billing.contactName}
+                    onChange={(e) => setBill({ contactName: e.target.value })}
                     placeholder="John Smith"
                     className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
                   />
@@ -917,14 +923,40 @@ export default function OrganizationDetailDrawer({
                 <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
                   <input
                     type="email"
-                    value={formData.billingContactEmail || formData.email}
-                    onChange={(e) => handleFieldChange("billingContactEmail", e.target.value)}
+                    value={billing.contactEmail}
+                    onChange={(e) => setBill({ contactEmail: e.target.value })}
                     placeholder="billing@healthcare.com"
                     className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
                   />
                   <Mail className="w-4 h-4 text-slate-400" />
                 </div>
               </div>
+
+              {/* Billing identity: used by the claim builder, the scrubber and eligibility */}
+              {([
+                ["legalName", "LEGAL NAME", "Legal entity name on claims"],
+                ["ein", "EIN / TAX ID", "12-3456789"],
+                ["groupNpi", "GROUP NPI", "10-digit billing NPI"],
+                ["taxonomy", "TAXONOMY CODE", "e.g. 207Q00000X"],
+                ["phone", "BILLING PHONE", "Billing office phone"],
+              ] as Array<[keyof OrgBilling, string, string]>).map(([k, label, ph]) => (
+                <div key={k}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <GripVertical className="w-3 h-3 text-slate-300" />
+                    <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">{label}</label>
+                  </div>
+                  <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 transition-colors">
+                    <input
+                      type="text"
+                      data-testid={`org-billing-${k}`}
+                      value={billing[k]}
+                      onChange={(e) => setBill({ [k]: e.target.value } as Partial<OrgBilling>)}
+                      placeholder={ph}
+                      className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                    />
+                  </div>
+                </div>
+              ))}
 
               {/* Custom Fields added to Billing Info */}
               {effectiveBillingCustomKeys.map((fieldKey) => {

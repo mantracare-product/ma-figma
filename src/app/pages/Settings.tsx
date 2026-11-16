@@ -164,8 +164,6 @@ import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemb
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
 import { getStoredRoles, saveStoredRoles, addRolesIfMissing } from "../../lib/rolesStore";
 import { buildSampleRcmRoles } from "../../lib/rcmSampleRoles";
-import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
-import BillingSetupTab from "../components/settings/BillingSetupTab";
 import { DepartmentDrawer } from "../components/settings/DepartmentDrawer";
 import { getStoredDepartments, saveStoredDepartments } from "../../lib/departmentStore";
 import type { Department } from "../../types/permissions";
@@ -786,12 +784,6 @@ export default function Settings() {
     const path = location.pathname.toLowerCase();
     const queryTab = searchParams.get("tab")?.toLowerCase();
 
-    // 0. Billing setup (RCM). Checked first: path.startsWith("/settings/billing") below would swallow it.
-    if (path === "/settings/billing-setup" || urlTab === "billing-setup" || queryTab === "billing-setup") {
-      setActiveTab("billing-setup");
-      return;
-    }
-
     // 1. First check if current route or query is for Billing
     const isBilling =
       path.startsWith("/settings/billing") ||
@@ -1408,13 +1400,6 @@ export default function Settings() {
     setRoles(merged);
     toast.success(added > 0 ? `Added ${added} sample RCM role${added === 1 ? "" : "s"}` : "Sample RCM roles are already added");
   };
-
-  // Current user's permissions. A non-admin who reached Settings (only /settings/billing-setup allows that)
-  // sees Billing setup and nothing else.
-  const currentPerms = useCurrentPermissions();
-  useEffect(() => {
-    if (!currentPerms.isSystemAdmin && activeTab !== "billing-setup") setActiveTab("billing-setup");
-  }, [currentPerms.isSystemAdmin, activeTab]);
 
   const assignedUserCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -3893,7 +3878,6 @@ export default function Settings() {
     { id: "custom-fields", label: "Sections/Fields", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
     { id: "reception", label: "AI Receptionist", icon: Sparkles },
-    { id: "billing-setup", label: "Billing setup", icon: FileText },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
   ];
 
@@ -8164,9 +8148,6 @@ export default function Settings() {
                 )}
               </div>
             )}
-
-            {/* Billing setup (RCM) Tab */}
-            {activeTab === "billing-setup" && <BillingSetupTab />}
 
             {/* Reception Tab */}
             {activeTab === "reception" && <ReceptionSettingsTab />}
