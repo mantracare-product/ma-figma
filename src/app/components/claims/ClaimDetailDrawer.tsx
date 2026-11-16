@@ -745,6 +745,11 @@ export default function ClaimDetailDrawer({
               if (matched) handleStageSelect(matched);
             }}
           />
+          {!isCreateMode && (liveClaim?.missingData || []).length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="claim-missing-data">
+              Missing before this claim can be submitted: {(liveClaim?.missingData || []).map((m) => m.replace(/_/g, " ")).join(", ")}.
+            </div>
+          )}
         </div>
 
         {/* ── Navigation Tabs Bar ── */}

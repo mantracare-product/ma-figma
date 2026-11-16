@@ -39,6 +39,7 @@ import ClaimStatusModal from "../components/claims/ClaimStatusModal";
 import CMS1500Modal from "../components/claims/CMS1500Modal";
 import ClaimProgressBar from "../components/claims/ClaimProgressBar";
 import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
+import CreateClaimModal from "../components/claims/CreateClaimModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -111,6 +112,7 @@ export default function Claims() {
   const { hasPermission: hasClaimPermission } = useCurrentPermissions();
   const canPostPayments = hasClaimPermission("rcmPayments", "add");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Load claims
   const refreshClaims = () => {
@@ -312,11 +314,7 @@ export default function Claims() {
           primaryAction={!hasClaimPermission("claims", "add") ? undefined : {
             label: "Create Claim",
             icon: <Plus className="w-4 h-4" />,
-            onClick: () => {
-              setSelectedClaimForDetail(null);
-              setIsCreateMode(true);
-              setIsDetailDrawerOpen(true);
-            },
+            onClick: () => setShowCreateModal(true),
           }}
           afterPrimaryAction={
             <div className="flex items-center gap-2">
@@ -353,6 +351,17 @@ export default function Claims() {
               />
             </div>
           }
+        />
+
+        <CreateClaimModal
+          isOpen={showCreateModal && hasClaimPermission("claims", "add")}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={(claim) => {
+            refreshClaims();
+            setSelectedClaimForDetail(claim);
+            setIsCreateMode(false);
+            setIsDetailDrawerOpen(true);
+          }}
         />
 
         {/* Unified DataExportModal */}
