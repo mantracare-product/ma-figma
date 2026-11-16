@@ -18,11 +18,12 @@ A dark **RCM tests** panel appears bottom-right (click its header to collapse).
 - Statuses: **PASS** (a real assertion held), **FAIL** (assertion failed or a target was not found), **SKIP** (cannot run here, with the reason), **MANUAL** (needs a human).
 - **Copy results** puts a markdown table `id | slice | title | status | detail` plus a summary line on the clipboard (also `RcmTm.markdown()` in the console).
 
-## Your data / reset
-Tests overwrite RCM data (claims, tasks, rules, process logs, ... they start each test from a clean RCM state and use `RCMTEST-` names). Before the first run the harness stores a full backup of localStorage/sessionStorage under `__rcmtest_backup`.
-- **Reset test data**: restores the data as it was before the first run (backup is kept, reloads the page).
-- **Restore & delete backup**: same, and deletes the backup. Do this when you are finished.
+## Your data / reset (non-destructive)
+Tests build a clean RCM state for themselves, so they wipe RCM stores **during** a test. To make that safe the harness takes a full backup of localStorage/sessionStorage (`__rcmtest_backup`) at the START of every run and puts storage back exactly as it was **after every test, pass or fail**. At the end it checks that storage is identical to the start and reports a `RUN` row (PASS/FAIL); test S1.15 proves the rollback.
+- If you close the tab in the middle of a run, press **Reset test data** (restores the backup, reloads) and, if needed, run `__rcm.reseedDemoData()`.
+- **Restore & delete backup**: restores and removes the backup.
 - If the browser refuses the backup (storage quota) the panel prints a WARNING; export your data yourself first.
+- On every app load `ensureDemoData()` also purges any record that still carries the RCMTEST marker.
 Tests are re-runnable.
 
 ## What is where

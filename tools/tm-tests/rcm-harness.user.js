@@ -127,6 +127,22 @@
     },
   };
 
+  /** Stable hash of all storage except the harness keys (to prove a run leaves storage as it found it). */
+  T.storageHash = function () {
+    const parts = [];
+    [localStorage, sessionStorage].forEach((st, si) => {
+      const keys = [];
+      for (let i = 0; i < st.length; i++) { const k = st.key(i); if (HARNESS_KEYS.indexOf(k) < 0) keys.push(k); }
+      keys.sort().forEach((k) => parts.push(si + ":" + k + "=" + st.getItem(k)));
+    });
+    const str = parts.join("\n");
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return h + ":" + str.length;
+  };
+  /** Put storage back exactly as the backup (taken at the start of the run) has it; keeps the harness keys. Called after EVERY test. */
+  T.restoreData = function () { return T.backup.restore(false); };
+
   // ── per-test context ─────────────────────────────────────────────────────────────────────────────
   const AUTH_KEYS = ["user_role", "user_data", "login_email", "auth_token"];
   function makeCtx(test) {
@@ -220,6 +236,7 @@
           run.pending = null;
           restoreAuth(run, test);
         }
+        try { T.restoreData(); } catch (e) { status = "FAIL"; detail = (detail ? detail + " | " : "") + "could not restore storage: " + e; }
         record(run.results, test, status, detail);
         run.idx++;
         if (test.reloadAfter && run.idx < run.queue.length) { setRun(run); location.assign("/"); return; }
@@ -244,6 +261,9 @@
   }
 
   function finish(run) {
+    const same = T.storageHash() === run.startHash;
+    run.results["RUN"] = { id: "RUN", slice: 0, title: "Storage is identical before and after the run", status: same ? "PASS" : "FAIL", detail: same ? "" : "storage differs from the start of the run (use Reset test data)" };
+    T.logLine((same ? "PASS " : "FAIL ") + "RUN  storage identical before/after the run");
     run.running = false;
     run.finishedAt = new Date().toISOString();
     setRun(run);
@@ -262,10 +282,11 @@
       T.logLine("The test hook (window.__rcm) is missing. Open the app from the Vite dev server (npm run dev).");
     }
     try { await T.waitFor(() => window.__rcm, { timeout: 8000, msg: "window.__rcm" }); } catch (e) {}
-    const b = T.backup.ensure();
-    if (b.fresh) T.logLine("Backup of localStorage/sessionStorage stored (use 'Restore backup' to undo everything the tests changed).");
+    try { localStorage.removeItem(LS_BACKUP); } catch (e) {}
+    const b = T.backup.ensure(); // a NEW backup at every run start: storage is restored from it after every test
+    if (b.fresh) T.logLine("Backup of localStorage/sessionStorage stored; it is restored after every test, so the run leaves your data as it found it.");
     if (!b.ok) T.logLine("WARNING: could not store the backup (" + b.error + "). Back up your data yourself before running; tests overwrite RCM data.");
-    const run = { running: true, queue: ids, idx: 0, results: {}, startedAt: new Date().toISOString(), label: label || "run", pending: null };
+    const run = { running: true, queue: ids, idx: 0, results: {}, startedAt: new Date().toISOString(), label: label || "run", pending: null, startHash: T.storageHash() };
     setRun(run);
     T.logLine("== " + (label || "run") + ": " + ids.length + " test(s) ==");
     await pump();

@@ -3,6 +3,10 @@
   import App from "./app/App.tsx";
   import "./styles/index.css";
   import "./lib/ruleEngine";
+  import { ensureDemoData } from "./lib/demoData";
+
+  // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
+  ensureDemoData();
 
   // Dev-only: test hook for the Tampermonkey RCM tests (tools/tm-tests). Removed from production builds.
   if (import.meta.env.DEV) {

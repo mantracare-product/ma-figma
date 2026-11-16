@@ -67,6 +67,8 @@ import * as notifications from "../lib/notificationsStore";
 import * as activity from "../lib/activityEngine";
 import * as cptCodes from "../lib/cptCodes";
 
+import * as demoData from "../lib/demoData";
+
 const TEST_PREFIX = "RCMTEST-";
 
 /** localStorage keys the RCM features read or write (cleared by freshWorld). */
@@ -154,7 +156,7 @@ const api = {
   appointments, clients, rolesStore, permissions, defaultRoles, sampleRoles, billing, priorAuth, eligibility, runEligibility, authActions, coverages,
   invoices, invoiceFromClaim, reports, kpis, jobs, sampleBundles, era, remittance, voice, scribeBilling, scribe, recordWriter, recordContext, actionRuns,
   audit, notifSettings, team, processStore, dealCards, claimSamples, sampleIds, ruleContext, fieldSeeds, fieldRegistry, messages, conversations, taskLinks,
-  coverageProcess, verifyNow, startProcess, notifications, activity, cptCodes,
+  demoData, reseedDemoData: () => demoData.ensureDemoData(), coverageProcess, verifyNow, startProcess, notifications, activity, cptCodes,
 };
 
 (window as any).__rcm = api;

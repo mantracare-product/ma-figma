@@ -127,3 +127,10 @@ Demo script (tests: rcmReports.test.ts, rcmSetE2.test.ts, voiceBenefits.test.ts,
 - start_process / create_task / update_fields have no dedicated canvas NodeType (generic step in the builder).
 - Deals does not open the instance drawer from ?instance= (task linked-record Open lands on the board).
 - Billing setup > Payers: prior-auth rules table lands in S3.3.
+
+## Round 2 (browser review fixes)
+### 0. Demo data vanished (done, commit "R2.0")
+Cause: the browser tests' freshWorld() removed whole RCM-affected stores (callLogs(+_demo), deals, clients(+_demo), appointments_v1, tasks, claims, invoices, rules, conversations, services, team, field registry, process store) and left only RCMTEST records behind; stores that hold a default seed only fall back to it when the key is missing or an empty array, so the demo seeds never came back. Callers that read `clients_demo` first lost the demo clients.
+Fix: src/lib/demoData.ts: purgeTestRecords() (removes any record carrying the RCMTEST marker from every stored array) + ensureDemoData() (demo org only: empty stores fall back to their seeds again; clients re-seeded from canonicalClients; never overwrites non-empty stores; idempotent), run on every app load (skipped while a browser test run is active) and as `__rcm.reseedDemoData()`.
+Not recoverable from the repo: appointments (INITIAL_APPOINTMENTS is empty in code), custom field-registry entries and anything edited by hand in the demo org: if those existed they must be re-entered.
+Tests: the harness now backs up storage at the start of every run, restores it after EVERY test (pass or fail), and reports a RUN row proving storage is identical before/after; S1.15 proves the rollback. Unit tests in demoData.test.ts.

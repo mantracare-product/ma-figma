@@ -243,6 +243,19 @@
       ],
     },
     {
+      title: "Non-destructive: after a test dirties storage, the runner rollback leaves storage byte-identical",
+      run(ctx) {
+        const r = T.rcm();
+        const before = T.storageHash();
+        const w = ctx.fresh(); // wipes RCM stores for the duration of the test...
+        start(r, w.clientId, 1);
+        r.tasks.createTaskRecord({ title: "RCMTEST dirty", description: "", status: "pending", isImportant: false, scopeLevel: "client", assignee: { scopeLevel: "client", assigneeName: "x" }, creator: { id: "u", name: "u" }, checklists: [], observers: [], subtasks: [], attachments: [] });
+        assert(T.storageHash() !== before, "the test really changed storage");
+        T.restoreData(); // ...and this is exactly what the runner does after every test, pass or fail
+        eq(T.storageHash(), before, "storage identical after the rollback");
+      },
+    },
+    {
       title: "Layout/visual check of Deals cards and the process drawer",
       run() { T.manual("Needs a human: card layout, drag-and-drop feel and the process drawer visuals"); },
     },
