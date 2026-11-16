@@ -18,13 +18,15 @@
 import { FIELD_REGISTRY_KEY } from "./fieldRegistryCore";
 import { SAMPLE_COVERAGE_PROCESS_ID } from "./rcmSampleIds";
 
-type Mod = "process" | "appointment" | "claim";
+type Mod = "process" | "appointment" | "claim" | "client";
 
 interface SeedField {
   key: string;
   label: string;
   inputType: string;
-  subFields?: Array<{ id: string; name: string; inputType: string }>;
+  subFields?: Array<{ id: string; name: string; inputType: string; options?: any[] }>;
+  options?: Array<{ id: string; label: string; value: string }>;
+  sectionId?: string;
 }
 
 const T = (key: string, label: string, inputType = "text"): SeedField => ({ key, label, inputType });
@@ -95,6 +97,69 @@ export const EG5: SeedField = TABLE("elig_benefits", "Benefit lines", [
   ["confidence", "Confidence"],
 ]);
 
+const opts = (...vals: string[]) => vals.map((v) => ({ id: v, label: v.charAt(0).toUpperCase() + v.slice(1), value: v }));
+const SEL = (key: string, label: string, values: string[], sectionId?: string): SeedField => ({ key, label, inputType: "list_select", options: opts(...values), sectionId });
+const TS = (key: string, label: string, sectionId: string, inputType = "text"): SeedField => ({ key, label, inputType, sectionId });
+
+export const SEC_BILLING_DEMOGRAPHICS = "sec-billing-demographics";
+export const SEC_COVERAGES = "sec-coverages";
+export const SEC_APPT_ELIGIBILITY = "sec-appt-eligibility";
+export const SEC_APPT_AUTHORIZATION = "sec-appt-authorization";
+export const SEC_CLAIM_RCM = "sec-clm-revenue-cycle";
+
+/** Client Insurance tab: billing demographics + the Coverages table (rows sync to the coverages store). */
+export const CLIENT_FIELDS: SeedField[] = [
+  TS("legalFirstName", "Legal first name", SEC_BILLING_DEMOGRAPHICS),
+  TS("legalLastName", "Legal last name", SEC_BILLING_DEMOGRAPHICS),
+  TS("dob", "Date of birth", SEC_BILLING_DEMOGRAPHICS, "date"),
+  SEL("sex", "Sex", ["female", "male", "other", "unknown"], SEC_BILLING_DEMOGRAPHICS),
+  TS("address", "Address", SEC_BILLING_DEMOGRAPHICS),
+  TS("guarantor", "Guarantor", SEC_BILLING_DEMOGRAPHICS),
+  TS("selfPay", "Self-pay", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
+  TS("consent_sms", "Consent: SMS", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
+  TS("consent_voice", "Consent: voice calls", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
+  TS("consent_cardOnFile", "Consent: card on file", SEC_BILLING_DEMOGRAPHICS, "yes_no"),
+  {
+    key: "ins_coverages",
+    label: "Coverages",
+    inputType: "table",
+    sectionId: SEC_COVERAGES,
+    subFields: [
+      { id: "payer", name: "Payer", inputType: "list_select" },
+      { id: "member_id", name: "Member ID", inputType: "text" },
+      { id: "group", name: "Group", inputType: "text" },
+      { id: "priority", name: "Priority", inputType: "list_select", options: opts("primary", "secondary", "tertiary") },
+      { id: "effective", name: "Effective", inputType: "date" },
+      { id: "term", name: "Term", inputType: "date" },
+      { id: "subscriber", name: "Subscriber", inputType: "text" },
+    ],
+  },
+];
+
+/** Claim drawer: revenue-cycle facts (assignee, priority, filing deadline, authorization, denial and appeal). */
+export const CLAIM_RCM_FIELDS: SeedField[] = [
+  TS("rcm_assignee", "Assignee", SEC_CLAIM_RCM),
+  SEL("rcm_priority", "Priority", ["low", "normal", "high", "urgent"], SEC_CLAIM_RCM),
+  TS("rcm_timely_filing", "Timely filing deadline", SEC_CLAIM_RCM, "date"),
+  TS("rcm_auth_status", "Authorization status", SEC_CLAIM_RCM),
+  TS("rcm_denial_category", "Denial category", SEC_CLAIM_RCM),
+  TS("rcm_denial_summary", "Denial reason", SEC_CLAIM_RCM, "textarea"),
+  TS("rcm_appeal_deadline", "Appeal deadline", SEC_CLAIM_RCM, "date"),
+  TS("rcm_appeal_draft", "Appeal draft (proposed)", SEC_CLAIM_RCM, "textarea"),
+  TS("rcm_scrub_issues", "Scrub issues", SEC_CLAIM_RCM, "textarea"),
+];
+
+/** Sections registered in the section registry (module -> list). */
+const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
+  { module: "client", id: SEC_BILLING_DEMOGRAPHICS, title: "Billing demographics", description: "Legal name, date of birth, guarantor and consents used for billing", iconName: "user", fieldKeys: CLIENT_FIELDS.filter((f) => f.sectionId === SEC_BILLING_DEMOGRAPHICS).map((f) => f.key) },
+  { module: "client", id: SEC_COVERAGES, title: "Coverages", description: "Insurance coverages in priority order", iconName: "shield", fieldKeys: ["ins_coverages"] },
+  { module: "appointment", id: SEC_APPT_ELIGIBILITY, title: "Eligibility", description: "Latest eligibility result for this visit", iconName: "shield", fieldKeys: ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at"] },
+  { module: "appointment", id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
+  { module: "claim", id: SEC_CLAIM_RCM, title: "Revenue cycle", description: "Assignee, priority, deadlines, authorization, denial and appeal", iconName: "layers", fieldKeys: CLAIM_RCM_FIELDS.map((f) => f.key) },
+];
+
+const APPT_SECTION_OF: Record<string, string> = { elig_status: SEC_APPT_ELIGIBILITY, elig_copay: SEC_APPT_ELIGIBILITY, elig_deductible_remaining: SEC_APPT_ELIGIBILITY, elig_checked_at: SEC_APPT_ELIGIBILITY, auth_required: SEC_APPT_AUTHORIZATION, auth_status: SEC_APPT_AUTHORIZATION, auth_number: SEC_APPT_AUTHORIZATION };
+
 const APPT_SUMMARY = ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at", "auth_required", "auth_status", "auth_number"];
 const CLAIM_SUMMARY = ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at", "auth_status", "auth_number"];
 
@@ -105,11 +170,13 @@ function plan(): Record<Mod, SeedField[]> {
   return {
     process: [...EG1, ...EG2, ...EG3, EG4, EG5],
     appointment: [...APPT_SUMMARY.map(byKey), T("elig_instance_id", "Eligibility instance")],
-    claim: CLAIM_SUMMARY.map(byKey),
+    claim: [...CLAIM_SUMMARY.map(byKey), ...CLAIM_RCM_FIELDS],
+    client: CLIENT_FIELDS,
   };
 }
 
 const SEED_ID_BASE = 9_100_000;
+const SECTION_KEY = "mantra_section_registry_v1";
 
 function readRegistry(): Record<string, any> {
   try {
@@ -140,23 +207,60 @@ export function ensureRcmFieldSeeds(): number {
       seq += 1;
       if (have.has(sf.key)) continue;
       list.push({
-        id: SEED_ID_BASE + (mod === "process" ? 0 : mod === "appointment" ? 1000 : 2000) + seq,
+        id: SEED_ID_BASE + (mod === "process" ? 0 : mod === "appointment" ? 1000 : mod === "claim" ? 2000 : 3000) + seq,
         key: sf.key,
         label: sf.label,
         module: mod,
+        // ordinary editable custom fields (createdIn "client", never "admin": admin-created fields are shown as templates)
         source: "custom",
-        createdIn: "admin",
+        createdIn: "client",
         createdAt: 0,
         inputType: sf.inputType,
+        ...(sf.sectionId || (mod === "appointment" && APPT_SECTION_OF[sf.key]) ? { sectionId: sf.sectionId || APPT_SECTION_OF[sf.key] } : {}),
+        ...(sf.options ? { options: sf.options, selectionMode: "single" } : {}),
         ...(sf.subFields ? { subFields: sf.subFields, compositeDisplayMode: "table" } : {}),
         ...(mod === "process" ? { processIds: [SAMPLE_COVERAGE_PROCESS_ID] } : {}),
         isReusable: false,
-        sampleSeed: true,
       });
       added += 1;
     }
     registry[mod] = list;
   });
+  // earlier builds marked these as admin-created (shown as "Template"): they are ordinary client fields
+  for (const m of Object.keys(registry)) {
+    for (const f of Array.isArray(registry[m]) ? registry[m] : []) {
+      if (typeof f.id === "number" && f.id >= SEED_ID_BASE && f.id < SEED_ID_BASE + 400000 && (f.createdIn === "admin" || f.sampleSeed)) {
+        f.createdIn = "client";
+        delete f.sampleSeed;
+        added += 1;
+      }
+    }
+  }
+  // keep the Coverages table's payer options in step with the payers list (only touches our own sub-field)
+  try {
+    const payers = JSON.parse(localStorage.getItem("mantra_payers_v1") || "[]") as Array<{ id: string; name: string }>;
+    const cov = (registry.client || []).find((f: any) => f.key === "ins_coverages");
+    const sub = cov && (cov.subFields || []).find((s: any) => s.id === "payer");
+    if (sub && payers.length) {
+      const next = payers.map((p) => ({ id: p.id, label: p.name, value: p.id }));
+      if (JSON.stringify(sub.options || []) !== JSON.stringify(next)) { sub.options = next; added += 1; }
+    }
+  } catch { /* ignore */ }
+  // sections
+  try {
+    const raw = localStorage.getItem(SECTION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const secs: Record<string, any[]> = Array.isArray(parsed) ? {} : parsed && typeof parsed === "object" ? parsed : {};
+    for (const s of SECTIONS) {
+      const list: any[] = Array.isArray(secs[s.module]) ? secs[s.module] : [];
+      if (!list.some((x) => x.id === s.id)) {
+        list.push({ id: s.id, title: s.title, description: s.description, module: s.module, source: "custom", createdIn: "client", iconName: s.iconName, fieldKeys: s.fieldKeys, isReusable: false });
+        added += 1;
+      }
+      secs[s.module] = list;
+    }
+    localStorage.setItem(SECTION_KEY, JSON.stringify(secs));
+  } catch { /* ignore */ }
   if (added > 0) {
     localStorage.setItem(FIELD_REGISTRY_KEY, JSON.stringify(registry));
     try {

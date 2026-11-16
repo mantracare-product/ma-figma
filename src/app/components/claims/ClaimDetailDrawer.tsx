@@ -33,10 +33,10 @@ import {
   getStoredClaims,
   saveClaim,
   generateClaimNumber,
-  moveClaimToStage,
   submitClaimElectronically,
   CLAIMS_CHANGED_EVENT,
 } from "../../../lib/claimsStore";
+import { claimService } from "../../../lib/claimService";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 import ActivityTab, { ActivityLogEntry } from "../activity/ActivityTab";
@@ -364,6 +364,15 @@ export default function ClaimDetailDrawer({
       prior_auth_number: "",
       allowed_amount: liveClaim.totalCharge > 0 ? (liveClaim.totalCharge * 0.85).toFixed(2) : "",
       paid_amount: liveClaim.amountPaid || "",
+      rcm_assignee: liveClaim.assignee || "",
+      rcm_priority: liveClaim.priority || "normal",
+      rcm_timely_filing: liveClaim.timelyFilingDeadline || "",
+      rcm_auth_status: (liveClaim as any).authStatus || (liveClaim as any).eligibilityAuth?.authStatus || "",
+      rcm_denial_category: liveClaim.denialCategory || "",
+      rcm_denial_summary: liveClaim.denialSummary || "",
+      rcm_appeal_deadline: liveClaim.appealDeadline || "",
+      rcm_appeal_draft: liveClaim.appealDraft?.text || "",
+      rcm_scrub_issues: (liveClaim.scrubIssues || []).map((i) => `[${i.severity}] ${i.message}`).join("\n"),
     };
 
     try {
@@ -387,6 +396,16 @@ export default function ClaimDetailDrawer({
       return next;
     });
 
+    const rcmPatch: Record<string, (v: any) => Partial<Claim>> = {
+      rcm_assignee: (v) => ({ assignee: String(v || "") || undefined }),
+      rcm_priority: (v) => ({ priority: (["low", "normal", "high", "urgent"].includes(v) ? v : "normal") as Claim["priority"] }),
+      rcm_timely_filing: (v) => ({ timelyFilingDeadline: String(v || "") || undefined }),
+    };
+    if (rcmPatch[key] && liveClaim && !isCreateMode) {
+      const patched = { ...liveClaim, ...rcmPatch[key](value), updatedAt: new Date().toISOString() } as Claim;
+      saveClaim(patched);
+      setLiveClaim(patched);
+    }
     if (key === "client_name") {
       setLiveClaim((prev) => (prev ? { ...prev, patientName: value } : prev));
     } else if (key === "billed_amount") {
@@ -400,9 +419,9 @@ export default function ClaimDetailDrawer({
     if (!liveClaim || targetStage.id === currentClaimStage?.id) return;
 
     try {
-      const updated = moveClaimToStage(liveClaim.id, targetStage.id, targetStage.name);
-      if (updated) {
-        setLiveClaim(updated);
+      const result = claimService.moveToStage(liveClaim.id, targetStage.id, { type: "manual" });
+      if (result) {
+        setLiveClaim(result.claim);
       }
 
       const primaryId = liveClaim.patientId || effectiveClientId;

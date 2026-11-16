@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Appointment } from "../../../lib/appointmentService";
 import { readLocalRecordFields } from "../../../lib/recordWriter";
@@ -8,17 +8,13 @@ import { acceptCallResult } from "../../../lib/voiceBenefits";
 import { getProcessInstanceById } from "../../../lib/processLogsStore";
 import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import CoverageChip from "./CoverageChip";
+import DraggableOverviewSections, { type OverviewSection } from "../profile/DraggableOverviewSections";
+import { ensureRcmFieldSeeds, SEC_APPT_AUTHORIZATION, SEC_APPT_ELIGIBILITY } from "../../../lib/rcmFieldSeeds";
 
-const ROWS: Array<[string, string]> = [
-  ["elig_status", "Eligibility"],
-  ["elig_copay", "Copay"],
-  ["elig_deductible_remaining", "Deductible remaining"],
-  ["elig_checked_at", "Checked at"],
-  ["auth_required", "Authorization required"],
-  ["auth_status", "Authorization status"],
-  ["auth_number", "Authorization #"],
-  ["auth_valid_from", "Valid from"],
-  ["auth_valid_to", "Valid to"],
+const SECTIONS_KEY = "ma_appt_coverage_sections_v1";
+const DEFAULT_SECTIONS: OverviewSection[] = [
+  { id: SEC_APPT_ELIGIBILITY, title: "Eligibility", description: "Latest eligibility result for this visit", iconName: "shield", source: "custom", module: "appointment", fieldKeys: ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at"] },
+  { id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", source: "custom", module: "appointment", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
 ];
 
 /** Appointment detail > Coverage tab: summary written by eligibility / prior-auth actions + Verify now. */
@@ -30,6 +26,21 @@ export default function AppointmentCoverageTab({ appointment }: { appointment: A
   const [authUnits, setAuthUnits] = useState("");
   const [, setTick] = useState(0);
   const values = readLocalRecordFields("appointment", appointment.id);
+  const [sections, setSections] = useState<OverviewSection[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(SECTIONS_KEY) || "null");
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch { /* ignore */ }
+    return DEFAULT_SECTIONS;
+  });
+  useEffect(() => { try { ensureRcmFieldSeeds(); } catch { /* ignore */ } }, []);
+  const saveField = (key: string, value: any) => {
+    try {
+      const k = `mantra_appt_fields_${appointment.id}`;
+      localStorage.setItem(k, JSON.stringify({ ...JSON.parse(localStorage.getItem(k) || "{}"), [key]: value }));
+    } catch { /* ignore */ }
+    setTick((t) => t + 1);
+  };
 
   return (
     <div className="p-6 space-y-4" data-testid="appointment-coverage-tab">
@@ -41,11 +52,11 @@ export default function AppointmentCoverageTab({ appointment }: { appointment: A
         <button
           type="button"
           disabled={!canVerify}
-          title={canVerify ? "Ask the payer now (mock)" : "You need the eligibility permission"}
+          title={canVerify ? "Ask the payer now" : "You need the eligibility permission"}
           onClick={() => {
             try {
               const r = verifyAppointmentNow(appointment.id);
-              toast.success(`Verified (mock): ${r.status.replace("_", " ")}`);
+              toast.success(`Verified: ${r.status.replace("_", " ")}`);
               setTick((t) => t + 1);
             } catch (e: any) {
               toast.error(String(e?.message || e));
@@ -56,23 +67,22 @@ export default function AppointmentCoverageTab({ appointment }: { appointment: A
           Verify now
         </button>
       </div>
-      <p className="text-xs text-amber-700">Mock data: eligibility answers come from a simulated payer.</p>
       {appointment.coverage?.summary && <p className="text-sm text-slate-700">{appointment.coverage.summary}</p>}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        {ROWS.map(([k, label]) => (
-          <div key={k}>
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-            <dd className="text-slate-800">{values[k] === undefined || values[k] === "" ? "—" : String(values[k])}</dd>
-          </div>
-        ))}
-      </dl>
+      <DraggableOverviewSections
+        mode="appointment"
+        sections={sections}
+        onSectionsChange={(next) => { setSections(next); try { localStorage.setItem(SECTIONS_KEY, JSON.stringify(next)); } catch { /* ignore */ } }}
+        fieldValues={values}
+        onFieldValueChange={saveField}
+        customFieldsModule="appointment"
+      />
       {(() => {
         const iid = appointment.coverage?.instanceId;
         const row: any = iid ? getProcessInstanceById(iid) : undefined;
         if (!row || row.elig_status !== "pending_review") return null;
         return (
           <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2" data-testid="call-result-review">
-            <div className="text-xs font-semibold text-violet-900">A phone call captured benefits (mock). Review and accept to make it the verified result.</div>
+            <div className="text-xs font-semibold text-violet-900">A phone call captured benefits. Review and accept to make it the verified result.</div>
             <div className="text-xs text-violet-900">Copay {String(row.elig_copay ?? "-")} · deductible remaining {String(row.elig_deductible_remaining ?? "-")}</div>
             <button type="button" disabled={!canVerify} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-violet-300 bg-white hover:bg-violet-100 disabled:opacity-50" onClick={() => {
               try { acceptCallResult({ instanceId: iid! }); toast.success("Call result accepted"); setTick((t) => t + 1); } catch (e: any) { toast.error(String(e?.message || e)); }
