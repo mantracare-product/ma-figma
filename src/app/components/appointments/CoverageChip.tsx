@@ -6,6 +6,8 @@ const STYLE: Record<string, { cls: string; label: string }> = {
   not_found: { cls: "bg-amber-50 text-amber-800 border-amber-200", label: "Needs fix" },
   provider_setup: { cls: "bg-amber-50 text-amber-800 border-amber-200", label: "Provider setup" },
   inconclusive: { cls: "bg-amber-50 text-amber-800 border-amber-200", label: "Inconclusive" },
+  pending_review: { cls: "bg-purple-50 text-purple-700 border-purple-200", label: "Pending review" },
+  self_pay: { cls: "bg-teal-50 text-teal-700 border-teal-200", label: "Self-pay" },
   no_coverage: { cls: "bg-slate-100 text-slate-600 border-slate-200", label: "No coverage" },
 };
 

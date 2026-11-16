@@ -82,6 +82,7 @@ export default function Claims() {
     const procId = params.get("processId");
     const procName = params.get("process") || params.get("processName");
     if (procId && insuranceProcesses.some((p) => p.id === procId)) {
+      workflowPicked.current = true;
       setSelectedProcessFilter(procId);
     } else if (procName) {
       const found = insuranceProcesses.find(
@@ -97,9 +98,14 @@ export default function Claims() {
     for (const c of claims) { const id = c.processId && insuranceProcesses.some((w) => w.id === c.processId) ? c.processId : first; if (id) m[id] = (m[id] || 0) + 1; }
     return m;
   }, [claims, insuranceProcesses]);
+  const workflowPicked = React.useRef(false);
   useEffect(() => {
     if (insuranceProcesses.length === 0) return;
-    if (selectedProcessFilter && insuranceProcesses.some((w) => w.id === selectedProcessFilter)) return;
+    if (selectedProcessFilter && insuranceProcesses.some((w) => w.id === selectedProcessFilter)) {
+      // default = the workflow with the most claims, decided once the claims have loaded (unless picked by the user / URL)
+      if (workflowPicked.current || claims.length === 0) return;
+      workflowPicked.current = true;
+    }
     const best = [...insuranceProcesses].sort((a, b) => (workflowCounts[b.id] || 0) - (workflowCounts[a.id] || 0))[0];
     setSelectedProcessFilter(best.id);
   }, [insuranceProcesses, workflowCounts, selectedProcessFilter]);
@@ -285,6 +291,11 @@ export default function Claims() {
         {/* Filter and Search Bar powered by PageTopBar */}
         <PageTopBar
           isBottomPanelAttached={true}
+          leftElement={activeView === "setup" ? undefined : (
+            <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { workflowPicked.current = true; setSelectedProcessFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+              {insuranceProcesses.map((proc) => <option key={proc.id} value={proc.id}>{stripSampleSuffix(proc.name)} ({workflowCounts[proc.id] || 0})</option>)}
+            </select>
+          )}
           modes={canSetup ? [{ id: "claims", label: "Claims" }, { id: "setup", label: "Setup" }] : undefined}
           activeMode={activeView}
           onModeChange={(m) => setView(m === "setup" ? "setup" : "claims")}
@@ -297,9 +308,6 @@ export default function Claims() {
           searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
           secondaryActions={activeView === "setup" ? undefined : (
             <div className="flex items-center gap-2 flex-wrap" data-testid="claims-filters">
-              <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { setSelectedProcessFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                {insuranceProcesses.map((proc) => <option key={proc.id} value={proc.id}>{stripSampleSuffix(proc.name)} ({workflowCounts[proc.id] || 0})</option>)}
-              </select>
               <select aria-label="Payer" data-testid="claims-filter-payer" value={selectedPayerFilter} onChange={(e) => { setSelectedPayerFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
                 <option value="all">All payers</option>
                 {uniquePayers.map((p) => <option key={p} value={p}>{p}</option>)}

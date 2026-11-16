@@ -70,6 +70,8 @@ import * as cptCodes from "../lib/cptCodes";
 import * as demoData from "../lib/demoData";
 import * as orgBilling from "../lib/orgBilling";
 import * as rcmDefaults from "../lib/rcmDefaults";
+import * as demoWorkspace from "../lib/rcmDemoWorkspace";
+import * as sampleSuffix from "../lib/sampleSuffixMigration";
 import * as rcmCatalog from "../lib/rcmCatalog";
 import * as automationTypes from "../app/types/automation";
 import * as automationMapping from "../lib/automationRuleMapping";
@@ -161,7 +163,7 @@ const api = {
   appointments, clients, rolesStore, permissions, defaultRoles, sampleRoles, billing, priorAuth, eligibility, runEligibility, authActions, coverages,
   invoices, invoiceFromClaim, reports, kpis, jobs, sampleBundles, era, remittance, voice, scribeBilling, scribe, recordWriter, recordContext, actionRuns,
   audit, notifSettings, team, processStore, dealCards, claimSamples, sampleIds, ruleContext, fieldSeeds, fieldRegistry, messages, conversations, taskLinks,
-  orgBilling, rcmDefaults, rcmCatalog, automationTypes, automationMapping,
+  orgBilling, rcmDefaults, rcmCatalog, automationTypes, automationMapping, demoWorkspace, sampleSuffix,
   demoData, reseedDemoData: () => demoData.ensureDemoData(), coverageProcess, verifyNow, startProcess, notifications, activity, cptCodes,
 };
 

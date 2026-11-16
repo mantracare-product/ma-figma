@@ -109,9 +109,11 @@ export function ensureDemoData(): EnsureDemoResult {
     migrateBillingSetupToOrg();
     const b = getOrgBilling();
     if (!b.legalName && !b.ein && !b.groupNpi) {
-      saveOrgBilling(getActiveOrgId(), { legalName: "Demo Mantra Care LLC", ein: "12-3456789", groupNpi: "1234567893", taxonomy: "207Q00000X", phone: "(555) 123-4567", address: "123 Innovation Blvd, Suite 400, San Francisco, CA 94107", contactName: "Finance Lead", contactEmail: "billing@mantraassist.com" });
+      saveOrgBilling(getActiveOrgId(), { legalName: "Mantra Care Health LLC", ein: "12-3456789", groupNpi: "1234567893", taxonomy: "207Q00000X", phone: "(555) 123-4567", address: "123 Innovation Blvd, Suite 400, San Francisco, CA 94107", contactName: "Finance Lead", contactEmail: "billing@mantraassist.com" });
       result.reseeded.push("org_billing");
     }
+    // earlier builds seeded a legal name containing "Demo": rename that exact default (an entered name is never touched)
+    if (getOrgBilling().legalName === "Demo Mantra Care LLC") saveOrgBilling(getActiveOrgId(), { legalName: "Mantra Care Health LLC" });
     // Services written by a test would hide DEFAULT_SERVICES: an empty list falls back (handled above); nothing else to do.
   } catch (e) {
     console.warn("[demoData] ensureDemoData failed:", e);

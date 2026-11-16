@@ -123,7 +123,7 @@ export default function ClaimsOverview({ payer, from, to }: { payer: string; fro
     <div className="space-y-5" data-testid="claims-overview">
       <RcmOverviewRow />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <div className={card}><h3 className={title}>Claims by stage</h3><BarBox data={d.claimsByStage} xKey="name" yKey="value" /></div>
+        <div className={card}><h3 className={title}>Claims by stage</h3><BarBox data={[...d.claimsByStage].sort((a, b) => b.value - a.value).slice(0, 10)} xKey="name" yKey="value" horizontal /></div>
         <div className={card}><h3 className={title}>Claims by workflow</h3><Donut data={d.claimsByWorkflow} label="CLAIMS" /></div>
         <div className={card}><h3 className={title}>Denial rate by month</h3><LineBox data={d.denialTrend} yKey="rate" unit="%" /></div>
         <div className={card}><h3 className={title}>A/R aging (outstanding)</h3><BarBox data={d.arAging} xKey="bucket" yKey="amount" color="#F59E0B" /></div>
