@@ -359,9 +359,9 @@
     },
     standardServices() {
       T.h.setServices([
-        { id: 701, name: "RCMTEST MRI brain", description: "", cptCode: "70553", duration: 30, price: 1200, currency: "USD", isActive: true },
-        { id: 702, name: "RCMTEST Office visit", description: "", cptCode: "99214", duration: 30, price: 150, currency: "USD", isActive: true },
-        { id: 703, name: "RCMTEST Cataract surgery", description: "", cptCode: "66984", duration: 60, price: 2400, currency: "USD", isActive: true },
+        { id: 701, name: "RCMTEST MRI brain", description: "", cptCode: "70553", duration: 30, price: 1200, currency: "USD", isActive: true, billableToInsurance: true },
+        { id: 702, name: "RCMTEST Office visit", description: "", cptCode: "99214", duration: 30, price: 150, currency: "USD", isActive: true, billableToInsurance: true },
+        { id: 703, name: "RCMTEST Cataract surgery", description: "", cptCode: "66984", duration: 60, price: 2400, currency: "USD", isActive: true, billableToInsurance: true },
       ]);
     },
     /** fresh world + standard services + sample templates + a BCBS coverage for the test client. */
@@ -830,16 +830,17 @@
         const first = r.rcmDefaults.ensureRcmDefaults();
         assert(!first.already && first.rules > 20 && first.enabled > 10, "defaults created: " + JSON.stringify(first));
         const byId2 = (id) => r.automation.getStoredRules().find((x) => x.id === id);
-        assert(byId2("sample-rule-A1").enabled, "A1 ships enabled");
-        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A29").enabled, "outbound rules (message / submit / call) ship off");
+        assert(byId2("r4-rule-create-record").enabled, "the insurance-record rule ships enabled");
+        assert(!byId2("sample-rule-A1"), "the old Coverage & authorization rules are not part of the starting set");
+        assert(!byId2("r4-rule-needs-fix-msg").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A28a").enabled, "outbound rules (message / submit) ship off");
         assert(!byId2("sample-rule-A14-scribe").enabled, "alternates ship off");
         assert(r.automation.getStoredRules().every((x) => !/\(sample\)/i.test(x.name)), "no (Sample) in rule names");
-        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: false });
-        r.automation.deleteRule("sample-rule-A2");
+        r.automation.updateRule("r4-rule-create-record", { name: "RCMTEST edited rule", enabled: false });
+        r.automation.deleteRule("r4-rule-daily-recheck");
         const second = r.rcmDefaults.ensureRcmDefaults();
         assert(second.already, "second run is a no-op");
-        eq(byId2("sample-rule-A1").name, "RCMTEST edited A1", "rule edit kept");
-        assert(!byId2("sample-rule-A2"), "deleted rule not brought back");
+        eq(byId2("r4-rule-create-record").name, "RCMTEST edited rule", "rule edit kept");
+        assert(!byId2("r4-rule-daily-recheck"), "deleted rule not brought back");
         eq(r.billing.getPayers().length, 15, "payers list seeded");
         eq(r.taskViews.taskViewsStore.get().length, 8, "8 queue views");
       },
@@ -1390,7 +1391,7 @@
         session(w, id, RT);
         await r.scribeBilling.signAndSendToBilling(SESSION);
         await T.waitFor(() => T.h.claimsOf(w.clientId).length === 1, { timeout: 6000, msg: "claim at signing" });
-        eq(T.h.claimsOf(w.clientId)[0].sourceType, "scribe");
+        eq(T.h.claimsOf(w.clientId)[0].sourceType, "appointment"); // the note continues the appointment insurance record
       },
     },
     {
@@ -1607,7 +1608,7 @@
       },
     },
     {
-      title: "Reminder stages: Sent => Reminder 1 => Reminder 2 => balance call => Overdue + Patient balances task (clock advanced)",
+      title: "Reminder stages: Sent => Reminder 1 => Reminder 2 => Overdue + Patient balances task (clock advanced; the balance call is a stage setting, not a rule)",
       async run(ctx) {
         const r = T.rcm();
         const w = worldM(ctx);
@@ -1621,8 +1622,6 @@
         await T.waitFor(() => label() === "Reminder 1", { timeout: 6000, msg: "Reminder 1" });
         age(31); await r.jobs.runDaily(new Date(), ["invoices"]);
         await T.waitFor(() => label() === "Reminder 2", { timeout: 6000, msg: "Reminder 2" });
-        age(46); await r.jobs.runDaily(new Date(), ["invoices"]);
-        await T.waitFor(() => r.claimStatusAndCalls.rcmCallsStore.get().some((c) => c.purpose === "balance_reminder" && c.status === "completed"), { timeout: 6000, msg: "balance call" });
         age(61); await r.jobs.runDaily(new Date(), ["invoices"]);
         await T.waitFor(() => label() === "Overdue", { timeout: 6000, msg: "Overdue" });
         await T.waitFor(() => T.h.openTasks("patient-balances").length === 1, { msg: "Patient balances task" });
@@ -1659,7 +1658,7 @@
       },
     },
     {
-      title: "start_call (mock): balance reminders need voice consent; CARC categories resolve",
+      title: "Stage call library (mock): balance reminders need voice consent; there is NO Start Call node in the catalog",
       run(ctx) {
         const r = T.rcm();
         const w = ctx.fresh();
@@ -1668,6 +1667,7 @@
         const no = r.claimStatusAndCalls.performStartCall({ purpose: "balance_reminder", clientId: w.clientId, voiceConsent: false, phone: "555", recordType: "invoice", recordId: "RCMTEST-INV2" });
         match(no, { status: "skipped", skipped: "no_consent" });
         eq(T.rcm().claimStatusAndCalls.rcmCallsStore.get().length >= 2, true);
+        assert(!T.rcm().rcmCatalog.RCM_ACTION_KEYS.includes("start_call"), "Start Call is not an automation action");
       },
     },
     {
@@ -1976,21 +1976,26 @@
       },
     },
     {
-      title: "Round 3: the demo organization has realistic data on every RCM screen (claims in all stages, ERAs, invoices, tasks in every queue, instances in all stages)",
+      title: "Round 3: the demo organization has realistic data on every RCM screen (claims in all stages, ERAs, invoices, tasks in every queue, one insurance record per appointment in all Eligibility / Prior auth stages)",
       run() {
         const r = T.rcm();
         const arr = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch (e) { return []; } };
         if (localStorage.getItem(r.demoWorkspace.DEMO_WORKSPACE_FLAG) !== "1") { T.manual("Needs a human: the demo organization is not the active one (the realistic data is only seeded for it)"); return; }
-        const claims = arr("mantra_claims_v1").filter((x) => String(x.id).indexOf("dm-") === 0);
+        const all = arr("mantra_claims_v1").filter((x) => String(x.id).indexOf("dm-") === 0);
+        const claims = all.filter((x) => String(x.id).indexOf("dm-clm-") === 0);
         assert(claims.length >= 60, "claims: " + claims.length);
         assert(new Set(claims.map((x) => x.processId)).size === 3, "claims in all three workflows");
+        const preStages = new Set(all.filter((x) => String(x.id).indexOf("dm-rec-") === 0).map((x) => x.processId + "/" + x.statusLabel));
+        assert(preStages.size >= 12, "insurance records in the Eligibility and Prior auth stages: " + preStages.size);
+        const per = {}; all.forEach((x) => { if (x.appointmentId) per[x.appointmentId] = (per[x.appointmentId] || 0) + 1; });
+        assert(Object.keys(per).every((k) => per[k] === 1), "ONE insurance record per appointment");
         assert(new Set(claims.map((x) => x.statusLabel)).size >= 17, "claims across the stages: " + new Set(claims.map((x) => x.statusLabel)).size);
         assert(new Set(claims.map((x) => x.payer.id)).size >= 6, "6+ payers");
         assert(arr("mantra_eras_v1").some((e) => e.status === "unmatched") && arr("mantra_eras_v1").some((e) => e.status === "partial"), "ERAs incl. partial and unmatched");
         assert(new Set(arr("mantra_invoices_v1").map((i) => i.statusLabel)).size >= 6, "invoice states");
         assert(new Set(arr("mantra_tasks_store").map((t) => t.queueId).filter(Boolean)).size >= 8, "tasks in every queue");
-        assert(r.processLogs.getProcessInstances().filter((i) => i.processId === "proc-sample-coverage-auth").length >= 30, "coverage instances (Deals is not empty)");
         assert(arr("appointments_v1").length >= 40 && arr("mantra_coverages_v1").length >= 20, "appointments and coverages");
+        assert(new Set(arr("appointments_v1").filter((a) => Number(a.id) >= 910000).map((a) => a.paymentMode)).size === 2, "appointments have payment modes");
         assert(!/RCMTEST/.test(localStorage.getItem("mantra_claims_v1") || ""), "no test prefix in the data");
       },
     },
@@ -2019,6 +2024,101 @@
           await T.waitFor(() => document.querySelector('[data-section-id="sec-insurance"]'), { timeout: 12000, msg: "Insurance section" });
         },
       }],
+    },
+    {
+      title: "Round 4: calls are stage settings (no Start Call action); the Eligibility workflow Inconclusive stage places the payer call; balance calls need consent",
+      run(ctx) {
+        const r = T.rcm();
+        ctx.fresh();
+        assert(!r.rcmCatalog.RCM_ACTION_KEYS.includes("start_call"), "no Start Call in the catalog");
+        localStorage.removeItem("mantra_r4_insurance_records_v1");
+        r.rcmDefaultsR4.seedInsuranceRecordDefaults();
+        const wf = r.processStore.getStoredProcesses().find((p) => p.id === r.rcmDefaultsR4.ELIGIBILITY_WORKFLOW_ID);
+        assert(wf && wf.workflowType === "eligibility", "Eligibility workflow exists with its type");
+        const inc = wf.stages.find((s) => s.name === "Inconclusive");
+        assert(inc.enableCalling === true && inc.callTriggerSettings && inc.callTriggerSettings.callPurpose === "payer_benefits", "payer-benefits call is ON for the Inconclusive stage");
+        const proc = { id: "RCMTEST-inv", name: "RCMTEST Invoices", entityType: "invoice", stages: [{ id: "RCMTEST-bal", name: "Balance", enableCalling: true, callTriggerSettings: { callPurpose: "balance_reminder" } }] };
+        r.processStore.saveStoredProcesses([...r.processStore.getStoredProcesses(), proc]);
+        localStorage.setItem("clients", JSON.stringify([{ id: "RCMTEST-CL-C", name: "RCMTEST Caller", phone: "555", stage: "x", processes: [] }]));
+        const ev = { id: "RCMTEST-E", event: "stage.entered", recordType: "invoice", recordId: "RCMTEST-INV-C", data: { clientId: "RCMTEST-CL-C", processId: "RCMTEST-inv", stageId: "RCMTEST-bal" }, timestamp: "" };
+        match(r.claimStatusAndCalls.performStageCall(ev), { status: "skipped", skipped: "no_consent" });
+      },
+    },
+    {
+      title: "Round 4: payment mode defaults from the service flag (not billable => self-pay), unconfirmed only for call bookings without an answer; registry field with editable options",
+      run(ctx) {
+        const r = T.rcm();
+        ctx.fresh();
+        T.h.setServices([{ id: 7001, name: "RCMTEST billable", description: "", cptCode: "99213", duration: 30, price: 10, currency: "USD", isActive: true, billableToInsurance: true }, { id: 7002, name: "RCMTEST cosmetic", description: "", duration: 30, price: 10, currency: "USD", isActive: true, billableToInsurance: false }]);
+        eq(r.paymentMode.resolvePaymentMode({ serviceId: 7001, source: "screen" }).mode, "insurance");
+        eq(r.paymentMode.resolvePaymentMode({ serviceId: 7002, requested: "insurance" }).mode, "self_pay", "not billable => self-pay");
+        eq(r.paymentMode.resolvePaymentMode({ serviceId: 7001, source: "Inbound Call" }).unconfirmed, true);
+        r.fieldSeeds.ensureRcmFieldSeeds();
+        const reg = JSON.parse(localStorage.getItem("mantra_field_registry_v1") || "{}");
+        const f = (Array.isArray(reg) ? reg.filter((x) => x.module === "appointment") : reg.appointment || []).find((x) => x.key === "paymentMode");
+        assert(f && f.options.length >= 2, "paymentMode registry field with options");
+      },
+    },
+    {
+      title: "Round 4: ONE insurance record per appointment moves across workflows; pre-claim records are left out of claim counts; the eligibility report reads the Eligibility workflow",
+      run(ctx) {
+        const r = T.rcm();
+        const w = ctx.fresh();
+        localStorage.removeItem("mantra_r4_insurance_records_v1");
+        r.rcmDefaultsR4.seedInsuranceRecordDefaults();
+        r.claimSamples.seedSampleClaimWorkflows();
+        const before = r.kpis.rcmKpis().claimsTotal;
+        const mk = (id, extra) => Object.assign({ id, claimNumber: id, patientId: w.clientId, patientName: "RCMTEST Patient", patientDob: "", patientGender: "Other", patientAddress: "", patientPhone: "", insuredId: "", payer: { id: "p", name: "RCMTEST Payer", payerId: "1", type: "Commercial" }, renderingProviderName: "", renderingProviderNpi: "", billingProviderName: "", billingProviderNpi: "", placeOfService: "", serviceDate: T.h.ymd(5), diagnosisCodes: [], lines: [], totalCharge: 100, amountPaid: 0, status: "Draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, extra);
+        const rec = r.claimService.claimService.create(mk("RCMTEST-rec1", { appointmentId: "RCMTEST-A1", sourceType: "appointment", sourceId: "RCMTEST-A1" }), r.rcmDefaultsR4.ELIGIBILITY_WORKFLOW_ID);
+        eq(r.kpis.rcmKpis().claimsTotal, before, "a record in Eligibility is not a claim");
+        r.recordWriter.writeRecordFields({ type: "claim", id: rec.id }, { elig_status: "active", elig_payer: "RCMTEST Payer" });
+        assert(r.reports.buildRcmReportRows("eligibility").some((x) => x.id === rec.id), "eligibility report reads the Eligibility workflow");
+        const cc = r.claimSamples.SAMPLE_CLAIM_WORKFLOW_IDS.chargeCapture;
+        const moved = r.claimService.claimService.moveToWorkflow(rec.id, cc);
+        assert(moved && moved.moved, "the same record moves to Charge capture");
+        eq(r.claims.getStoredClaims().filter((c) => c.appointmentId === "RCMTEST-A1").length, 1, "still one record for the appointment");
+        eq(r.kpis.rcmKpis().claimsTotal, before + 1, "once in Charge capture it counts as a claim");
+        assert(r.claimWorkflows.isPreClaimWorkflow(r.claimWorkflows.getClaimWorkflow(r.rcmDefaultsR4.PRIOR_AUTH_WORKFLOW_ID)), "Prior auth is pre-claim by type");
+      },
+    },
+    {
+      title: "Round 4: linked-appointment condition fields resolve without a linked appointment (no crash) and the picker fields exist in the registry",
+      run(ctx) {
+        const r = T.rcm();
+        ctx.fresh();
+        const rule = { enabled: true, conditions: [{ field: "paymentMode" }, { field: "elig_copay" }], trigger: { event: "stage.entered" } };
+        const out = r.ruleContextFields.linkedAppointmentFields({ id: "E", event: "stage.entered", recordType: "claim", recordId: "none", data: {}, timestamp: "" }, [rule]);
+        eq(Object.keys(out).length, 0);
+        r.fieldSeeds.ensureRcmFieldSeeds();
+        const reg = JSON.parse(localStorage.getItem("mantra_field_registry_v1") || "{}");
+        const appt = Array.isArray(reg) ? reg.filter((x) => x.module === "appointment") : reg.appointment || [];
+        for (const k of ["paymentMode", "elig_copay", "elig_deductible_remaining", "elig_plan_end", "auth_status", "auth_units_approved"]) assert(appt.some((x) => x.key === k) || (Array.isArray(reg) ? reg : reg.claim || []).some((x) => x.key === k), "selectable field " + k);
+      },
+    },
+    {
+      title: "UI: Claims switcher lists Eligibility and Prior auth with counts and does not open on them",
+      arrange(ctx) {
+        const r = T.rcm();
+        const w = ctx.fresh();
+        localStorage.removeItem("mantra_r4_insurance_records_v1");
+        r.rcmDefaultsR4.seedInsuranceRecordDefaults();
+        r.claimSamples.seedSampleClaimWorkflows();
+        const mk = (id, extra) => Object.assign({ id, claimNumber: id, patientId: w.clientId, patientName: "RCMTEST Patient", patientDob: "", patientGender: "Other", patientAddress: "", patientPhone: "", insuredId: "", payer: { id: "p", name: "RCMTEST Payer", payerId: "1", type: "Commercial" }, renderingProviderName: "", renderingProviderNpi: "", billingProviderName: "", billingProviderNpi: "", placeOfService: "", serviceDate: T.h.ymd(5), diagnosisCodes: [], lines: [], totalCharge: 100, amountPaid: 0, status: "Draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, extra);
+        for (let i = 0; i < 4; i++) r.claimService.claimService.create(mk("RCMTEST-e" + i, { appointmentId: "RCMTEST-AE" + i, sourceType: "appointment", sourceId: "RCMTEST-AE" + i }), r.rcmDefaultsR4.ELIGIBILITY_WORKFLOW_ID);
+        r.claimService.claimService.create(mk("RCMTEST-c1"), r.claimSamples.SAMPLE_CLAIM_WORKFLOW_IDS.claim);
+      },
+      phases: [
+        {
+          nav: "/claims",
+          async verify() {
+            await T.ui.wait("claims-filter-workflow", 15000);
+            const sel = T.ui.q("claims-filter-workflow");
+            const opts = Array.from(sel.options).map((o) => o.text);
+            assert(opts.some((t) => t.indexOf("Eligibility (4)") === 0) && opts.some((t) => t.indexOf("Prior auth (0)") === 0), "switcher lists the new workflows with counts: " + opts.join(" | "));
+            assert(sel.selectedOptions[0].text.indexOf("Eligibility") !== 0, "does not open on Eligibility: " + sel.selectedOptions[0].text);
+          },
+        },
+      ],
     },
     {
       title: "Round 3: Insurance section layout, Claims overview chart look, More menu, Setup",

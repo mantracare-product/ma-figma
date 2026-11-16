@@ -167,9 +167,13 @@ const INSTANCE_STAGE_TO_RECORD: Record<string, { workflow: string; stage: string
   "Self-pay": { workflow: ELIGIBILITY_WORKFLOW_ID, stage: "Self-pay" },
   "Auth required": { workflow: PRIOR_AUTH_WORKFLOW_ID, stage: "Required" },
   "Auth submitted": { workflow: PRIOR_AUTH_WORKFLOW_ID, stage: "Submitted" },
+  "Auth approved": { workflow: PRIOR_AUTH_WORKFLOW_ID, stage: "Approved" },
   "Auth expired": { workflow: PRIOR_AUTH_WORKFLOW_ID, stage: "Expired" },
   "Auth denied": { workflow: PRIOR_AUTH_WORKFLOW_ID, stage: "Denied" },
 };
+
+/** Stage of the insurance record that matches a state name of the older Coverage & authorization process (used by the demo data and the migration). */
+export const mapDemoStateToRecord = (state: string): { workflow: string; stage: string } => INSTANCE_STAGE_TO_RECORD[state] || { workflow: ELIGIBILITY_WORKFLOW_ID, stage: "Run eligibility" };
 
 /** Rules of the old "Coverage & authorization" flow (Set E A1-A13, E2 A11/A12): they create or move instances. */
 const OLD_INSTANCE_RULE = /^sample-rule-A(1|2|3|4|5|6|8|9|10|11|12|13)$/;

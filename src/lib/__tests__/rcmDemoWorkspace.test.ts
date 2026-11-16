@@ -44,10 +44,20 @@ describe("demo workspace seed", () => {
     const tasks = arr("mantra_tasks_store").filter((t: any) => String(t.id).startsWith("dm-"));
     expect(new Set(tasks.map((t: any) => t.queueId)).size).toBe(8);
     expect(tasks.some((t: any) => t.status === "completed") && tasks.some((t: any) => t.status !== "completed" && Date.parse(t.dueAt) < Date.parse("2026-11-16"))).toBe(true);
-    // every Coverage & authorization stage has an instance
-    const { SAMPLE_COVERAGE_PROCESS_ID } = await import("../rcmSampleIds");
-    const stages = new Set(arr("callLogs").filter((l: any) => l.processId === SAMPLE_COVERAGE_PROCESS_ID).map((l: any) => l.currentStage));
-    for (const s of ["Not checked", "Checking", "Needs fix", "Provider setup issue", "Inconclusive", "Pending review", "Auth required", "Auth submitted", "Verified", "Auth expired", "Inactive", "Auth denied", "Self-pay"]) expect(stages.has(s), s).toBe(true);
+    // ONE insurance record per appointment, in every stage of Eligibility and Prior auth, with eligibility / auth values
+    const allClaims = arr("mantra_claims_v1");
+    const perAppt = new Map<string, number>();
+    for (const c of allClaims.filter((x: any) => String(x.appointmentId).startsWith("91"))) perAppt.set(c.appointmentId, (perAppt.get(c.appointmentId) || 0) + 1);
+    expect(Array.from(perAppt.values()).every((n) => n === 1)).toBe(true);
+    const { buildEligibilityWorkflow, buildPriorAuthWorkflow } = await import("../rcmDefaultsR4");
+    for (const w of [buildEligibilityWorkflow(), buildPriorAuthWorkflow()]) for (const st of w.stages) expect(allClaims.some((c: any) => c.processId === w.id && c.statusLabel === st.name), `${w.name} / ${st.name}`).toBe(true);
+    const rec = allClaims.find((c: any) => c.processId === "proc-claim-eligibility" && c.statusLabel === "Eligible");
+    expect(JSON.parse(localStorage.getItem(`mantra_claim_fieldvalues_${rec.id}`)!)).toMatchObject({ elig_status: "active" });
+    // appointments carry a payment mode (insurance, self-pay, some unconfirmed) and no process instances remain
+    const ap = arr("appointments_v1").filter((a: any) => Number(a.id) >= 910000);
+    expect(new Set(ap.map((a: any) => a.paymentMode))).toEqual(new Set(["insurance", "self_pay"]));
+    expect(ap.some((a: any) => a.paymentModeUnconfirmed)).toBe(true);
+    expect(arr("callLogs").some((l: any) => l.kind === "process_instance" && String(l.id).includes("-DM-"))).toBe(false);
     // no wording that marks it as sample data, and none of the test prefix
     const blob = (JSON.stringify(claims) + JSON.stringify(tasks)).replace(/proc-sample-[a-z-]+/g, "");
     expect((blob.match(/.{0,30}(sample|mock|dummy|RCMTEST|demo).{0,30}/i) || [""])[0]).toBe("");

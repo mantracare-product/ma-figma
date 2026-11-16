@@ -45,3 +45,10 @@ Deals/process-drawer visuals, form layouts (Claims Setup, Insurance tab, Create 
 - Claims top bar: workflow switcher (no All, counts, default = most claims), payer, assignee, List/Board, no stage or date filters. Payer, assignee and List/Board may sit in the top bar's **More** menu on narrow windows: tests call `T.ui.openMore()` first.
 - Tasks page has no Queue selector / Save view. Overview shows one "Work queues" card (counts only).
 - New checks (S6.12-S6.16): "(Sample)" suffix migration, realistic data present (flag `mantra_demo_workspace_v1`), single-line top bars and no horizontal page scroll on eight pages, no Insurance tab. The realistic data is seeded by the app at start-up (never during a test run) and read-only here.
+
+## Round 4 changes
+- No Start Call action: calls are stage settings (`performStageCall`); tests call the library function and the stage setting of the Eligibility workflow.
+- Appointments have a payment mode (service flag "Billable to insurance"); test services carry `billableToInsurance`.
+- ONE insurance record per appointment (Eligibility / Prior auth workflows, workflow type); the Coverage & authorization process and Set E are no longer part of the starting set. Tests that use `enableDemoSet("E")` still exercise the instance-based library code.
+- New checks in S6 (Round 4): no Start Call node / stage call, payment mode defaults, one record moving across workflows and claim counts excluding pre-claim records, condition fields, Claims switcher listing Eligibility / Prior auth.
+- The realistic data now uses flag `mantra_demo_workspace_v2` (appointments with payment modes, one record per appointment).

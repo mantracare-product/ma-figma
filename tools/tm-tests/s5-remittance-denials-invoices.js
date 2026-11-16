@@ -99,7 +99,7 @@
       },
     },
     {
-      title: "Reminder stages: Sent => Reminder 1 => Reminder 2 => balance call => Overdue + Patient balances task (clock advanced)",
+      title: "Reminder stages: Sent => Reminder 1 => Reminder 2 => Overdue + Patient balances task (clock advanced; the balance call is a stage setting, not a rule)",
       async run(ctx) {
         const r = T.rcm();
         const w = worldM(ctx);
@@ -113,8 +113,6 @@
         await T.waitFor(() => label() === "Reminder 1", { timeout: 6000, msg: "Reminder 1" });
         age(31); await r.jobs.runDaily(new Date(), ["invoices"]);
         await T.waitFor(() => label() === "Reminder 2", { timeout: 6000, msg: "Reminder 2" });
-        age(46); await r.jobs.runDaily(new Date(), ["invoices"]);
-        await T.waitFor(() => r.claimStatusAndCalls.rcmCallsStore.get().some((c) => c.purpose === "balance_reminder" && c.status === "completed"), { timeout: 6000, msg: "balance call" });
         age(61); await r.jobs.runDaily(new Date(), ["invoices"]);
         await T.waitFor(() => label() === "Overdue", { timeout: 6000, msg: "Overdue" });
         await T.waitFor(() => T.h.openTasks("patient-balances").length === 1, { msg: "Patient balances task" });

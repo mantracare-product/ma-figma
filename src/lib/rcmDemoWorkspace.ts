@@ -1,5 +1,5 @@
 /**
- * Realistic starting workspace for the demo organization (R3.4): appointments, coverages, eligibility instances,
+ * Realistic starting workspace for the demo organization (R3.4, rebuilt in R4.6 for the one-record-per-appointment model): appointments, coverages, eligibility instances,
  * claims in every stage of the three claim workflows, ERAs, payments, invoices, scribe sessions with accepted codes,
  * tasks in every queue, payer calls, notifications and audit entries. Dates are relative to today (last ~90 days and
  * the next 14), the data is deterministic and internally consistent (client <-> appointment <-> coverage <-> instance
@@ -15,8 +15,7 @@ import { testRunActive } from "./demoData";
 import { getOrgBilling } from "./orgBilling";
 import { POPULAR_PAYERS, type Claim, type ClaimPayer } from "./claimsStore";
 import { buildSampleClaimWorkflows, seedSampleClaimWorkflows, SAMPLE_CLAIM_WORKFLOW_IDS, claimStageId } from "./rcmSampleClaimWorkflows";
-import { seedCoverageSampleProcess, covStageId } from "./rcmSampleProcess";
-import { SAMPLE_COVERAGE_PROCESS_ID, SAMPLE_COVERAGE_PROCESS_NAME } from "./rcmSampleIds";
+import { ensureRound4Defaults, APPT_INSURANCE_WORKFLOW_ID, apptInsuranceStageId, mapDemoStateToRecord } from "./rcmDefaultsR4";
 import { claimStatusForStage } from "./claimWorkflows";
 import { CARC } from "./denialCodes";
 import { queueIdFromName } from "./taskViewsStore";
@@ -28,7 +27,8 @@ import { getStoredNotifications, saveStoredNotifications } from "./notifications
 import { getStoredAuditLogs } from "./auditLogsStore";
 import { getScribeSessions } from "./scribeSessionStore";
 
-export const DEMO_WORKSPACE_FLAG = "mantra_demo_workspace_v1";
+export const DEMO_WORKSPACE_FLAG = "mantra_demo_workspace_v2";
+const DEMO_WORKSPACE_FLAG_V1 = "mantra_demo_workspace_v1";
 const ID = "dm-";
 
 // ── helpers ───────────────────────────────────────────────────────────────────────────────────────
@@ -68,16 +68,16 @@ const STAFF = ["Maya Collins", "Jordan Lee", "Sam Rivera"];
 /** Eligibility / authorization state of an appointment's coverage; names are the stages of "Coverage & authorization". */
 const COV_STATES = [
   "Verified", "Verified", "Verified", "Needs fix", "Verified", "Inactive", "Verified", "Inconclusive", "Verified", "Pending review",
-  "Verified", "Self-pay", "Auth required", "Verified", "Auth submitted", "Provider setup issue", "Verified", "Auth expired", "Not checked", "Checking", "Auth denied", "Verified", "Needs fix", "Verified",
+  "Verified", "Self-pay", "Auth required", "Verified", "Auth submitted", "Provider setup issue", "Verified", "Auth expired", "Not checked", "Checking", "Auth denied", "Verified", "Needs fix", "Auth approved", "Verified", "Auth approved",
 ] as const;
 type CovState = (typeof COV_STATES)[number];
 const CHIP: Record<string, string> = {
   Verified: "active", "Needs fix": "not_found", Inactive: "inactive", Inconclusive: "inconclusive", "Pending review": "pending_review", "Self-pay": "self_pay",
-  "Provider setup issue": "provider_setup", "Auth required": "active", "Auth submitted": "active", "Auth expired": "active", "Auth denied": "active",
+  "Provider setup issue": "provider_setup", "Auth required": "active", "Auth submitted": "active", "Auth expired": "active", "Auth denied": "active", "Auth approved": "active",
 };
 const ELIG: Record<string, string> = {
   Verified: "active", "Needs fix": "not_found", Inactive: "inactive", Inconclusive: "inconclusive", "Pending review": "pending_review", "Provider setup issue": "provider_setup",
-  "Auth required": "active", "Auth submitted": "active", "Auth expired": "active", "Auth denied": "active", "Self-pay": "", "Not checked": "", Checking: "",
+  "Auth required": "active", "Auth submitted": "active", "Auth expired": "active", "Auth denied": "active", "Auth approved": "active", "Self-pay": "", "Not checked": "", Checking: "",
 };
 
 const DEMO_SCRIBE_KEY = "mantra_demo_scribe_sessions_v1";
@@ -104,6 +104,8 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
     if (!opts.force) {
       if (testRunActive() || !isDemoMantraActive()) return { already: true, added };
       if (localStorage.getItem(DEMO_WORKSPACE_FLAG) === "1") return { already: true, added };
+      // the first version of this data (instances, several claims per visit) is replaced: remove exactly what it created
+      if (localStorage.getItem(DEMO_WORKSPACE_FLAG_V1) === "1") removeDemoRecords();
     }
     const now = opts.now ?? Date.now();
     const dayYmd = (offset: number) => new Date(now + offset * DAY).toISOString().slice(0, 10);
@@ -113,7 +115,7 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
 
     // Reference data the rest depends on (all idempotent "add what is missing" seeders).
     seedSampleClaimWorkflows();
-    seedCoverageSampleProcess();
+    try { ensureRound4Defaults(); } catch { /* ignore */ }
     const clients = (initialClients as any[]).slice(0, 20);
     const payers: ClaimPayer[] = POPULAR_PAYERS.slice(0, 6);
     const planOf = (p: ClaimPayer) => (p.type === "Medicare" ? "Medicare Part B" : p.type === "Medicaid" ? "Medicaid Managed Care" : `${p.name.split(" ")[0]} PPO Choice`);
@@ -150,61 +152,80 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
       const a: any = {
         id: 910000 + aSeq, _seq: aSeq, clientId: c.id, clientName: c.name, clientEmail: c.email || "", clientPhone: c.phone || "", employeeId: 100 + (ci % 3), employeeName: prov.name,
         serviceId: 9000 + (SERVICES.indexOf(s) + 1), serviceName: s.name, title: `${s.name} - ${c.name}`, date: dayYmd(offset), time: `${String(hour).padStart(2, "0")}:${aSeq % 2 ? "00" : "30"}`, duration: s.dur,
-        status, sessionType: "inPerson", location: "Main Clinic", createdAt: dayIso(offset - 12), updatedAt: dayIso(offset - 1), source: "booking",
+        status, sessionType: "inPerson", location: "Main Clinic", createdAt: dayIso(offset - 12), updatedAt: dayIso(offset - 1), source: ["Inbound Call", "MA-Client", "Walked In", "screen"][aSeq % 4],
         _service: s, _prov: prov,
       };
+      // payment mode: insurance when the client has a coverage and the service is billable to insurance (physical therapy is self-pay); some call bookings were never confirmed
+      a.paymentMode = covOf[c.id] && s.name !== "Physical therapy" ? "insurance" : "self_pay";
+      if (a.source === "Inbound Call" && aSeq % 3 === 0) a.paymentModeUnconfirmed = true;
       appts.push(a);
       return a;
     };
     clients.forEach((c, ci) => {
-      const past = 1 + (ci % 3 === 0 ? 1 : 0);
-      for (let k = 0; k < past; k++) mkAppt(ci, -(4 + ((ci * 11 + k * 31) % 80)), (ci + k) % 9 === 4 ? "cancelled" : (ci + k) % 13 === 6 ? "no-show" : "completed");
+      const past = 6 + (ci % 2);
+      for (let k = 0; k < past; k++) mkAppt(ci, -(4 + ((ci * 11 + k * 13) % 84)), (ci + k) % 11 === 4 ? "cancelled" : (ci + k) % 17 === 6 ? "no-show" : "completed");
       mkAppt(ci, (ci * 5) % 15, "scheduled");
+      if (ci % 2 === 0) mkAppt(ci, 1 + ((ci * 3) % 13), "scheduled");
+      if (ci % 3 === 1) mkAppt(ci, 2 + ((ci * 7) % 12), "scheduled");
     });
 
-    // ── Coverage & authorization instances: one per upcoming / recent appointment, in every stage ──
-    const logs: any[] = [];
+    // ── Insurance records for the visits that are still ahead (or just happened): ONE per appointment, in every stage of
+    //    Eligibility and Prior auth, with eligibility / authorization values and history ──
+    const preRecords: any[] = [];
+    const preFields: Record<string, Record<string, any>> = {};
     let stateIdx = 0;
-    const eligAppts = appts.filter((a) => a.status === "scheduled" || a.status === "completed").slice(0, 44);
+    const eligAppts = appts.filter((a) => a.paymentMode === "insurance" && a.status === "scheduled" && covOf[a.clientId]);
     eligAppts.forEach((a) => {
       const state: CovState = COV_STATES[stateIdx % COV_STATES.length];
       stateIdx += 1;
       const cov = covOf[a.clientId];
-      const payer = payers.find((p) => p.id === cov?.payerId);
-      const instId = `PRC-DM-${String(a._seq).padStart(3, "0")}`;
-      const checkedAt = dayIso(Math.min(0, new Date(a.date).getTime() > now ? -1 : -2), 7);
+      const payer = payers.find((p) => p.id === cov?.payerId)!;
+      const target = mapDemoStateToRecord(state);
+      const recId = `${ID}rec-${a._seq}`;
+      const checkedAt = dayIso(-1, 7);
       const eligStatus = ELIG[state];
       const needsAuth = state.startsWith("Auth");
-      const row: any = {
-        id: instId, instanceId: instId, kind: "process_instance", client: a.clientName, clientId: a.clientId, type: "WhatsApp", status: "In Progress", process: SAMPLE_COVERAGE_PROCESS_NAME,
-        processId: SAMPLE_COVERAGE_PROCESS_ID, currentStage: state, duration: "0:00", date: `${a.date} ${a.time}`, hasRecording: false, hasTranscript: true, hasScheduledCall: false,
-        source: { type: "appointment", id: String(a.id), title: `${a._service.name} - ${a.date} ${a.time} (Appt #${a._seq})` },
-        dedupeKey: `${a.clientId}|${SAMPLE_COVERAGE_PROCESS_ID}|appointment:${a.id}`, instanceStatus: state === "Verified" || state === "Self-pay" || state === "Inactive" ? "completed" : "active",
-        title: `${a._service.name} - ${a.date}`, createdAt: dayIso(-3 - (stateIdx % 20), 6),
-      };
-      if (eligStatus && payer) {
-        Object.assign(row, {
+      const c = clients.find((x) => x.id === a.clientId) || clients[0];
+      preRecords.push({
+        id: recId, claimNumber: `INS-${String(910000 + a._seq).slice(-5)}`, patientId: c.id, patientName: c.name, patientDob: c.dob || "", patientGender: "Other", patientAddress: c.location || "", patientPhone: c.phone || "",
+        insuredId: cov.memberId, groupNumber: cov.groupNumber, payer, appointmentId: String(a.id), appointmentTitle: a.title, serviceId: String(a.serviceId),
+        renderingProviderName: a._prov.name, renderingProviderNpi: a._prov.npi, billingProviderName: "", billingProviderNpi: "", placeOfService: "", serviceDate: a.date,
+        diagnosisCodes: [], lines: [], totalCharge: 0, amountPaid: 0, status: "Draft", currentStageId: claimStageId(target.workflow, target.stage), statusLabel: target.stage, processId: target.workflow,
+        assignee: STAFF[stateIdx % STAFF.length], priority: "normal", sourceType: "appointment", sourceId: String(a.id), dedupeKey: `claim:appointment:${a.id}`, submissionCount: 0,
+        createdAt: dayIso(-3 - (stateIdx % 12), 6), updatedAt: dayIso(-1, 9),
+      });
+      const f: Record<string, any> = {};
+      if (eligStatus) {
+        Object.assign(f, {
           elig_status: eligStatus, elig_payer: payer.name, elig_plan: cov.planName, elig_copay: [20, 30, 40, 50][stateIdx % 4], elig_deductible_remaining: [0, 250, 500, 1200, 75][stateIdx % 5],
           elig_coinsurance: [10, 20, 0][stateIdx % 3], elig_oop_remaining: [800, 2400, 150][stateIdx % 3], elig_network: stateIdx % 6 === 0 ? "Out of network" : "In network",
-          elig_plan_begin: cov.effectiveDate, elig_plan_end: cov.termDate || "", elig_checked_at: checkedAt, elig_source: "clearinghouse",
-          elig_history: [{ checkedAt, trigger: "Scheduled check", source: "clearinghouse", status: eligStatus, reasonCode: eligStatus === "active" ? "" : eligStatus === "not_found" ? "75" : "", summary: state }],
+          elig_plan_begin: cov.effectiveDate, elig_plan_end: cov.termDate || dayYmd(200), elig_checked_at: checkedAt, elig_source: "clearinghouse",
+          elig_history: [{ checkedAt, trigger: "Scheduled check", source: "clearinghouse", status: eligStatus, reasonCode: eligStatus === "not_found" ? "75" : "", summary: state, sourceRecord: `appointment:${a.id}`, rawRef: "" }],
         });
-        if (eligStatus === "not_found") Object.assign(row, { elig_reason_code: "75", elig_reason_category: "Subscriber not found", elig_message: "Member ID or date of birth does not match the payer record", elig_attempt: 2 });
+        if (eligStatus === "not_found") Object.assign(f, { elig_reason_code: "75", elig_reason_category: "Subscriber not found", elig_message: "Member ID or date of birth does not match the payer record", elig_attempt: 2 });
       }
       if (needsAuth) {
-        Object.assign(row, {
-          auth_required: "Yes", auth_status: state === "Auth required" ? "Required" : state === "Auth submitted" ? "Submitted" : state === "Auth expired" ? "Expired" : "Denied",
+        Object.assign(f, {
+          auth_required: true, auth_status: state === "Auth required" ? "required" : state === "Auth submitted" ? "requested" : state === "Auth expired" ? "expired" : state === "Auth approved" ? "approved" : "denied",
           auth_number: state === "Auth required" || state === "Auth submitted" ? "" : `PA-${660000 + stateIdx * 17}`, auth_units_approved: 12, auth_units_used: state === "Auth expired" ? 12 : 3,
           auth_valid_from: dayYmd(-120), auth_valid_to: state === "Auth expired" ? dayYmd(-5) : dayYmd(90), auth_requested_at: dayYmd(-6),
         });
       }
-      logs.push(row);
-      a.coverage = state === "Not checked" || state === "Checking" ? undefined : { instanceId: instId, status: CHIP[state], checkedAt, summary: state === "Verified" ? "Active coverage" : state };
-      if (cov) a.coverageId = cov.id;
+      preFields[recId] = f;
+      a.coverage = state === "Not checked" || state === "Checking" ? undefined : { instanceId: recId, status: CHIP[state], checkedAt, summary: state === "Verified" ? "Active coverage" : state };
+      a.coverageId = cov.id;
       a.financialClass = state === "Self-pay" ? "self_pay" : "insurance";
+      a.claimId = recId;
+      // the appointment sits in the insurance workflow; cleared once eligibility / authorization is
+      a.processId = APPT_INSURANCE_WORKFLOW_ID;
+      const cleared = state === "Verified" || state === "Auth approved";
+      a.currentStageId = apptInsuranceStageId(cleared ? (a._seq % 3 === 0 ? "Reminded" : "Insurance cleared") : "Booked");
+      a.statusLabel = cleared ? (a._seq % 3 === 0 ? "Reminded" : "Insurance cleared") : "Booked";
     });
-    // stage id for the instance, for Deals (kept in sync with covStageId)
-    logs.forEach((l) => { l.lastStage = l.currentStage; l.stageId = covStageId(l.currentStage); });
+    // appointments that already took place are in the insurance workflow too (Completed)
+    appts.forEach((a) => {
+      if (a.paymentMode === "insurance" && a.status === "completed" && !a.processId) { a.processId = APPT_INSURANCE_WORKFLOW_ID; a.currentStageId = apptInsuranceStageId("Completed"); a.statusLabel = "Completed"; }
+    });
 
     // ── Scribe sessions (signed and unsigned) so Create Claim has choices ──
     const sessions: any[] = [];
@@ -232,11 +253,11 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
     const PLAN: Array<[string, string, number]> = [
       [chargeCapture, "Awaiting note", 3], [chargeCapture, "Coding review", 3], [chargeCapture, "Hold", 2], [chargeCapture, "Ready to bill", 2],
       [claimWf, "Draft", 4], [claimWf, "Scrub failed", 3], [claimWf, "Ready to submit", 4], [claimWf, "Submitted", 6], [claimWf, "Rejected", 3], [claimWf, "Accepted by payer", 4],
-      [claimWf, "Pending (payer)", 5], [claimWf, "Partially paid", 3], [claimWf, "Paid", 20], [claimWf, "Closed", 4],
+      [claimWf, "Pending (payer)", 5], [claimWf, "Partially paid", 3], [claimWf, "Paid", 12], [claimWf, "Closed", 3],
       [denial, "New denial", 5], [denial, "Correct & resubmit", 3], [denial, "Appeal drafted", 3], [denial, "Appeal submitted", 2], [denial, "Written off", 2],
     ];
     const DENIALS: Array<[string, string]> = [["appealable", "197"], ["correctable", "16"], ["coverage", "27"], ["appealable", "50"], ["timely_filing", "29"], ["appealable", "97"], ["correctable", "4"], ["coverage", "31"]];
-    const insuredCompleted = completed.filter((x) => !!covOf[x.clientId]); // self-pay clients get invoices, not claims
+    const insuredCompleted = completed.filter((x) => x.paymentMode === "insurance" && !!covOf[x.clientId]); // self-pay visits get invoices, not claims; ONE record per appointment
     const claims: Claim[] = [];
     const eraLinesByPayer: Record<string, any[]> = {};
     const invoiceSeeds: Array<{ claim: Claim }> = [];
@@ -246,7 +267,8 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
       const stage = stageOf(wfId, stageName);
       const cat = stage.systemCategory || "";
       for (let k = 0; k < count; k++) {
-        const a = insuredCompleted[n % insuredCompleted.length];
+        const a = insuredCompleted[n];
+        if (!a) continue;
         const c = clients.find((x) => x.id === a.clientId) || clients[n % clients.length];
         const cov = covOf[c.id];
         const payer = payers.find((p) => p.id === cov?.payerId) || payers[n % payers.length];
@@ -297,7 +319,8 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
         n += 1;
       }
     }
-    added.claims = addMissing("mantra_claims_v1", claims, true, getStoredClaims());
+    added.claims = addMissing("mantra_claims_v1", [...(preRecords as Claim[]), ...claims], true, getStoredClaims());
+    for (const [rid, vals] of Object.entries(preFields)) { try { if (!localStorage.getItem(`mantra_claim_fieldvalues_${rid}`)) localStorage.setItem(`mantra_claim_fieldvalues_${rid}`, JSON.stringify(vals)); } catch { /* ignore */ } }
     localStorage.setItem("claims_schema_v2", localStorage.getItem("claims_schema_v2") || "1");
 
     // ── ERAs: posted per payer, one partial, one unmatched ──
@@ -348,7 +371,7 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
 
     // ── Tasks in every queue, linked to their records ──
     const QUEUES: Array<[string, string, number]> = [
-      ["Insurance fixes", "process_instance", 4], ["Benefits to verify", "process_instance", 4], ["Enrollment", "client", 2], ["Prior auth", "process_instance", 4],
+      ["Insurance fixes", "record", 4], ["Benefits to verify", "record", 4], ["Enrollment", "client", 2], ["Prior auth", "record", 4],
       ["Claim fixes", "claim", 5], ["Posting", "claim", 3], ["Denials and A/R", "claim", 5], ["Patient balances", "invoice", 4],
     ];
     const tasks: any[] = [];
@@ -362,7 +385,7 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
         if (refType === "claim") { const cl = claims[(t * 5) % claims.length]; ref = { type: "claim", id: cl.id, stageId: cl.currentStageId, stageName: cl.statusLabel }; amount = cl.totalCharge; title = `${qName === "Posting" ? "Post payment for" : qName === "Denials and A/R" ? "Work denial on" : "Fix"} ${cl.claimNumber} (${cl.patientName})`; }
         else if (refType === "invoice") { const iv = invoices[(t * 3) % invoices.length]; ref = { type: "invoice", id: iv.id }; amount = iv.total - iv.amountPaid; title = `Collect balance on ${iv.invoiceNumber} (${iv.clientName})`; }
         else if (refType === "client") { const c = clients[(t * 7) % clients.length]; ref = { type: "client", id: c.id }; title = `Enroll ${c.name} with the payer`; }
-        else { const l = logs[(t * 3) % logs.length]; ref = { type: "process_instance", id: l.instanceId, instanceId: l.instanceId, processId: SAMPLE_COVERAGE_PROCESS_ID, stageId: covStageId(l.currentStage), stageName: l.currentStage }; title = `${qName === "Prior auth" ? "Prior authorization for" : qName === "Benefits to verify" ? "Verify benefits for" : "Fix coverage for"} ${l.client}`; }
+        else { const rec = preRecords[(t * 3) % preRecords.length]; ref = { type: "claim", id: rec.id, stageId: rec.currentStageId, stageName: rec.statusLabel }; title = `${qName === "Prior auth" ? "Prior authorization for" : qName === "Benefits to verify" ? "Verify benefits for" : "Fix coverage for"} ${rec.patientName}`; }
         tasks.push({
           id: `${ID}task-${t + 1}`, code: `RC-${100 + t}`, title, description: "", status: done ? "completed" : k % 3 === 1 ? "in_progress" : "pending", isImportant: overdue, scopeLevel: "client",
           assignee: { scopeLevel: "client", assigneeName: STAFF[t % STAFF.length] }, creator: { id: "u1", name: STAFF[(t + 1) % STAFF.length] }, checklists: [], observers: [], subtasks: [], attachments: [],
@@ -381,8 +404,8 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
       const p = payers[i % payers.length];
       calls.push({ id: `${ID}call-${i + 1}`, kind: "call", client: `${p.name} (${purpose})`, clientId: clients[i].id, type: "Outbound", status, process: "Payer calls", currentStage: purpose, duration: dur, date: `${dayYmd(-(3 + i * 4))} ${String(9 + i).padStart(2, "0")}:15`, hasRecording: status === "Completed", hasTranscript: status === "Completed", hasScheduledCall: false, createdAt: dayIso(-(3 + i * 4), 9) });
     });
-    // call logs: instances first, then calls (existing call logs are kept)
-    added.callLogs = addMissing("callLogs", [...logs, ...calls], true, getStoredCallLogs(), saveCallLogs);
+    // call logs: payer calls (existing call logs are kept)
+    added.callLogs = addMissing("callLogs", calls, true, getStoredCallLogs(), saveCallLogs);
     const apptRecords = appts.map(({ _service, _prov, _seq, ...rest }) => rest);
     added.appointments = addMissing("appointments_v1", apptRecords);
     try { const raw = sessionStorage.getItem("appointments_v1"); if (raw) { const cur = JSON.parse(raw); if (Array.isArray(cur)) { const have = new Set(cur.map((r: any) => String(r.id))); sessionStorage.setItem("appointments_v1", JSON.stringify([...cur, ...apptRecords.filter((r) => !have.has(String(r.id)))])); } } } catch { /* ignore */ }
@@ -414,17 +437,37 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
   return { already: false, added };
 }
 
-const isDemoRecord = (r: any) => { const id = String(r?.id); const n = Number(id); return id.startsWith(ID) || id.includes("-DM-") || (Number.isFinite(n) && n >= 910000 && n < 920000); };
+const isDemoRecord = (r: any) => {
+  const id = String(r?.id);
+  const n = Number(id);
+  const appt = Number(r?.appointmentId);
+  // records of the first version that the R4.4 migration turned into insurance records keep their appointment id
+  return id.startsWith(ID) || id.includes("-DM-") || (Number.isFinite(n) && n >= 910000 && n < 920000) || (Number.isFinite(appt) && appt >= 910000 && appt < 920000);
+};
 
-/** Dev only: remove exactly the records this seed created (ids starting with "dm-") and seed again. */
-export function reseedDemoWorkspace(): DemoWorkspaceResult {
-  const keys = ["mantra_coverages_v1", "mantra_claims_v1", "mantra_eras_v1", "mantra_invoices_v1", "mantra_payments_v1", "mantra_tasks_store", "callLogs", "callLogs_demo", "appointments_v1", "mantra_notifications_store", "mantra_admin_audit_logs"];
-  for (const k of keys) {
+const DEMO_KEYS = ["mantra_coverages_v1", "mantra_claims_v1", "mantra_eras_v1", "mantra_invoices_v1", "mantra_payments_v1", "mantra_tasks_store", "callLogs", "callLogs_demo", "appointments_v1", "mantra_notifications_store", "mantra_admin_audit_logs"];
+
+/** Remove exactly the records this seed created (and their field values). */
+export function removeDemoRecords(): number {
+  let removed = 0;
+  for (const k of DEMO_KEYS) {
     const cur = readArr(k);
-    if (cur.some(isDemoRecord)) localStorage.setItem(k, JSON.stringify(cur.filter((r) => !isDemoRecord(r))));
+    if (cur.some(isDemoRecord)) {
+      for (const r of cur.filter(isDemoRecord)) { try { localStorage.removeItem(`mantra_claim_fieldvalues_${r.id}`); } catch { /* ignore */ } }
+      removed += cur.filter(isDemoRecord).length;
+      localStorage.setItem(k, JSON.stringify(cur.filter((r) => !isDemoRecord(r))));
+    }
   }
   try { const cur = JSON.parse(sessionStorage.getItem("scribeSessionsData") || "null"); if (Array.isArray(cur)) sessionStorage.setItem("scribeSessionsData", JSON.stringify(cur.filter((r: any) => !String(r?.id).startsWith(ID)))); } catch { /* ignore */ }
+  try { const ap = JSON.parse(sessionStorage.getItem("appointments_v1") || "null"); if (Array.isArray(ap)) sessionStorage.setItem("appointments_v1", JSON.stringify(ap.filter((r: any) => !isDemoRecord(r)))); } catch { /* ignore */ }
   localStorage.removeItem(DEMO_SCRIBE_KEY);
+  return removed;
+}
+
+/** Dev only: remove exactly the records this seed created and seed again. */
+export function reseedDemoWorkspace(): DemoWorkspaceResult {
+  removeDemoRecords();
   localStorage.removeItem(DEMO_WORKSPACE_FLAG);
+  localStorage.removeItem(DEMO_WORKSPACE_FLAG_V1);
   return seedDemoWorkspace({ force: false });
 }

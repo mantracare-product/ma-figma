@@ -117,16 +117,17 @@
         const first = r.rcmDefaults.ensureRcmDefaults();
         assert(!first.already && first.rules > 20 && first.enabled > 10, "defaults created: " + JSON.stringify(first));
         const byId2 = (id) => r.automation.getStoredRules().find((x) => x.id === id);
-        assert(byId2("sample-rule-A1").enabled, "A1 ships enabled");
-        assert(!byId2("sample-rule-A9").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A28a").enabled, "outbound rules (message / submit) ship off");
+        assert(byId2("r4-rule-create-record").enabled, "the insurance-record rule ships enabled");
+        assert(!byId2("sample-rule-A1"), "the old Coverage & authorization rules are not part of the starting set");
+        assert(!byId2("r4-rule-needs-fix-msg").enabled && !byId2("sample-rule-A18").enabled && !byId2("sample-rule-A28a").enabled, "outbound rules (message / submit) ship off");
         assert(!byId2("sample-rule-A14-scribe").enabled, "alternates ship off");
         assert(r.automation.getStoredRules().every((x) => !/\(sample\)/i.test(x.name)), "no (Sample) in rule names");
-        r.automation.updateRule("sample-rule-A1", { name: "RCMTEST edited A1", enabled: false });
-        r.automation.deleteRule("sample-rule-A2");
+        r.automation.updateRule("r4-rule-create-record", { name: "RCMTEST edited rule", enabled: false });
+        r.automation.deleteRule("r4-rule-daily-recheck");
         const second = r.rcmDefaults.ensureRcmDefaults();
         assert(second.already, "second run is a no-op");
-        eq(byId2("sample-rule-A1").name, "RCMTEST edited A1", "rule edit kept");
-        assert(!byId2("sample-rule-A2"), "deleted rule not brought back");
+        eq(byId2("r4-rule-create-record").name, "RCMTEST edited rule", "rule edit kept");
+        assert(!byId2("r4-rule-daily-recheck"), "deleted rule not brought back");
         eq(r.billing.getPayers().length, 15, "payers list seeded");
         eq(r.taskViews.taskViewsStore.get().length, 8, "8 queue views");
       },

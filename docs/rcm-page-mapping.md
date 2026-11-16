@@ -768,3 +768,15 @@ Check: lows 9.0 + 7.5 + 7.0 + 10.0 + 5.0 + 3.5 = 42.0; highs 11.0 + 10.5 + 9.5 +
 ---
 
 *What I did not verify:* anything at runtime (nothing was built or run); whether a stage rule really fires twice per client move (NC); whether a separate `process_instance` record type is needed (NC); where non-React code gets the org scope for registry reads (NC); `Settings.tsx` left-nav render site and tab filtering (NC); claim-module section scoping per workflow (NC); whether table/group field types render in all four drawers (NC); `createAppointment` automation gating (NC); which invoice stages are stored (NC); real stored `callLogs` data shapes for the migration (NC); how `automationExecutionEngine.ts`/rule executors import stores (NC).
+
+---
+
+## Amendment (Round 4): one insurance record per appointment
+
+This note records what changed after the mapping above was written; the rows above are not rewritten.
+
+- **Calls are stage settings, not an action.** There is no `start_call` automation action. A stage with calling ON and a call purpose (payer benefits, balance reminder, general) places the call when a record enters it; hours and retries stay in the stage call settings. Payer calls need the payer phone from the payer record, patient calls need voice consent. (Rows 11-13 and the Set E A7 / Set M A29 rules are superseded.)
+- **Payment mode.** Appointments carry a payment mode (registry field, options editable; defaults Insurance (claim) and Self-pay) that defaults from the service flag "Billable to insurance" (separate from the prior-auth default).
+- **One record per appointment.** The "Coverage & authorization" client process and its instances (rows 24 and 26 for eligibility) are replaced by ONE insurance record per appointment: a claim-entity record that moves through the workflows Eligibility -> Prior auth -> Charge capture -> Claim -> Denial & appeal with `move_to_workflow` (dedupe key = appointment id). Eligibility and Prior auth are claim-entity workflows of workflow type `eligibility` / `prior_auth`; records in them are not claims yet and are excluded from claim counts, A/R, denial rate and first-pass. The generic multi-instance process code stays; the Coverage & authorization process is retired from the starting set and from the Deals board (existing instances were migrated to records, a copy of the process is kept).
+- **Appointment workflows by rule.** The appointment entity has several workflows ("Appointment via Insurance" next to the default); a rule on `appointment.booked` with conditions on the booking (payment mode, service, provider, channel) chooses the workflow through `move_to_workflow`.
+- **Rules.** Set R (insurance record) replaces Set E for the starting set; A14-A30 continue the same record.

@@ -168,7 +168,7 @@
         session(w, id, RT);
         await r.scribeBilling.signAndSendToBilling(SESSION);
         await T.waitFor(() => T.h.claimsOf(w.clientId).length === 1, { timeout: 6000, msg: "claim at signing" });
-        eq(T.h.claimsOf(w.clientId)[0].sourceType, "scribe");
+        eq(T.h.claimsOf(w.clientId)[0].sourceType, "appointment"); // the note continues the appointment insurance record
       },
     },
     {
