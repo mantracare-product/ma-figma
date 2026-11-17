@@ -808,11 +808,12 @@ export default function OrganizationDetailDrawer({
     }
 
     const locNames = locations.map((l) => l.name);
+    const primaryLoc = locations.find((l) => l.isPrimary) || locations[0];
     const updatedForm: OrganizationDetail = {
       ...formData,
       locations: locNames,
-      location: locations.find((l) => l.isPrimary)?.name || locNames[0] || formData.location,
-      timezone: selectedLocation?.timezone || formData.timezone,
+      location: primaryLoc?.name || locNames[0] || formData.location,
+      timezone: primaryLoc?.timezone || formData.timezone,
     };
 
     onSave(updatedForm);

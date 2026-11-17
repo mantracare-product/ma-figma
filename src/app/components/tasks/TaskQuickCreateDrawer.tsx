@@ -22,7 +22,6 @@ import {
   Shield,
   Globe,
   Calendar,
-  CalendarX2,
   FileCode,
   Link as LinkIcon,
   Image as ImageIcon,
@@ -789,124 +788,47 @@ export default function TaskQuickCreateDrawer({
   const [repeatStopCount, setRepeatStopCount] = useState(10);
   const [repeatStopDate, setRepeatStopDate] = useState("");
 
-  // Settings: Skip Off Days (Custom rest days and blackout dates - not hardcoded to Sat/Sun)
-  const [skipOffDaysEnabled, setSkipOffDaysEnabled] = useState(false);
-  const [selectedWeeklyOffDays, setSelectedWeeklyOffDays] = useState<string[]>(["Sat", "Sun"]);
-  const [customOffDates, setCustomOffDates] = useState<Array<{ id: string; date: string; label?: string }>>([]);
-  const [newOffDate, setNewOffDate] = useState("");
-  const [newOffDateLabel, setNewOffDateLabel] = useState("");
-
-  const handleAddCustomOffDate = () => {
-    if (!newOffDate) {
-      toast.error("Please pick an off date");
-      return;
-    }
-    if (customOffDates.some((c) => c.date === newOffDate)) {
-      toast.error("This off date is already added");
-      return;
-    }
-    setCustomOffDates((prev) => [
-      ...prev,
-      {
-        id: `off-${Date.now()}`,
-        date: newOffDate,
-        label: newOffDateLabel.trim() || undefined,
-      },
-    ]);
-    setNewOffDate("");
-    setNewOffDateLabel("");
-    toast.success("Off day added");
-  };
-
-  // Settings: Observers (Role, Multi-select, All-role logic)
-  const [observerType, setObserverType] = useState<"team" | "contact">("team");
+  // Settings: Observers (Role, Multi-select, All-role logic for Team Members)
   const [observerRoleFilter, setObserverRoleFilter] = useState("All Roles");
   const [selectedObserverMemberIds, setSelectedObserverMemberIds] = useState<string[]>([]);
-  const [observerContactCategory, setObserverContactCategory] = useState("All Categories");
-  const [selectedObserverContactIds, setSelectedObserverContactIds] = useState<string[]>([]);
 
   const filteredObserverTeamMembers = useMemo(() => {
     if (observerRoleFilter === "All Roles") return teamMembers;
     return teamMembers.filter((m) => m.role === observerRoleFilter);
   }, [teamMembers, observerRoleFilter]);
 
-  const filteredObserverContacts = useMemo(() => {
-    if (observerContactCategory === "All Categories") return initialClients;
-    return initialClients.filter(
-      (c) => (c.contactType || c.contact_type || "Client").toLowerCase() === observerContactCategory.toLowerCase()
-    );
-  }, [observerContactCategory]);
-
   const computedObservers = useMemo<TaskObserver[]>(() => {
-    if (observerType === "team") {
-      if (selectedObserverMemberIds.length > 0) {
-        return selectedObserverMemberIds.map((id) => {
-          const m = teamMembers.find((tm) => String(tm.id) === id);
-          return {
-            id: String(m?.id || id),
-            name: m?.name || "Team Member",
-            role: m?.role,
-            type: "member" as const,
-          };
-        });
-      } else if (observerRoleFilter !== "All Roles") {
-        const matching = teamMembers.filter((m) => m.role === observerRoleFilter);
-        if (matching.length > 0) {
-          return matching.map((m) => ({
-            id: String(m.id),
-            name: m.name,
-            role: m.role,
-            type: "member" as const,
-          }));
-        }
-        return [
-          {
-            id: `obs-role-${observerRoleFilter}`,
-            name: `All ${observerRoleFilter}s`,
-            role: observerRoleFilter,
-            type: "member" as const,
-          },
-        ];
+    if (selectedObserverMemberIds.length > 0) {
+      return selectedObserverMemberIds.map((id) => {
+        const m = teamMembers.find((tm) => String(tm.id) === id);
+        return {
+          id: String(m?.id || id),
+          name: m?.name || "Team Member",
+          role: m?.role,
+          type: "member" as const,
+        };
+      });
+    } else if (observerRoleFilter !== "All Roles") {
+      const matching = teamMembers.filter((m) => m.role === observerRoleFilter);
+      if (matching.length > 0) {
+        return matching.map((m) => ({
+          id: String(m.id),
+          name: m.name,
+          role: m.role,
+          type: "member" as const,
+        }));
       }
-      return [];
-    } else {
-      if (selectedObserverContactIds.length > 0) {
-        return selectedObserverContactIds.map((id) => {
-          const c = initialClients.find((cl) => cl.id === id);
-          return {
-            id: c?.id || id,
-            name: c?.name || "Contact",
-            role: c?.contactType || c?.contact_type || "Client",
-            category: c?.contactType || c?.contact_type || "Client",
-            type: "contact" as const,
-          };
-        });
-      } else if (observerContactCategory !== "All Categories") {
-        const matching = initialClients.filter(
-          (c) => (c.contactType || c.contact_type || "Client").toLowerCase() === observerContactCategory.toLowerCase()
-        );
-        if (matching.length > 0) {
-          return matching.map((c) => ({
-            id: c.id,
-            name: c.name,
-            role: c.contactType || c.contact_type || "Client",
-            category: c.contactType || c.contact_type || "Client",
-            type: "contact" as const,
-          }));
-        }
-        return [
-          {
-            id: `obs-cat-${observerContactCategory}`,
-            name: `All ${observerContactCategory} Contacts`,
-            role: observerContactCategory,
-            category: observerContactCategory,
-            type: "contact" as const,
-          },
-        ];
-      }
-      return [];
+      return [
+        {
+          id: `obs-role-${observerRoleFilter}`,
+          name: `All ${observerRoleFilter}s`,
+          role: observerRoleFilter,
+          type: "member" as const,
+        },
+      ];
     }
-  }, [observerType, selectedObserverMemberIds, observerRoleFilter, teamMembers, selectedObserverContactIds, observerContactCategory]);
+    return [];
+  }, [selectedObserverMemberIds, observerRoleFilter, teamMembers]);
 
   const observers = computedObservers;
 
@@ -938,15 +860,31 @@ export default function TaskQuickCreateDrawer({
     },
   ]);
 
+  const lastOpenedRef = useRef(false);
+  const lastTaskToEditIdRef = useRef<string | null>(null);
+
   // Reset or populate drawer state when opened/closed or taskToEdit changes
   useEffect(() => {
     if (!isOpen) {
+      lastOpenedRef.current = false;
+      lastTaskToEditIdRef.current = null;
       setStep(1);
       setStudioTab("builder");
       setPreviewDoneItems({});
       setOpenSettingsRow(null);
       return;
     }
+
+    const currentTaskId = taskToEdit?.id || null;
+    const isNewOpening = !lastOpenedRef.current;
+    const isDifferentTask = currentTaskId !== lastTaskToEditIdRef.current;
+
+    if (!isNewOpening && !isDifferentTask) {
+      return;
+    }
+
+    lastOpenedRef.current = true;
+    lastTaskToEditIdRef.current = currentTaskId;
 
     if (taskToEdit) {
       setTitle(taskToEdit.title || "");
@@ -1019,30 +957,9 @@ export default function TaskQuickCreateDrawer({
         const memberIds = taskToEdit.observers
           .filter((o) => o.type !== "contact")
           .map((o) => String(o.id));
-        const contactIds = taskToEdit.observers
-          .filter((o) => o.type === "contact")
-          .map((o) => String(o.id));
-        if (contactIds.length > 0) {
-          setObserverType("contact");
-          setSelectedObserverContactIds(contactIds);
-        } else {
-          setObserverType("team");
-          setSelectedObserverMemberIds(memberIds);
-        }
+        setSelectedObserverMemberIds(memberIds);
       } else {
         setSelectedObserverMemberIds([]);
-        setSelectedObserverContactIds([]);
-      }
-
-      if (taskToEdit.recurrence?.skipOffDays !== undefined || taskToEdit.timePlanning?.skipOffDays !== undefined) {
-        setSkipOffDaysEnabled(Boolean(taskToEdit.recurrence?.skipOffDays || taskToEdit.timePlanning?.skipOffDays));
-      }
-      if (taskToEdit.recurrence?.weeklyOffDays || taskToEdit.timePlanning?.weeklyOffDays) {
-        setSelectedWeeklyOffDays(taskToEdit.recurrence?.weeklyOffDays || taskToEdit.timePlanning?.weeklyOffDays || ["Sat", "Sun"]);
-      }
-      if (taskToEdit.recurrence?.customOffDates || taskToEdit.timePlanning?.customOffDates) {
-        const dates = taskToEdit.recurrence?.customOffDates || taskToEdit.timePlanning?.customOffDates || [];
-        setCustomOffDates(dates.map((d, i) => ({ id: `off-${i}-${d}`, date: d })));
       }
 
       if (taskToEdit.studioItems && taskToEdit.studioItems.length > 0) {
@@ -1068,10 +985,6 @@ export default function TaskQuickCreateDrawer({
       setIsImportant(false);
       setRepeatEnabled(false);
       setSelectedObserverMemberIds([]);
-      setSelectedObserverContactIds([]);
-      setSkipOffDaysEnabled(false);
-      setSelectedWeeklyOffDays(["Sat", "Sun"]);
-      setCustomOffDates([]);
       setAdminScopingRules([]);
       setSelectedAdminRoles(["Lead Physician"]);
       setStudioItems([
@@ -1101,7 +1014,7 @@ export default function TaskQuickCreateDrawer({
         },
       ]);
     }
-  }, [isOpen, taskToEdit, teamMembers]);
+  }, [isOpen, taskToEdit]);
 
   // Step 2 Studio View Tab: "builder" vs "preview"
   const [studioTab, setStudioTab] = useState<"builder" | "preview">("builder");
@@ -1287,20 +1200,13 @@ export default function TaskQuickCreateDrawer({
   };
 
   const handleAddObserver = (memberId: string) => {
-    if (observerType === "team") {
-      if (!selectedObserverMemberIds.includes(memberId)) {
-        setSelectedObserverMemberIds((prev) => [...prev, memberId]);
-      }
-    } else {
-      if (!selectedObserverContactIds.includes(memberId)) {
-        setSelectedObserverContactIds((prev) => [...prev, memberId]);
-      }
+    if (!selectedObserverMemberIds.includes(memberId)) {
+      setSelectedObserverMemberIds((prev) => [...prev, memberId]);
     }
   };
 
   const handleRemoveObserver = (id: string) => {
     setSelectedObserverMemberIds((prev) => prev.filter((x) => x !== id));
-    setSelectedObserverContactIds((prev) => prev.filter((x) => x !== id));
   };
 
   // ── File Upload Helper (Base64 + 1MB limit) ──
@@ -1484,10 +1390,7 @@ export default function TaskQuickCreateDrawer({
         interval: Math.max(1, repeatInterval),
         unit: repeatUnit,
         startDate: deadlineDate || new Date().toISOString().split("T")[0],
-        skipWeekends: selectedWeeklyOffDays.includes("Sat") || selectedWeeklyOffDays.includes("Sun"),
-        skipOffDays: skipOffDaysEnabled,
-        weeklyOffDays: selectedWeeklyOffDays,
-        customOffDates: customOffDates.map((c) => c.date),
+        skipWeekends: repeatSkipWeekends,
         stopRule: repeatStopRule,
         stopCount: repeatStopRule === "count" ? repeatStopCount : undefined,
         stopDate: repeatStopRule === "date" ? repeatStopDate : undefined,
@@ -1498,10 +1401,7 @@ export default function TaskQuickCreateDrawer({
       startDate: deadlineDate,
       dueDate: deadlineDate,
       assigneeCanEditDates: false,
-      skipWeekends: selectedWeeklyOffDays.includes("Sat") || selectedWeeklyOffDays.includes("Sun"),
-      skipOffDays: skipOffDaysEnabled,
-      weeklyOffDays: selectedWeeklyOffDays,
-      customOffDates: customOffDates.map((c) => c.date),
+      skipWeekends: false,
       useSubtaskDates: false,
     };
 
@@ -1588,11 +1488,11 @@ export default function TaskQuickCreateDrawer({
 
   // Schedule summary chip
   const scheduleChipSummary = useMemo(() => {
-    if (!deadlineDate) return isImportant ? "Important" : "None";
+    if (!deadlineDate) return "None";
     const dStr = new Date(deadlineDate).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const timeStr = deadlineTime ? `, ${deadlineTime}` : "";
-    return `${dStr}${timeStr}${isImportant ? " · Important" : ""}`;
-  }, [deadlineDate, deadlineTime, isImportant]);
+    return `${dStr}${timeStr}`;
+  }, [deadlineDate, deadlineTime]);
 
   // Repeat summary chip
   const repeatChipSummary = useMemo(() => {
@@ -2055,222 +1955,64 @@ export default function TaskQuickCreateDrawer({
               {isAdmin ? "Task Parameters" : "Task Parameters & Schedule"}
             </h3>
 
-            {/* Row A: Schedule & Priority (Client) OR Priority Only (Admin) */}
-            {isAdmin ? (
-              <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
-                    <Star className={`w-4 h-4 ${isImportant ? "text-amber-500 fill-amber-500" : "text-slate-400"}`} />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-[#222222] block" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Mark as Important
-                    </span>
-                    <span className="text-[11px] text-slate-500">Flags high priority across assigned organizations</span>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isImportant}
-                    onChange={(e) => setIsImportant(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-                </label>
-              </div>
-            ) : (
-            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
-              <button
-                type="button"
-                onClick={() => setOpenSettingsRow(openSettingsRow === "schedule" ? null : "schedule")}
-                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                    <Calendar className="w-4 h-4 text-[#1456f0]" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Schedule & Priority
-                    </span>
-                    <Tooltip text="Set completion deadline, time target, and high-priority importance flag">
-                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                    </Tooltip>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
-                    {scheduleChipSummary}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                      openSettingsRow === "schedule" ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </button>
-
-              {openSettingsRow === "schedule" && (
-                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">Deadline Date</label>
-                      <input
-                        type="date"
-                        value={deadlineDate}
-                        onChange={(e) => setDeadlineDate(e.target.value)}
-                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
-                      />
+            {/* Row A: Schedule (Client only) */}
+            {!isAdmin && (
+              <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+                <button
+                  type="button"
+                  onClick={() => setOpenSettingsRow(openSettingsRow === "schedule" ? null : "schedule")}
+                  className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                      <Calendar className="w-4 h-4 text-[#1456f0]" />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">Target Time</label>
-                      <input
-                        type="time"
-                        value={deadlineTime}
-                        onChange={(e) => setDeadlineTime(e.target.value)}
-                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
-                      />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Schedule
+                      </span>
+                      <Tooltip text="Set completion deadline and target time">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      </Tooltip>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                      {scheduleChipSummary}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        openSettingsRow === "schedule" ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </button>
 
-                  {/* Mark as Important Inline Toggle */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
-                    <div className="flex items-center gap-2">
-                      <Star className={`w-4 h-4 ${isImportant ? "text-amber-500 fill-amber-500" : "text-slate-400"}`} />
+                {openSettingsRow === "schedule" && (
+                  <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <span className="text-xs font-bold text-slate-900 block">Mark as Important</span>
-                        <span className="text-[11px] text-slate-500">Flags priority across clinical boards</span>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isImportant}
-                        onChange={(e) => setIsImportant(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-                    </label>
-                  </div>
-
-                  {/* Skip Off Days (Custom rest days and blackout dates - not hardcoded to Sat/Sun) */}
-                  <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CalendarX2 className="w-4 h-4 text-slate-600" />
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block">Skip Off Days</span>
-                          <span className="text-[11px] text-slate-500">
-                            Reschedule triggers that fall on selected rest days or holidays
-                          </span>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">Deadline Date</label>
                         <input
-                          type="checkbox"
-                          checked={skipOffDaysEnabled}
-                          onChange={(e) => setSkipOffDaysEnabled(e.target.checked)}
-                          className="sr-only peer"
+                          type="date"
+                          value={deadlineDate}
+                          onChange={(e) => setDeadlineDate(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
                         />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    {skipOffDaysEnabled && (
-                      <div className="space-y-3 pt-2 border-t border-slate-100 animate-in fade-in duration-150">
-                        {/* Weekly Off Days selection - user can pick any days, not limited to Sat/Sun */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-[11px] font-semibold text-slate-700">Weekly Rest Days</label>
-                            <span className="text-[10px] text-slate-400">Choose any off days (not just Sat/Sun)</span>
-                          </div>
-                          <div className="grid grid-cols-7 gap-1.5">
-                            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
-                              const isSelected = selectedWeeklyOffDays.includes(day);
-                              return (
-                                <button
-                                  key={day}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setSelectedWeeklyOffDays(selectedWeeklyOffDays.filter((d) => d !== day));
-                                    } else {
-                                      setSelectedWeeklyOffDays([...selectedWeeklyOffDays, day]);
-                                    }
-                                  }}
-                                  className={`py-1.5 text-xs font-bold rounded-lg border text-center transition-all cursor-pointer ${
-                                    isSelected
-                                      ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {day}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Custom Off Dates & Holidays */}
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-semibold text-slate-700 block">
-                            Add Custom Off Days & Holidays
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="date"
-                              value={newOffDate}
-                              onChange={(e) => setNewOffDate(e.target.value)}
-                              className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Holiday label (optional)"
-                              value={newOffDateLabel}
-                              onChange={(e) => setNewOffDateLabel(e.target.value)}
-                              className="flex-1 text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleAddCustomOffDate}
-                              disabled={!newOffDate}
-                              className="px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 border border-blue-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              + Add
-                            </button>
-                          </div>
-
-                          {/* List of custom off days chips */}
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {customOffDates.map((off) => (
-                              <span
-                                key={off.id}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
-                              >
-                                <span>{off.date}</span>
-                                {off.label && <span className="text-[10px] text-slate-500">({off.label})</span>}
-                                <button
-                                  type="button"
-                                  onClick={() => setCustomOffDates(customOffDates.filter((x) => x.id !== off.id))}
-                                  className="hover:text-rose-600 p-0.5 ml-0.5 cursor-pointer text-slate-400"
-                                  title="Remove off date"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            {customOffDates.length === 0 && (
-                              <span className="text-[11px] text-slate-400 italic">No custom blackout dates added</span>
-                            )}
-                          </div>
-                        </div>
                       </div>
-                    )}
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">Target Time</label>
+                        <input
+                          type="time"
+                          value={deadlineTime}
+                          onChange={(e) => setDeadlineTime(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
             )}
 
             {/* Row B: Repeat (Inline recurrence settings — Client only; hidden for Admin) */}
@@ -2295,7 +2037,13 @@ export default function TaskQuickCreateDrawer({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-full font-mono transition-colors ${
+                      repeatEnabled
+                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                        : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
                     {repeatChipSummary}
                   </span>
                   <ChevronDown
@@ -2309,20 +2057,32 @@ export default function TaskQuickCreateDrawer({
               {openSettingsRow === "repeat" && (
                 <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
                   {/* Enable Repeat Toggle */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
+                  <div
+                    onClick={() => setRepeatEnabled((prev) => !prev)}
+                    className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/80 transition-colors cursor-pointer select-none"
+                  >
                     <div>
                       <span className="text-xs font-bold text-slate-900 block">Enable Recurrence</span>
                       <span className="text-[11px] text-slate-500">Auto-create new instances on schedule</span>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={repeatEnabled}
-                        onChange={(e) => setRepeatEnabled(e.target.checked)}
-                        className="sr-only peer"
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={repeatEnabled}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRepeatEnabled((prev) => !prev);
+                      }}
+                      className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                        repeatEnabled ? "bg-[#1456f0]" : "bg-slate-200"
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
+                          repeatEnabled ? "translate-x-5" : "translate-x-0"
+                        }`}
                       />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1E293B]"></div>
-                    </label>
+                    </button>
                   </div>
 
                   {repeatEnabled && (
@@ -2353,23 +2113,7 @@ export default function TaskQuickCreateDrawer({
                         </div>
                       </div>
 
-                      {/* Skip Off Days status in recurrence */}
-                      <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200/80">
-                        <div>
-                          <span className="text-xs font-semibold text-slate-700 block">Skip Off Days</span>
-                          <span className="text-[11px] text-slate-500">
-                            {skipOffDaysEnabled
-                              ? `Active: ${selectedWeeklyOffDays.join(", ") || "None"}${customOffDates.length > 0 ? ` + ${customOffDates.length} custom dates` : ""}`
-                              : "Off (triggers on any scheduled day)"}
-                          </span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={skipOffDaysEnabled}
-                          onChange={(e) => setSkipOffDaysEnabled(e.target.checked)}
-                          className="w-4 h-4 rounded text-slate-900 cursor-pointer"
-                        />
-                      </div>
+
 
                       {/* Stop Conditions */}
                       <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-2">
@@ -2457,197 +2201,85 @@ export default function TaskQuickCreateDrawer({
 
               {openSettingsRow === "observers" && (
                 <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-                  {/* Mode switcher: Team Members vs Contacts */}
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Observer Target
-                    </label>
-                    <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/70">
-                      <button
-                        type="button"
-                        onClick={() => setObserverType("team")}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          observerType === "team"
-                            ? "bg-white text-slate-900 shadow-2xs"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        Team Members
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setObserverType("contact")}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          observerType === "contact"
-                            ? "bg-white text-slate-900 shadow-2xs"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        Contacts
-                      </button>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
+                      <div className="relative">
+                        <select
+                          value={observerRoleFilter}
+                          onChange={(e) => {
+                            setObserverRoleFilter(e.target.value);
+                            setSelectedObserverMemberIds([]);
+                          }}
+                          className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                        >
+                          {availableRoles.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
+
+                    <div>
+                      <SearchableMultiSelectPicker
+                        label="Select Observer Members"
+                        placeholder="+ Click to select observers..."
+                        searchPlaceholder="Search team members by name or role..."
+                        options={filteredObserverTeamMembers.map((m) => ({
+                          id: String(m.id),
+                          name: m.name,
+                          subtitle: m.role,
+                        }))}
+                        selectedIds={selectedObserverMemberIds}
+                        onChange={setSelectedObserverMemberIds}
+                        autoRoleText={
+                          observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0
+                            ? `All ${observerRoleFilter} members (${filteredObserverTeamMembers.length} observers)`
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    {/* If role is selected and no members picked: show role-wide banner */}
+                    {observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0 && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
+                        <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold">Role-wide Observers:</span> All{" "}
+                          <span className="font-semibold underline">{filteredObserverTeamMembers.length} {observerRoleFilter}</span> members will observe this task.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active observer chips */}
+                    {selectedObserverMemberIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {selectedObserverMemberIds.map((id) => {
+                          const m = teamMembers.find((tm) => String(tm.id) === id);
+                          return (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                            >
+                              <Eye className="w-3 h-3 text-amber-500" />
+                              <span>{m?.name || "Member"}</span>
+                              {m?.role && <span className="text-[10px] text-slate-400">({m.role})</span>}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveObserver(id)}
+                                className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-
-                  {observerType === "team" ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
-                        <div className="relative">
-                          <select
-                            value={observerRoleFilter}
-                            onChange={(e) => {
-                              setObserverRoleFilter(e.target.value);
-                              setSelectedObserverMemberIds([]);
-                            }}
-                            className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
-                          >
-                            {availableRoles.map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <SearchableMultiSelectPicker
-                          label="Select Observer Members"
-                          placeholder="+ Click to select observers..."
-                          searchPlaceholder="Search team members by name or role..."
-                          options={filteredObserverTeamMembers.map((m) => ({
-                            id: String(m.id),
-                            name: m.name,
-                            subtitle: m.role,
-                          }))}
-                          selectedIds={selectedObserverMemberIds}
-                          onChange={setSelectedObserverMemberIds}
-                          autoRoleText={
-                            observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0
-                              ? `All ${observerRoleFilter} members (${filteredObserverTeamMembers.length} observers)`
-                              : undefined
-                          }
-                        />
-                      </div>
-
-                      {/* If role is selected and no members picked: show role-wide banner */}
-                      {observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0 && (
-                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
-                          <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-bold">Role-wide Observers:</span> All{" "}
-                            <span className="font-semibold underline">{filteredObserverTeamMembers.length} {observerRoleFilter}</span> members will observe this task.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Active observer chips */}
-                      {selectedObserverMemberIds.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {selectedObserverMemberIds.map((id) => {
-                            const m = teamMembers.find((tm) => String(tm.id) === id);
-                            return (
-                              <span
-                                key={id}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
-                              >
-                                <Eye className="w-3 h-3 text-amber-500" />
-                                <span>{m?.name || "Member"}</span>
-                                {m?.role && <span className="text-[10px] text-slate-400">({m.role})</span>}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveObserver(id)}
-                                  className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Contact Category</label>
-                        <div className="relative">
-                          <select
-                            value={observerContactCategory}
-                            onChange={(e) => {
-                              setObserverContactCategory(e.target.value);
-                              setSelectedObserverContactIds([]);
-                            }}
-                            className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
-                          >
-                            {CONTACT_CATEGORIES.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <SearchableMultiSelectPicker
-                          label="Select Observer Contacts"
-                          placeholder="+ Click to select observer contacts..."
-                          searchPlaceholder="Search contacts..."
-                          options={filteredObserverContacts.map((c) => ({
-                            id: c.id,
-                            name: c.name,
-                            subtitle: c.contactType || c.contact_type || "Client",
-                          }))}
-                          selectedIds={selectedObserverContactIds}
-                          onChange={setSelectedObserverContactIds}
-                          autoRoleText={
-                            observerContactCategory !== "All Categories" && selectedObserverContactIds.length === 0
-                              ? `All ${observerContactCategory} contacts (${filteredObserverContacts.length} observers)`
-                              : undefined
-                          }
-                        />
-                      </div>
-
-                      {/* If category selected with 0 contacts picked: show category-wide banner */}
-                      {observerContactCategory !== "All Categories" && selectedObserverContactIds.length === 0 && (
-                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
-                          <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-bold">Category-wide Observers:</span> All{" "}
-                            <span className="font-semibold underline">{filteredObserverContacts.length} {observerContactCategory}</span> contacts will observe this task.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Active observer contact chips */}
-                      {selectedObserverContactIds.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {selectedObserverContactIds.map((id) => {
-                            const c = initialClients.find((cl) => cl.id === id);
-                            return (
-                              <span
-                                key={id}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
-                              >
-                                <Eye className="w-3 h-3 text-amber-500" />
-                                <span>{c?.name || "Contact"}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveObserver(id)}
-                                  className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
