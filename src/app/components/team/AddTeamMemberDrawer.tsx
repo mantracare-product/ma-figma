@@ -101,6 +101,7 @@ export default function AddTeamMemberDrawer({
   }, [activeOrganization, locVersion]);
 
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
@@ -113,11 +114,14 @@ export default function AddTeamMemberDrawer({
       setSelectedLocationIds(orgLocations.map((l) => l.id));
       setInvitedMember(null);
       setCopiedLink(false);
+      setIsSubmitting(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, initialCanBookAppointments, orgLocations]);
+  }, [isOpen, initialCanBookAppointments]);
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!name.trim() || !email.trim()) {
       toast.error("Please fill in all required fields");
       return;
@@ -133,6 +137,8 @@ export default function AddTeamMemberDrawer({
       toast.error("Please select at least one available location for appointment booking");
       return;
     }
+
+    setIsSubmitting(true);
 
     const selectedLocationNames = orgLocations
       .filter((l) => selectedLocationIds.includes(l.id))
@@ -163,8 +169,32 @@ export default function AddTeamMemberDrawer({
       window.dispatchEvent(new Event("storage"));
     } catch {}
 
-    toast.success(`Team member "${created.name}" added & invitation sent automatically!`);
+    const directInviteUrl = `${window.location.origin}/chats?memberId=${created.id}&invite=1`;
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(directInviteUrl);
+        setCopiedLink(true);
+      }
+    } catch {}
+
+    toast.success(`Team member "${created.name}" added & invitation link copied!`, {
+      description: directInviteUrl,
+      action: {
+        label: "Copy Link",
+        onClick: () => {
+          try {
+            navigator.clipboard.writeText(directInviteUrl);
+            toast.success("Invitation link copied to clipboard!");
+          } catch {}
+        },
+      },
+      duration: 8000,
+    });
+
     setInvitedMember(created);
+    setIsSubmitting(false);
+
     if (onSuccess) {
       onSuccess(created);
     }
@@ -564,8 +594,9 @@ export default function AddTeamMemberDrawer({
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={handleSave}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-xs"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -582,7 +613,7 @@ export default function AddTeamMemberDrawer({
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            Add Team Member
+            {isSubmitting ? "Adding..." : "Add Team Member"}
           </button>
         </div>
       </div>

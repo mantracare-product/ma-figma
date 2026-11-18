@@ -5,7 +5,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { GroupChatConfig, GroupChatPermissions, Conversation } from "../../../lib/useConversations";
 import { getClientList } from "../../../lib/getClientList";
-import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
+import { getStoredTeamMembers, cleanLegacyMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { toast } from "sonner";
 
 export interface CreateGroupChatDrawerProps {
@@ -66,13 +66,13 @@ export default function CreateGroupChatDrawer({
   }, [allClients, isTeamChat]);
 
   // Team Members
-  const [storedTeam, setStoredTeam] = useState(() => getStoredTeamMembers());
+  const [storedTeam, setStoredTeam] = useState(() => cleanLegacyMembers(getStoredTeamMembers()));
 
   useEffect(() => {
     if (isOpen) {
-      setStoredTeam(getStoredTeamMembers());
+      setStoredTeam(cleanLegacyMembers(getStoredTeamMembers()));
     }
-    const handleUpdate = () => setStoredTeam(getStoredTeamMembers());
+    const handleUpdate = () => setStoredTeam(cleanLegacyMembers(getStoredTeamMembers()));
     window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
@@ -83,11 +83,12 @@ export default function CreateGroupChatDrawer({
 
   const teamCandidates = useMemo(() => {
     const list: Array<{ id: string; name: string; role: string }> = [];
-    storedTeam.forEach((tm) => {
+    const cleaned = cleanLegacyMembers(storedTeam);
+    cleaned.forEach((tm) => {
       const idStr = String(tm.id);
       if (!list.some((existing) => existing.id === idStr || existing.name.toLowerCase() === tm.name.toLowerCase())) {
         list.push({
-          id: `usr-team-${idStr}`,
+          id: idStr.startsWith("usr-") ? idStr : `usr-${idStr}`,
           name: tm.name,
           role: tm.role || tm.department || "Staff",
         });

@@ -65,6 +65,7 @@ export interface TaskQuickCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateTask: (taskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => void;
+  onCreateMultipleTasks?: (tasksData: Array<Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">>) => TaskEntity[] | void;
   onUpdateTask?: (id: string, patch: Partial<TaskEntity>) => void;
   taskToEdit?: TaskEntity | null;
   isAdmin?: boolean;
@@ -644,6 +645,7 @@ export default function TaskQuickCreateDrawer({
   isOpen,
   onClose,
   onCreateTask,
+  onCreateMultipleTasks,
   onUpdateTask,
   taskToEdit = null,
   isAdmin = false,
@@ -1432,6 +1434,93 @@ export default function TaskQuickCreateDrawer({
         scopingRules: isAdmin ? adminScopingRules : taskToEdit.scopingRules,
       });
       toast.success(`Task ${taskToEdit.code} updated successfully`);
+      onClose();
+      return;
+    }
+
+    // When multiple responsible people are selected:
+    // Create an individual task for EACH responsible person with their own unique ID, code, and log!
+    if (responsiblePeople.length > 1) {
+      const nowTs = Date.now();
+      const tasksToCreate: Array<Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">> = responsiblePeople.map(
+        (r, rIdx) => {
+          const indivAssignee: TaskAssigneeScope = {
+            scopeLevel: isAdmin ? "org_role" : r.type === "contact" ? "contact" : "client",
+            assigneeName: r.name,
+            roleName: r.role,
+            userId: r.type === "member" ? r.id : undefined,
+            clientId: r.type === "contact" ? r.id : undefined,
+            clientName: r.type === "contact" ? r.name : undefined,
+            adminScopeName: isAdmin
+              ? adminScopingRules.map((rule) => rule.industryCategory).filter(Boolean).join(", ") || "Global"
+              : undefined,
+          };
+
+          const indivStudioItems = finalStudioItems.map((si, siIdx) => ({
+            ...si,
+            id: `st-it-${nowTs}-${rIdx + 1}-${siIdx + 1}`,
+            completion: {},
+          }));
+
+          return {
+            title: title.trim(),
+            description: description.trim(),
+            creator: {
+              id: user?.email || (isAdmin ? "admin-1" : "member-1"),
+              name: user?.name || (isAdmin ? "Platform Administrator" : "Dr. Alistair Mehta"),
+              role: user?.role || (isAdmin ? "SuperAdmin" : "Physician"),
+            },
+            status: "pending",
+            stageName,
+            stageId,
+            workflowId: selectedPipeline.id,
+            workflowName: selectedPipeline.name,
+            isImportant,
+            scopeLevel: isAdmin ? "admin" : r.type === "contact" ? "portal" : "client",
+            assignee: indivAssignee,
+            assignees: [indivAssignee],
+            responsiblePeople: [r],
+            responsibleType: isAdmin ? "org_role" : r.type === "contact" ? "contact" : "team",
+            targetRole: isAdmin ? selectedAdminRoles.join(", ") : r.role || undefined,
+            targetCategory:
+              r.type === "contact" && selectedContactCategory !== "All Categories"
+                ? selectedContactCategory
+                : undefined,
+            scopingRules: isAdmin ? adminScopingRules : undefined,
+            studioItems: indivStudioItems,
+            deadline: isAdmin ? undefined : deadlineFormatted,
+            deadlineDate: isAdmin ? undefined : deadlineDate || undefined,
+            deadlineTime: isAdmin ? undefined : deadlineTime || undefined,
+            checklists: [
+              {
+                id: `chk-${nowTs}-${rIdx + 1}`,
+                title: "Deliverables Checklist",
+                items: indivStudioItems.map((si) => ({
+                  id: si.id,
+                  text: si.title,
+                  isCompleted: false,
+                  isImportant: si.isImportant,
+                })),
+              },
+            ],
+            observers,
+            subtasks: [],
+            recurrence,
+            timePlanning,
+            attachments: [],
+          };
+        }
+      );
+
+      if (onCreateMultipleTasks) {
+        onCreateMultipleTasks(tasksToCreate);
+      } else {
+        tasksToCreate.forEach((t) => onCreateTask(t));
+      }
+
+      toast.success(
+        `Created ${tasksToCreate.length} individual tasks for each responsible person (${responsiblePeople.map((p) => p.name).join(", ")})`
+      );
       onClose();
       return;
     }

@@ -124,7 +124,7 @@ import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
 import { getStoredWhatsAppNumbers, DEFAULT_MOCK_NUMBERS } from "../../lib/useWhatsAppNumbers";
 import { useAuth } from "../context/AuthContext";
-import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../lib/teamStore";
+import { getStoredTeamMembers, cleanLegacyMembers, TeamMember, TEAM_STORE_EVENT } from "../../lib/teamStore";
 
 // Types are imported from useConversations
 
@@ -868,11 +868,11 @@ export default function Chats() {
   const { user: currentUser } = useAuth();
   const [chatAudience, setChatAudience] = useState<"contact" | "team">("contact");
   const [teamFilterTab, setTeamFilterTab] = useState<"all" | "groups" | "direct">("all");
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => cleanLegacyMembers(getStoredTeamMembers()));
 
   useEffect(() => {
     const handleUpdate = () => {
-      setTeamMembers(getStoredTeamMembers());
+      setTeamMembers(cleanLegacyMembers(getStoredTeamMembers()));
     };
     window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
@@ -882,7 +882,7 @@ export default function Chats() {
         bc = new BroadcastChannel("mantra_team_chat_channel");
         bc.onmessage = (event) => {
           if (event.data?.type === "TEAM_MEMBERS_UPDATED" || event.data?.type === "SYNC_CONVERSATIONS") {
-            setTeamMembers(getStoredTeamMembers());
+            setTeamMembers(cleanLegacyMembers(getStoredTeamMembers()));
           }
         };
       }
@@ -1387,7 +1387,11 @@ export default function Chats() {
 
     // 2. Direct Messages for each other team member
     const dms: Conversation[] = [];
-    const otherMembers = teamMembers.filter((m) => String(m.id) !== currentUserId);
+    const otherMembers = cleanLegacyMembers(teamMembers).filter(
+      (m) =>
+        String(m.id) !== currentUserId &&
+        (!currentUser?.email || (m.email || "").toLowerCase() !== currentUser.email.toLowerCase())
+    );
 
     for (const tm of otherMembers) {
       const otherId = String(tm.id);

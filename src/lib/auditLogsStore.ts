@@ -33,7 +33,8 @@ export type AuditModule =
   | "Telephony"
   | "Security"
   | "Roles"
-  | "Templates";
+  | "Templates"
+  | "Tasks";
 
 export interface AuditLogEntry {
   id: string;

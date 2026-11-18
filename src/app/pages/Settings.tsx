@@ -37,7 +37,7 @@ import {
   getStoredIntegrationConfig,
 } from "../../lib/integrationsRegistry";
 import IntegrationConfigDrawer from "../components/settings/IntegrationConfigDrawer";
-import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
+import { getStoredTeamMembers, saveStoredTeamMembers, cleanLegacyMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
 import { getStoredVoices, saveStoredVoices, toggleClientVoiceStatus, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
 import { getStoredAIModels, toggleClientAIModelActive, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
@@ -1253,24 +1253,9 @@ export default function Settings() {
   const [allUsers, setAllUsers] = useState<User[]>(() => {
     try {
       const stored = getStoredTeamMembers();
-      if (stored && stored.length > 0) return stored as any;
+      if (stored && stored.length > 0) return cleanLegacyMembers(stored) as any;
     } catch {}
-    return [
-      {
-        id: 1,
-        name: "Admin User",
-        email: "admin@mantra.care",
-        status: true,
-        organizationId: "1",
-        role: "Admin",
-        permissions: DEFAULT_ROLES[0]?.permissions,
-        calendarConnected: true,
-        connectedCalendar: "google",
-        availability: createDefaultAvailability(),
-        daysOff: [],
-        assignedServices: [1, 2],
-      },
-    ];
+    return cleanLegacyMembers(INITIAL_TEAM_MEMBERS) as any;
   });
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
@@ -1543,9 +1528,10 @@ export default function Settings() {
       if (isInternalSaveRef.current) return;
       const stored = getStoredTeamMembers();
       if (stored && stored.length > 0) {
+        const cleaned = cleanLegacyMembers(stored);
         setAllUsers((prev) => {
-          if (JSON.stringify(prev) === JSON.stringify(stored)) return prev;
-          return stored as any;
+          if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+          return cleaned as any;
         });
       }
     };
@@ -5077,7 +5063,8 @@ export default function Settings() {
 
                 {/* VIEW 2: USERS TABLE (Dynamic synced with team store) */}
                 {teamSubTab === "users" && (() => {
-                  const filteredUsers = allUsers.filter((u) => {
+                  const dedupedUsers = cleanLegacyMembers(allUsers);
+                  const filteredUsers = dedupedUsers.filter((u) => {
                     const matchSearch =
                       teamSearchQuery === "" ||
                       u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
@@ -5185,6 +5172,20 @@ export default function Settings() {
                   ];
 
                   const userRowActions: TableRowAction<User>[] = [
+                    {
+                      label: "Copy Invitation Link",
+                      onClick: (u) => {
+                        const link = `${window.location.origin}/chats?memberId=${u.id}&invite=1`;
+                        try {
+                          navigator.clipboard.writeText(link);
+                          toast.success(`Invitation link for "${u.name}" copied to clipboard!`, {
+                            description: link,
+                          });
+                        } catch {
+                          toast.success(`Invitation link: ${link}`);
+                        }
+                      },
+                    },
                     {
                       label: "Edit",
                       onClick: (u) => {
@@ -13028,10 +13029,7 @@ export default function Settings() {
           onClose={() => setShowAddUserModal(false)}
           onSuccess={(newMember) => {
             setAllUsers((prev) => {
-              if (prev.some((u) => String(u.id) === String(newMember.id) || (u.email && u.email.toLowerCase() === newMember.email.toLowerCase()))) {
-                return prev.map((u) => String(u.id) === String(newMember.id) ? (newMember as any) : u);
-              }
-              return [...prev, newMember as any];
+              return cleanLegacyMembers([...prev, newMember as any]) as any;
             });
           }}
         />

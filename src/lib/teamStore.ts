@@ -80,19 +80,26 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
   },
 ];
 
-function cleanLegacyMembers(list: any[]): TeamMember[] {
+export function cleanLegacyMembers(list: any[]): TeamMember[] {
+  if (!Array.isArray(list)) return INITIAL_TEAM_MEMBERS;
   const seenEmails = new Set<string>();
   const seenIds = new Set<string>();
-  const deduped: any[] = [];
+  const seenNames = new Set<string>();
+  const deduped: TeamMember[] = [];
 
   for (const m of list) {
     if (!m || !m.name) continue;
     const emailKey = (m.email || "").toLowerCase().trim();
-    const idKey = String(m.id);
+    const idKey = String(m.id ?? "").trim();
+    const nameKey = (m.name || "").toLowerCase().trim();
+
     if (emailKey && seenEmails.has(emailKey)) continue;
     if (idKey && seenIds.has(idKey)) continue;
+    if (nameKey && emailKey && seenNames.has(`${nameKey}::${emailKey}`)) continue;
+
     if (emailKey) seenEmails.add(emailKey);
     if (idKey) seenIds.add(idKey);
+    if (nameKey && emailKey) seenNames.add(`${nameKey}::${emailKey}`);
     deduped.push(m);
   }
 
@@ -143,7 +150,8 @@ export function getStoredTeamMembers(): TeamMember[] {
 
 export function saveStoredTeamMembers(members: TeamMember[]) {
   try {
-    const serialized = JSON.stringify(members);
+    const cleaned = cleanLegacyMembers(members);
+    const serialized = JSON.stringify(cleaned);
     localStorage.setItem(TEAM_STORAGE_KEY, serialized);
     localStorage.setItem(SETTINGS_USERS_KEY, serialized);
     sessionStorage.setItem(SETTINGS_USERS_KEY, serialized);
@@ -180,10 +188,17 @@ export function enableMultipleAppointmentBooking(memberIds: (string | number)[])
 
 export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: string | number }): TeamMember {
   const members = getStoredTeamMembers();
-  // Check if member already exists by email
-  const existingIndex = newMember.email
-    ? members.findIndex((m) => m.email && m.email.toLowerCase().trim() === newMember.email.toLowerCase().trim())
-    : -1;
+  const normalizedEmail = (newMember.email || "").toLowerCase().trim();
+  const normalizedName = (newMember.name || "").toLowerCase().trim();
+
+  // Check if member already exists by email or name
+  const existingIndex = members.findIndex((m) => {
+    const mEmail = (m.email || "").toLowerCase().trim();
+    const mName = (m.name || "").toLowerCase().trim();
+    if (normalizedEmail && mEmail === normalizedEmail) return true;
+    if (normalizedName && mName === normalizedName) return true;
+    return false;
+  });
 
   if (existingIndex >= 0) {
     const existing = members[existingIndex];
@@ -194,8 +209,9 @@ export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: 
       status: newMember.status !== undefined ? newMember.status : true,
       locations: newMember.locations || (newMember as any).availableLocations || existing.locations || [],
     };
-    const updated = [...members];
-    updated[existingIndex] = updatedMember;
+    const updated = cleanLegacyMembers(
+      members.map((m, idx) => (idx === existingIndex ? updatedMember : m))
+    );
     saveStoredTeamMembers(updated);
     return updatedMember;
   }
@@ -208,7 +224,7 @@ export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: 
     canBookAppointments: newMember.canBookAppointments !== undefined ? newMember.canBookAppointments : false,
     locations: newMember.locations || (newMember as any).availableLocations || [],
   };
-  const updated = [...members, created];
+  const updated = cleanLegacyMembers([...members, created]);
   saveStoredTeamMembers(updated);
   return created;
 }
