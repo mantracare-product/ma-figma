@@ -1,16 +1,17 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Users, Shield, Check, UserPlus, Search, ChevronDown } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import { Tooltip } from "../ui/Tooltip";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { GroupChatConfig, GroupChatPermissions, Conversation } from "../../../lib/useConversations";
 import { getClientList } from "../../../lib/getClientList";
-import { getStoredTeamMembers } from "../../../lib/teamStore";
+import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { toast } from "sonner";
 
 export interface CreateGroupChatDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  chatAudience?: "contact" | "team";
   onCreateGroup: (params: {
     name: string;
     chatType: "private" | "public";
@@ -34,31 +35,54 @@ const DEFAULT_TEAM_MEMBERS = [
 export default function CreateGroupChatDrawer({
   isOpen,
   onClose,
+  chatAudience,
   onCreateGroup,
 }: CreateGroupChatDrawerProps) {
+  const isTeamChat = chatAudience === "team";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>(["usr-admin-1"]);
   const [selectedModerators, setSelectedModerators] = useState<string[]>(["usr-admin-1"]);
   const [whoCanAddMembers, setWhoCanAddMembers] = useState<"all" | "moderators">("moderators");
   const [whoCanPost, setWhoCanPost] = useState<"all" | "moderators">("all");
-  const [memberTab, setMemberTab] = useState<"contacts" | "team">("contacts");
+  const [memberTab, setMemberTab] = useState<"contacts" | "team">(isTeamChat ? "team" : "contacts");
   const [memberSearch, setMemberSearch] = useState("");
+
+  useEffect(() => {
+    if (isOpen && isTeamChat) {
+      setMemberTab("team");
+    }
+  }, [isOpen, isTeamChat]);
 
   // Contacts
   const allClients = getClientList();
   const contactCandidates = useMemo(() => {
+    if (isTeamChat) return [];
     return allClients.map((c) => ({
       id: c.id,
       name: c.name,
       role: c.phoneNumber ? `${c.phoneNumber} • Contact` : "Patient / Contact",
     }));
-  }, [allClients]);
+  }, [allClients, isTeamChat]);
 
   // Team Members
-  const storedTeam = getStoredTeamMembers();
+  const [storedTeam, setStoredTeam] = useState(() => getStoredTeamMembers());
+
+  useEffect(() => {
+    if (isOpen) {
+      setStoredTeam(getStoredTeamMembers());
+    }
+    const handleUpdate = () => setStoredTeam(getStoredTeamMembers());
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, [isOpen]);
+
   const teamCandidates = useMemo(() => {
-    const list = [...DEFAULT_TEAM_MEMBERS];
+    const list: Array<{ id: string; name: string; role: string }> = [];
     storedTeam.forEach((tm) => {
       const idStr = String(tm.id);
       if (!list.some((existing) => existing.id === idStr || existing.name.toLowerCase() === tm.name.toLowerCase())) {
@@ -69,11 +93,14 @@ export default function CreateGroupChatDrawer({
         });
       }
     });
+    if (list.length === 0) {
+      return DEFAULT_TEAM_MEMBERS;
+    }
     return list;
   }, [storedTeam]);
 
-  // Filter candidates based on active toggle
-  const activeCandidates = memberTab === "contacts" ? contactCandidates : teamCandidates;
+  // Filter candidates based on active toggle (if team chat, strictly team candidates)
+  const activeCandidates = isTeamChat || memberTab === "team" ? teamCandidates : contactCandidates;
   const filteredCandidates = activeCandidates.filter(
     (c) =>
       c.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
@@ -276,50 +303,52 @@ export default function CreateGroupChatDrawer({
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Add Members ({selectedMembers.length})
+            {isTeamChat ? `Select Team Members (${selectedTeamCount})` : `Add Members (${selectedMembers.length})`}
           </h3>
-          <InfoTooltip content="Select contacts and team members. Toggle moderator status for team members." />
+          <InfoTooltip content={isTeamChat ? "Select team members to include in this internal team group channel." : "Select contacts and team members. Toggle moderator status for team members."} />
         </div>
 
-        {/* Two Toggles: Contacts and Team Member */}
-        <div className="flex items-center p-1 bg-slate-100 rounded-xl">
-          <button
-            type="button"
-            onClick={() => setMemberTab("contacts")}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              memberTab === "contacts"
-                ? "bg-white text-slate-900 shadow-2xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <span>Contacts</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                memberTab === "contacts" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+        {/* Two Toggles: Contacts and Team Member (Hidden in Team Chat — internal members only) */}
+        {!isTeamChat && (
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setMemberTab("contacts")}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                memberTab === "contacts"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              {selectedContactCount}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMemberTab("team")}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              memberTab === "team"
-                ? "bg-white text-slate-900 shadow-2xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <span>Team Member</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                memberTab === "team" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+              <span>Contacts</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  memberTab === "contacts" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+                }`}
+              >
+                {selectedContactCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMemberTab("team")}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                memberTab === "team"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              {selectedTeamCount}
-            </span>
-          </button>
-        </div>
+              <span>Team Member</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  memberTab === "team" ? "bg-slate-100 text-slate-800" : "bg-slate-200/60 text-slate-500"
+                }`}
+              >
+                {selectedTeamCount}
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Member Search */}
         <div className="relative">

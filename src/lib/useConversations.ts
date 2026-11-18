@@ -25,6 +25,8 @@ export interface Message {
   timestamp: string;
   sender: "contact" | "me";
   senderName?: string;
+  senderId?: string;
+  senderEmail?: string;
   status?: "sent" | "delivered" | "read";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
   replyTo?: MessageReplyReference;
@@ -61,7 +63,8 @@ export interface Conversation {
   contactName: string;
   phoneNumber: string;
   inboxNumber?: string;
-  channel: "whatsapp" | "sms" | "website" | "email" | "companion";
+  channel: "whatsapp" | "sms" | "website" | "email" | "companion" | "team";
+  isTeam?: boolean;
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
@@ -88,7 +91,7 @@ export interface Conversation {
 }
 
 export interface SessionWindowStatus {
-  channel: "whatsapp" | "sms" | "website" | "email" | "companion";
+  channel: "whatsapp" | "sms" | "website" | "email" | "companion" | "team";
   lastInboundAt: string | null;
   hoursRemaining: number | null;
   isExpired: boolean;
@@ -103,8 +106,9 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     id: "grp-clinical-care",
     contactName: "Clinical Care Team",
     phoneNumber: "Group · 4 members",
-    inboxNumber: "+1 (555) 123-4567",
-    channel: "whatsapp",
+    inboxNumber: "Team Chat",
+    channel: "team",
+    isTeam: true,
     lastMessage: "Dr. Alistair Mehta: Attached the updated lab protocol for review.",
     timestamp: "10:40 AM",
     unreadCount: 1,
@@ -114,10 +118,10 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       chatType: "private",
       autoDelete: "never",
       description: "Interdisciplinary care coordination for oncology and lab follow-ups.",
-      ownerId: "usr-doc-1",
-      ownerName: "Dr. Alistair Mehta",
-      moderatorIds: ["usr-doc-1", "usr-doc-2"],
-      memberIds: ["usr-doc-1", "usr-doc-2", "CL-001", "CL-004"],
+      ownerId: "1",
+      ownerName: "Admin User",
+      moderatorIds: ["1", "2"],
+      memberIds: ["1", "2", "3", "4"],
       permissions: {
         whoCanAddMembers: "moderators",
         whoCanPost: "all",
@@ -128,24 +132,27 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
         id: "msg-grp-1",
         text: "Welcome team to the Clinical Care coordination channel.",
         timestamp: "Yesterday, 04:30 PM",
-        sender: "contact",
+        senderId: "usr-doc-2",
         senderName: "Dr. Rachel Reynolds",
+        sender: "contact",
         status: "read",
       },
       {
         id: "msg-grp-2",
         text: "Please make sure fasting lab instructions are sent to all Tuesday appointments.",
         timestamp: "09:15 AM",
+        senderId: "1",
+        senderName: "Admin User",
         sender: "me",
-        senderName: "Care Coordinator",
         status: "read",
       },
       {
         id: "msg-grp-3",
         text: "Attached the updated lab protocol for review.",
         timestamp: "10:40 AM",
-        sender: "contact",
+        senderId: "usr-doc-1",
         senderName: "Dr. Alistair Mehta",
+        sender: "contact",
         status: "delivered",
         attachment: {
           name: "Oncology_Lab_Panel_Guide_2026.pdf",
@@ -161,8 +168,9 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     id: "grp-patient-support",
     contactName: "Patient Support & Wellness",
     phoneNumber: "Group · 5 members",
-    inboxNumber: "+1 (555) 123-4567",
-    channel: "companion",
+    inboxNumber: "Team Chat",
+    channel: "team",
+    isTeam: true,
     lastMessage: "Sarah Johnson: Thank you for confirming the therapy dates!",
     timestamp: "09:30 AM",
     unreadCount: 0,
@@ -172,10 +180,10 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       chatType: "public",
       autoDelete: "30d",
       description: "Direct wellness questions and follow-up guidance for enrolled clients.",
-      ownerId: "usr-admin-1",
-      ownerName: "Clinic Admin",
-      moderatorIds: ["usr-admin-1"],
-      memberIds: ["usr-admin-1", "CL-001", "CL-002", "CL-003", "CL-005"],
+      ownerId: "1",
+      ownerName: "Admin User",
+      moderatorIds: ["1"],
+      memberIds: ["1", "2", "3", "4"],
       permissions: {
         whoCanAddMembers: "all",
         whoCanPost: "all",
@@ -186,22 +194,123 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
         id: "msg-grp-w1",
         text: "Hello everyone, reminder that nutrition clinic drop-in sessions take place this Friday.",
         timestamp: "Yesterday, 11:00 AM",
+        senderId: "1",
+        senderName: "Admin User",
         sender: "me",
-        senderName: "Clinic Admin",
         status: "read",
       },
       {
         id: "msg-grp-w2",
         text: "Thank you for confirming the therapy dates!",
         timestamp: "09:30 AM",
+        senderId: "2",
+        senderName: "Akshita Sharma",
         sender: "contact",
-        senderName: "Sarah Johnson",
         status: "read",
         replyTo: {
           id: "msg-grp-w1",
           text: "Hello everyone, reminder that nutrition clinic drop-in sessions take place this Friday.",
-          senderName: "Clinic Admin",
+          senderName: "Admin User",
         },
+      },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  // ── Team 1-on-1 Direct Messages ──
+  {
+    id: "team-dm-1_2",
+    contactName: "Akshita Sharma",
+    phoneNumber: "Ophthalmologist · Clinical",
+    inboxNumber: "Team Chat",
+    channel: "team",
+    isTeam: true,
+    lastMessage: "Sure, reviewing the pre-op notes now. Everything looks good.",
+    timestamp: "11:20 AM",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      {
+        id: "msg-team-1",
+        text: "Hi Dr. Akshita, could you review the Tuesday cataract consultation list?",
+        timestamp: "10:15 AM",
+        senderId: "1",
+        senderName: "Admin User",
+        senderEmail: "admin@mantra.care",
+        sender: "me",
+        status: "read",
+      },
+      {
+        id: "msg-team-2",
+        text: "Sure, reviewing the pre-op notes now. Everything looks good.",
+        timestamp: "11:20 AM",
+        senderId: "2",
+        senderName: "Akshita Sharma",
+        senderEmail: "akshita.sharma@mantra.care",
+        sender: "contact",
+        status: "read",
+      },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "team-dm-1_3",
+    contactName: "Alice",
+    phoneNumber: "Senior Surgeon · Surgery",
+    inboxNumber: "Team Chat",
+    channel: "team",
+    isTeam: true,
+    lastMessage: "OR 2 schedule is confirmed for tomorrow morning.",
+    timestamp: "Yesterday",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      {
+        id: "msg-team-3",
+        text: "Alice, what is the surgical schedule for OR 2 tomorrow?",
+        timestamp: "Yesterday, 03:10 PM",
+        senderId: "1",
+        senderName: "Admin User",
+        senderEmail: "admin@mantra.care",
+        sender: "me",
+        status: "read",
+      },
+      {
+        id: "msg-team-4",
+        text: "OR 2 schedule is confirmed for tomorrow morning.",
+        timestamp: "Yesterday, 03:45 PM",
+        senderId: "3",
+        senderName: "Alice",
+        senderEmail: "alice@mantra.care",
+        sender: "contact",
+        status: "read",
+      },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "team-dm-1_4",
+    contactName: "Charu Arora",
+    phoneNumber: "Physician · Consultation",
+    inboxNumber: "Team Chat",
+    channel: "team",
+    isTeam: true,
+    lastMessage: "I have updated the consultation slots for next week.",
+    timestamp: "2 days ago",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      {
+        id: "msg-team-5",
+        text: "I have updated the consultation slots for next week.",
+        timestamp: "2 days ago",
+        senderId: "4",
+        senderName: "Charu Arora",
+        senderEmail: "charu@mantra.care",
+        sender: "contact",
+        status: "read",
       },
     ],
     botStatus: "off",
@@ -1154,6 +1263,16 @@ export function getStoredConversations(): Conversation[] {
   return INITIAL_MOCK_CONVERSATIONS;
 }
 
+const CHAT_BROADCAST_NAME = "mantra_team_chat_channel";
+let chatChannel: BroadcastChannel | null = null;
+if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+  try {
+    chatChannel = new BroadcastChannel(CHAT_BROADCAST_NAME);
+  } catch (e) {
+    console.error("BroadcastChannel not available:", e);
+  }
+}
+
 let isSyncingStoredConvs = false;
 export function saveStoredConversations(convs: Conversation[]): void {
   if (isSyncingStoredConvs) return;
@@ -1163,6 +1282,9 @@ export function saveStoredConversations(convs: Conversation[]): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
     window.dispatchEvent(new Event(TEST_CHAT_SYNC_EVENT));
     window.dispatchEvent(new Event("storage"));
+    try {
+      chatChannel?.postMessage({ type: "SYNC_CONVERSATIONS" });
+    } catch {}
   } catch {} finally {
     isSyncingStoredConvs = false;
   }
@@ -1239,9 +1361,24 @@ export function useConversations() {
     const handleUpdate = () => setConversationsState(getStoredConversations());
     window.addEventListener(TEST_CHAT_SYNC_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
+    const handleBroadcast = (event: MessageEvent) => {
+      if (event.data?.type === "SYNC_CONVERSATIONS") {
+        setConversationsState(getStoredConversations());
+      }
+      if (event.data?.type === "TEAM_MEMBERS_UPDATED") {
+        setConversationsState(getStoredConversations());
+        window.dispatchEvent(new Event("storage"));
+      }
+    };
+    try {
+      chatChannel?.addEventListener("message", handleBroadcast);
+    } catch {}
     return () => {
       window.removeEventListener(TEST_CHAT_SYNC_EVENT, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
+      try {
+        chatChannel?.removeEventListener("message", handleBroadcast);
+      } catch {}
     };
   }, []);
 
@@ -1356,6 +1493,10 @@ export function useConversations() {
       attachment?: MessageAttachment;
       sender?: "contact" | "me";
       senderName?: string;
+      senderId?: string;
+      senderEmail?: string;
+      recipientName?: string;
+      recipientSubtitle?: string;
     }
   ) => {
     if (!text.trim() && !options?.attachment) return;
@@ -1363,11 +1504,13 @@ export function useConversations() {
     const targetId = conv ? conv.id : conversationId;
 
     const newMessage: Message = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       sender: options?.sender || "me",
       senderName: options?.senderName,
+      senderId: options?.senderId,
+      senderEmail: options?.senderEmail,
       status: "read",
       origin: "human",
       replyTo: options?.replyTo,
@@ -1390,19 +1533,32 @@ export function useConversations() {
             : c
         );
       }
+      const isTeamDM = targetId.startsWith("team-dm-");
+      const isTeamGroup = targetId.startsWith("grp-");
+      const isBot = targetId.includes("bot");
       const newConv: Conversation = {
         id: targetId,
-        contactName: options?.senderName || (targetId.includes("bot") ? "Care Bot" : "Conversation"),
-        phoneNumber: targetId.includes("bot") ? "AI Health Companion" : "Portal Message",
-        inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber,
-        channel: targetId.includes("bot") ? "companion" : "whatsapp",
+        contactName: isTeamDM
+          ? (options?.recipientName || "Team Chat")
+          : options?.senderName || (isBot ? "Care Bot" : "Conversation"),
+        phoneNumber: isTeamDM
+          ? (options?.recipientSubtitle || "Team Direct Message")
+          : isTeamGroup
+          ? "Team Group"
+          : isBot
+          ? "AI Health Companion"
+          : "Portal Message",
+        inboxNumber: isTeamDM || isTeamGroup ? "Team Chat" : DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber,
+        channel: isTeamDM || isTeamGroup ? "team" : isBot ? "companion" : "whatsapp",
+        isTeam: isTeamDM || isTeamGroup,
+        isGroup: isTeamGroup,
         lastMessage: displayText,
         timestamp: "Just now",
         unreadCount: 0,
         status: "open",
-        isBot: targetId.includes("bot"),
+        isBot: isBot,
         messages: [newMessage],
-        botStatus: targetId.includes("bot") ? "active" : "off",
+        botStatus: isBot ? "active" : "off",
         assignedPersonId: "",
       };
       return [newConv, ...prev];
@@ -1444,8 +1600,9 @@ export function useConversations() {
       id: `grp-${Date.now()}`,
       contactName: params.name.trim(),
       phoneNumber: `Group · ${params.memberIds.length} members`,
-      inboxNumber: "Companion Portal",
-      channel: "companion",
+      inboxNumber: "Team Chat",
+      channel: "team",
+      isTeam: true,
       lastMessage: `Group "${params.name.trim()}" created`,
       timestamp: "Just now",
       unreadCount: 0,

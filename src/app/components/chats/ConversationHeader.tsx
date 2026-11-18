@@ -73,6 +73,11 @@ export default function ConversationHeader({
               <span>Group Settings</span>
             </button>
           )
+        ) : conversation.isTeam || conversation.channel === "team" ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-[#1456f0] text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+            <span>Direct Message</span>
+          </span>
         ) : !isCompanion ? (
           <>
             {conversation.botStatus === "active" ? (

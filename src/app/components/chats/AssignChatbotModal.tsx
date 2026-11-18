@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Bot, SEED_BOTS, sanitizeBot } from "./ChatbotTab";
+import { Bot, ChannelType, SEED_BOTS, sanitizeBot } from "./ChatbotTab";
 import { X, Bot as BotIcon, AlertTriangle, Check, UserCheck } from "lucide-react";
 import { Button } from "../ui/Button";
 import { getStoredBots, CHATBOT_BOTS_EVENT } from "../../../lib/useChatbotBots";
@@ -7,7 +7,7 @@ import { getStoredBots, CHATBOT_BOTS_EVENT } from "../../../lib/useChatbotBots";
 interface AssignChatbotModalProps {
   isOpen: boolean;
   onClose: () => void;
-  channel: "whatsapp" | "sms" | "website" | "email" | "companion";
+  channel: "whatsapp" | "sms" | "website" | "email" | "companion" | "team";
   assignedPersonId?: string;
   assignedBotId?: string;
   onAssign: (bot: Bot) => void;
@@ -34,9 +34,13 @@ export default function AssignChatbotModal({
     }
 
     const loadBots = () => {
+      if (channel === "team") {
+        setBots([]);
+        return;
+      }
       const allBots = getStoredBots();
       const filtered = allBots.filter(
-        (b) => b.active && Array.isArray(b.channels) && b.channels.includes(channel)
+        (b) => b.active && Array.isArray(b.channels) && b.channels.includes(channel as ChannelType)
       );
       setBots(filtered);
     };

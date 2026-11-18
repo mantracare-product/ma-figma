@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { Check, CheckCheck, Reply, FileText, Download } from "lucide-react";
 import { Message } from "../../../lib/useConversations";
 import { Tooltip } from "../ui/Tooltip";
+import { useAuth } from "../../context/AuthContext";
 
 export interface MessageThreadListProps {
   messages: Message[];
@@ -28,6 +29,7 @@ export default function MessageThreadList({
   onReply,
 }: MessageThreadListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (containerRef.current) {
@@ -46,7 +48,12 @@ export default function MessageThreadList({
         </div>
       ) : (
         messages.map((msg) => {
-          const isMe = msg.sender === "me";
+          const isMe = user
+            ? (msg.senderId && String(msg.senderId) === String(user.id)) ||
+              (msg.senderEmail && user.email && msg.senderEmail.toLowerCase() === user.email.toLowerCase()) ||
+              (msg.senderName && user.name && msg.senderName.toLowerCase() === user.name.toLowerCase()) ||
+              (!msg.senderId && !msg.senderName && msg.sender === "me")
+            : msg.sender === "me";
           return (
             <div
               key={msg.id}

@@ -123,6 +123,8 @@ import CompanionSettingsTab from "../components/chats/CompanionSettingsTab";
 import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
 import { getStoredWhatsAppNumbers, DEFAULT_MOCK_NUMBERS } from "../../lib/useWhatsAppNumbers";
+import { useAuth } from "../context/AuthContext";
+import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../lib/teamStore";
 
 // Types are imported from useConversations
 
@@ -863,6 +865,37 @@ export default function Chats() {
     createGroupConversation,
     updateGroupConfig,
   } = useConversations();
+  const { user: currentUser } = useAuth();
+  const [chatAudience, setChatAudience] = useState<"contact" | "team">("contact");
+  const [teamFilterTab, setTeamFilterTab] = useState<"all" | "groups" | "direct">("all");
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setTeamMembers(getStoredTeamMembers());
+    };
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("mantra_team_chat_channel");
+        bc.onmessage = (event) => {
+          if (event.data?.type === "TEAM_MEMBERS_UPDATED" || event.data?.type === "SYNC_CONVERSATIONS") {
+            setTeamMembers(getStoredTeamMembers());
+          }
+        };
+      }
+    } catch {}
+    return () => {
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+      try {
+        bc?.close();
+      } catch {}
+    };
+  }, []);
+
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [showCreateGroupDrawer, setShowCreateGroupDrawer] = useState(false);
   const [showGroupSettingsDrawer, setShowGroupSettingsDrawer] = useState(false);
@@ -1343,11 +1376,150 @@ export default function Chats() {
     }
   }, [location.state, conversations]);
 
-  const activeConversation = conversations.find(c => c.id === selectedConversationId);
+  // Memoized team conversations (Team Groups + 1-on-1 Direct Messages with all team members)
+  const teamConversations = useMemo(() => {
+    const currentUserId = currentUser?.id ? String(currentUser.id) : "1";
+
+    // 1. Group conversations (channel: "team" or isTeam/isGroup)
+    const groups: Conversation[] = conversations.filter(
+      (c) => (c.channel === "team" || c.isTeam) && c.isGroup
+    );
+
+    // 2. Direct Messages for each other team member
+    const dms: Conversation[] = [];
+    const otherMembers = teamMembers.filter((m) => String(m.id) !== currentUserId);
+
+    for (const tm of otherMembers) {
+      const otherId = String(tm.id);
+      const dmId = "team-dm-" + [currentUserId, otherId].sort().join("_");
+      const existing = conversations.find((c) => c.id === dmId);
+      const roleSubtitle = `${tm.role || "Specialist"} · ${tm.department || "Clinical"}`;
+
+      if (existing) {
+        dms.push({
+          ...existing,
+          contactName: tm.name,
+          phoneNumber: roleSubtitle,
+          channel: "team",
+          isTeam: true,
+          isGroup: false,
+        });
+      } else {
+        dms.push({
+          id: dmId,
+          contactName: tm.name,
+          phoneNumber: roleSubtitle,
+          inboxNumber: "Team Chat",
+          channel: "team",
+          isTeam: true,
+          isGroup: false,
+          lastMessage: `Start chatting with ${tm.name}`,
+          timestamp: "Available",
+          unreadCount: 0,
+          status: "open",
+          messages: [],
+          botStatus: "off",
+        });
+      }
+    }
+
+    return [...groups, ...dms];
+  }, [conversations, currentUser, teamMembers]);
+
+  const filteredConversations = useMemo(() => {
+    if (chatAudience === "team") {
+      return teamConversations.filter((c) => {
+        const matchesSearch =
+          c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) ||
+          c.phoneNumber.toLowerCase().includes(chatSearch.toLowerCase()) ||
+          c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
+
+        return matchesSearch;
+      });
+    }
+
+    return conversations.filter((c) => {
+      // Exclude team conversations from Contact Chat
+      if (c.channel === "team" || c.isTeam) return false;
+
+      const matchesSearch =
+        c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) ||
+        c.phoneNumber.includes(chatSearch) ||
+        c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
+
+      const matchesChannel =
+        channelFilter === null
+          ? false
+          : channelFilter === "all"
+          ? true
+          : c.channel === channelFilter;
+
+      const matchesView =
+        viewFilter === "all"
+          ? true
+          : viewFilter === "unread"
+          ? c.unreadCount > 0
+          : viewFilter === "assigned_to_me"
+          ? c.assignedPersonId === (currentUser?.id ? String(currentUser.id) : CURRENT_USER_ID)
+          : c.status === viewFilter;
+
+      return matchesSearch && matchesChannel && matchesView;
+    });
+  }, [
+    chatAudience,
+    teamConversations,
+    conversations,
+    chatSearch,
+    teamFilterTab,
+    channelFilter,
+    viewFilter,
+    currentUser,
+  ]);
+
+  const activeConversation = useMemo(() => {
+    const currentUserId = currentUser?.id ? String(currentUser.id) : "1";
+    let found = conversations.find((c) => c.id === selectedConversationId);
+    if (!found && chatAudience === "team") {
+      found = teamConversations.find((c) => c.id === selectedConversationId);
+    }
+    if (!found) {
+      found = filteredConversations.find((c) => c.id === selectedConversationId);
+    }
+    if (!found) return undefined;
+
+    // If it's a team DM, customize the title and role subtitle for the other member
+    if (found.id.startsWith("team-dm-")) {
+      const parts = found.id.replace("team-dm-", "").split("_");
+      const otherId = parts.find((id) => id !== currentUserId) || parts[0];
+      const otherMember = teamMembers.find((m) => String(m.id) === otherId);
+      if (otherMember) {
+        return {
+          ...found,
+          contactName: otherMember.name,
+          phoneNumber: `${otherMember.role || "Specialist"} · ${otherMember.department || "Clinical"}`,
+          channel: "team" as const,
+          isTeam: true,
+          isGroup: false,
+        };
+      }
+    }
+    return found;
+  }, [conversations, teamConversations, filteredConversations, selectedConversationId, currentUser, teamMembers, chatAudience]);
+
+  useEffect(() => {
+    if (filteredConversations.length > 0) {
+      const exists = filteredConversations.some((c) => c.id === selectedConversationId);
+      if (!exists) {
+        setSelectedConversationId(filteredConversations[0].id);
+      }
+    }
+  }, [filteredConversations, selectedConversationId]);
 
   useEffect(() => {
     if (activeConversation && activeConversation.unreadCount > 0) {
-      setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, unreadCount: 0 } : c));
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedConversationId ? { ...c, unreadCount: 0 } : c))
+      );
     }
   }, [selectedConversationId]);
 
@@ -1359,6 +1531,7 @@ export default function Chats() {
         const now = Date.now();
 
         const updated = prev.map((c) => {
+          if (c.channel === "team") return c;
           if (!c.campaignEnrollments || c.campaignEnrollments.length === 0) return c;
           if (c.assignedPersonId) return c; // Pause campaign execution while human assigned
 
@@ -1512,16 +1685,44 @@ export default function Chats() {
   const handleSendMessage = (text?: string, options?: any) => {
     const textToSend = typeof text === "string" ? text : composerText;
     if ((!textToSend.trim() && !options?.attachment) || !activeConversation) return;
-    storeSendMessage(selectedConversationId, textToSend, options);
+    storeSendMessage(selectedConversationId, textToSend, {
+      ...options,
+      senderId: currentUser?.id ? String(currentUser.id) : "1",
+      senderName: currentUser?.name || "Admin User",
+      senderEmail: currentUser?.email || "admin@mantra.care",
+      sender: "me",
+      recipientName: activeConversation.contactName,
+      recipientSubtitle: activeConversation.phoneNumber,
+    });
     setComposerText("");
     setReplyingToMessage(null);
     toast.success("Message sent");
   };
 
   const handleCreateGroup = (params: any) => {
-    const newGroup = createGroupConversation(params);
+    const newGroup = createGroupConversation({
+      ...params,
+      ownerId: currentUser?.id ? String(currentUser.id) : "1",
+      ownerName: currentUser?.name || "Admin User",
+    });
     if (newGroup) {
       setSelectedConversationId(newGroup.id);
+      setChatAudience("team");
+    }
+  };
+
+  const handleAudienceChange = (audience: "contact" | "team") => {
+    setChatAudience(audience);
+    if (audience === "team") {
+      const firstTeam = teamConversations[0];
+      if (firstTeam) {
+        setSelectedConversationId(firstTeam.id);
+      }
+    } else {
+      const firstContact = conversations.find((c) => c.channel !== "team" && !c.isTeam);
+      if (firstContact) {
+        setSelectedConversationId(firstContact.id);
+      }
     }
   };
 
@@ -1557,32 +1758,6 @@ export default function Chats() {
       setNumberFilter("");
     }
   }, [availableNumbersForChannel, numberFilter]);
-
-  const filteredConversations = conversations.filter(c => {
-    const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
-    const matchesChannel =
-      channelFilter === null
-        ? false
-        : channelFilter === "all"
-        ? true
-        : c.channel === channelFilter || (c.isGroup && (channelFilter === "whatsapp" || channelFilter === "companion"));
-    const matchesView =
-      viewFilter === "all" ? true :
-        viewFilter === "unread" ? c.unreadCount > 0 :
-          viewFilter === "assigned_to_me" ? c.assignedPersonId === CURRENT_USER_ID :
-            c.status === viewFilter;
-    const matchesNumber = true; // Show all contacts in the contact list
-    return matchesSearch && matchesChannel && matchesView && matchesNumber;
-  });
-
-  useEffect(() => {
-    if (filteredConversations.length > 0) {
-      const exists = filteredConversations.some(c => c.id === selectedConversationId);
-      if (!exists) {
-        setSelectedConversationId(filteredConversations[0].id);
-      }
-    }
-  }, [filteredConversations, selectedConversationId]);
 
   // ── Templates State ──
   const [globalTemplates, setGlobalTemplates] = useWhatsappTemplates();
@@ -2098,8 +2273,40 @@ export default function Chats() {
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-2">
-              {/* Channel Dropdown: WhatsApp, SMS, Website, Email */}
-              <div className="relative shrink-0" ref={channelDropdownRef}>
+              {/* Audience Switcher: Contact Chat vs Team Chat */}
+              <div className="inline-flex items-center p-0.5 bg-slate-100 border border-border/80 rounded-xl gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleAudienceChange("contact")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    chatAudience === "contact"
+                      ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Contact Chat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAudienceChange("team")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    chatAudience === "team"
+                      ? "bg-white text-[#1456f0] shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Team Chat</span>
+                </button>
+              </div>
+
+              {chatAudience === "contact" && (
+                <>
+                  {/* Channel Dropdown: WhatsApp, SMS, Website, Email */}
+                  <div className="relative shrink-0" ref={channelDropdownRef}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2590,10 +2797,14 @@ export default function Chats() {
                   )}
                 </>
               )}
+                </>
+              )}
             </div>
           }
           searchQuery={
-            channelFilter === "email"
+            chatAudience === "team"
+              ? chatSearch
+              : channelFilter === "email"
               ? subMode === "templates"
                 ? emailTemplateSearch
                 : subMode === "agent"
@@ -2604,7 +2815,9 @@ export default function Chats() {
               : chatSearch
           }
           onSearchChange={
-            channelFilter === "email"
+            chatAudience === "team"
+              ? setChatSearch
+              : channelFilter === "email"
               ? subMode === "templates"
                 ? setEmailTemplateSearch
                 : subMode === "agent"
@@ -2615,7 +2828,9 @@ export default function Chats() {
               : setChatSearch
           }
           searchPlaceholder={
-            channelFilter === "email"
+            chatAudience === "team"
+              ? "Search team members, groups, messages..."
+              : channelFilter === "email"
               ? subMode === "templates"
                 ? "Search email templates (name, subject, body)..."
                 : subMode === "agent"
@@ -2631,7 +2846,7 @@ export default function Chats() {
           }
           customFilterModalContent={undefined}
           secondaryActions={
-            channelFilter === "email" && subMode === "inbox" ? (
+            channelFilter === "email" && subMode === "inbox" && chatAudience === "contact" ? (
               <button
                 type="button"
                 onClick={() => toast.success("Mailbox synchronized")}
@@ -2643,7 +2858,13 @@ export default function Chats() {
             ) : undefined
           }
           primaryAction={
-            channelFilter === "email"
+            chatAudience === "team"
+              ? {
+                  label: "New Group",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => setShowCreateGroupDrawer(true),
+                }
+              : channelFilter === "email"
               ? subMode === "templates"
                 ? {
                     label: "New Template",
@@ -2681,6 +2902,7 @@ export default function Chats() {
               : undefined
           }
           afterPrimaryAction={
+            chatAudience === "team" ? undefined :
             channelFilter === "email" ? (
               <div className="relative shrink-0" ref={emailGearMenuRef}>
                 <button
@@ -2798,7 +3020,7 @@ export default function Chats() {
 
         {/* ── Main Content Area Below Topbar ── */}
         {activeTab === "chats" && (
-          channelFilter === "email" ? (
+          chatAudience === "contact" && channelFilter === "email" ? (
             subMode === "agent" ? (
               <EmailAgentRulesView
                 searchQuery={emailAgentSearch}
@@ -2819,7 +3041,7 @@ export default function Chats() {
             {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}
             <div className="w-[330px] sm:w-[360px] shrink-0 bg-white rounded-none border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-                {channelFilter === null ? (
+                {chatAudience !== "team" && channelFilter === null ? (
                   <div className="p-10 flex flex-col items-center text-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
                       <MessageCircle className="w-6 h-6 text-gray-400" />
@@ -2833,7 +3055,7 @@ export default function Chats() {
                   </div>
                 ) : filteredConversations.length === 0 ? (
                   <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    No conversations found.
+                    {chatAudience === "team" ? "No team conversations or members found." : "No conversations found."}
                   </div>
                 ) : (
                   filteredConversations.map((conv) => {
@@ -2910,7 +3132,7 @@ export default function Chats() {
                   {/* Shared Chat Subcomponents */}
                   <ConversationHeader
                     conversation={activeConversation}
-                    channel={channelFilter || activeConversation.channel}
+                    channel={chatAudience === "team" ? "team" : (channelFilter || activeConversation.channel)}
                     onToggleBotStatus={handleToggleBotStatus}
                     onOpenAssignBotModal={() => setShowAssignBotModal(true)}
                     onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
@@ -2924,7 +3146,7 @@ export default function Chats() {
                   />
                   <MessageComposerBar
                     conversation={activeConversation}
-                    channel={channelFilter || activeConversation.channel}
+                    channel={chatAudience === "team" ? "team" : (channelFilter || activeConversation.channel)}
                     session={computeSessionWindow(activeConversation)}
                     onSendMessage={(text, opts) => handleSendMessage(text, opts)}
                     onSendTemplate={handleSendTemplateDirectly}
@@ -3749,7 +3971,7 @@ export default function Chats() {
         <AssignChatbotModal
           isOpen={showAssignBotModal}
           onClose={() => setShowAssignBotModal(false)}
-          channel={activeConversation?.channel || "whatsapp"}
+          channel={activeConversation?.channel === "team" ? "whatsapp" : (activeConversation?.channel || "whatsapp")}
           assignedPersonId={activeConversation?.assignedPersonId}
           assignedBotId={activeConversation?.assignedBotId}
           onAssign={handleAssignBot}
@@ -3846,6 +4068,7 @@ export default function Chats() {
       <CreateGroupChatDrawer
         isOpen={showCreateGroupDrawer}
         onClose={() => setShowCreateGroupDrawer(false)}
+        chatAudience={chatAudience}
         onCreateGroup={handleCreateGroup}
       />
 

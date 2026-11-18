@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Drawer } from "../ui/drawer";
-import { ChevronDown, MapPin, Video, Building2 } from "lucide-react";
+import { ChevronDown, MapPin, Video, Building2, Copy, Check, ExternalLink, Mail, CheckCircle2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { addTeamMemberToStore, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
@@ -35,6 +35,10 @@ export default function AddTeamMemberDrawer({
   const [role, setRole] = useState("Specialist");
   const [canBookAppointments, setCanBookAppointments] = useState(initialCanBookAppointments);
   const [locVersion, setLocVersion] = useState(0);
+
+  // Invitation Success & Copy Link State
+  const [invitedMember, setInvitedMember] = useState<TeamMember | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Listen to storage/team updates
   useEffect(() => {
@@ -97,16 +101,20 @@ export default function AddTeamMemberDrawer({
   }, [activeOrganization, locVersion]);
 
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       setName("");
       setEmail("");
       setDepartment("");
       setRole("Specialist");
       setCanBookAppointments(initialCanBookAppointments);
       setSelectedLocationIds(orgLocations.map((l) => l.id));
+      setInvitedMember(null);
+      setCopiedLink(false);
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, initialCanBookAppointments, orgLocations]);
 
   const handleSave = () => {
@@ -155,10 +163,31 @@ export default function AddTeamMemberDrawer({
       window.dispatchEvent(new Event("storage"));
     } catch {}
 
-    toast.success(`Team member "${created.name}" added successfully`);
+    toast.success(`Team member "${created.name}" added & invitation sent automatically!`);
+    setInvitedMember(created);
     if (onSuccess) {
       onSuccess(created);
     }
+  };
+
+  const inviteUrl = invitedMember
+    ? `${window.location.origin}/chats?memberId=${invitedMember.id}&invite=1`
+    : "";
+
+  const handleCopyLink = () => {
+    if (!inviteUrl) return;
+    try {
+      navigator.clipboard.writeText(inviteUrl);
+      setCopiedLink(true);
+      toast.success("Invitation link copied to clipboard!");
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      toast.success("Link copied!");
+    }
+  };
+
+  const handleCloseAll = () => {
+    setInvitedMember(null);
     onClose();
   };
 
@@ -169,7 +198,7 @@ export default function AddTeamMemberDrawer({
   return (
     <Drawer
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleCloseAll}
       title={
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
@@ -193,16 +222,137 @@ export default function AddTeamMemberDrawer({
           </div>
           <div>
             <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Add Team Member
+              {invitedMember ? "Team Member Invited" : "Add Team Member"}
             </div>
             <div className="text-[11px] text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Fill in the details below to add a new user
+              {invitedMember ? "Invitation sent with direct login link" : "Fill in the details below to add a new user"}
             </div>
           </div>
         </div>
       }
       maxWidth="max-w-[420px] w-full sm:max-w-[480px]"
     >
+      {invitedMember ? (
+        <div className="space-y-4 py-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {/* Success Banner */}
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs font-bold text-emerald-900">
+                Invitation Sent Automatically!
+              </h4>
+              <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                An invitation email was sent to{" "}
+                <span className="font-semibold underline">{invitedMember.email}</span>.
+              </p>
+            </div>
+          </div>
+
+          {/* Member Card */}
+          <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {invitedMember.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="text-xs font-bold text-slate-900 truncate">
+                    {invitedMember.name}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    {invitedMember.role || "Specialist"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  {invitedMember.email} · {invitedMember.department || "Medical"}
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Shield className="w-3.5 h-3.5 text-blue-600" />
+                Access Permissions:
+              </span>
+              <span className="font-semibold text-slate-800">
+                {invitedMember.role} Access Scope
+              </span>
+            </div>
+          </div>
+
+          {/* Copy Link Box */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800">
+                Direct User Invitation Link
+              </label>
+              <span className="text-[10px] text-slate-400">
+                Role & permission enabled
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={inviteUrl}
+                className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none select-all shadow-2xs truncate"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0 ${
+                  copiedLink
+                    ? "bg-emerald-600 text-white"
+                    : "bg-[#1456f0] text-white hover:bg-blue-700"
+                }`}
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Opening this link will automatically open MantraAssist as{" "}
+              <span className="font-bold text-slate-700">{invitedMember.name}</span> with their configured permissions.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => window.open(inviteUrl, "_blank")}
+              className="flex-1 px-3 py-2.5 text-xs font-bold text-[#1456f0] bg-blue-50/70 hover:bg-blue-100 border border-blue-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span>Open in New Tab</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleCloseAll}
+              className="flex-1 px-4 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-4" style={{ fontFamily: "Outfit, sans-serif" }}>
         {/* Name */}
         <div>
@@ -436,6 +586,7 @@ export default function AddTeamMemberDrawer({
           </button>
         </div>
       </div>
+      )}
     </Drawer>
   );
 }
