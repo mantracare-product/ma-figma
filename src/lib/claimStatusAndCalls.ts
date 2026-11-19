@@ -11,7 +11,6 @@ import { captureVoiceBenefits } from "./voiceBenefits";
 import { eventBus, type BusEvent } from "./eventBus";
 import { getStoredProcesses } from "./useProcessStore";
 import { getPayers } from "./billingSetupStore";
-import { VOICE_ENABLED_KEY } from "./ruleContextFields";
 import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { getStoredClaims, saveClaim, type Claim } from "./claimsStore";
 import { claimService } from "./claimService";
@@ -150,8 +149,6 @@ export function performStageCall(event: BusEvent): RcmCall | null {
   const settings = stage?.callTriggerSettings;
   const purpose = settings?.callPurpose;
   if (!stage || !stage.enableCalling || !purpose || purpose === "general") return null;
-  // payer calls also need the clinic voice calling switched on
-  if (purpose === "payer_benefits") { try { if (localStorage.getItem(VOICE_ENABLED_KEY) !== "1") return null; } catch { return null; } }
   const key = actionIdempotencyKey("stage_call", event.recordId, `${stage.id}:${purpose}`, todayStr());
   const run = runActionOnce(key, { actionKey: "stage_call", ruleId: stage.id, ruleName: `${proc?.name} / ${stage.name}`, payload: { recordId: event.recordId, purpose } as any }, () => {
     const ctx = resolveRecordContext(event);

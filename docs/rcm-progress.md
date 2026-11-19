@@ -219,7 +219,7 @@ Checklist:
 - [x] Part E: Claim defaults and claim fields (done, commit "R5-fix.3")
 - [x] Part F: Scrub rules as condition blocks (done, commit "R5-fix.4")
 - [x] Part G: Provider credentials move to the Team member drawer (done, commit "R5-fix.5")
-- [ ] Part H: Notifications page and the voice switch
+- [x] Part H: Notifications page and the voice switch (done, commit "R5-fix.6")
 - [ ] Part I: Client insurance Add row bug
 - [ ] Part J: Dummy data, tests, docs
 
@@ -299,4 +299,13 @@ Checklist:
 - `getProviderCredential` in `billingSetupStore.ts` reads directly from team member records (by ID or name) first, falling back to legacy store.
 - Migration `migrateProviderCredentialsToTeamMember` (`src/lib/providerCredentialMigration.ts`, flag `mantra_provider_credentials_migrated_v1`): migrates existing provider credentials to matching team members by ID or name, keeps old store untouched in storage, logged to `mantra_migration_log_v1`.
 - Tests: `providerCredentials.test.ts` (3/3 passed).
+- Gate: typecheck OK, build OK, vitest OK.
+
+### R5-fix.6: Revenue cycle alerts and stage call switch (done, commit "R5-fix.6")
+- Removed "Notification toggles" tab from Setup and deleted obsolete `ClaimsSetup.tsx`.
+- Settings > Notifications (`NotificationsSettingsTab.tsx`): added group card "Revenue cycle alerts" with 5 toggles (visit in 2 days and auth not approved, visit completed note & codes needed, note waiting >24h, submitted claim no response 2 days, appeal deadline within 14 days) backed by `rcmNotificationSettingsStore`.
+- Removed global "Voice calls for payer benefits" switch (`VOICE_ENABLED_KEY`) from billing setup: whether a payer call happens is decided ONLY by whether the Inconclusive stage call is ON and has call purpose "payer benefits".
+- `performStageCall` and `_voiceEnabled` (`isInconclusiveVoiceCallEnabled`) compute exclusively from the Inconclusive stage call setting.
+- Migration `migrateStageCallSwitch` (`src/lib/stageCallSwitchMigration.ts`, flag `mantra_stage_call_switch_migrated_v1`): copies any existing global voice switch value to the Inconclusive stage call setting, old key untouched in storage, logged to `mantra_migration_log_v1`.
+- Tests: `rcmNotificationsAndStageCall.test.ts` (2/2 passed), `voiceBenefits.test.ts` (4/4 passed), `rcmSetM.test.ts` (7/7 passed).
 - Gate: typecheck OK, build OK, vitest OK.

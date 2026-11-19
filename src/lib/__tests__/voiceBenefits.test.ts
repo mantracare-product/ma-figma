@@ -101,6 +101,18 @@ describe("voice results into an instance (S6.4)", () => {
 
   it("voice OFF: the same Inconclusive instance gets the Benefits to verify task instead (A8), no call", async () => {
     sb.enableDemoSet("E");
+    const procStore = await import("../useProcessStore");
+    const procs = procStore.getStoredProcesses();
+    procStore.saveStoredProcesses(
+      procs.map((p) =>
+        p.id === "proc-sample-coverage-auth"
+          ? {
+              ...p,
+              stages: p.stages.map((s) => (s.name === "Inconclusive" ? { ...s, enableCalling: false } : s)),
+            }
+          : p
+      )
+    );
     const { inst } = await bookWithInconclusive();
     await wait(400);
     expect((store.getProcessInstanceById(inst.instanceId!) as any).currentStage).toBe("Inconclusive");

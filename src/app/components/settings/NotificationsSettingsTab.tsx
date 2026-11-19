@@ -28,14 +28,24 @@ import {
   sendBrowserNotification,
   BrowserNotificationStatus,
 } from "../../../lib/browserPushNotifications";
+import {
+  KNOWN_RCM_NOTIFICATIONS,
+  RCM_NOTIFICATION_EVENT,
+  isRcmNotificationEnabled,
+  setRcmNotificationEnabled,
+} from "../../../lib/rcmNotificationSettings";
 
 export default function NotificationsSettingsTab() {
   const { settings, modules, toggleModule, setAllModules } = useNotificationSettings();
   const [permissionStatus, setPermissionStatus] = useState<BrowserNotificationStatus>("default");
   const [isRequesting, setIsRequesting] = useState(false);
+  const [rcmTick, setRcmTick] = useState(0);
 
   useEffect(() => {
     setPermissionStatus(getBrowserNotificationPermission());
+    const handleBump = () => setRcmTick((t) => t + 1);
+    window.addEventListener(RCM_NOTIFICATION_EVENT, handleBump);
+    return () => window.removeEventListener(RCM_NOTIFICATION_EVENT, handleBump);
   }, []);
 
   const handleRequestPush = async () => {
@@ -249,6 +259,100 @@ export default function NotificationsSettingsTab() {
                       toggleModule(mod.id);
                       toast.success(
                         `${mod.label} notifications turned ${!isEnabled ? "ON" : "OFF"}`
+                      );
+                    }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isEnabled ? "bg-[#1E293B]" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                        isEnabled ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Card 3: Revenue Cycle Alerts (5 Toggles) ── */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+              Revenue Cycle Alerts
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {KNOWN_RCM_NOTIFICATIONS.filter((n) => isRcmNotificationEnabled(n.key)).length} of {KNOWN_RCM_NOTIFICATIONS.length} revenue cycle alert rules active
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                KNOWN_RCM_NOTIFICATIONS.forEach((n) => setRcmNotificationEnabled(n.key, true));
+                setRcmTick((t) => t + 1);
+                toast.success("All revenue cycle alerts enabled");
+              }}
+              className="font-semibold text-[#1456f0] hover:underline cursor-pointer"
+            >
+              Enable All
+            </button>
+            <span className="text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                KNOWN_RCM_NOTIFICATIONS.forEach((n) => setRcmNotificationEnabled(n.key, false));
+                setRcmTick((t) => t + 1);
+                toast.info("All revenue cycle alerts disabled");
+              }}
+              className="font-semibold text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
+            >
+              Disable All
+            </button>
+          </div>
+        </div>
+
+        <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+          {KNOWN_RCM_NOTIFICATIONS.map((n) => {
+            const isEnabled = isRcmNotificationEnabled(n.key);
+            return (
+              <div
+                key={n.key}
+                className="p-3.5 px-4 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/70 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200/80 flex items-center justify-center shrink-0">
+                    <Receipt className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-slate-900 truncate">{n.label}</h4>
+                    <p className="text-[11px] text-slate-500 truncate font-mono">{n.key}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span
+                    className={`text-[11px] font-mono font-bold tracking-wider uppercase transition-colors ${
+                      isEnabled ? "text-[#1E293B]" : "text-slate-400"
+                    }`}
+                  >
+                    {isEnabled ? "ON" : "OFF"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isEnabled}
+                    onClick={() => {
+                      const next = !isEnabled;
+                      setRcmNotificationEnabled(n.key, next);
+                      setRcmTick((t) => t + 1);
+                      toast.success(
+                        `Alert "${n.label}" turned ${next ? "ON" : "OFF"}`
                       );
                     }}
                     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${

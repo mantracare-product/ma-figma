@@ -10,8 +10,28 @@ import type { AutomationRule } from "./useAutomationStore";
 import { resolveRecordContext } from "./recordContext";
 import { getCoverageOn } from "./coveragesStore";
 import { readLocalRecordFields } from "./recordWriter";
+import { getStoredProcesses } from "./useProcessStore";
 
 export const VOICE_ENABLED_KEY = "mantra_rcm_voice_enabled";
+
+/**
+ * Returns true if the Inconclusive stage call is ON and has callPurpose "payer_benefits".
+ * R5-fix.6: Replaces the removed global voice switch.
+ */
+export function isInconclusiveVoiceCallEnabled(): boolean {
+  try {
+    const processes = getStoredProcesses();
+    for (const proc of processes) {
+      const stage: any = proc.stages?.find((s) => s.name?.toLowerCase() === "inconclusive");
+      if (stage && stage.callTriggerSettings?.callPurpose === "payer_benefits") {
+        return !!stage.enableCalling;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
 
 export function derivedFieldsNeeded(rules: AutomationRule[]): Set<string> {
   const needed = new Set<string>();
@@ -27,13 +47,7 @@ export function computeDerivedFields(event: BusEvent, needed: Set<string>): Reco
   const out: Record<string, any> = {};
   if (needed.size === 0) return out;
   if (needed.has("_voiceEnabled")) {
-    let on = false;
-    try {
-      on = localStorage.getItem(VOICE_ENABLED_KEY) === "1";
-    } catch {
-      /* ignore */
-    }
-    out._voiceEnabled = String(on);
+    out._voiceEnabled = String(isInconclusiveVoiceCallEnabled());
   }
   if (needed.has("_hasCoverage") || needed.has("_daysSinceLastCheck")) {
     const ctx = resolveRecordContext(event);

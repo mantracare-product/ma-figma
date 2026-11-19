@@ -16,6 +16,7 @@ import { migrateFeeSchedulesToServicePrices } from "./lib/feeScheduleMigration";
 import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
 import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
 import { migrateProviderCredentialsToTeamMember } from "./lib/providerCredentialMigration";
+import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -48,6 +49,9 @@ import { migrateProviderCredentialsToTeamMember } from "./lib/providerCredential
 
   // Round 5: provider credentials move to team member records (once, logged).
   try { if (!testRunActive()) migrateProviderCredentialsToTeamMember(); } catch { /* ignore */ }
+
+  // Round 5: global voice switch migrated to Inconclusive stage call setting (once, logged).
+  try { if (!testRunActive()) migrateStageCallSwitch(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }
