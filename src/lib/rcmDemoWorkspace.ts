@@ -24,6 +24,7 @@ import { getStoredClaims } from "./claimsStore";
 import { getStoredCallLogs, saveCallLogs } from "./processLogsStore";
 import { getStoredTasks, saveStoredTasks } from "./tasksStore";
 import { CREDENTIALING_STORAGE_KEY, type CredentialingRecord } from "./credentialingStore";
+import { ensureArRecordsAllStages } from "./arStore";
 import { getStoredNotifications, saveStoredNotifications } from "./notificationsStore";
 import { getStoredAuditLogs } from "./auditLogsStore";
 import { getScribeSessions } from "./scribeSessionStore";
@@ -577,7 +578,57 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
       updatedAt: dayIso(-1, 9),
     });
 
+    // Also credential existing staff members (Akshita Sharma id 2, Alice id 3)
+    credRecords.push({
+      id: `${ID}cred-p1-akshita`,
+      scope: "provider",
+      memberId: "2",
+      memberName: "Akshita Sharma",
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "PR-BCBS-202",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(365),
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    credRecords.push({
+      id: `${ID}cred-p2-akshita`,
+      scope: "provider",
+      memberId: "2",
+      memberName: "Akshita Sharma",
+      payerId: p2.id,
+      payerName: p2.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "PR-AET-202",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(300),
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    credRecords.push({
+      id: `${ID}cred-p1-alice`,
+      scope: "provider",
+      memberId: "3",
+      memberName: "Alice",
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "PR-BCBS-303",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(365),
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+
     added.credentialing = addMissing(CREDENTIALING_STORAGE_KEY, credRecords);
+
+    // Ensure AR records in every stage of AR cycle
+    ensureArRecordsAllStages();
 
     if (!opts.force) localStorage.setItem(DEMO_WORKSPACE_FLAG, "1");
     window.dispatchEvent(new Event("storage"));

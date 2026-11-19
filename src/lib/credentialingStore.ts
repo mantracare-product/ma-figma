@@ -128,12 +128,29 @@ export function getOrgCredentialing(payerId: string): CredentialingRecord | unde
 export function getProviderCredentialing(memberId: string | number | undefined, payerId: string): CredentialingRecord | undefined {
   if (!memberId) return undefined;
   const mId = String(memberId);
-  return getStoredCredentialing().find(
+  const records = getStoredCredentialing();
+  const direct = records.find(
     (c) =>
       c.scope === "provider" &&
       String(c.memberId) === mId &&
       (c.payerId === payerId || c.payerName?.toLowerCase() === payerId.toLowerCase())
   );
+  if (direct) return direct;
+
+  try {
+    const member = getStoredTeamMembers().find((m) => String(m.id) === mId || m.npi === mId);
+    if (member) {
+      return records.find(
+        (c) =>
+          c.scope === "provider" &&
+          (String(c.memberId) === String(member.id) || (member.npi && String(c.memberId) === member.npi)) &&
+          (c.payerId === payerId || c.payerName?.toLowerCase() === payerId.toLowerCase())
+      );
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
 }
 
 export function isOrgCredentialed(payerId: string): boolean {

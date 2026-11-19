@@ -72,6 +72,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     taxonomy: "207WX0009X",
     licenseNumber: "LIC-0002",
     licenseState: "CA",
+    providesServices: true,
+    isRenderingProvider: true,
     customFields: { npi: "2222222228", taxonomy: "207WX0009X", licenseNumber: "LIC-0002", licenseState: "CA" },
   },
   {
@@ -90,6 +92,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     taxonomy: "152W00000X",
     licenseNumber: "LIC-0003",
     licenseState: "CA",
+    providesServices: true,
+    isRenderingProvider: true,
     customFields: { npi: "3333333334", taxonomy: "152W00000X", licenseNumber: "LIC-0003", licenseState: "CA" },
   },
   {
@@ -104,6 +108,12 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     calendarConnected: true,
     locations: ["California", "California Branch", "Online"],
     availableLocations: ["California", "California Branch", "Online"],
+    npi: "4444444440",
+    taxonomy: "207Q00000X",
+    licenseNumber: "LIC-0004",
+    licenseState: "CA",
+    providesServices: true,
+    isRenderingProvider: true,
   },
 ];
 
