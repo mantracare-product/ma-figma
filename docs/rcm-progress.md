@@ -215,7 +215,7 @@ Checklist:
 - [x] Part A: Remove the eligibility scenario picker (done, commit "R5.A")
 - [x] Part B: Fees live on the service only (done, commit "R5.B")
 - [x] Part C: Payers: table + detail drawer (done, commit "R5.C")
-- [ ] Part D: Service drawer link
+- [x] Part D: Service drawer link (done, commit "R5.D")
 - [ ] Part E: Claim defaults and claim fields
 - [ ] Part F: Scrub rules as condition blocks
 - [ ] Part G: Provider credentials move to the Team member drawer
@@ -253,4 +253,10 @@ Checklist:
   - Inactive payers (`active: false`) are hidden from coverage dropdowns via `getActivePayers()`.
 - Migration `migratePayersToThreeFunctionEnrollment` (`src/lib/payerMigration.ts`, flag `mantra_payers_migrated_v1`): legacy single enrollment copied to eligibility, claims, era; type preset by name (medicare, medicaid, tricare/other, else commercial); logged to `mantra_migration_log_v1`.
 - Tests: `src/lib/__tests__/payerDetail.test.ts` (4/4 passed).
+- Gate: typecheck OK, build OK, vitest at baseline.
+
+### Part D: Service drawer link (done, commit "R5.D")
+- Added read-only line "Requires prior auth with: <payers>" to `ServiceDrawer.tsx` derived from active rules in `priorAuthRulesStore`.
+- Each payer name is a clickable link that opens `PayerDetailDrawer` on the `Prior-auth rules` tab (`initialTab="rules"`).
+- Preserved the per-service default authorization requirement switch (`requiresAuthDefault`).
 - Gate: typecheck OK, build OK, vitest at baseline.

@@ -16,6 +16,9 @@ import {
 import { useTeamMembers } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredRooms, syncServiceRooms } from "../../../lib/roomsStore";
+import { priorAuthRulesStore } from "../../../lib/priorAuthRulesStore";
+import { payersStore, type Payer } from "../../../lib/billingSetupStore";
+import PayerDetailDrawer from "../claims/PayerDetailDrawer";
 
 export interface AvailabilityRule {
   id: string;
@@ -104,6 +107,8 @@ export default function ServiceDrawer({
   const [slotDuration, setSlotDuration] = useState<number>(30);
   const [isPrepaid, setIsPrepaid] = useState<boolean>(false);
   const [billableToInsurance, setBillableToInsurance] = useState<boolean>(false);
+  const [requiresAuthDefault, setRequiresAuthDefault] = useState<boolean>(false);
+  const [selectedPayerForAuth, setSelectedPayerForAuth] = useState<string | null>(null);
   const [prepaidDepositType, setPrepaidDepositType] = useState<"full" | "deposit">("full");
   const [prepaidDepositAmount, setPrepaidDepositAmount] = useState<number>(0);
   const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([]);
@@ -123,6 +128,31 @@ export default function ServiceDrawer({
     tax: 0,
     isActive: true,
   });
+
+  const authPayers: Payer[] = useMemo(() => {
+    const rules = priorAuthRulesStore.get();
+    const currentCpt = String(fieldValues["cptCode"] || "").trim();
+    const serviceId = service?.id;
+    const matchingRules = rules.filter((r) => {
+      if (!r.required) return false;
+      if (serviceId !== undefined && r.serviceId !== undefined && String(r.serviceId) === String(serviceId)) {
+        return true;
+      }
+      if (currentCpt && r.cptCode === currentCpt) {
+        return true;
+      }
+      return false;
+    });
+
+    const payerMap = new Map<string, Payer>();
+    for (const r of matchingRules) {
+      const p = payersStore.find(r.payerId);
+      if (p && !payerMap.has(p.id)) {
+        payerMap.set(p.id, p);
+      }
+    }
+    return Array.from(payerMap.values());
+  }, [fieldValues, service, isOpen]);
 
   // Overview Sections (Slot duration configured in Availability tab)
   const CANONICAL_SERVICE_SECTIONS: OverviewSection[] = useMemo(() => [
@@ -229,6 +259,7 @@ export default function ServiceDrawer({
       setAvailableForAppointment(service.availableForAppointment ?? true);
       setIsPrepaid(Boolean(service.isPrepaid));
       setBillableToInsurance(Boolean((service as any).billableToInsurance));
+      setRequiresAuthDefault(Boolean(service.requiresAuthDefault));
       setPrepaidDepositType(service.prepaidDepositType || "full");
       setPrepaidDepositAmount(service.prepaidDepositAmount ?? service.price ?? 0);
       const sDuration = service.slotDuration || service.duration || 30;
@@ -302,6 +333,8 @@ export default function ServiceDrawer({
       const isApptAvail = initialAvailableForAppointment;
       setAvailableForAppointment(isApptAvail);
       setIsPrepaid(false);
+      setBillableToInsurance(false);
+      setRequiresAuthDefault(false);
       setPrepaidDepositType("full");
       setPrepaidDepositAmount(0);
       setSlotDuration(30);
@@ -468,6 +501,7 @@ export default function ServiceDrawer({
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         billableToInsurance,
+        requiresAuthDefault,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -495,6 +529,7 @@ export default function ServiceDrawer({
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         billableToInsurance,
+        requiresAuthDefault,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -521,6 +556,7 @@ export default function ServiceDrawer({
         availableForAppointment,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         billableToInsurance,
+        requiresAuthDefault,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
         assignedEmployees,
@@ -675,6 +711,50 @@ export default function ServiceDrawer({
             >
               <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ${billableToInsurance ? "translate-x-5" : "translate-x-0"}`} />
             </button>
+          </div>
+        </div>
+
+        {/* ── Prior Authorization Requirements ── */}
+        <div className={`border rounded-2xl p-4 shadow-2xs transition-all space-y-3 ${requiresAuthDefault ? "bg-amber-50/40 border-amber-200" : "bg-slate-50/90 border-slate-200"}`} data-testid="service-prior-auth-card">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>Default prior-authorization requirement</label>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Fallback setting when no payer-specific prior-auth rule matches this service.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={requiresAuthDefault}
+              data-testid="service-auth-default-toggle"
+              onClick={() => setRequiresAuthDefault(!requiresAuthDefault)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${requiresAuthDefault ? "bg-blue-600" : "bg-slate-300"}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ${requiresAuthDefault ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
+
+          <div className="pt-2 border-t border-slate-200/70 text-xs text-slate-700">
+            <span className="font-semibold text-slate-800">Requires prior auth with: </span>
+            {authPayers.length > 0 ? (
+              <span className="inline-flex flex-wrap items-center gap-1.5 ml-1">
+                {authPayers.map((payer, idx) => (
+                  <span key={payer.id} className="inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPayerForAuth(payer.id)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline font-semibold cursor-pointer"
+                    >
+                      {payer.name}
+                    </button>
+                    {idx < authPayers.length - 1 && <span className="text-slate-400 mr-1">,</span>}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="text-slate-500 italic ml-1">None (uses default)</span>
+            )}
           </div>
         </div>
 
@@ -1232,6 +1312,13 @@ export default function ServiceDrawer({
           onSaved={() => setAddSectionDrawerOpen(false)}
         />
       )}
+
+      <PayerDetailDrawer
+        isOpen={!!selectedPayerForAuth}
+        onClose={() => setSelectedPayerForAuth(null)}
+        payerId={selectedPayerForAuth}
+        initialTab="rules"
+      />
     </>
   );
 }
