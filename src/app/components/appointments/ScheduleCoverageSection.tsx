@@ -3,7 +3,7 @@ import { defaultPaymentModeFor, getPaymentModeOptions } from "../../../lib/payme
 import { getCoverageOn } from "../../../lib/coveragesStore";
 import { getPayer } from "../../../lib/billingSetupStore";
 import { previewEligibility, type EligibilityPreview } from "../../../lib/verifyNow";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 
 /**
  * Coverage block for the Schedule drawer: the client's primary coverage on the visit date and a "Verify now" that

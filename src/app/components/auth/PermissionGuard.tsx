@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from "react-router";
 import { toast } from "sonner";
 import { useEffect, useRef } from "react";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import type { Action } from "../../../types/permissions";
 
 /** Route guard driven by a role permission key instead of SystemAdmin. Use as a layout route. */

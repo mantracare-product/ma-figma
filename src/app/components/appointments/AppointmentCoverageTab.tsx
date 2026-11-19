@@ -6,7 +6,7 @@ import { verifyAppointmentNow } from "../../../lib/verifyNow";
 import { recordAuthDecision } from "../../../lib/authActions";
 import { acceptCallResult } from "../../../lib/voiceBenefits";
 import { getProcessInstanceById } from "../../../lib/processLogsStore";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import CoverageChip from "./CoverageChip";
 import DraggableOverviewSections, { type OverviewSection } from "../profile/DraggableOverviewSections";
 import { ensureRcmFieldSeeds, SEC_APPT_AUTHORIZATION, SEC_APPT_ELIGIBILITY } from "../../../lib/rcmFieldSeeds";

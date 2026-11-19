@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Plus } from "lucide-react";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import {
   BILLING_SETUP_EVENT,
   payersStore,

@@ -1,6 +1,6 @@
 import ClaimsOverview from "../components/overview/ClaimsOverview";
 import { PageTopBar } from "../components/layout/PageTopBar";
-import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import { getStoredClaims } from "../../lib/claimsStore";
 import { Phone as PhoneIcon, FileText as FileTextIcon } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";

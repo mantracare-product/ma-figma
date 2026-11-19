@@ -58,7 +58,7 @@ import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
 
   // Dev-only: test hook for the Tampermonkey RCM tests (tools/tm-tests). Removed from production builds.
   if (import.meta.env.DEV) {
-    void import("./dev/rcmTestHook");
+    void import("./lib/rcmTestHook");
   }
 
   createRoot(document.getElementById("root")!).render(<App />);

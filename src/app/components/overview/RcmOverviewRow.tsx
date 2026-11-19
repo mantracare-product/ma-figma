@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import { rcmKpis } from "../../../lib/rcmKpis";
 import { kpiDeltas } from "../../../lib/claimsOverviewData";
 import { TASKS_STORE_EVENT } from "../../../lib/tasksStore";

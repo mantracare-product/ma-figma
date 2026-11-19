@@ -1,5 +1,5 @@
 import { RCM_SOURCE_METADATA } from "../../../lib/rcmReportSources";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Modal } from "../ui/Modal";
 import { ReportDataSource, ReportDefinition, ReportMetric } from "../../types/invoiceTypes";

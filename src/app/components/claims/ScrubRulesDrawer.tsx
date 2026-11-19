@@ -15,7 +15,7 @@ import {
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/switch";
 import { toast } from "sonner";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import { useFieldRegistry } from "../../context/FieldRegistryContext";
 import {
   scrubRulesStore,

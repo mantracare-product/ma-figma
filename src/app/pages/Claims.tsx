@@ -1,5 +1,5 @@
 import { receiveMockEra } from "../../lib/eraStore";
-import { useCurrentPermissions } from "../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
 import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
 import { claimService } from "../../lib/claimService";

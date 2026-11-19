@@ -4,7 +4,7 @@ import type { ScribeSession } from "../../../lib/scribeSessionStore";
 import { acceptCodes, getSessionCodes, LATERALITY_MODIFIERS, signAndSendToBilling, type ScribeCodes } from "../../../lib/scribeBilling";
 import { COMMON_CPT_CODES } from "../../../lib/cptCodes";
 import { COMMON_ICD_CODES } from "../../../lib/icdCodes";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 
 const inputCls = "px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white";
 const btnCls = "px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50";

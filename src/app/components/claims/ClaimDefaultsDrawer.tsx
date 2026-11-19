@@ -4,7 +4,7 @@ import { Button } from "../ui/Button";
 import { Switch } from "../ui/switch";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
-import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
+import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import {
   claimDefaultsStore,
   type ClaimDefaults,
