@@ -147,8 +147,15 @@ function loadServices(): Service[] {
 }
 
 function saveServices(services: Service[]) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(services));
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(services));
+    if (isDemoMantraActive()) {
+      localStorage.setItem("ma_services_demo", JSON.stringify(services));
+    }
+  } catch { /* ignore */ }
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    try { window.dispatchEvent(new Event(CHANGE_EVENT)); } catch { /* ignore */ }
+  }
 }
 
 export { loadServices, saveServices as saveStoredServices };

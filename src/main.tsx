@@ -12,6 +12,7 @@
   import { migrateStartCallToStageCalls } from "./lib/stageCallMigration";
   import { migratePaymentModes } from "./lib/paymentMode";
   import { ensureRound4Defaults } from "./lib/rcmDefaultsR4";
+import { migrateFeeSchedulesToServicePrices } from "./lib/feeScheduleMigration";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -32,6 +33,9 @@
 
   // Round 4 starting set (flagged steps, ordinary editable items): appointment workflow "Appointment via Insurance"
   try { if (!testRunActive()) ensureRound4Defaults(); } catch { /* ignore */ }
+
+  // Round 5: fees live on the service only (migrate default fee schedule lines to service price once, logged).
+  try { if (!testRunActive()) migrateFeeSchedulesToServicePrices(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

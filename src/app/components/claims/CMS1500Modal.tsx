@@ -302,7 +302,7 @@ export default function CMS1500Modal({ claim, isOpen, onClose }: CMS1500ModalPro
                         {line.diagnosisPointer}
                       </td>
                       <td className="p-2 border-r border-slate-200 text-right font-mono font-semibold text-slate-900">
-                        ${line.chargeAmount.toFixed(2)}
+                        {line.chargeAmount !== undefined && line.chargeAmount !== null ? `$${line.chargeAmount.toFixed(2)}` : ""}
                       </td>
                       <td className="p-2 border-r border-slate-200 text-center font-mono text-xs">
                         {line.units}

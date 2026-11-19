@@ -5,7 +5,6 @@ import { useTeamMembers } from "../../../lib/teamStore";
 import {
   BILLING_SETUP_EVENT,
   claimDefaultsStore,
-  feeSchedulesStore,
   payersStore,
   providerCredentialsStore,
   scrubRulesStore,
@@ -21,11 +20,10 @@ import { getOrgLocations } from "../../../lib/orgBilling";
 import { VOICE_ENABLED_KEY } from "../../../lib/ruleContextFields";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
 
-type Section = "payers" | "fees" | "defaults" | "scrub" | "providers" | "notifications";
+type Section = "payers" | "defaults" | "scrub" | "providers" | "notifications";
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: "payers", label: "Payers & enrollment" },
-  { id: "fees", label: "Fee schedules" },
   { id: "defaults", label: "Claim defaults" },
   { id: "scrub", label: "Scrub rules" },
   { id: "providers", label: "Provider credentials" },
@@ -138,36 +136,7 @@ function NotificationsSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function FeesSection({ canEdit }: { canEdit: boolean }) {
-  useStoreTick();
-  const rows = feeSchedulesStore.get();
-  const payers = payersStore.get();
-  return (
-    <div className="space-y-4">
-      {rows.map((s) => (
-        <div key={s.id} className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <div className="grid grid-cols-[2fr_2fr_auto] gap-2">
-            <input className={inputCls} disabled={!canEdit} value={s.name} onChange={(e) => feeSchedulesStore.upsert({ ...s, name: e.target.value, sample: false })} />
-            <select className={inputCls} disabled={!canEdit} value={s.payerId || ""} onChange={(e) => feeSchedulesStore.upsert({ ...s, payerId: e.target.value || undefined, sample: false })}>
-              <option value="">Default (all payers)</option>
-              {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <button className={btnCls} disabled={!canEdit} onClick={() => feeSchedulesStore.remove(s.id)}>Remove</button>
-          </div>
-          {s.lines.map((l, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-              <input className={inputCls} disabled={!canEdit} value={l.cpt} placeholder="CPT" onChange={(e) => feeSchedulesStore.upsert({ ...s, sample: false, lines: s.lines.map((x, j) => (j === i ? { ...x, cpt: e.target.value } : x)) })} />
-              <input className={inputCls} disabled={!canEdit} type="number" value={l.amount} onChange={(e) => feeSchedulesStore.upsert({ ...s, sample: false, lines: s.lines.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) } : x)) })} />
-              <button className={btnCls} disabled={!canEdit} onClick={() => feeSchedulesStore.upsert({ ...s, sample: false, lines: s.lines.filter((_, j) => j !== i) })}>x</button>
-            </div>
-          ))}
-          <button className={btnCls} disabled={!canEdit} onClick={() => feeSchedulesStore.upsert({ ...s, sample: false, lines: [...s.lines, { cpt: "", amount: 0 }] })}>Add line</button>
-        </div>
-      ))}
-      <button className={btnCls} disabled={!canEdit} onClick={() => feeSchedulesStore.upsert({ id: newId("fee"), name: "New fee schedule", lines: [] })}>Add fee schedule</button>
-    </div>
-  );
-}
+
 
 function DefaultsSection({ canEdit }: { canEdit: boolean }) {
   useStoreTick();
@@ -267,7 +236,6 @@ export default function ClaimsSetup() {
       </div>
       <div>
         {section === "payers" && <PayersSection canEdit={canEdit} />}
-        {section === "fees" && <FeesSection canEdit={canEdit} />}
         {section === "defaults" && <DefaultsSection canEdit={canEdit} />}
         {section === "scrub" && <ScrubSection canEdit={canEdit} />}
         {section === "providers" && <ProvidersSection canEdit={canEdit} />}

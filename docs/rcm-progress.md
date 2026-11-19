@@ -213,7 +213,7 @@ Dummy data rebuilt for the new model (flag mantra_demo_workspace_v2; demo organi
 
 Checklist:
 - [x] Part A: Remove the eligibility scenario picker (done, commit "R5.A")
-- [ ] Part B: Fees live on the service only
+- [x] Part B: Fees live on the service only (done, commit "R5.B")
 - [ ] Part C: Payers: table + detail drawer
 - [ ] Part D: Service drawer link
 - [ ] Part E: Claim defaults and claim fields
@@ -227,3 +227,12 @@ Checklist:
 - Deleted `MockScenarioPicker` and its dev-only control / label text from `src/app/components/claims/ClaimsSetup.tsx`.
 - Mock adapter markers (`NOTFOUND`, `INACTIVE`, `DOWN`, `TIMEOUT`) and the test hook `src/dev/rcmTestHook.ts` (`window.__rcm.eligibility.setMockScenario`) are preserved.
 - Gate: typecheck OK, build OK, vitest at baseline (13 baseline reception failures, 0 RCM failures).
+
+### Part B: Fees live on the service only (done, commit "R5.B")
+- Removed the "Fee schedules" tab and section from `ClaimsSetup.tsx`.
+- Service drawer: `price` is labelled "Price per unit (USD)" and `cptCode` field is present.
+- Claim builder (`performCreateClaim`) and scribe billing (`applyCodesToClaim`): claim line amount = service price x units (matched by CPT). When a service has no price, `chargeAmount` is empty (`undefined`) and `"service_price"` is listed in `claim.missingData`.
+- All reads of `feeSchedulesStore` / `lookupFee` removed from claim builder, scribe billing, scrubber, demo data, Overview, and reports. Old store stays untouched in storage.
+- Migration `migrateFeeSchedulesToServicePrices` (`src/lib/feeScheduleMigration.ts`, flag `mantra_fee_schedule_migrated_v1`): default fee schedule lines set a service's price only when it has none; on conflict keeps service price and logs it; unmatched lines logged, not dropped. Payer-specific schedules are no longer used or shown.
+- Unit tests: `feeScheduleMigration.test.ts` (3/3 passed), `claimActions.test.ts` (11/11 passed), `scribeBilling.test.ts` (5/5 passed).
+- Gate: typecheck OK, build OK, vitest at baseline.

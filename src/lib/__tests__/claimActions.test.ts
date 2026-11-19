@@ -83,7 +83,7 @@ describe("create_claim", () => {
     });
     expect(c.payer).toMatchObject({ id: "payer-bcbs", payerId: "BCBS1" });
     expect(c.lines).toHaveLength(1);
-    expect(c.lines[0]).toMatchObject({ cptCode: "66984", chargeAmount: 1900 }); // BCBS contracted fee, not the service list price
+    expect(c.lines[0]).toMatchObject({ cptCode: "66984", chargeAmount: 2400 }); // Clinic service price, same for all payers
     expect(c.missingData).toEqual(["diagnosis"]); // no ICD yet; nothing else missing
     expect(c.timelyFilingDeadline).toBe("2031-01-30");
   });

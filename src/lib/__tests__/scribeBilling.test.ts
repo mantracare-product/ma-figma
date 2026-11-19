@@ -43,6 +43,11 @@ beforeEach(() => {
   off?.();
   fresh();
   billing.seedBillingSetupSamples();
+  const svc = [
+    { id: 701, name: "Cataract surgery", cptCode: "66984", price: 2400, isActive: true },
+    { id: 702, name: "Comprehensive eye exam", cptCode: "92014", price: 180, isActive: true },
+  ];
+  for (const k of ["ma_services_store", "ma_services_demo"]) localStorage.setItem(k, JSON.stringify(svc));
   seen = [];
   off = bus.eventBus.subscribeAll((e) => void seen.push(e));
   const base = scribe.INITIAL_SCRIBE_SESSIONS[0] as any;
@@ -84,8 +89,8 @@ describe("Scribe codes -> billing", () => {
     const c: any = claimsLib.getStoredClaims().find((x) => x.id === "clm-S")!;
     expect(c.scribeSessionId).toBe("scr-T");
     expect(c.diagnosisCodes).toEqual([{ pointer: "A", code: "H25.11", description: "Cataract" }]);
-    expect(c.lines.map((l: any) => [l.cptCode, l.modifier, l.units, l.chargeAmount])).toEqual([["66984", "RT", 1, 1900], ["92014", undefined, 2, 280]]); // BCBS contracted fees
-    expect(c.totalCharge).toBe(2180);
+    expect(c.lines.map((l: any) => [l.cptCode, l.modifier, l.units, l.chargeAmount])).toEqual([["66984", "RT", 1, 2400], ["92014", undefined, 2, 360]]); // Service prices: 2400 * 1, 180 * 2
+    expect(c.totalCharge).toBe(2760);
     expect(seen.filter((e) => e.event === "claim.note_signed")).toHaveLength(1);
     expect((scribe.getScribeSessionById("scr-T") as any).codes.signedAt).toBeTruthy();
   });

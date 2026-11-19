@@ -31,7 +31,7 @@ export interface ClaimServiceLine {
   modifier?: string;
   diagnosisPointer: string; // e.g. "A" or "A, B"
   units: number;
-  chargeAmount: number; // rate per unit * units
+  chargeAmount?: number; // rate per unit * units (empty when no price is set)
 }
 
 export interface ClaimDiagnosisCode {

@@ -13,7 +13,7 @@ import { getClaimWorkflow, getClaimWorkflows, findStage, isPreClaimWorkflow } fr
 import { resolveRecordContext } from "./recordContext";
 import { getCoverageOn, getClientDemographics } from "./coveragesStore";
 import {
-  claimDefaultsStore, getPayer, getProviderCredential, lookupFee, scrubRulesStore, type ScrubRule,
+  claimDefaultsStore, getPayer, getProviderCredential, scrubRulesStore, type ScrubRule,
 } from "./billingSetupStore";
 import { getOrgBilling, getOrgLocations } from "./orgBilling";
 import { getStoredServices } from "./servicesStore";
@@ -151,9 +151,21 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   } else if (linesFrom === "service_cpt" && appt) {
     const svc = getStoredServices().find((s) => String(s.id) === String(appt.serviceId));
     if (svc?.cptCode) {
-      const fee = lookupFee(svc.cptCode, payer?.id);
-      const line: ClaimServiceLine = { id: `ln-${baseClaim.id}-1`, serviceDate, cptCode: svc.cptCode, description: svc.name, diagnosisPointer: "A", units: 1, chargeAmount: fee ?? svc.price ?? 0 };
-      claim = { ...claim, lines: [line], totalCharge: line.chargeAmount };
+      const price = typeof svc.price === "number" && svc.price > 0 ? svc.price : undefined;
+      const chargeAmount = price !== undefined ? price * 1 : undefined;
+      const line: ClaimServiceLine = {
+        id: `ln-${baseClaim.id}-1`,
+        serviceDate,
+        cptCode: svc.cptCode,
+        description: svc.name,
+        diagnosisPointer: "A",
+        units: 1,
+        chargeAmount,
+      };
+      if (price === undefined && !missing.includes("service_price")) {
+        missing.push("service_price");
+      }
+      claim = { ...claim, lines: [line], totalCharge: chargeAmount || 0 };
     }
   }
   // claim-only facts are not missing on an insurance record that has not become a claim yet (Eligibility / Prior auth)

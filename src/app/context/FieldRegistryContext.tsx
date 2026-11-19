@@ -137,7 +137,7 @@ export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: str
   ],
   service: [
     { key: "name", label: "Service Name" },
-    { key: "price", label: "Price / Cost" },
+    { key: "price", label: "Price per unit (USD)" },
     { key: "duration", label: "Duration (min)" },
     { key: "category", label: "Category" },
   ],
@@ -1746,7 +1746,7 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     },
     { key: "description", label: "Description", module: "service", sectionId: "sec-service-info", inputType: "textarea", placeholder: "Brief description of the service...", showAlways: true },
     { key: "duration", label: "Slot Duration (min)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "30", defaultValue: 30, showAlways: true },
-    { key: "price", label: "Pricing & Currency", module: "service", sectionId: "sec-service-pricing", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "price", label: "Price per unit (USD)", module: "service", sectionId: "sec-service-pricing", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
     { key: "tax", label: "Tax (%)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "5", defaultValue: 0, showAlways: true },
     { key: "assignedEmployees", label: "Assigned Employees", module: "service", sectionId: "sec-service-assignment", inputType: "user", placeholder: "Select employees...", showAlways: true },
   ],
@@ -2762,6 +2762,12 @@ function ensureServiceSeeds(registry: Record<Exclude<FieldModule, "deal">, Field
         createdAt: 0,
       } as FieldDefinition);
       existingServiceKeys.add(seed.key);
+    }
+  });
+  // Ensure price label is updated to "Price per unit (USD)"
+  registry.service.forEach((f) => {
+    if (f.key === "price" && (f.source === "system" || f.label === "Pricing & Currency" || f.label === "Price / Cost")) {
+      f.label = "Price per unit (USD)";
     }
   });
 }

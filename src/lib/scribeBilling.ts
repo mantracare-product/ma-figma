@@ -10,7 +10,7 @@
 import { recordRcmAudit } from "./rcmAudit";
 import { getScribeSessionById, saveScribeSession, type ScribeSession } from "./scribeSessionStore";
 import { getStoredClaims, saveClaim, type Claim, type ClaimDiagnosisCode, type ClaimServiceLine } from "./claimsStore";
-import { lookupFee } from "./billingSetupStore";
+import { getStoredServices } from "./servicesStore";
 import { getCPTCodeOption } from "./cptCodes";
 import { eventBus } from "./eventBus";
 
@@ -55,24 +55,43 @@ export function acceptCodes(sessionId: string, codes: Omit<ScribeCodes, "accepte
   return accepted;
 }
 
-/** Write accepted codes into a claim: diagnosis pointers A-D (max 4) and service lines priced from the fee schedule. */
+/** Write accepted codes into a claim: diagnosis pointers A-D (max 4) and service lines priced from the service price. */
 export function applyCodesToClaim(claim: Claim, codes: ScribeCodes, serviceDate: string): Claim {
   const pointers: Array<ClaimDiagnosisCode["pointer"]> = ["A", "B", "C", "D"];
   const diagnosisCodes: ClaimDiagnosisCode[] = codes.icd.slice(0, 4).map((d, i) => ({ pointer: pointers[i], code: d.code, description: d.description }));
+  const services = getStoredServices();
+  const missing = [...(claim.missingData || [])];
+  let hasMissingPrice = false;
+
   const lines: ClaimServiceLine[] = codes.cpt.map((c, i) => {
-    const unit = lookupFee(c.code, claim.payer?.id);
+    const matched = services.find((s) => s.cptCode === c.code);
+    const unitPrice = typeof matched?.price === "number" && matched.price > 0 ? matched.price : undefined;
+    const units = c.units || 1;
+    if (unitPrice === undefined) {
+      hasMissingPrice = true;
+    }
+    const chargeAmount = unitPrice !== undefined ? unitPrice * units : undefined;
     return {
       id: `ln-${claim.id}-${i + 1}`,
       serviceDate,
       cptCode: c.code,
-      description: c.description || getCPTCodeOption(c.code)?.description || c.code,
+      description: c.description || matched?.name || getCPTCodeOption(c.code)?.description || c.code,
       modifier: c.modifier || undefined,
       diagnosisPointer: diagnosisCodes.map((d) => d.pointer).join(", ") || "A",
-      units: c.units || 1,
-      chargeAmount: (unit ?? 0) * (c.units || 1),
+      units,
+      chargeAmount,
     };
   });
-  return { ...claim, diagnosisCodes, lines, totalCharge: lines.reduce((a, l) => a + l.chargeAmount, 0) || claim.totalCharge };
+  if (hasMissingPrice && !missing.includes("service_price")) {
+    missing.push("service_price");
+  }
+  return {
+    ...claim,
+    diagnosisCodes,
+    lines,
+    missingData: missing,
+    totalCharge: lines.reduce((a, l) => a + (l.chargeAmount || 0), 0) || claim.totalCharge,
+  };
 }
 
 export interface SignResult {

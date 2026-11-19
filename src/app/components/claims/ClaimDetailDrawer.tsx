@@ -1002,7 +1002,9 @@ export default function ClaimDetailDrawer({
                             <td className="py-3 px-4 text-slate-700 max-w-xs truncate">{line.description}</td>
                             <td className="py-3 px-4 text-center font-mono font-semibold text-slate-500">{line.diagnosisPointer}</td>
                             <td className="py-3 px-4 text-center font-medium text-slate-600">{line.units}</td>
-                            <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">${(line.chargeAmount || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">
+                              {line.chargeAmount !== undefined && line.chargeAmount !== null ? `$${line.chargeAmount.toFixed(2)}` : ""}
+                            </td>
                           </tr>
                         ))
                       )}
