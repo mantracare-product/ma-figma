@@ -2,19 +2,26 @@
  * PermissionSelect.tsx
  * Path: src/app/components/settings/PermissionSelect.tsx
  *
- * Premium multi-select dropdown for module permissions (Read, Write, Delete, Import, Export).
- * Implements strict access rules:
- * - Read-only users cannot select Write and Delete, but CAN select Import and Export.
- * - When Write is enabled, all core access (Read, Write, Delete) is automatically granted.
+ * Premium multi-select dropdown for module permissions (View, Create, Edit, Delete, Import, Export).
+ * Implements access rules:
+ * - View is required for Create, Edit, and Delete actions.
+ * - Enabling Create, Edit, Delete, Import, or Export automatically grants View.
  * - Rendered with portaled popover so it is never clipped by table overflow or drawer boundaries.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Lock, X } from "lucide-react";
-import { toast } from "sonner";
+import { Check, ChevronDown, X } from "lucide-react";
 
-export type PermissionAction = "read" | "write" | "delete" | "import" | "export";
+export type PermissionAction =
+  | "view"
+  | "create"
+  | "edit"
+  | "delete"
+  | "import"
+  | "export"
+  | "read"
+  | "write";
 
 export interface PermissionActionMeta {
   id: PermissionAction;
@@ -24,11 +31,12 @@ export interface PermissionActionMeta {
 }
 
 export const PERMISSION_ACTIONS: PermissionActionMeta[] = [
-  { id: "read", label: "Read", badge: "View", hint: "View records & details" },
-  { id: "write", label: "Write", badge: "All Access", hint: "Full access (Read, Write & Delete)" },
-  { id: "delete", label: "Delete", badge: "Remove", hint: "Delete records (Requires Write)" },
-  { id: "import", label: "Import", badge: "Upload", hint: "Import data (Allowed in Read-only)" },
-  { id: "export", label: "Export", badge: "Download", hint: "Export data (Allowed in Read-only)" },
+  { id: "view", label: "View", badge: "View", hint: "View records & details" },
+  { id: "create", label: "Create", badge: "Create", hint: "Create new records" },
+  { id: "edit", label: "Edit", badge: "Edit", hint: "Edit existing records" },
+  { id: "delete", label: "Delete", badge: "Remove", hint: "Delete records" },
+  { id: "import", label: "Import", badge: "Upload", hint: "Import data" },
+  { id: "export", label: "Export", badge: "Download", hint: "Export data" },
 ];
 
 export interface PermissionSelectProps {
@@ -61,16 +69,30 @@ export default function PermissionSelect({
     showAbove: boolean;
   } | null>(null);
 
-  const hasWrite = value.includes("write");
+  // Normalize incoming value: legacy "read" -> "view", legacy "write" -> "create" + "edit"
+  const normalizedValue = useMemo(() => {
+    const set = new Set<PermissionAction>();
+    value.forEach((v) => {
+      if (v === "read") {
+        set.add("view");
+      } else if (v === "write") {
+        set.add("create");
+        set.add("edit");
+      } else {
+        set.add(v);
+      }
+    });
+    return Array.from(set);
+  }, [value]);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const menuHeight = 250;
+    const menuHeight = 280;
     const showAbove = spaceBelow < menuHeight && rect.top > menuHeight;
 
-    const width = Math.max(rect.width, 270);
+    const width = Math.max(rect.width, 280);
     let left = rect.left;
     if (left + width > window.innerWidth - 12) {
       left = Math.max(12, window.innerWidth - width - 12);
@@ -144,50 +166,34 @@ export default function PermissionSelect({
     if (allowInherit && isInherit) {
       onToggleInherit?.(false);
     }
-    const isChecked = value.includes(actionId);
+    const current = normalizedValue;
+    const isChecked = current.includes(actionId);
     let updated: PermissionAction[];
 
-    if (actionId === "write") {
+    if (actionId === "view") {
       if (isChecked) {
-        // Unchecking write removes write AND delete (switches to Read-only mode)
-        updated = value.filter((a) => a !== "write" && a !== "delete");
-        if (!updated.includes("read")) {
-          updated.push("read");
-        }
+        // Unchecking View removes View and dependent actions (Create, Edit, Delete)
+        updated = current.filter(
+          (a) =>
+            a !== "view" &&
+            a !== "read" &&
+            a !== "create" &&
+            a !== "edit" &&
+            a !== "delete" &&
+            a !== "write"
+        );
       } else {
-        // "if write then all access is there":
-        // Selecting write automatically includes Read, Write, and Delete
-        const set = new Set<PermissionAction>([...value, "read", "write", "delete"]);
-        updated = Array.from(set);
-      }
-    } else if (actionId === "delete") {
-      // If user is read-only (write is off), cannot select delete
-      if (!hasWrite) {
-        toast.info("Write access is required to enable Delete.");
-        return;
-      }
-      if (isChecked) {
-        updated = value.filter((a) => a !== "delete");
-      } else {
-        updated = [...value, "delete"];
-      }
-    } else if (actionId === "read") {
-      if (isChecked) {
-        // Unchecking read clears core access (read, write, delete)
-        updated = value.filter((a) => a !== "read" && a !== "write" && a !== "delete");
-      } else {
-        updated = [...value, "read"];
+        updated = [...current, "view"];
       }
     } else {
-      // "import" and "export" can be freely toggled in both read-only and write mode
+      // create, edit, delete, import, export
       if (isChecked) {
-        updated = value.filter((a) => a !== actionId);
+        updated = current.filter((a) => a !== actionId);
       } else {
-        const next = [...value, actionId];
-        if (!next.includes("read")) {
-          next.push("read");
-        }
-        updated = next;
+        const next = new Set<PermissionAction>([...current, actionId]);
+        // Automatically ensure View is active when enabling any action
+        next.add("view");
+        updated = Array.from(next);
       }
     }
     onChange(updated);
@@ -197,7 +203,7 @@ export default function PermissionSelect({
     if (allowInherit && isInherit) {
       onToggleInherit?.(false);
     }
-    onChange(["read", "write", "delete", "import", "export"]);
+    onChange(["view", "create", "edit", "delete", "import", "export"]);
   };
 
   const clearAll = () => {
@@ -214,7 +220,7 @@ export default function PermissionSelect({
       );
     }
 
-    if (value.length === 0) {
+    if (normalizedValue.length === 0) {
       return (
         <span className="text-gray-400 italic text-xs font-normal">
           {placeholder}
@@ -222,45 +228,79 @@ export default function PermissionSelect({
       );
     }
 
-    if (value.length === 5) {
+    const hasAll =
+      normalizedValue.includes("view") &&
+      normalizedValue.includes("create") &&
+      normalizedValue.includes("edit") &&
+      normalizedValue.includes("delete") &&
+      normalizedValue.includes("import") &&
+      normalizedValue.includes("export");
+
+    if (hasAll || normalizedValue.length >= 6) {
       return (
-        <span className="text-xs font-semibold text-gray-800 truncate" title="All Permissions (Read, Write, Delete, Import, Export)">
-          All (Read, Write, Delete, Import, Export)
+        <span
+          className="text-xs font-semibold text-gray-800 truncate"
+          title="All (View, Create, Edit, Delete, Import, Export)"
+        >
+          All (View, Create, Edit, Delete, Import, Export)
         </span>
       );
     }
 
-    if (hasWrite && value.includes("delete") && value.includes("read") && value.length === 3) {
+    const hasCrud =
+      normalizedValue.includes("view") &&
+      normalizedValue.includes("create") &&
+      normalizedValue.includes("edit") &&
+      normalizedValue.includes("delete") &&
+      normalizedValue.length === 4;
+
+    if (hasCrud) {
       return (
-        <span className="text-xs font-semibold text-blue-700 truncate" title="Full Access (Read, Write, Delete)">
-          All Access (Read, Write, Delete)
+        <span
+          className="text-xs font-semibold text-blue-700 truncate"
+          title="Full Access (View, Create, Edit, Delete)"
+        >
+          Full Access (View, Create, Edit, Delete)
         </span>
       );
     }
 
-    if (!hasWrite && value.includes("read")) {
-      const extra = value.filter((a) => a !== "read").map((a) => a.charAt(0).toUpperCase() + a.slice(1));
+    if (
+      normalizedValue.includes("view") &&
+      !normalizedValue.includes("create") &&
+      !normalizedValue.includes("edit") &&
+      !normalizedValue.includes("delete")
+    ) {
+      const extra = normalizedValue
+        .filter((a) => a !== "view" && a !== "read")
+        .map((a) => a.charAt(0).toUpperCase() + a.slice(1));
       if (extra.length === 0) {
         return (
-          <span className="text-xs font-medium text-emerald-700 truncate" title="Read Only">
-            Read Only
+          <span className="text-xs font-medium text-emerald-700 truncate" title="View Only">
+            View Only
           </span>
         );
       }
       return (
-        <span className="text-xs font-medium text-gray-800 truncate" title={`Read Only (${extra.join(", ")})`}>
-          Read Only ({extra.join(", ")})
+        <span
+          className="text-xs font-medium text-gray-800 truncate"
+          title={`View Only (${extra.join(", ")})`}
+        >
+          View Only ({extra.join(", ")})
         </span>
       );
     }
 
     // Active action names capitalized in canonical order
-    const orderedLabels = PERMISSION_ACTIONS.filter((a) => value.includes(a.id)).map(
-      (a) => a.label
-    );
+    const orderedLabels = PERMISSION_ACTIONS.filter((a) =>
+      normalizedValue.includes(a.id)
+    ).map((a) => a.label);
 
     return (
-      <span className="text-xs font-medium text-gray-800 truncate" title={orderedLabels.join(", ")}>
+      <span
+        className="text-xs font-medium text-gray-800 truncate"
+        title={orderedLabels.join(", ")}
+      >
         {orderedLabels.join(", ")}
       </span>
     );
@@ -281,9 +321,9 @@ export default function PermissionSelect({
       >
         <div className="min-w-0 flex-1 truncate">{renderTriggerContent()}</div>
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
-          {value.length > 0 && value.length < 5 && (
+          {normalizedValue.length > 0 && normalizedValue.length < 6 && (
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-600 border border-blue-200/50">
-              {value.length}
+              {normalizedValue.length}
             </span>
           )}
           <ChevronDown
@@ -313,7 +353,7 @@ export default function PermissionSelect({
             {/* Header with Quick Presets */}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-50/90 border-b border-gray-100 text-[11px]">
               <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
-                Permissions ({value.length}/5)
+                Permissions ({normalizedValue.length}/6)
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -367,54 +407,38 @@ export default function PermissionSelect({
               )}
 
               {PERMISSION_ACTIONS.map((action) => {
-                const isChecked = value.includes(action.id);
-                const isDeleteLocked = action.id === "delete" && !hasWrite;
+                const isChecked = normalizedValue.includes(action.id);
 
                 return (
                   <div
                     key={action.id}
                     onClick={() => toggleAction(action.id)}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-xs ${
-                      isDeleteLocked
-                        ? "opacity-45 cursor-not-allowed bg-slate-50/60"
-                        : "cursor-pointer"
-                    } ${
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-xs cursor-pointer ${
                       isChecked
                         ? "bg-blue-50/70 text-blue-950 font-semibold"
                         : "hover:bg-slate-50 text-gray-700 font-medium"
                     }`}
-                    title={
-                      isDeleteLocked
-                        ? "Write access is required to enable Delete"
-                        : action.hint
-                    }
+                    title={action.hint}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className={`w-4 h-4 rounded flex items-center justify-center border transition-all shrink-0 ${
                           isChecked
                             ? "bg-blue-600 border-blue-600 text-white shadow-xs"
-                            : isDeleteLocked
-                            ? "border-gray-200 bg-gray-100 text-gray-400"
                             : "border-gray-300 bg-white"
                         }`}
                       >
                         {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                        {isDeleteLocked && !isChecked && <Lock className="w-2.5 h-2.5 text-gray-400" />}
                       </div>
                       <span className="text-xs truncate">{action.label}</span>
                     </div>
 
                     <span
                       className={`text-[10px] shrink-0 ml-2 ${
-                        isDeleteLocked
-                          ? "text-slate-400 italic"
-                          : isChecked
-                          ? "text-blue-600 font-semibold"
-                          : "text-gray-400"
+                        isChecked ? "text-blue-600 font-semibold" : "text-gray-400"
                       }`}
                     >
-                      {isDeleteLocked ? "Requires Write" : action.hint}
+                      {action.hint}
                     </span>
                   </div>
                 );

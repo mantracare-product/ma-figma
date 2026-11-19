@@ -45,7 +45,7 @@ import {
 import { getStoredDepartments } from "../../../../lib/departmentStore";
 import type { Department } from "../../../../types/permissions";
 
-export type PermissionScope = "deny" | "own" | "department" | "all" | "allow";
+export type PermissionScope = "deny" | "own" | "department" | "role" | "all" | "allow";
 
 export const STANDARD_MODULES = [
   { id: "clients", label: "Clients", icon: Users },
@@ -81,8 +81,8 @@ export interface ActionItem {
 }
 
 export const FULL_ACTIONS: ActionItem[] = [
-  { id: "read", label: "Read" },
-  { id: "add", label: "Add" },
+  { id: "view", label: "View" },
+  { id: "create", label: "Create" },
   { id: "edit", label: "Edit" },
   { id: "delete", label: "Delete" },
   { id: "export", label: "Export" },
@@ -90,14 +90,14 @@ export const FULL_ACTIONS: ActionItem[] = [
 ];
 
 export const FOUR_ACTIONS: ActionItem[] = [
-  { id: "read", label: "Read" },
-  { id: "add", label: "Add" },
+  { id: "view", label: "View" },
+  { id: "create", label: "Create" },
   { id: "edit", label: "Edit" },
   { id: "delete", label: "Delete" },
 ];
 
 export const SETTINGS_ACTIONS: ActionItem[] = [
-  { id: "read", label: "Read" },
+  { id: "view", label: "View" },
   { id: "edit", label: "Edit" },
 ];
 
@@ -438,7 +438,7 @@ export function RoleStudioModal({
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-500 font-bold tracking-wider text-[11px]">
                     <th className="py-2.5 px-4 w-56">MODULE</th>
-                    <th className="py-2.5 px-4 w-44">SCOPE LEVEL</th>
+                    <th className="py-2.5 px-4 w-44">SCOPE</th>
                     <th className="py-2.5 px-4">PERMISSIONS (CRUD & ACTIONS)</th>
                   </tr>
                 </thead>
@@ -479,7 +479,8 @@ export function RoleStudioModal({
                             className="w-full px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           >
                             <option value="all">All Records (Global)</option>
-                            <option value="department">Role</option>
+                            <option value="department">Department</option>
+                            <option value="role">Role</option>
                             <option value="own">Own Assigned Only</option>
                             <option value="allow">Allow (Full Flag)</option>
                             <option value="deny">Deny Access</option>

@@ -7,6 +7,8 @@ export interface TeamMember {
   phone?: string;
   role?: string;
   department?: string;
+  departments?: string[];
+  assignedDepartments?: Array<{ department: string; role: string }>;
   status?: boolean;
   organizationId?: string;
   canBookAppointments?: boolean; // Controls whether this user appears in Appointments

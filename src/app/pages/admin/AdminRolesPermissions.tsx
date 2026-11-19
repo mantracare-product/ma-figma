@@ -51,8 +51,8 @@ import {
   getIndustriesForCategory,
 } from "../../../data/industryReferenceData";
 
-export type PermissionScope = "deny" | "own" | "department" | "all";
-export type ScopeLevelOption = "all" | "department" | "own" | "deny";
+export type PermissionScope = "deny" | "own" | "department" | "role" | "all";
+export type ScopeLevelOption = "all" | "department" | "role" | "own" | "deny";
 
 export interface SimpleModulePermission {
   actions: PermissionAction[];
@@ -95,9 +95,9 @@ export function createDefaultModulePermissions(preset?: "full" | "standard" | "v
   const result: Record<string, SimpleModulePermission> = {};
   ROLE_PERMISSION_MODULES.forEach((mod) => {
     let actions: PermissionAction[] = [];
-    if (preset === "full") actions = ["read", "write", "delete", "import", "export"];
-    else if (preset === "standard") actions = ["read", "write", "delete"];
-    else if (preset === "viewOnly") actions = ["read"];
+    if (preset === "full") actions = ["view", "create", "edit", "delete", "import", "export"];
+    else if (preset === "standard") actions = ["view", "create", "edit", "delete"];
+    else if (preset === "viewOnly") actions = ["view"];
     else actions = [];
 
     result[mod.id] = {
@@ -132,9 +132,9 @@ export function normalizeModulePermissions(
 
     // Convert legacy format
     let acts: PermissionAction[] = [];
-    if (raw.permission === "full") acts = ["read", "write", "delete", "import", "export"];
-    else if (raw.permission === "read_write") acts = ["read", "write"];
-    else if (raw.permission === "read_only") acts = ["read"];
+    if (raw.permission === "full") acts = ["view", "create", "edit", "delete", "import", "export"];
+    else if (raw.permission === "read_write") acts = ["view", "create", "edit"];
+    else if (raw.permission === "read_only") acts = ["view"];
     else acts = [];
 
     result[mod.id] = {
@@ -1148,7 +1148,7 @@ export default function AdminRolesPermissions() {
                 <tr className="bg-[#1E293B] text-white text-[11px] font-bold uppercase tracking-wider">
                   <th className="py-3 px-4 w-[28%]">MODULE</th>
                   <th className="py-3 px-4 w-[44%]">PERMISSION</th>
-                  <th className="py-3 px-4 w-[28%]">LEVEL</th>
+                  <th className="py-3 px-4 w-[28%]">SCOPE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
@@ -1199,7 +1199,8 @@ export default function AdminRolesPermissions() {
                               className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                             >
                               <option value="all">All Records</option>
-                              <option value="department">Role</option>
+                              <option value="department">Department</option>
+                              <option value="role">Role</option>
                               <option value="own">Own Records</option>
                               <option value="deny">Deny</option>
                             </select>
@@ -1261,7 +1262,8 @@ export default function AdminRolesPermissions() {
                                       className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                                     >
                                       <option value="all">All Records</option>
-                                      <option value="department">Role</option>
+                                      <option value="department">Department</option>
+                                      <option value="role">Role</option>
                                       <option value="own">Own Records</option>
                                       <option value="deny">Deny</option>
                                     </select>

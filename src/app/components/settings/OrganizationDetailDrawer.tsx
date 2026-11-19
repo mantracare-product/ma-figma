@@ -713,11 +713,10 @@ export default function OrganizationDetailDrawer({
 
   // Security Settings State
   const [roboCallEnabled, setRoboCallEnabled] = useState(true);
-  const [shieldingSensitivity, setShieldingSensitivity] = useState<"standard" | "strict" | "aggressive">("standard");
   const [autoBlockSpam, setAutoBlockSpam] = useState(true);
 
   const [enforce2FA, setEnforce2FA] = useState(false);
-  const [twoFaGracePeriod, setTwoFaGracePeriod] = useState("3 days");
+  const [preferredMfaMethod, setPreferredMfaMethod] = useState("");
 
   const [sessionTimeout, setSessionTimeout] = useState("30m");
   const [lockOnIdle, setLockOnIdle] = useState(true);
@@ -2075,23 +2074,7 @@ export default function OrganizationDetailDrawer({
             </div>
 
             {expandedSecurityRow === "robocall" && (
-              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
-                <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">Sensitivity Level</div>
-                    <div className="text-[11px] text-slate-500">Adjust the aggressiveness of AI spam call interception</div>
-                  </div>
-                  <select
-                    value={shieldingSensitivity}
-                    onChange={(e) => setShieldingSensitivity(e.target.value as any)}
-                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
-                  >
-                    <option value="standard">Standard (Recommended)</option>
-                    <option value="strict">Strict (Blocks all unverified caller IDs)</option>
-                    <option value="aggressive">Aggressive (Challenge audio captcha)</option>
-                  </select>
-                </div>
-
+              <div className="px-5 pb-5 pt-2 border-t border-slate-100 bg-slate-50/30">
                 <div className="flex items-center justify-between py-2">
                   <div>
                     <div className="text-xs font-bold text-slate-800">Auto-Block Known Spam Numbers</div>
@@ -2263,22 +2246,24 @@ export default function OrganizationDetailDrawer({
             </div>
 
             {expandedSecurityRow === "twoFa" && (
-              <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 bg-slate-50/30">
-                <div className="flex items-center justify-between py-2">
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">New Member Grace Period</div>
-                    <div className="text-[11px] text-slate-500">Days allowed to configure 2FA before account is locked</div>
+              <div className="px-5 pb-5 pt-3 border-t border-slate-100 bg-slate-50/30">
+                <div className="space-y-1.5 max-w-md">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Preferred MFA Method
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={preferredMfaMethod}
+                      onChange={(e) => setPreferredMfaMethod(e.target.value)}
+                      className="w-full h-10 px-3.5 pr-8 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 rounded-xl text-xs font-semibold text-slate-800 transition-colors outline-none appearance-none cursor-pointer shadow-2xs"
+                    >
+                      <option value="">Select option</option>
+                      <option value="totp">Authenticator App (TOTP)</option>
+                      <option value="sms">SMS</option>
+                      <option value="email">Email</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
-                  <select
-                    value={twoFaGracePeriod}
-                    onChange={(e) => setTwoFaGracePeriod(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
-                  >
-                    <option value="Immediately">Immediate (No grace period)</option>
-                    <option value="3 days">3 days</option>
-                    <option value="7 days">7 days</option>
-                    <option value="14 days">14 days</option>
-                  </select>
                 </div>
               </div>
             )}
