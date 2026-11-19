@@ -1178,6 +1178,7 @@ export default function ProcessDetailDrawer({
                       }}
                       customFieldsModule="process"
                       highlightRequiredKeys={missingFieldKeys}
+                      pipelineStages={activeStageList}
                     />
                   </div>
 

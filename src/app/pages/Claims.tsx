@@ -26,13 +26,16 @@ import {
   CLAIMS_CHANGED_EVENT,
   saveClaim,
 } from "../../lib/claimsStore";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT, Stage } from "../../lib/useProcessStore";
 import ClaimSubmissionModal from "../components/claims/ClaimSubmissionModal";
 import ClaimStatusModal from "../components/claims/ClaimStatusModal";
 import CMS1500Modal from "../components/claims/CMS1500Modal";
 import ClaimProgressBar from "../components/claims/ClaimProgressBar";
 import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
 import { InfoTooltip } from "../components/help/InfoTooltip";
+import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
+import { useFieldRegistry } from "../context/FieldRegistryContext";
 
 export default function Claims() {
   const navigate = useNavigate();
@@ -42,6 +45,21 @@ export default function Claims() {
   const [selectedPayerFilter, setSelectedPayerFilter] = useState<string>("all");
   const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
   const [storeTick, setStoreTick] = useState(0);
+
+  const { getAllFields } = useFieldRegistry();
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    claim: Claim | null;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+    initialValues: Record<string, any>;
+  }>({
+    isOpen: false,
+    claim: null,
+    targetStage: null,
+    missingFields: [],
+    initialValues: {},
+  });
 
   // Workflow integration: retrieve configured insurance & claims process
   useEffect(() => {
@@ -132,9 +150,16 @@ export default function Claims() {
     refreshClaims();
   };
 
-  const handleStageChange = (claimId: string, stageId: string, stageName?: string) => {
-    const target = claims.find((c) => c.id === claimId);
-    if (!target) return;
+  const executeStageChange = (target: Claim, stageId: string, stageName?: string, extraValues?: Record<string, any>) => {
+    if (extraValues && Object.keys(extraValues).length > 0) {
+      try {
+        const storedKey = `mantra_claim_fieldvalues_${target.id}`;
+        const raw = localStorage.getItem(storedKey);
+        const existing = raw ? JSON.parse(raw) : {};
+        localStorage.setItem(storedKey, JSON.stringify({ ...existing, ...extraValues }));
+      } catch {}
+    }
+
     const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
     const name = stageName || stageObj?.name || stageId;
 
@@ -158,6 +183,53 @@ export default function Claims() {
     saveClaim(updated);
     refreshClaims();
     toast.success(`Claim moved to ${name} ✓`);
+  };
+
+  const handleStageChange = (claimId: string, stageId: string, stageName?: string) => {
+    const target = claims.find((c) => c.id === claimId);
+    if (!target) return;
+    const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
+    const name = stageName || stageObj?.name || stageId;
+
+    let storedFields: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem(`mantra_claim_fieldvalues_${target.id}`);
+      if (raw) storedFields = JSON.parse(raw);
+    } catch {}
+
+    const mergedValues = {
+      ...storedFields,
+      client_name: target.patientName,
+      patient_name: target.patientName,
+      claim_number: target.claimNumber,
+      service_date: target.serviceDate,
+      billed_amount: target.totalCharge,
+      patient_phone: target.patientPhone,
+      patient_dob: target.patientDob,
+      policy_number: target.insuredId,
+      group_number: target.groupNumber,
+      payer_name: target.payer?.name,
+    };
+
+    const missing = getMissingRequiredProcessFields({
+      module: "claim",
+      currentStageName: name,
+      allFields: getAllFields("claim"),
+      fieldValues: mergedValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        claim: target,
+        targetStage: stageObj || ({ id: stageId, name } as Stage),
+        missingFields: missing,
+        initialValues: mergedValues,
+      });
+      return;
+    }
+
+    executeStageChange(target, stageId, name);
   };
 
   // Filtered claims
@@ -687,6 +759,30 @@ export default function Claims() {
             setIsDetailDrawerOpen(true);
           }}
           onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
+        />
+
+        {/* Required Fields Modal when stage changes */}
+        <RequiredFieldsModal
+          isOpen={requiredFieldsModalState.isOpen}
+          onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+          clientName={requiredFieldsModalState.claim?.patientName || "Claim"}
+          clientId={requiredFieldsModalState.claim?.patientId || ""}
+          processName="Insurance Process"
+          targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+          missingFields={requiredFieldsModalState.missingFields}
+          allFields={getAllFields("claim")}
+          initialValues={requiredFieldsModalState.initialValues}
+          onConfirm={(filledValues) => {
+            if (requiredFieldsModalState.claim && requiredFieldsModalState.targetStage) {
+              executeStageChange(
+                requiredFieldsModalState.claim,
+                requiredFieldsModalState.targetStage.id,
+                requiredFieldsModalState.targetStage.name,
+                filledValues
+              );
+            }
+            setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          }}
         />
       </div>
     </div>

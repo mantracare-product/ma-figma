@@ -49,6 +49,8 @@ export interface ClientInvoice {
   billingAddress?: string;
   tax?: number;
   discount?: number;
+  notes?: string;
+  description?: string;
 }
 
 export type InvoicePaymentRecord = Payment & {

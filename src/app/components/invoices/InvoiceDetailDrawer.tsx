@@ -65,6 +65,8 @@ import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import { getStoredAdvanceListById } from "../../../lib/advanceListStore";
 import { getStoredClientDocuments, CLIENT_DOCUMENTS_EVENT } from "../../../lib/clientDocumentsStore";
+import RequiredFieldsModal from "../deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
 
 export interface InvoiceDetailDrawerProps {
   isOpen: boolean;
@@ -124,13 +126,22 @@ export default function InvoiceDetailDrawer({
   const navigate = useNavigate();
   const { invoices, updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice, getClientCredit } = useInvoices();
   const { activeOrganization } = useOrganization();
-  const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
+  const { getSectionsForOrg, getFieldsForOrg, getAllFields, addCustomSection, updateCustomSection } = useFieldRegistry();
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<"overview" | "documents" | "payments">("overview");
   const [copiedLink, setCopiedLink] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [showScribeModal, setShowScribeModal] = useState(false);
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+  }>({
+    isOpen: false,
+    targetStage: null,
+    missingFields: [],
+  });
 
   // Field Management Modals
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
@@ -537,9 +548,9 @@ export default function InvoiceDetailDrawer({
     toast.success("✨ Invoice fields populated with AI Scribe clinical data!");
   };
 
-  // Stage Progression Handler
-  const handleStageSelect = (targetStage: Stage) => {
-    if (!liveInvoice || targetStage.id === currentInvoiceStage?.id) return;
+  // Stage Progression Execution
+  const executeStageSelect = (targetStage: Stage) => {
+    if (!liveInvoice) return;
 
     try {
       const moved = invoiceService.moveToStage(liveInvoice.id, targetStage.id, {
@@ -569,6 +580,37 @@ export default function InvoiceDetailDrawer({
     } catch (e) {
       console.warn("[InvoiceDetailDrawer] Failed to move stage:", e);
     }
+  };
+
+  // Stage Progression Handler with Required Fields Validation
+  const handleStageSelect = (targetStage: Stage) => {
+    if (!liveInvoice || targetStage.id === currentInvoiceStage?.id) return;
+
+    const allInvFields = getAllFields("invoice");
+    const mergedValues = {
+      ...fieldValues,
+      client_name: liveInvoice.clientName,
+      email: liveInvoice.clientEmail,
+      total_amount: liveInvoice.total,
+      notes: liveInvoice.notes,
+    };
+    const missing = getMissingRequiredProcessFields({
+      module: "invoice",
+      currentStageName: targetStage.name,
+      allFields: allInvFields,
+      fieldValues: mergedValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        targetStage,
+        missingFields: missing,
+      });
+      return;
+    }
+
+    executeStageSelect(targetStage);
   };
 
   // Activity logs subscription
@@ -864,6 +906,7 @@ export default function InvoiceDetailDrawer({
                   <DraggableOverviewSections
                     mode="invoice"
                     customFieldsModule="invoice"
+                    pipelineStages={invoiceStages.map((s) => s.name)}
                     sections={invoiceSections}
                     onSectionsChange={handleSectionsChange}
                     fieldValues={fieldValues}
@@ -1178,6 +1221,30 @@ export default function InvoiceDetailDrawer({
             extractedData: session.extractedData,
             scribeSessionId: session.id,
           });
+        }}
+      />
+
+      {/* Required Fields Modal when stage changes */}
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((prev) => ({ ...prev, isOpen: false }))}
+        clientName={liveInvoice?.clientName || "Invoice"}
+        clientId={effectiveClientId}
+        processName="Invoice Process"
+        targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={getAllFields("invoice")}
+        initialValues={fieldValues}
+        onConfirm={(filledValues) => {
+          if (!liveInvoice) return;
+          const updated = { ...fieldValues, ...filledValues };
+          setFieldValues(updated);
+          try {
+            localStorage.setItem(`mantra_inv_fields_${liveInvoice.id}`, JSON.stringify(updated));
+          } catch {}
+          if (requiredFieldsModalState.targetStage) {
+            executeStageSelect(requiredFieldsModalState.targetStage);
+          }
         }}
       />
     </div>

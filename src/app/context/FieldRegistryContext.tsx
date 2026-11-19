@@ -356,12 +356,12 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
     options: (col.options && col.options.length > 0)
       ? col.options
       : inputType === "list_select"
-      ? [
+        ? [
           { id: 1, label: "Option A", value: "option_a" },
           { id: 2, label: "Option B", value: "option_b" },
           { id: 3, label: "Option C", value: "option_c" },
         ]
-      : [],
+        : [],
     crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "service", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
@@ -696,7 +696,7 @@ export function isProcessMatchingAssignment(
   let stored: { id: string; name: string }[] = [];
   try {
     stored = getStoredProcesses();
-  } catch {}
+  } catch { }
 
   const targetProc = stored.find(
     (p) =>
@@ -2096,7 +2096,7 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
 
 export function getLiveTeamMembers() {
   const list = new Set<string>();
-  
+
   // Try loading from settings_allUsers
   try {
     const raw = sessionStorage.getItem("settings_allUsers");
@@ -2108,7 +2108,7 @@ export function getLiveTeamMembers() {
         });
       }
     }
-  } catch {}
+  } catch { }
 
   // Try loading from userManagement_users
   try {
@@ -2121,7 +2121,7 @@ export function getLiveTeamMembers() {
         });
       }
     }
-  } catch {}
+  } catch { }
 
   // Fallbacks
   const fallbacks = [
@@ -2618,20 +2618,20 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
       typeof f.id === "number"
         ? f.id
         : typeof f.id === "string" && !isNaN(Number(f.id))
-        ? Number(f.id)
-        : Date.now() + Math.floor(Math.random() * 1000),
+          ? Number(f.id)
+          : Date.now() + Math.floor(Math.random() * 1000),
     key: f.key || (f.label || f.name || "field").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
     label: f.label || f.name || "Untitled Field",
     module: targetModule,
     source: f.source === "system" || (typeof f.id === "number" && f.id < 0) || (f.key && SYSTEM_FIELD_KEYS.has(f.key))
       ? "system"
       : f.source === "template"
-      ? "template"
-      : f.source === "custom" && f.createdIn === "client"
-      ? "custom"
-      : f.createdIn === "client"
-      ? "custom"
-      : "template",
+        ? "template"
+        : f.source === "custom" && f.createdIn === "client"
+          ? "custom"
+          : f.createdIn === "client"
+            ? "custom"
+            : "template",
     createdIn: f.createdIn || (f.source === "custom" && f.createdIn === "client" ? "client" : "admin"),
     inputType: normalizedType,
     placeholder: f.placeholder || "",
@@ -2639,8 +2639,8 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     validation: f.validation || "",
     options: Array.isArray(f.options)
       ? f.options.map((opt: any, idx: number) =>
-          typeof opt === "string" ? { id: idx + 1, label: opt, value: opt } : opt
-        )
+        typeof opt === "string" ? { id: idx + 1, label: opt, value: opt } : opt
+      )
       : undefined,
     tableColumns: f.tableColumns,
     sectionId: f.sectionId,
@@ -2677,8 +2677,8 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     subFields: Array.isArray(f.subFields)
       ? f.subFields
       : Array.isArray(f.tableColumns) && f.tableColumns.length > 0
-      ? f.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
-      : undefined,
+        ? f.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
+        : undefined,
     crmBindConfig: f.crmBindConfig ?? undefined,
     selectionMode: normalizedSelectionMode,
     listEntryType: isStructured ? "structured" : (f.listEntryType || (normalizedType === "list_open" ? "plain_text" : undefined)),
@@ -2832,7 +2832,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       // Save the sanitized canonical object to localStorage
       try {
         localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
-      } catch {}
+      } catch { }
       return registry;
     } catch (e) {
       console.error("Error reading fieldRegistry from localStorage, falling back", e);
@@ -2901,7 +2901,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
           }
         });
       }
-    } catch {}
+    } catch { }
   }
 
   ensureScribeSeeds(registry);
@@ -2917,7 +2917,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
   // Write the canonical module-keyed object to localStorage
   try {
     localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
-  } catch {}
+  } catch { }
 
   return registry;
 }
@@ -2932,19 +2932,19 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
     source: s.source === "system" || SYSTEM_SECTION_IDS.has(s.id)
       ? "system"
       : s.source === "template"
-      ? "template"
-      : s.source === "custom" && s.createdIn === "client"
-      ? "custom"
-      : s.createdIn === "client"
-      ? "custom"
-      : "template",
+        ? "template"
+        : s.source === "custom" && s.createdIn === "client"
+          ? "custom"
+          : s.createdIn === "client"
+            ? "custom"
+            : "template",
     createdIn: s.createdIn || (s.source === "custom" && s.createdIn === "client" ? "client" : "admin"),
     iconName: undefined,
     fieldKeys: Array.isArray(s.fieldKeys)
       ? s.fieldKeys
       : Array.isArray(s.fieldIds)
-      ? s.fieldIds
-      : [],
+        ? s.fieldIds
+        : [],
     required: Boolean(s.required),
     requiredStages: Array.isArray(s.requiredStages) && s.requiredStages.length > 0 ? s.requiredStages : undefined,
     showAlways: s.showAlways !== false,
@@ -3027,7 +3027,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
 
       try {
         localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
-      } catch {}
+      } catch { }
       return sections;
     } catch (e) {
       console.error("Error reading sectionRegistry from localStorage", e);
@@ -3071,7 +3071,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
 
   try {
     localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
-  } catch {}
+  } catch { }
 
   return sections;
 }
@@ -3191,11 +3191,29 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
+    const norm = normalizeModule(module);
     const sys = getSystemFields(module);
     const cust = getCustomFields(module);
+    const systemOverrides = (customFields[norm] || []).filter(
+      (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+    );
+
+    const mergedSys = sys.map((sField) => {
+      const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+      return override ? { ...sField, ...override } : sField;
+    });
+
     const seen = new Set<string>();
     const result: FieldDefinition[] = [];
-    for (const f of [...sys, ...cust]) {
+    // 1. User custom fields take precedence
+    for (const f of cust) {
+      if (!seen.has(f.key)) {
+        seen.add(f.key);
+        result.push(f);
+      }
+    }
+    // 2. System fields with user-configured overrides applied
+    for (const f of mergedSys) {
       if (!seen.has(f.key)) {
         seen.add(f.key);
         result.push(f);
@@ -3241,8 +3259,29 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     const normalizedPatch = { ...patch };
     setCustomFields((prev) => {
       const currentList = prev[norm] || [];
-      const targetField = currentList.find((f) => f.id === id);
+      const targetField = currentList.find((f) => f.id === id || (patch.key && f.key === patch.key));
       if (!targetField) {
+        // If it's a system field, create an override in custom fields so changes persist
+        const allSys = getSystemFields(norm);
+        const foundSys = allSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+        if (foundSys) {
+          const overridden: FieldDefinition = {
+            ...foundSys,
+            ...normalizedPatch,
+            id: foundSys.id,
+            source: "system",
+          };
+          const nextState = {
+            ...prev,
+            [norm]: [...currentList, overridden],
+          };
+          try {
+            localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+            sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+            window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+          } catch {}
+          return nextState;
+        }
         return {
           ...prev,
           [norm]: currentList.map((f) => (f.id === id ? { ...f, ...normalizedPatch } : f)),
@@ -3263,7 +3302,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
       }
 
       const updated = currentList.map((f) => {
-        if (f.id === id) {
+        if (f.id === id || (patch.key && f.key === patch.key)) {
           return { ...f, ...normalizedPatch };
         }
 
@@ -3313,10 +3352,16 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         return f;
       });
 
-      return {
+      const nextState = {
         ...prev,
         [norm]: updated,
       };
+      try {
+        localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+        sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+        window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+      } catch {}
+      return nextState;
     });
   };
 
@@ -3542,22 +3587,73 @@ export function useFieldRegistry(): FieldRegistryContextValue {
     return {
       getSystemFields: getSysFields,
       getCustomFields: getCustFields,
-      getAllFields: (module: FieldModule) => [...getSysFields(module), ...getCustFields(module)],
-      getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
-        [...getSysFields(module), ...getCustFields(module)].filter((f) => isFieldMatchingOrg(f, org, processId)),
+      getAllFields: (module: FieldModule) => {
+        const norm = normMod(module);
+        const sys = getSysFields(module);
+        const cust = getCustFields(module);
+        const systemOverrides = (customFields[norm] || []).filter(
+          (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+        );
+        const mergedSys = sys.map((sField) => {
+          const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+          return override ? { ...sField, ...override } : sField;
+        });
+        const seen = new Set<string>();
+        const result: FieldDefinition[] = [];
+        for (const f of cust) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        for (const f of mergedSys) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        return result;
+      },
+      getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) => {
+        const norm = normMod(module);
+        const sys = getSysFields(module);
+        const cust = getCustFields(module);
+        const systemOverrides = (customFields[norm] || []).filter(
+          (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+        );
+        const mergedSys = sys.map((sField) => {
+          const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+          return override ? { ...sField, ...override } : sField;
+        });
+        const seen = new Set<string>();
+        const result: FieldDefinition[] = [];
+        for (const f of cust) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        for (const f of mergedSys) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        return result.filter((f) => isFieldMatchingOrg(f, org, processId));
+      },
       addCustomField: () => ({ id: Date.now(), key: "", label: "", module: "client", source: "custom", inputType: "text", createdAt: Date.now() }),
-      updateCustomField: () => {},
-      deleteCustomField: () => {},
+      updateCustomField: () => { },
+      deleteCustomField: () => { },
       getSystemSections: getSysSections,
       getCustomSections: getCustSections,
       getAllSections: (module: FieldModule) => [...getSysSections(module), ...getCustSections(module)],
       getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
         [...getSysSections(module), ...getCustSections(module)].filter((s) => isSectionMatchingOrg(s, org, processId)),
       addCustomSection: () => ({ id: `sec-${Date.now()}`, title: "", module: "client", source: "custom", createdAt: Date.now(), fieldKeys: [] }),
-      updateCustomSection: () => {},
-      deleteCustomSection: () => {},
-      assignFieldToSection: () => {},
-      removeFieldFromSection: () => {},
+      updateCustomSection: () => { },
+      deleteCustomSection: () => { },
+      assignFieldToSection: () => { },
+      removeFieldFromSection: () => { },
     };
   }
   return ctx;
