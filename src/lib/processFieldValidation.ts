@@ -60,12 +60,14 @@ export function isFieldRequiredForStage(
  * Note: Section-level requirements have been removed; validation is strictly per-field.
  */
 export function getMissingRequiredProcessFields({
+  module = "process",
   processId,
   processName,
   currentStageName,
   allFields,
   fieldValues = {},
 }: {
+  module?: string;
   processId?: string;
   processName?: string;
   currentStageName: string;
@@ -75,19 +77,26 @@ export function getMissingRequiredProcessFields({
 }): MissingRequiredField[] {
   if (!currentStageName) return [];
 
-  // Filter fields applicable to this process (or global process fields)
-  const processFields = allFields.filter((f) => {
-    if (f.module !== "process") return false;
-    if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all")) return true;
-    if (processId && isProcessMatchingAssignment(f.processIds, processId)) return true;
-    if (processName && isProcessMatchingAssignment(f.processIds, processName)) return true;
-    return false;
+  const targetModule = (module || "process").toLowerCase().trim();
+
+  // Filter fields applicable to this module (and process scoping if module is process)
+  const applicableFields = allFields.filter((f) => {
+    const fModule = (f.module || "").toLowerCase().trim();
+    if (fModule !== targetModule) return false;
+
+    if (targetModule === "process") {
+      if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all")) return true;
+      if (processId && isProcessMatchingAssignment(f.processIds, processId)) return true;
+      if (processName && isProcessMatchingAssignment(f.processIds, processName)) return true;
+      return false;
+    }
+    return true;
   });
 
   const missingFieldsMap = new Map<string, MissingRequiredField>();
 
   // Check direct field requirements
-  for (const f of processFields) {
+  for (const f of applicableFields) {
     if (isFieldRequiredForStage(f, currentStageName)) {
       const val = fieldValues[f.key];
       if (isFieldValueEmpty(val)) {
@@ -102,4 +111,3 @@ export function getMissingRequiredProcessFields({
 
   return Array.from(missingFieldsMap.values());
 }
-

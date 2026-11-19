@@ -69,6 +69,8 @@ import { useClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
+import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 
 
 interface Employee {
@@ -252,7 +254,25 @@ export default function Appointments() {
     return Object.keys(map).length > 0 ? map : processStages;
   }, [appointmentProcesses]);
 
-  const handleQuickStageChange = (apt: Appointment, targetStage: Stage) => {
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    apt: Appointment | null;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+    initialValues: Record<string, any>;
+  }>({
+    isOpen: false,
+    apt: null,
+    targetStage: null,
+    missingFields: [],
+    initialValues: {},
+  });
+
+  const executeQuickStageChange = (
+    apt: Appointment,
+    targetStage: Stage,
+    additionalValues?: Record<string, any>
+  ) => {
     let newStatus: Appointment["status"] = apt.status;
     if (targetStage.systemCategory === "completed") newStatus = "completed";
     else if (targetStage.systemCategory === "cancelled") newStatus = "cancelled";
@@ -261,6 +281,7 @@ export default function Appointments() {
 
     const updated = {
       ...apt,
+      ...(additionalValues || {}),
       processId: appointmentProcess.id,
       currentStageId: targetStage.id,
       statusLabel: targetStage.name,
@@ -304,6 +325,43 @@ export default function Appointments() {
     });
 
     toast.success(`Appointment moved to "${targetStage.name}"`);
+  };
+
+  const handleQuickStageChange = (apt: Appointment, targetStage: Stage) => {
+    let savedFields: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem(`mantra_appt_fields_${apt.id}`);
+      if (raw) savedFields = JSON.parse(raw);
+    } catch {}
+    const mergedValues = {
+      ...savedFields,
+      client_name: apt.clientName,
+      email: apt.clientEmail,
+      phone: apt.clientPhone,
+      appointment_date: apt.date,
+      appointment_time: apt.time,
+      notes: apt.notes,
+    };
+    const allApptFields = getAllFields("appointment");
+    const missing = getMissingRequiredProcessFields({
+      module: "appointment",
+      currentStageName: targetStage.name,
+      allFields: allApptFields,
+      fieldValues: mergedValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        apt,
+        targetStage,
+        missingFields: missing,
+        initialValues: mergedValues,
+      });
+      return;
+    }
+
+    executeQuickStageChange(apt, targetStage);
   };
 
   const [listViewTab, setListViewTab] = useState<"upcoming" | "done" | "pending" | "all">("all");
@@ -2059,6 +2117,36 @@ export default function Appointments() {
         onSessionCreated={(session) => {
           setShowScribeModal(false);
           toast.success(`AI Scribe consultation saved for ${session.clientName || "Appointment"}!`);
+        }}
+      />
+
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={requiredFieldsModalState.apt?.clientName || "Appointment"}
+        clientId={String(requiredFieldsModalState.apt?.id || "")}
+        processName={appointmentProcess.name}
+        targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={getAllFields("appointment")}
+        initialValues={requiredFieldsModalState.initialValues}
+        onConfirm={(filledValues) => {
+          if (requiredFieldsModalState.apt && requiredFieldsModalState.targetStage) {
+            try {
+              const currentSaved = localStorage.getItem(`mantra_appt_fields_${requiredFieldsModalState.apt.id}`);
+              const existing = currentSaved ? JSON.parse(currentSaved) : {};
+              localStorage.setItem(
+                `mantra_appt_fields_${requiredFieldsModalState.apt.id}`,
+                JSON.stringify({ ...existing, ...filledValues })
+              );
+            } catch {}
+            executeQuickStageChange(
+              requiredFieldsModalState.apt,
+              requiredFieldsModalState.targetStage,
+              filledValues
+            );
+          }
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
         }}
       />
     </div>

@@ -65,6 +65,8 @@ import {
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
 import { toast } from "sonner";
+import RequiredFieldsModal from "../deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
 
 
 export interface ClaimDetailDrawerProps {
@@ -194,7 +196,17 @@ export default function ClaimDetailDrawer({
 }: ClaimDetailDrawerProps) {
   const navigate = useNavigate();
   const { activeOrganization } = useOrganization();
-  const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
+  const { getSectionsForOrg, getFieldsForOrg, getAllFields, addCustomSection, updateCustomSection } = useFieldRegistry();
+
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+  }>({
+    isOpen: false,
+    targetStage: null,
+    missingFields: [],
+  });
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<"overview" | "documents" | "billing">("overview");
@@ -304,7 +316,7 @@ export default function ClaimDetailDrawer({
         const filtered = parsed.filter((s) => s.id !== "sec-clm-custom");
         if (filtered.length > 0) return filtered;
       }
-    } catch {}
+    } catch { }
     return DEFAULT_CLAIM_SECTIONS;
   });
 
@@ -332,7 +344,7 @@ export default function ClaimDetailDrawer({
           return merged;
         });
       }
-    } catch {}
+    } catch { }
   }, [getSectionsForOrg, activeOrganization]);
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {
@@ -340,7 +352,7 @@ export default function ClaimDetailDrawer({
     setClaimSections(cleaned);
     try {
       localStorage.setItem(claimSectionsStorageKey, JSON.stringify(cleaned));
-    } catch {}
+    } catch { }
   };
 
   // Field Values state
@@ -420,7 +432,7 @@ export default function ClaimDetailDrawer({
       if (customSaved) {
         Object.assign(initialValues, JSON.parse(customSaved));
       }
-    } catch {}
+    } catch { }
 
     setFieldValues(initialValues);
   }, [liveClaim, isCreateMode]);
@@ -431,7 +443,7 @@ export default function ClaimDetailDrawer({
       if (!isCreateMode && liveClaim?.id) {
         try {
           localStorage.setItem(`mantra_claim_fieldvalues_${liveClaim.id}`, JSON.stringify(next));
-        } catch {}
+        } catch { }
       }
       return next;
     });
@@ -460,9 +472,9 @@ export default function ClaimDetailDrawer({
     }
   };
 
-  // Stage Progression Handler
-  const handleStageSelect = (targetStage: Stage) => {
-    if (!liveClaim || targetStage.id === currentClaimStage?.id) return;
+  // Stage Progression Execution
+  const executeStageSelect = (targetStage: Stage) => {
+    if (!liveClaim) return;
 
     try {
       const result = claimService.moveToStage(liveClaim.id, targetStage.id, { type: "manual" });
@@ -493,6 +505,43 @@ export default function ClaimDetailDrawer({
     } catch (e) {
       console.warn("[ClaimDetailDrawer] Failed to move stage:", e);
     }
+  };
+
+  // Stage Progression Handler with Required Fields Validation
+  const handleStageSelect = (targetStage: Stage) => {
+    if (!liveClaim || targetStage.id === currentClaimStage?.id) return;
+
+    const allClaimFields = getAllFields("claim");
+    const mergedValues = {
+      ...fieldValues,
+      client_name: liveClaim.patientName,
+      patient_name: liveClaim.patientName,
+      claim_number: liveClaim.claimNumber,
+      service_date: liveClaim.serviceDate,
+      billed_amount: liveClaim.totalCharge,
+      patient_phone: liveClaim.patientPhone,
+      patient_dob: liveClaim.patientDob,
+      policy_number: liveClaim.insuredId,
+      group_number: liveClaim.groupNumber,
+      payer_name: liveClaim.payer?.name,
+    };
+    const missing = getMissingRequiredProcessFields({
+      module: "claim",
+      currentStageName: targetStage.name,
+      allFields: allClaimFields,
+      fieldValues: mergedValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        targetStage,
+        missingFields: missing,
+      });
+      return;
+    }
+
+    executeStageSelect(targetStage);
   };
 
   // Activity logs subscription
@@ -610,10 +659,10 @@ export default function ClaimDetailDrawer({
     const diagString = fieldValues.diagnosis_codes || "";
     const diagCodes: ClaimDiagnosisCode[] = diagString
       ? diagString.split(",").map((c: string, idx: number) => ({
-          pointer: (["A", "B", "C", "D"][idx] || "A") as any,
-          code: c.trim(),
-          description: `ICD-10 Code ${c.trim()}`,
-        }))
+        pointer: (["A", "B", "C", "D"][idx] || "A") as any,
+        code: c.trim(),
+        description: `ICD-10 Code ${c.trim()}`,
+      }))
       : [];
 
     // Parse procedure codes
@@ -622,14 +671,14 @@ export default function ClaimDetailDrawer({
     const procList = procString ? procString.split(",") : [];
     const serviceLines: ClaimServiceLine[] = procList.length > 0
       ? procList.map((p: string, idx: number) => ({
-          id: `line-${Date.now()}-${idx}`,
-          serviceDate: fieldValues.service_date || liveClaim.serviceDate,
-          cptCode: p.trim(),
-          description: `CPT Procedure ${p.trim()}`,
-          diagnosisPointer: "A",
-          chargeAmount: billedAmt / procList.length,
-          units: 1,
-        }))
+        id: `line-${Date.now()}-${idx}`,
+        serviceDate: fieldValues.service_date || liveClaim.serviceDate,
+        cptCode: p.trim(),
+        description: `CPT Procedure ${p.trim()}`,
+        diagnosisPointer: "A",
+        chargeAmount: billedAmt / procList.length,
+        units: 1,
+      }))
       : [];
 
     const newClaim: Claim = {
@@ -854,11 +903,10 @@ export default function ClaimDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-                activeTab === "overview"
+              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${activeTab === "overview"
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
+                }`}
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -868,11 +916,10 @@ export default function ClaimDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab("documents")}
-              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-                activeTab === "documents"
+              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${activeTab === "documents"
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
+                }`}
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -959,6 +1006,7 @@ export default function ClaimDetailDrawer({
                   <DraggableOverviewSections
                     mode="claim"
                     customFieldsModule="claim"
+                    pipelineStages={claimStages.map((s) => s.name)}
                     sections={preClaim ? claimSections.filter((s) => s.id !== "sec-clm-billing").map((s) => (s.id === "sec-clm-revenue-cycle" ? { ...s, fieldKeys: s.fieldKeys.filter((k) => !CLAIM_ONLY_FIELDS.has(k)) } : s)) : claimSections}
                     onSectionsChange={handleSectionsChange}
                     fieldValues={fieldValues}
@@ -1259,6 +1307,31 @@ export default function ClaimDetailDrawer({
             }}
           />
         )}
+
+        {/* Required Fields Modal when stage changes */}
+        <RequiredFieldsModal
+          isOpen={requiredFieldsModalState.isOpen}
+          onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+          clientName={liveClaim?.patientName || "Claim"}
+          clientId={effectiveClientId}
+          processName="Insurance Process"
+          targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+          missingFields={requiredFieldsModalState.missingFields}
+          allFields={getAllFields("claim")}
+          initialValues={fieldValues}
+          onConfirm={(filledValues) => {
+            if (!liveClaim) return;
+            const updated = { ...fieldValues, ...filledValues };
+            setFieldValues(updated);
+            try {
+              localStorage.setItem(`mantra_claim_fieldvalues_${liveClaim.id}`, JSON.stringify(updated));
+            } catch { }
+            if (requiredFieldsModalState.targetStage) {
+              executeStageSelect(requiredFieldsModalState.targetStage);
+            }
+            setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          }}
+        />
       </div>
     </div>
   );

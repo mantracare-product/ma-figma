@@ -40,9 +40,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
-import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS, FIELD_REGISTRY_EVENT, SECTION_REGISTRY_EVENT } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
-import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
@@ -99,6 +99,7 @@ export interface DraggableOverviewSectionsProps {
   highlightRequiredKeys?: string[];
   renderCustomSection?: (section: OverviewSection) => React.ReactNode;
   contactCategory?: string;
+  pipelineStages?: Array<{ id?: string; name?: string } | string>;
 }
 
 
@@ -272,6 +273,7 @@ export default function DraggableOverviewSections({
   highlightRequiredKeys = [],
   renderCustomSection,
   contactCategory,
+  pipelineStages,
 }: DraggableOverviewSectionsProps) {
   const effectiveContactCategory =
     contactCategory ||
@@ -290,9 +292,48 @@ export default function DraggableOverviewSections({
   );
 
   const [activeFieldMenu, setActiveFieldMenu] = useState<{ sectionId: string; fieldKey: string } | null>(null);
-  const [showConfigureSubmenu, setShowConfigureSubmenu] = useState(false);
+  const [showConfigureSubmenu, setShowConfigureSubmenu] = useState(true);
 
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
+  const [registryVersion, setRegistryVersion] = useState(0);
+
+  useEffect(() => {
+    const handleFieldUpdate = () => setRegistryVersion((v) => v + 1);
+    window.addEventListener(FIELD_REGISTRY_EVENT, handleFieldUpdate);
+    window.addEventListener(SECTION_REGISTRY_EVENT, handleFieldUpdate);
+    window.addEventListener("storage", handleFieldUpdate);
+    return () => {
+      window.removeEventListener(FIELD_REGISTRY_EVENT, handleFieldUpdate);
+      window.removeEventListener(SECTION_REGISTRY_EVENT, handleFieldUpdate);
+      window.removeEventListener("storage", handleFieldUpdate);
+    };
+  }, []);
+
+  const availablePipelineStages: string[] = useMemo(() => {
+    if (pipelineStages && pipelineStages.length > 0) {
+      return pipelineStages
+        .map((s) => (typeof s === "string" ? s : s.name || s.id || ""))
+        .filter(Boolean);
+    }
+    const mod = customFieldsModule || mode;
+    if (mod === "appointment") {
+      return (DEFAULT_ENTITY_PROCESSES.appointment?.stages || []).map((s) => s.name);
+    }
+    if (mod === "invoice") {
+      return (DEFAULT_ENTITY_PROCESSES.invoice?.stages || []).map((s) => s.name);
+    }
+    if (mod === "claim") {
+      return (DEFAULT_ENTITY_PROCESSES.insurance?.stages || DEFAULT_ENTITY_PROCESSES.claim?.stages || []).map((s) => s.name);
+    }
+    if (mod === "process" || mode === "process") {
+      const proc = allProcesses.find((p) => p.name === log?.process || p.id === log?.process || p.id === log?.processId || (log?.process && p.name.toLowerCase() === log.process.toLowerCase())) || allProcesses[0];
+      if (proc && proc.stages && proc.stages.length > 0) {
+        return proc.stages.map((s) => (typeof s === "string" ? s : s.name));
+      }
+      return ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Won / Lost"];
+    }
+    return [];
+  }, [pipelineStages, mode, customFieldsModule, log, allProcesses]);
 
   useEffect(() => {
     const handleUpdate = () => setAllProcesses(getStoredProcesses());
@@ -375,7 +416,7 @@ export default function DraggableOverviewSections({
       }
     });
     return uniqueList.filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
-  }, [getAllFields, customFieldsModule, activeOrganization, activeProcessId, activeProcessName]);
+  }, [getAllFields, customFieldsModule, activeOrganization, activeProcessId, activeProcessName, registryVersion]);
 
   // All custom sections registered in current module filtered by organization scope and process context
   const allCustomSections = useMemo(() => {
@@ -391,7 +432,7 @@ export default function DraggableOverviewSections({
       }
     });
     return Array.from(uniqueMap.values()).filter((s) => isSectionMatchingOrg(s, activeOrganization, procId));
-  }, [getAllSections, customFieldsModule, activeOrganization, activeProcessId, activeProcessName]);
+  }, [getAllSections, customFieldsModule, activeOrganization, activeProcessId, activeProcessName, registryVersion]);
 
   const allowedFieldKeys = useMemo(() => {
     return new Set(allRegistryFields.map((f) => f.key));
@@ -894,7 +935,7 @@ export default function DraggableOverviewSections({
                       setShowConfigureSubmenu(false);
                     } else {
                       setActiveFieldMenu({ sectionId, fieldKey: key });
-                      setShowConfigureSubmenu(false);
+                      setShowConfigureSubmenu(true);
                     }
                   }}
                   className="p-0.5 text-slate-300 hover:text-blue-600 hover:rotate-45 rounded transition-all cursor-pointer"
@@ -914,7 +955,7 @@ export default function DraggableOverviewSections({
                       }}
                     />
                     <div
-                      className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-50 text-left animate-in fade-in zoom-in-95 duration-100"
+                      className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-50 text-left animate-in fade-in zoom-in-95 duration-100"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -939,22 +980,123 @@ export default function DraggableOverviewSections({
 
                           {/* Configure Submenu */}
                           {showConfigureSubmenu && (
-                            <div className="px-2.5 py-2 mx-1.5 my-1 bg-slate-50/90 rounded-lg border border-slate-200/80 space-y-2 animate-in fade-in duration-100">
+                            <div className="px-2.5 py-2 mx-1.5 my-1 bg-slate-50/90 rounded-lg border border-slate-200/80 space-y-2.5 animate-in fade-in duration-100">
                               {/* Marked as Required */}
-                              <label className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-700 cursor-pointer select-none">
-                                <span>Marked as required</span>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(regField?.required)}
-                                  onChange={(e) => {
-                                    if (regField) {
-                                      updateCustomField(customFieldsModule, regField.id, { required: e.target.checked });
-                                      toast.success(`Field marked as ${e.target.checked ? "required" : "optional"}`);
-                                    }
-                                  }}
-                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                              </label>
+                              <div className="space-y-1.5">
+                                <label className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
+                                  <span>Marked as required</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(regField?.required)}
+                                    onChange={(e) => {
+                                      if (regField) {
+                                        const isReq = e.target.checked;
+                                        const initialStages = isReq
+                                          ? (regField.requiredStages && regField.requiredStages.length > 0 ? regField.requiredStages : ["all"])
+                                          : [];
+                                        updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                          key: regField.key,
+                                          required: isReq,
+                                          requiredStages: initialStages,
+                                        });
+                                        toast.success(`Field marked as ${isReq ? "required" : "optional"}`);
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                </label>
+
+                                {/* Multi-select Pipeline Stages when Marked as Required is checked */}
+                                {Boolean(regField?.required) && availablePipelineStages.length > 0 && (
+                                  <div className="pt-2 border-t border-slate-200/80 space-y-1.5 animate-in fade-in duration-150">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                        Required on Stages
+                                      </label>
+                                      <span className="text-[10px] text-blue-600 font-semibold">
+                                        {(!regField.requiredStages || regField.requiredStages.length === 0 || regField.requiredStages.includes("all") || regField.requiredStages.length === availablePipelineStages.length)
+                                          ? "All stages"
+                                          : `${regField.requiredStages.length} of ${availablePipelineStages.length}`}
+                                      </span>
+                                    </div>
+
+                                    {/* All Stages Toggle */}
+                                    <label className="flex items-center gap-2 px-2 py-1 rounded bg-slate-100/90 hover:bg-slate-200/70 text-[11px] font-semibold text-slate-800 cursor-pointer select-none transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(
+                                          !regField.requiredStages ||
+                                          regField.requiredStages.length === 0 ||
+                                          regField.requiredStages.includes("all") ||
+                                          regField.requiredStages.length === availablePipelineStages.length
+                                        )}
+                                        onChange={(e) => {
+                                          if (regField) {
+                                            const newStages = e.target.checked ? ["all"] : [];
+                                            updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                              key: regField.key,
+                                              required: true,
+                                              requiredStages: newStages,
+                                            });
+                                          }
+                                        }}
+                                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                      />
+                                      <span>All Stages</span>
+                                    </label>
+
+                                    {/* Individual Stage Checkboxes (Multi-select) */}
+                                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 bg-white p-1 rounded-lg border border-slate-200/60">
+                                      {availablePipelineStages.map((stgName) => {
+                                        const isAll = !regField.requiredStages || regField.requiredStages.length === 0 || regField.requiredStages.includes("all");
+                                        const isChecked = isAll || regField.requiredStages.some((s) => s.toLowerCase() === stgName.toLowerCase());
+
+                                        return (
+                                          <label
+                                            key={stgName}
+                                            className="flex items-center gap-2 pt-1 pb-0.5 px-1 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded cursor-pointer select-none"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => {
+                                                if (regField) {
+                                                  let currentList = isAll
+                                                    ? [...availablePipelineStages]
+                                                    : [...(regField.requiredStages || [])];
+
+                                                  if (e.target.checked) {
+                                                    if (!currentList.some((s) => s.toLowerCase() === stgName.toLowerCase())) {
+                                                      currentList.push(stgName);
+                                                    }
+                                                  } else {
+                                                    currentList = currentList.filter(
+                                                      (s) => s.toLowerCase() !== stgName.toLowerCase() && s.toLowerCase() !== "all"
+                                                    );
+                                                  }
+
+                                                  const finalStages =
+                                                    currentList.length === availablePipelineStages.length || currentList.length === 0
+                                                      ? ["all"]
+                                                      : currentList;
+
+                                                  updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                    key: regField.key,
+                                                    required: true,
+                                                    requiredStages: finalStages,
+                                                  });
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            />
+                                            <span className="truncate">{stgName}</span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Fill with AI Scribe (No sparkle icon) */}
                               <label className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-700 cursor-pointer select-none">
@@ -964,7 +1106,7 @@ export default function DraggableOverviewSections({
                                   checked={Boolean((regField as any)?.fillWithAIScribe)}
                                   onChange={(e) => {
                                     if (regField) {
-                                      updateCustomField(customFieldsModule, regField.id, { fillWithAIScribe: e.target.checked } as any);
+                                      updateCustomField(regField.module || customFieldsModule, regField.id, { key: regField.key, fillWithAIScribe: e.target.checked } as any);
                                       toast.success(`AI Scribe auto-fill ${e.target.checked ? "enabled" : "disabled"}`);
                                     }
                                   }}
@@ -981,7 +1123,7 @@ export default function DraggableOverviewSections({
                                   value={(regField as any)?.visibility || "all"}
                                   onChange={(e) => {
                                     if (regField) {
-                                      updateCustomField(customFieldsModule, regField.id, { visibility: e.target.value } as any);
+                                      updateCustomField(regField.module || customFieldsModule, regField.id, { key: regField.key, visibility: e.target.value } as any);
                                       toast.success(`Field visibility updated to: ${e.target.options[e.target.selectedIndex].text}`);
                                     }
                                   }}
@@ -1021,7 +1163,7 @@ export default function DraggableOverviewSections({
                           setShowConfigureSubmenu(false);
                           if (regField) {
                             const nextVal = !Boolean(regField.showAlways);
-                            updateCustomField(customFieldsModule, regField.id, { showAlways: nextVal });
+                            updateCustomField(regField.module || customFieldsModule, regField.id, { key: regField.key, showAlways: nextVal });
                             toast.success(`Field "${regField.label || key}" ${nextVal ? "set to show always" : "will auto-hide when empty"}`);
                           }
                         }}

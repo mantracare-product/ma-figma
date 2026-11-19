@@ -63,6 +63,8 @@ import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/a
 import { logStageMove } from "../../../lib/useAutomationStore";
 import { hasInvoiceAutomation } from "../../../lib/invoiceService";
 import type { Appointment as ServiceAppointment } from "../../../lib/appointmentService";
+import RequiredFieldsModal from "../deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
 
 export interface AppointmentDetailDrawerProps {
   isOpen: boolean;
@@ -122,7 +124,7 @@ export default function AppointmentDetailDrawer({
 }: AppointmentDetailDrawerProps) {
   const navigate = useNavigate();
   const { activeOrganization } = useOrganization();
-  const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
+  const { getSectionsForOrg, getFieldsForOrg, getAllFields, addCustomSection, updateCustomSection } = useFieldRegistry();
   const { invoices } = useInvoices();
 
   // Active Tab
@@ -155,6 +157,15 @@ export default function AppointmentDetailDrawer({
 
   // Field values
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+  }>({
+    isOpen: false,
+    targetStage: null,
+    missingFields: [],
+  });
 
   // AI Scribe Consultation Drawer state
   const [showScribeModal, setShowScribeModal] = useState(false);
@@ -457,9 +468,8 @@ export default function AppointmentDetailDrawer({
     toast.success("✨ Form fields filled with AI Scribe clinical data!");
   };
 
-  // Stage Progression Handler
-  const handleStageSelect = (targetStage: Stage) => {
-    if (!effectiveAppt || targetStage.id === currentStage?.id) return;
+  const executeStageMove = (targetStage: Stage) => {
+    if (!effectiveAppt) return;
 
     try {
       const moved = appointmentService.moveToStage(effectiveAppt.id, targetStage.id, {
@@ -507,6 +517,39 @@ export default function AppointmentDetailDrawer({
     } catch (e) {
       console.warn("[AppointmentDetailDrawer] Failed to move stage:", e);
     }
+  };
+
+  // Stage Progression Handler with Required Fields Validation
+  const handleStageSelect = (targetStage: Stage) => {
+    if (!effectiveAppt || targetStage.id === currentStage?.id) return;
+
+    const allApptFields = getAllFields("appointment");
+    const mergedValues = {
+      ...fieldValues,
+      client_name: effectiveAppt.clientName,
+      email: effectiveAppt.clientEmail,
+      phone: effectiveAppt.clientPhone,
+      appointment_date: effectiveAppt.date,
+      appointment_time: effectiveAppt.time,
+      notes: effectiveAppt.notes,
+    };
+    const missing = getMissingRequiredProcessFields({
+      module: "appointment",
+      currentStageName: targetStage.name,
+      allFields: allApptFields,
+      fieldValues: mergedValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        targetStage,
+        missingFields: missing,
+      });
+      return;
+    }
+
+    executeStageMove(targetStage);
   };
 
   // Activity logs subscription
@@ -855,6 +898,7 @@ export default function AppointmentDetailDrawer({
                     fieldValues={fieldValues}
                     onFieldValueChange={handleFieldValueChange}
                     client={{ id: effectiveClientId, name: appointment.clientName, phone: appointment.clientPhone, email: appointment.clientEmail }}
+                    pipelineStages={stages.map((s) => s.name)}
                   />
                 </div>
 
@@ -1316,6 +1360,41 @@ export default function AppointmentDetailDrawer({
             extractedData: session.extractedData,
             scribeSessionId: session.id,
           });
+        }}
+      />
+
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={effectiveAppt.clientName || "Appointment"}
+        clientId={effectiveClientId}
+        processName={appointmentProcess.name}
+        targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={getAllFields("appointment")}
+        initialValues={{
+          ...fieldValues,
+          client_name: effectiveAppt.clientName,
+          email: effectiveAppt.clientEmail,
+          phone: effectiveAppt.clientPhone,
+          appointment_date: effectiveAppt.date,
+          appointment_time: effectiveAppt.time,
+          notes: effectiveAppt.notes,
+        }}
+        onConfirm={(filledValues) => {
+          setFieldValues((prev) => {
+            const updated = { ...prev, ...filledValues };
+            if (effectiveAppt) {
+              try {
+                localStorage.setItem(`mantra_appt_fields_${effectiveAppt.id}`, JSON.stringify(updated));
+              } catch {}
+            }
+            return updated;
+          });
+          if (requiredFieldsModalState.targetStage) {
+            executeStageMove(requiredFieldsModalState.targetStage);
+          }
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
         }}
       />
     </div>

@@ -3202,11 +3202,29 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
+    const norm = normalizeModule(module);
     const sys = getSystemFields(module);
     const cust = getCustomFields(module);
+    const systemOverrides = (customFields[norm] || []).filter(
+      (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+    );
+
+    const mergedSys = sys.map((sField) => {
+      const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+      return override ? { ...sField, ...override } : sField;
+    });
+
     const seen = new Set<string>();
     const result: FieldDefinition[] = [];
-    for (const f of [...sys, ...cust]) {
+    // 1. User custom fields take precedence
+    for (const f of cust) {
+      if (!seen.has(f.key)) {
+        seen.add(f.key);
+        result.push(f);
+      }
+    }
+    // 2. System fields with user-configured overrides applied
+    for (const f of mergedSys) {
       if (!seen.has(f.key)) {
         seen.add(f.key);
         result.push(f);
@@ -3252,8 +3270,29 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     const normalizedPatch = { ...patch };
     setCustomFields((prev) => {
       const currentList = prev[norm] || [];
-      const targetField = currentList.find((f) => f.id === id);
+      const targetField = currentList.find((f) => f.id === id || (patch.key && f.key === patch.key));
       if (!targetField) {
+        // If it's a system field, create an override in custom fields so changes persist
+        const allSys = getSystemFields(norm);
+        const foundSys = allSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+        if (foundSys) {
+          const overridden: FieldDefinition = {
+            ...foundSys,
+            ...normalizedPatch,
+            id: foundSys.id,
+            source: "system",
+          };
+          const nextState = {
+            ...prev,
+            [norm]: [...currentList, overridden],
+          };
+          try {
+            localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+            sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+            window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+          } catch {}
+          return nextState;
+        }
         return {
           ...prev,
           [norm]: currentList.map((f) => (f.id === id ? { ...f, ...normalizedPatch } : f)),
@@ -3274,7 +3313,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
       }
 
       const updated = currentList.map((f) => {
-        if (f.id === id) {
+        if (f.id === id || (patch.key && f.key === patch.key)) {
           return { ...f, ...normalizedPatch };
         }
 
@@ -3324,10 +3363,16 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         return f;
       });
 
-      return {
+      const nextState = {
         ...prev,
         [norm]: updated,
       };
+      try {
+        localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+        sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+        window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+      } catch {}
+      return nextState;
     });
   };
 
@@ -3553,9 +3598,60 @@ export function useFieldRegistry(): FieldRegistryContextValue {
     return {
       getSystemFields: getSysFields,
       getCustomFields: getCustFields,
-      getAllFields: (module: FieldModule) => [...getSysFields(module), ...getCustFields(module)],
-      getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
-        [...getSysFields(module), ...getCustFields(module)].filter((f) => isFieldMatchingOrg(f, org, processId)),
+      getAllFields: (module: FieldModule) => {
+        const norm = normMod(module);
+        const sys = getSysFields(module);
+        const cust = getCustFields(module);
+        const systemOverrides = (customFields[norm] || []).filter(
+          (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+        );
+        const mergedSys = sys.map((sField) => {
+          const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+          return override ? { ...sField, ...override } : sField;
+        });
+        const seen = new Set<string>();
+        const result: FieldDefinition[] = [];
+        for (const f of cust) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        for (const f of mergedSys) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        return result;
+      },
+      getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) => {
+        const norm = normMod(module);
+        const sys = getSysFields(module);
+        const cust = getCustFields(module);
+        const systemOverrides = (customFields[norm] || []).filter(
+          (f) => f.source === "system" || (SYSTEM_SEEDS[norm] || []).some((s) => s.key === f.key) || SYSTEM_FIELD_KEYS.has(f.key)
+        );
+        const mergedSys = sys.map((sField) => {
+          const override = systemOverrides.find((o) => o.key === sField.key || o.id === sField.id);
+          return override ? { ...sField, ...override } : sField;
+        });
+        const seen = new Set<string>();
+        const result: FieldDefinition[] = [];
+        for (const f of cust) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        for (const f of mergedSys) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            result.push(f);
+          }
+        }
+        return result.filter((f) => isFieldMatchingOrg(f, org, processId));
+      },
       addCustomField: () => ({ id: Date.now(), key: "", label: "", module: "client", source: "custom", inputType: "text", createdAt: Date.now() }),
       updateCustomField: () => {},
       deleteCustomField: () => {},

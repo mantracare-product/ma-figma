@@ -36,17 +36,35 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useNavigate, useLocation, Link } from "react-router";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT, Stage } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { getStoredClaims } from "../../lib/claimsStore";
 import InvoiceStatementDrawer from "../components/invoices/InvoiceStatementDrawer";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
+import { useFieldRegistry } from "../context/FieldRegistryContext";
+import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 
 export default function Invoices() {
   const navigate = useNavigate();
   const { invoices: contextInvoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
+  const { getAllFields } = useFieldRegistry();
   const allClients = getClientList();
+
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    invoice: ClientInvoice | null;
+    targetStage: Stage | null;
+    missingFields: MissingRequiredField[];
+    initialValues: Record<string, any>;
+  }>({
+    isOpen: false,
+    invoice: null,
+    targetStage: null,
+    missingFields: [],
+    initialValues: {},
+  });
 
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
   const [storeTick, setStoreTick] = useState(0);
@@ -281,11 +299,57 @@ export default function Invoices() {
     return Boolean(params.get("process") || params.get("processName") || params.get("processId"));
   }, [location.search]);
 
+  const executeInvoiceMoveToStage = (inv: ClientInvoice, stage: Stage, extraValues?: Record<string, any>) => {
+    if (extraValues && Object.keys(extraValues).length > 0) {
+      try {
+        const storedKey = `mantra_inv_fields_${inv.id}`;
+        const raw = localStorage.getItem(storedKey);
+        const existing = raw ? JSON.parse(raw) : {};
+        localStorage.setItem(storedKey, JSON.stringify({ ...existing, ...extraValues }));
+      } catch {}
+    }
+    invoiceService.moveToStage(inv.id, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+    toast.success(`Invoice moved to ${stage.name} ✓`);
+  };
+
   const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
     const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
     if (stage) {
-      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
-      toast.success(`Invoice moved to ${stage.name} ✓`);
+      const targetInv = liveInvoices.find((i) => i.id === invoiceId) || invoiceService.getInvoiceById(invoiceId);
+      if (targetInv) {
+        let storedFields: Record<string, any> = {};
+        try {
+          const raw = localStorage.getItem(`mantra_inv_fields_${targetInv.id}`);
+          if (raw) storedFields = JSON.parse(raw);
+        } catch {}
+        const mergedValues = {
+          ...storedFields,
+          client_name: targetInv.clientName,
+          email: targetInv.clientEmail,
+          total_amount: targetInv.total,
+          notes: targetInv.notes,
+        };
+        const missing = getMissingRequiredProcessFields({
+          module: "invoice",
+          currentStageName: stage.name,
+          allFields: getAllFields("invoice"),
+          fieldValues: mergedValues,
+        });
+        if (missing.length > 0) {
+          setRequiredFieldsModalState({
+            isOpen: true,
+            invoice: targetInv,
+            targetStage: stage,
+            missingFields: missing,
+            initialValues: mergedValues,
+          });
+          return;
+        }
+        executeInvoiceMoveToStage(targetInv, stage);
+      } else {
+        invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+        toast.success(`Invoice moved to ${stage.name} ✓`);
+      }
     } else {
       updateInvoiceStatus(invoiceId, newStatusOrStageId as InvoiceStatus);
     }
@@ -812,8 +876,42 @@ export default function Invoices() {
                         voidInvoice(targetInv.id);
                         toast.success(`Invoice ${targetInv.id} voided`);
                       } else {
-                        invoiceService.moveToStage(targetInv.id, col.id, { type: "manual", ruleName: `Kanban drag to ${col.title}` });
-                        toast.success(`Invoice moved to ${col.title}`);
+                        const stage = invoiceProcess.stages.find((s) => s.id === col.id);
+                        if (stage) {
+                          let storedFields: Record<string, any> = {};
+                          try {
+                            const raw = localStorage.getItem(`mantra_inv_fields_${targetInv.id}`);
+                            if (raw) storedFields = JSON.parse(raw);
+                          } catch {}
+                          const mergedValues = {
+                            ...storedFields,
+                            client_name: targetInv.clientName,
+                            email: targetInv.clientEmail,
+                            total_amount: targetInv.total,
+                            notes: targetInv.notes,
+                          };
+                          const missing = getMissingRequiredProcessFields({
+                            module: "invoice",
+                            currentStageName: stage.name,
+                            allFields: getAllFields("invoice"),
+                            fieldValues: mergedValues,
+                          });
+                          if (missing.length > 0) {
+                            setRequiredFieldsModalState({
+                              isOpen: true,
+                              invoice: targetInv,
+                              targetStage: stage,
+                              missingFields: missing,
+                              initialValues: mergedValues,
+                            });
+                            setDraggedInvoiceId(null);
+                            return;
+                          }
+                          executeInvoiceMoveToStage(targetInv, stage);
+                        } else {
+                          invoiceService.moveToStage(targetInv.id, col.id, { type: "manual", ruleName: `Kanban drag to ${col.title}` });
+                          toast.success(`Invoice moved to ${col.title}`);
+                        }
                       }
 
                       setDraggedInvoiceId(null);
@@ -1052,6 +1150,29 @@ export default function Invoices() {
           preSelectedInvoiceId={paymentModalInvoice?.id || null}
         />
       )}
+
+      {/* Required Fields Modal when stage changes */}
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={requiredFieldsModalState.invoice?.clientName || "Invoice"}
+        clientId={requiredFieldsModalState.invoice?.clientId || ""}
+        processName="Invoice Process"
+        targetStageName={requiredFieldsModalState.targetStage?.name || ""}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={getAllFields("invoice")}
+        initialValues={requiredFieldsModalState.initialValues}
+        onConfirm={(filledValues) => {
+          if (requiredFieldsModalState.invoice && requiredFieldsModalState.targetStage) {
+            executeInvoiceMoveToStage(
+              requiredFieldsModalState.invoice,
+              requiredFieldsModalState.targetStage,
+              filledValues
+            );
+          }
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+        }}
+      />
 
     </div>
   );

@@ -49,6 +49,8 @@ export interface ClientInvoice {
   billingAddress?: string;
   tax?: number;
   discount?: number;
+  notes?: string;
+  description?: string;
 }
 
 export type InvoicePaymentRecord = Payment & {
@@ -103,7 +105,7 @@ export interface MockService {
   tax?: number;
 }
 
-export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes" | "claims" | "denials" | "payments" | "ar_aging" | "eligibility";
+export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes";
 
 export interface ReportBucketCase {
   id: string;
@@ -180,4 +182,3 @@ export interface ReportDefinition {
   yAxisLabel?: string;
   yAxisMode?: "count" | "field";
 }
-
