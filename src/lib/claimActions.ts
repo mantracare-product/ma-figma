@@ -14,7 +14,12 @@ import { resolveRecordContext } from "./recordContext";
 import { getCoverageOn, getClientDemographics } from "./coveragesStore";
 import {
   claimDefaultsStore, getPayer, getProviderCredential, scrubRulesStore, type ScrubRule,
+  type ScrubCondition, type ScrubConditionGroup,
 } from "./billingSetupStore";
+import { getStoredClients } from "./clientsStore";
+import { getCoveragesForClient } from "./coveragesStore";
+import { appointmentService } from "./appointmentService";
+import { isValidNpiLuhn } from "./scrubMigration";
 import { getOrgBilling, getOrgLocations } from "./orgBilling";
 import { getStoredServices } from "./servicesStore";
 import { getStoredTeamMembers } from "./teamStore";
@@ -232,11 +237,267 @@ export interface ScrubIssue {
   message: string;
 }
 
+function evalOp(actual: any, op: string, target: any): boolean {
+  const normOp = (op || "is").toLowerCase().replace(/[- ]/g, "_");
+  const isEmpty =
+    actual === undefined ||
+    actual === null ||
+    actual === "" ||
+    (Array.isArray(actual) && actual.length === 0);
+
+  if (normOp === "is_empty") return isEmpty;
+  if (normOp === "is_not_empty") return !isEmpty;
+
+  if (isEmpty) return false;
+
+  const actualStr = String(actual).trim().toLowerCase();
+  const targetStr = target !== undefined && target !== null ? String(target).trim().toLowerCase() : "";
+
+  switch (normOp) {
+    case "is":
+    case "equals":
+    case "equal_to":
+      return actualStr === targetStr;
+    case "is_not":
+    case "not_equals":
+    case "not_equal_to":
+      return actualStr !== targetStr;
+    case "contains":
+    case "includes":
+      return actualStr.includes(targetStr);
+    case "greater_than": {
+      const numAct = Number(actual);
+      const numTgt = Number(target);
+      if (!isNaN(numAct) && !isNaN(numTgt)) return numAct > numTgt;
+      return actualStr > targetStr;
+    }
+    case "less_than": {
+      const numAct = Number(actual);
+      const numTgt = Number(target);
+      if (!isNaN(numAct) && !isNaN(numTgt)) return numAct < numTgt;
+      return actualStr < targetStr;
+    }
+    case "is_one_of": {
+      const items = Array.isArray(target)
+        ? target.map((x) => String(x).trim().toLowerCase())
+        : targetStr.split(",").map((s) => s.trim().toLowerCase());
+      return items.includes(actualStr);
+    }
+    default:
+      return actualStr === targetStr;
+  }
+}
+
+function evalConditionOnRecord(
+  cond: ScrubCondition,
+  context: {
+    claim: Claim;
+    patient?: any;
+    coverage?: any;
+    payer?: any;
+    renderingProvider?: any;
+    appointment?: any;
+    authorization?: any;
+    organization?: any;
+    derived: Record<string, any>;
+    local: Record<string, any>;
+  }
+): boolean {
+  const { record, field, operator, value } = cond;
+  let sourceObj: any = {};
+  switch (record) {
+    case "claim":
+      sourceObj = { ...context.claim, ...context.local, ...context.derived };
+      break;
+    case "patient":
+      sourceObj = context.patient || {};
+      break;
+    case "coverage":
+      sourceObj = context.coverage || {};
+      break;
+    case "payer":
+      sourceObj = context.payer || {};
+      break;
+    case "rendering_provider":
+      sourceObj = {
+        ...(context.renderingProvider || {}),
+        npi: context.claim.renderingProviderNpi || context.renderingProvider?.npi,
+        name: context.claim.renderingProviderName || context.renderingProvider?.name,
+        _npiValid: context.derived._npiValid,
+      };
+      break;
+    case "appointment":
+      sourceObj = context.appointment || {};
+      break;
+    case "authorization":
+      sourceObj = context.authorization || {};
+      break;
+    case "organization":
+      sourceObj = { ...(context.organization || {}), _groupNpiValid: context.derived._groupNpiValid };
+      break;
+    default:
+      sourceObj = { ...context.claim, ...context.local, ...context.derived };
+      break;
+  }
+
+  const actual = sourceObj[field] ?? sourceObj[field.toLowerCase()];
+  return evalOp(actual, operator, value);
+}
+
+function evalGroup(group: ScrubConditionGroup, context: any, lines: any[]): boolean {
+  const matchType = group.matchType || "ALL";
+  const conds = group.conditions || [];
+  if (conds.length === 0) return false;
+
+  const allAreLines = conds.every((c) => c.record === "claim_line");
+
+  if (allAreLines) {
+    const anyQuantifier = conds.some((c) => (c.lineQuantifier || "any") === "any");
+    if (anyQuantifier) {
+      if (lines.length === 0) return false;
+      return lines.some((line) => {
+        if (matchType === "ANY") {
+          return conds.some((c) => evalOp(line[c.field], c.operator, c.value));
+        } else {
+          return conds.every((c) => evalOp(line[c.field], c.operator, c.value));
+        }
+      });
+    } else {
+      if (lines.length === 0) return false;
+      return lines.every((line) => {
+        if (matchType === "ANY") {
+          return conds.some((c) => evalOp(line[c.field], c.operator, c.value));
+        } else {
+          return conds.every((c) => evalOp(line[c.field], c.operator, c.value));
+        }
+      });
+    }
+  }
+
+  const evalSingle = (c: ScrubCondition) => {
+    if (c.record === "claim_line") {
+      if ((c.lineQuantifier || "any") === "every") {
+        return lines.length > 0 && lines.every((l) => evalOp(l[c.field], c.operator, c.value));
+      } else {
+        return lines.some((l) => evalOp(l[c.field], c.operator, c.value));
+      }
+    }
+    return evalConditionOnRecord(c, context);
+  };
+
+  if (matchType === "ANY") {
+    return conds.some(evalSingle);
+  } else {
+    return conds.every(evalSingle);
+  }
+}
+
+function evalRule(rule: ScrubRule, context: any, lines: any[]): boolean {
+  if (rule.groups && rule.groups.length > 0) {
+    const matchType = rule.matchType || "ALL";
+    if (matchType === "ANY") {
+      return rule.groups.some((g) => evalGroup(g, context, lines));
+    } else {
+      return rule.groups.every((g) => evalGroup(g, context, lines));
+    }
+  } else if (rule.conditions && rule.conditions.length > 0) {
+    return evalGroup({ id: "g", matchType: rule.matchType || "ALL", conditions: rule.conditions }, context, lines);
+  }
+  return false;
+}
+
 export function scrubClaim(claim: Claim, rules: ScrubRule[] = scrubRulesStore.get()): ScrubIssue[] {
   const issues: ScrubIssue[] = [];
   const local = readLocalRecordFields("claim", claim.id);
   const add = (r: ScrubRule, fallback: string) => issues.push({ ruleId: r.id, severity: r.severity, message: r.message || fallback });
+
+  // Resolve context for condition block evaluation
+  const lines = claim.lines || [];
+  let patient: any;
+  try {
+    patient = getStoredClients().find((c: any) => c.id === claim.patientId);
+  } catch { /* ignore */ }
+
+  let coverage: any;
+  try {
+    coverage = getCoveragesForClient(claim.patientId).find((c: any) => c.payerId === claim.payer?.id || c.isPrimary) || (claim as any).coverage;
+  } catch { /* ignore */ }
+
+  const payerRecord = getPayer(claim.payer?.id);
+  const renderingProviderCred = getProviderCredential((claim as any).renderingProviderId || claim.renderingProviderNpi);
+  const orgBilling = getOrgBilling();
+
+  let appointment: any;
+  try {
+    if (claim.appointmentId) {
+      appointment = appointmentService.getAppointmentById(claim.appointmentId);
+    }
+  } catch { /* ignore */ }
+
+  const authorization = {
+    status: (claim as any).authStatus || ((claim as any).priorAuthNumber ? "approved" : "required"),
+    authorizationNumber: (claim as any).priorAuthNumber || (claim as any).authorizationNumber,
+  };
+
+  // Compute derived fields
+  const existingClaims = getStoredClaims();
+  const isDuplicate = existingClaims.some(
+    (c) =>
+      c.id !== claim.id &&
+      c.patientId === claim.patientId &&
+      c.serviceDate === claim.serviceDate &&
+      (c.status as string) !== "Void" &&
+      (c as any).frequencyCode !== "8"
+  );
+
+  const isFutureDos = Boolean(
+    claim.serviceDate &&
+    new Date(claim.serviceDate).getTime() > Date.now()
+  );
+
+  const timelyLimit = Number(payerRecord?.timelyFilingDays || claimDefaultsStore.get().timelyFilingDays || 90);
+  let daysPastFiling = 0;
+  if (claim.serviceDate) {
+    const dosMs = new Date(claim.serviceDate).getTime();
+    const elapsedDays = Math.floor((Date.now() - dosMs) / (1000 * 60 * 60 * 24));
+    if (elapsedDays > timelyLimit) {
+      daysPastFiling = elapsedDays - timelyLimit;
+    }
+  }
+
+  const npiToCheck = claim.renderingProviderNpi || renderingProviderCred?.npi;
+  const isNpiValid = npiToCheck ? isValidNpiLuhn(npiToCheck) : false;
+  const isGroupNpiValid = orgBilling?.groupNpi ? isValidNpiLuhn(orgBilling.groupNpi) : false;
+
+  const evalContext = {
+    claim,
+    patient,
+    coverage,
+    payer: payerRecord,
+    renderingProvider: renderingProviderCred,
+    appointment,
+    authorization,
+    organization: orgBilling,
+    derived: {
+      _isDuplicateClaim: isDuplicate,
+      _isFutureDos: isFutureDos,
+      _daysPastFiling: daysPastFiling,
+      _npiValid: isNpiValid,
+      _groupNpiValid: isGroupNpiValid,
+    },
+    local,
+  };
+
   for (const r of rules.filter((x) => x.enabled)) {
+    // Condition block evaluation
+    if ((r.groups && r.groups.length > 0) || (r.conditions && r.conditions.length > 0)) {
+      if (evalRule(r, evalContext, lines)) {
+        add(r, "Scrub rule validation failed");
+      }
+      continue;
+    }
+
+    // Legacy fallback
     switch (r.check) {
       case "icd_required":
         if (!claim.diagnosisCodes || claim.diagnosisCodes.length === 0) add(r, "At least one diagnosis code is required");

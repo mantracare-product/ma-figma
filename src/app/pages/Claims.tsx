@@ -42,6 +42,7 @@ import CreateClaimModal from "../components/claims/CreateClaimModal";
 import { stripSampleSuffix } from "../../lib/sampleSuffixMigration";
 import PayersView from "../components/claims/PayersView";
 import ClaimDefaultsDrawer from "../components/claims/ClaimDefaultsDrawer";
+import ScrubRulesDrawer from "../components/claims/ScrubRulesDrawer";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -622,6 +623,12 @@ export default function Claims() {
         <ClaimDefaultsDrawer
           isOpen={isClaimDefaultsOpen}
           onClose={() => setIsClaimDefaultsOpen(false)}
+        />
+
+        {/* Scrub Rules Drawer */}
+        <ScrubRulesDrawer
+          isOpen={isScrubRulesOpen}
+          onClose={() => setIsScrubRulesOpen(false)}
         />
 
         {/* Claim Detail Drawer (Standard Architecture: Draggable Sections + Activity Feed + Documents) */}

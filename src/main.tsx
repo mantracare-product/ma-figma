@@ -14,6 +14,7 @@
   import { ensureRound4Defaults } from "./lib/rcmDefaultsR4";
 import { migrateFeeSchedulesToServicePrices } from "./lib/feeScheduleMigration";
 import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
+import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -40,6 +41,9 @@ import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
 
   // Round 5: payers 3-function enrollment & type preset (once, logged).
   try { if (!testRunActive()) migratePayersToThreeFunctionEnrollment(); } catch { /* ignore */ }
+
+  // Round 5: scrub rules condition blocks & extra rules (once, logged).
+  try { if (!testRunActive()) migrateScrubRulesToConditionBlocks(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

@@ -62,7 +62,7 @@ const SERVICES = [
   { name: "Physical therapy", cpt: "97110", desc: "Therapeutic exercise, each 15 minutes", charge: 140, dur: 45, icd: ["M54.5", "Low back pain"] },
   { name: "Comprehensive eye exam", cpt: "92004", desc: "Comprehensive eye exam, new patient", charge: 220, dur: 40, icd: ["H52.4", "Presbyopia"] },
 ];
-const PROVIDERS = [{ name: "Dr. Priya Sharma", npi: "1487920194" }, { name: "Dr. Marcus Reed", npi: "1316987452" }, { name: "Dr. Elena Park", npi: "1578234096" }];
+const PROVIDERS = [{ name: "Dr. Priya Sharma", npi: "1487920195" }, { name: "Dr. Marcus Reed", npi: "1316987456" }, { name: "Dr. Elena Park", npi: "1578234092" }];
 const STAFF = ["Maya Collins", "Jordan Lee", "Sam Rivera"];
 
 /** Eligibility / authorization state of an appointment's coverage; names are the stages of "Coverage & authorization". */

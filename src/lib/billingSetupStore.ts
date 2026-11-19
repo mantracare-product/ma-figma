@@ -89,16 +89,57 @@ export interface ClaimDefaults {
 
 export type ScrubSeverity = "error" | "warning";
 
+export type ScrubRecordScope =
+  | "claim"
+  | "claim_line"
+  | "patient"
+  | "coverage"
+  | "payer"
+  | "rendering_provider"
+  | "appointment"
+  | "authorization"
+  | "organization";
+
+export type ScrubLineQuantifier = "any" | "every";
+
+export type ScrubOperator =
+  | "is_empty"
+  | "is_not_empty"
+  | "is"
+  | "is_not"
+  | "is_one_of"
+  | "greater_than"
+  | "less_than"
+  | "contains";
+
+export interface ScrubCondition {
+  id: string;
+  record: ScrubRecordScope;
+  lineQuantifier?: ScrubLineQuantifier;
+  field: string;
+  operator: ScrubOperator;
+  value?: any;
+}
+
+export interface ScrubConditionGroup {
+  id: string;
+  matchType: "ALL" | "ANY";
+  conditions: ScrubCondition[];
+}
+
 export interface ScrubRule {
   id: string;
   name: string;
-  /** What is checked; interpreted by the scrubber (S4.5): required_field | line_modifier | icd_required | custom */
-  check: "required_field" | "line_modifier" | "icd_required" | "billing_entity" | "rendering_npi";
-  /** For required_field: claim property name. For line_modifier: CPT the modifier is required for. */
-  target?: string;
-  severity: ScrubSeverity;
   enabled: boolean;
+  severity: ScrubSeverity;
   message?: string;
+  matchType?: "ALL" | "ANY";
+  groups?: ScrubConditionGroup[];
+  conditions?: ScrubCondition[];
+  /** Legacy: what was checked (S4.5): required_field | line_modifier | icd_required | custom */
+  check?: "required_field" | "line_modifier" | "icd_required" | "billing_entity" | "rendering_npi" | "custom";
+  /** Legacy: For required_field: claim property name. For line_modifier: CPT the modifier is required for. */
+  target?: string;
   sample?: boolean;
 }
 
@@ -254,11 +295,11 @@ export const SAMPLE_SCRUB_RULES: ScrubRule[] = [
   { id: "scrub-sample-auth", name: "Prior auth number present", check: "required_field", target: "priorAuthNumber", severity: "warning", enabled: false, message: "Prior authorization number is empty", sample: true },
 ];
 
-/** Three sample providers keyed by the seeded team member ids. */
+/** Three sample providers keyed by the seeded team member ids (valid 10-digit Luhn NPIs). */
 export const SAMPLE_PROVIDER_CREDENTIALS: ProviderCredential[] = [
   { id: "1", name: "Sample provider 1", npi: "1111111112", taxonomy: "207W00000X", licenseNumber: "LIC-0001", licenseState: "CA", sample: true },
-  { id: "2", name: "Sample provider 2", npi: "2222222226", taxonomy: "207WX0009X", licenseNumber: "LIC-0002", licenseState: "CA", sample: true },
-  { id: "3", name: "Sample provider 3", npi: "3333333330", taxonomy: "152W00000X", licenseNumber: "LIC-0003", licenseState: "CA", sample: true },
+  { id: "2", name: "Sample provider 2", npi: "2222222228", taxonomy: "207WX0009X", licenseNumber: "LIC-0002", licenseState: "CA", sample: true },
+  { id: "3", name: "Sample provider 3", npi: "3333333334", taxonomy: "152W00000X", licenseNumber: "LIC-0003", licenseState: "CA", sample: true },
 ];
 
 /**

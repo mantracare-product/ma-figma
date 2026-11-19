@@ -217,7 +217,7 @@ Checklist:
 - [x] Part C: Payers: table + detail drawer (done, commit "R5.C")
 - [x] Part D: Service drawer link (done, commit "R5.D")
 - [x] Part E: Claim defaults and claim fields (done, commit "R5-fix.3")
-- [ ] Part F: Scrub rules as condition blocks
+- [x] Part F: Scrub rules as condition blocks (done, commit "R5-fix.4")
 - [ ] Part G: Provider credentials move to the Team member drawer
 - [ ] Part H: Notifications page and the voice switch
 - [ ] Part I: Client insurance Add row bug
@@ -278,4 +278,15 @@ Checklist:
 - Added actions "Resubmit as replacement" and "Void claim" to claim drawer and `claimActions.ts`.
 - Migration `ensureClaimBillingDefaults` (`mantra_claim_defaults_migrated_v1`) sets frequencyCode='1', acceptAssignment=true, signatureOnFile=true, releaseOfInformation=true for existing claims without them, logged to `mantra_migration_log_v1`.
 - Tests: `claimDefaults.test.ts` (4/4 passed), `claimActions.test.ts` (11/11 passed).
+- Gate: typecheck OK, build OK, vitest OK.
+
+### R5-fix.4: Scrub rules drawer as condition blocks (done, commit "R5-fix.4")
+- Settings gear in Claims top bar opens "Scrub rules" as a right-side drawer (`ScrubRulesDrawer.tsx`), requiring billingSetup permission to edit (read-only otherwise).
+- Scrub rules drawer list view: rule name, On/Off toggle switch, severity chip (`error` / `warning`), conditions summary preview, Edit and Remove actions, "Add rule" button.
+- Rule editor within drawer: name, On/Off toggle switch, WHEN condition block builder (ALL/ANY logic joiner, groups, conditions; record selector: Claim, Claim line, Patient, Coverage, Payer, Rendering provider, Appointment, Authorization, Organization; quantifier for lines: any line / every line; registry + derived fields dropdown; operators: is empty, is not empty, is, is not, is one of, greater than, less than, contains; typed / fixed options value input), THEN block (severity: Error or Warning, failure message input).
+- Scrubber engine (`scrubClaim` in `claimActions.ts`) evaluates condition blocks dynamically against claim context and derived fields (`_isDuplicateClaim`, `_isFutureDos`, `_daysPastFiling`, `_npiValid`, `_groupNpiValid`).
+- Error moves claim to Scrub failed + task, cannot submit; Warning flags claim, submit allowed.
+- Valid 10-digit CMS Luhn checksum validator (`isValidNpiLuhn`). Demo provider NPIs updated to valid Luhn check numbers.
+- Migration `migrateScrubRulesToConditionBlocks` (`src/lib/scrubMigration.ts`, flag `mantra_scrub_rules_migrated_v1`): migrates 5 legacy rules to condition blocks keeping On and severity, turns seeded prior-auth rule to Error and On, seeds 5 extra rules (member ID missing, duplicate claim, date of service in the future, filing deadline passed, NPI invalid), logged to `mantra_migration_log_v1`.
+- Tests: `scrubRules.test.ts` (3/3 passed), `claimActions.test.ts` (11/11 passed).
 - Gate: typecheck OK, build OK, vitest OK.
