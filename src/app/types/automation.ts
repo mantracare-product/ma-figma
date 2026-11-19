@@ -19,7 +19,9 @@ export type EventTriggerType =
   | "field_update"
   | "claim"
   | "coverage"
+  | "credentialing"
   | "era"
+  | "ar"
   | "schedule"
   | "task";
 
@@ -185,6 +187,15 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     iconKey: "shield",
     events: [
       { event: "coverage.updated", label: "Coverage updated", description: "A client coverage is added or changed" },
+    ],
+  },
+  {
+    type: "credentialing",
+    label: "Credentialing",
+    description: "Trigger when provider or organization credentialing status changes",
+    iconKey: "award",
+    events: [
+      { event: "credentialing.updated", label: "Credentialing updated", description: "Payer credentialing status, IDs, or dates change" },
     ],
   },
   {

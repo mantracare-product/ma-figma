@@ -1,4 +1,4 @@
-import { getClaimWorkflows, isPreClaimWorkflow } from "../../../lib/claimWorkflows";
+import { getClaimWorkflows, isPreClaimWorkflow, isPreClaimClaim } from "../../../lib/claimWorkflows";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -259,9 +259,12 @@ export default function ClaimDetailDrawer({
     return workflows.find((p) => p.id === (liveClaim || claim)?.processId) || workflows[0];
   }, [liveClaim, claim]);
 
-  // R4.4: a record in an Eligibility / Prior auth workflow is not a claim yet: claim-only parts (CPT & diagnoses, scrub,
+  // R6.A: a record in an Eligibility / Prior auth phase is not a claim yet: claim-only parts (CPT & diagnoses, scrub,
   // denial, appeal, filing deadline, payments) are hidden there; the Eligibility and Authorization sections show.
-  const preClaim = isPreClaimWorkflow(insuranceProcess);
+  const preClaim = useMemo(() => {
+    if (!liveClaim) return isPreClaimWorkflow(insuranceProcess);
+    return isPreClaimClaim(liveClaim);
+  }, [liveClaim, insuranceProcess]);
   useEffect(() => { if (preClaim && activeTab === "billing") setActiveTab("overview"); }, [preClaim, activeTab]);
   const CLAIM_ONLY_FIELDS = useMemo(() => new Set(["rcm_timely_filing", "rcm_denial_category", "rcm_denial_summary", "rcm_appeal_deadline", "rcm_appeal_draft", "rcm_scrub_issues"]), []);
 

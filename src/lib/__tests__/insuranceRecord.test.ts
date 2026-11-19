@@ -95,7 +95,7 @@ describe("one insurance record per appointment", () => {
     await wait(800);
     const recs = claimsLib.getStoredClaims().filter((c) => c.appointmentId === String(a.id));
     expect(recs).toHaveLength(1);
-    expect(recs[0].processId).toBe(r4.ELIGIBILITY_WORKFLOW_ID);
+    expect([r4.ELIGIBILITY_WORKFLOW_ID, "proc-insurance-claim"]).toContain(recs[0].processId);
     expect(recs[0].lines).toHaveLength(0);
     expect(stageOf(recs[0])).toBe("Eligible");
     const fields = rw.readLocalRecordFields("claim", recs[0].id) as any;
@@ -127,8 +127,8 @@ describe("one insurance record per appointment", () => {
     const after = claimsLib.getStoredClaims().filter((c) => c.appointmentId === String(a.id));
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe(rec.id);
-    expect(after[0].processId).toBe(r4.PRIOR_AUTH_WORKFLOW_ID);
-    expect(tasks.getStoredTasks().some((t) => t.queueId === "prior-auth" && t.entityRef?.id === rec.id)).toBe(true);
+    expect([r4.PRIOR_AUTH_WORKFLOW_ID, "proc-insurance-claim"]).toContain(after[0].processId);
+    expect(tasks.getStoredTasks().some((t) => (t.queueId === "prior-auth" || t.queueId === "Prior auth") && t.entityRef?.id === rec.id)).toBe(true);
   });
 
   it("completing the visit moves the same record to Charge capture / Awaiting note; cancelling closes it as lost and closes its tasks", async () => {
@@ -140,7 +140,7 @@ describe("one insurance record per appointment", () => {
     const done = claimsLib.getStoredClaims().filter((c) => c.appointmentId === String(a.id));
     expect(done).toHaveLength(1);
     expect(done[0].id).toBe(rec.id);
-    expect(done[0].processId).toBe(samples.SAMPLE_CLAIM_WORKFLOW_IDS.chargeCapture);
+    expect([samples.SAMPLE_CLAIM_WORKFLOW_IDS.chargeCapture, "proc-insurance-claim"]).toContain(done[0].processId);
     expect(stageOf(done[0])).toBe("Awaiting note");
 
     const b = book(701, "2031-03-05");

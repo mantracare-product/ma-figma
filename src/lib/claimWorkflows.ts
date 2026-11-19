@@ -5,7 +5,7 @@
  *
  * Claim.status is DERIVED from the stage's systemCategory when it has one, otherwise "Unmapped".
  */
-import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, type Process, type Stage } from "./useProcessStore";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, type Process, type Stage, type StagePhase } from "./useProcessStore";
 import type { Claim, ClaimStatus } from "./claimsStore";
 
 export function getClaimWorkflows(): Process[] {
@@ -64,12 +64,26 @@ export function assignClaimsToWorkflows(claims: Claim[], workflows: Process[]): 
   return { claims: next, changed };
 }
 
+/** Get the stage phase, falling back to workflowType or "claim" if unset. */
+export function getStagePhase(stage?: Stage | null, workflow?: Process | null): StagePhase {
+  if (stage?.phase) return stage.phase;
+  if (workflow?.workflowType === "eligibility") return "eligibility";
+  if (workflow?.workflowType === "prior_auth") return "prior_auth";
+  return "claim";
+}
+
 /** True for workflows that hold an insurance record before any claim exists (decided by workflow TYPE, never by name). */
 export const isPreClaimWorkflow = (p?: { workflowType?: string } | null): boolean => p?.workflowType === "eligibility" || p?.workflowType === "prior_auth";
-/** True when a claim record currently sits in a pre-claim (eligibility / prior auth) workflow. */
-export const isPreClaimClaim = (c: { processId?: string }): boolean => isPreClaimWorkflow(getClaimWorkflow(c.processId));
 
-/** Claims proper: records in an Eligibility / Prior auth workflow are not claims yet and are left out of claim counts, A/R, denial rate and first-pass. */
-export const claimsOnly = <T extends { processId?: string }>(claims: T[]): T[] => claims.filter((c) => !isPreClaimClaim(c));
+/** True when a claim record currently sits in an eligibility / prior auth phase or pre-claim workflow. */
+export function isPreClaimClaim(c: { processId?: string; currentStageId?: string; statusLabel?: string }): boolean {
+  const wf = getClaimWorkflow(c.processId);
+  const stage = findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel);
+  const phase = getStagePhase(stage, wf);
+  return phase === "eligibility" || phase === "prior_auth";
+}
+
+/** Claims proper: records in an Eligibility / Prior auth phase are not claims yet and are left out of claim counts, A/R, denial rate and first-pass. */
+export const claimsOnly = <T extends { processId?: string; currentStageId?: string; statusLabel?: string }>(claims: T[]): T[] => claims.filter((c) => !isPreClaimClaim(c));
 /** The insurance records that are still before the claim stage. */
-export const preClaimRecords = <T extends { processId?: string }>(claims: T[]): T[] => claims.filter((c) => isPreClaimClaim(c));
+export const preClaimRecords = <T extends { processId?: string; currentStageId?: string; statusLabel?: string }>(claims: T[]): T[] => claims.filter((c) => isPreClaimClaim(c));

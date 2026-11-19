@@ -4,7 +4,7 @@
  * when it came from sample/mock sources so reports can show the banner.
  */
 import { getStoredClaims, type Claim } from "./claimsStore";
-import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows, preClaimRecords } from "./claimWorkflows";
+import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows, getStagePhase, preClaimRecords } from "./claimWorkflows";
 import { readLocalRecordFields } from "./recordWriter";
 import { getProcessInstances } from "./processLogsStore";
 import type { FieldMetadata } from "./reportEngine";
@@ -63,7 +63,12 @@ export function buildRcmReportRows(source: RcmReportSource, now: number = Date.n
         });
     case "eligibility":
       return [
-        ...preClaimRecords(getStoredClaims()).filter((c) => getClaimWorkflow(c.processId)?.workflowType === "eligibility").map((c) => {
+        ...getStoredClaims().filter((c) => {
+          const wf = getClaimWorkflow(c.processId);
+          const stage = findStage(wf, c.currentStageId) || findStage(wf, c.statusLabel);
+          const phase = getStagePhase(stage, wf);
+          return phase === "eligibility" || wf?.workflowType === "eligibility";
+        }).map((c) => {
           const f: any = readLocalRecordFields("claim", c.id) || {};
           return { id: c.id, client: c.patientName, process: getClaimWorkflow(c.processId)?.name || "", stage: c.statusLabel || "", status: f.elig_status || "", payer: f.elig_payer || "", copay: Number(f.elig_copay) || 0, checkedAt: f.elig_checked_at || "", date: ymd(f.elig_checked_at || c.createdAt) } as Record<string, any>;
         }).filter((r) => r.status),

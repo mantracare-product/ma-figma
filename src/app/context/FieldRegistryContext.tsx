@@ -3230,6 +3230,13 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         result.push(f);
       }
     }
+    // 3. Any additional system overrides stored for this module (e.g. cross-module seeds like country in process)
+    for (const ov of systemOverrides) {
+      if (!seen.has(ov.key)) {
+        seen.add(ov.key);
+        result.push(ov);
+      }
+    }
     return result;
   };
 
@@ -3274,29 +3281,81 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
       if (!targetField) {
         // If it's a system field, create an override in custom fields so changes persist
         const allSys = getSystemFields(norm);
-        const foundSys = allSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+        let foundSys = allSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+        let originMod: Exclude<FieldModule, "deal"> | null = null;
+        if (!foundSys) {
+          // Check other modules for the system seed if this field was shared (e.g. client field in process drawer)
+          for (const otherMod of ALL_MODULES) {
+            const otherSys = getSystemFields(otherMod);
+            const match = otherSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+            if (match) {
+              foundSys = { ...match, module: norm };
+              originMod = normalizeModule(otherMod);
+              break;
+            }
+          }
+        }
+
         if (foundSys) {
           const overridden: FieldDefinition = {
             ...foundSys,
             ...normalizedPatch,
             id: foundSys.id,
+            module: norm,
             source: "system",
           };
-          const nextState = {
+          const nextState: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
             ...prev,
             [norm]: [...currentList, overridden],
           };
+          if (originMod && originMod !== norm) {
+            const origList = prev[originMod] || [];
+            const origTarget = origList.find((f) => f.id === id || (patch.key && f.key === patch.key));
+            const origOverridden: FieldDefinition = {
+              ...(origTarget || foundSys),
+              ...normalizedPatch,
+              id: (origTarget || foundSys).id,
+              module: originMod,
+              source: "system",
+            };
+            nextState[originMod] = origTarget
+              ? origList.map((f) => (f.id === id || (patch.key && f.key === patch.key) ? origOverridden : f))
+              : [...origList, origOverridden];
+          }
           try {
             localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
             sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
-            window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+            window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: { sender: instanceId.current, ...nextState } }));
           } catch {}
           return nextState;
         }
-        return {
+
+        // Check if defined in any other module as custom field
+        const allKnown = ALL_MODULES.flatMap((m) => prev[m] || []);
+        const matchCustom = allKnown.find((f) => f.id === id || (patch.key && f.key === patch.key));
+        const newField: FieldDefinition = matchCustom
+          ? { ...matchCustom, ...normalizedPatch, module: norm }
+          : {
+              id: id || Date.now(),
+              key: patch.key || `field_${Date.now()}`,
+              label: patch.label || patch.key || "Field",
+              module: norm,
+              source: "custom",
+              inputType: patch.inputType || "text",
+              createdAt: Date.now(),
+              ...normalizedPatch,
+            };
+
+        const nextState = {
           ...prev,
-          [norm]: currentList.map((f) => (f.id === id ? { ...f, ...normalizedPatch } : f)),
+          [norm]: [...currentList, newField],
         };
+        try {
+          localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+          sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+          window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+        } catch {}
+        return nextState;
       }
 
       // Track option renames for propagation
@@ -3623,6 +3682,12 @@ export function useFieldRegistry(): FieldRegistryContextValue {
             result.push(f);
           }
         }
+        for (const ov of systemOverrides) {
+          if (!seen.has(ov.key)) {
+            seen.add(ov.key);
+            result.push(ov);
+          }
+        }
         return result;
       },
       getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) => {
@@ -3650,10 +3715,49 @@ export function useFieldRegistry(): FieldRegistryContextValue {
             result.push(f);
           }
         }
+        for (const ov of systemOverrides) {
+          if (!seen.has(ov.key)) {
+            seen.add(ov.key);
+            result.push(ov);
+          }
+        }
         return result.filter((f) => isFieldMatchingOrg(f, org, processId));
       },
       addCustomField: () => ({ id: Date.now(), key: "", label: "", module: "client", source: "custom", inputType: "text", createdAt: Date.now() }),
-      updateCustomField: () => {},
+      updateCustomField: (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => {
+        const norm = normMod(module);
+        const stored = loadCustomFieldsFromStorage();
+        const currentList = stored[norm] || [];
+        const targetField = currentList.find((f) => f.id === id || (patch.key && f.key === patch.key));
+        let nextList: FieldDefinition[];
+        if (targetField) {
+          nextList = currentList.map((f) => (f.id === id || (patch.key && f.key === patch.key) ? { ...f, ...patch } : f));
+        } else {
+          const allSys = getSysFields(norm);
+          let foundSys = allSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+          if (!foundSys) {
+            for (const otherMod of ALL_MODULES) {
+              const otherSys = getSysFields(otherMod);
+              const match = otherSys.find((s) => s.id === id || (patch.key && s.key === patch.key));
+              if (match) {
+                foundSys = { ...match, module: norm };
+                break;
+              }
+            }
+          }
+          if (foundSys) {
+            nextList = [...currentList, { ...foundSys, ...patch, id: foundSys.id, module: norm, source: "system" }];
+          } else {
+            nextList = [...currentList, { id: id || Date.now(), key: patch.key || `field_${Date.now()}`, label: patch.label || patch.key || "Field", module: norm, source: "custom", inputType: patch.inputType || "text", createdAt: Date.now(), ...patch }];
+          }
+        }
+        const nextState = { ...stored, [norm]: nextList };
+        try {
+          localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
+          sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
+          window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
+        } catch {}
+      },
       deleteCustomField: () => {},
       getSystemSections: getSysSections,
       getCustomSections: getCustSections,

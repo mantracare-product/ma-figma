@@ -108,6 +108,8 @@ export interface StagePortalReceptionSettings {
   images?: Array<{ id: string; title: string; url: string }>;
 }
 
+export type StagePhase = "eligibility" | "prior_auth" | "charge_capture" | "claim" | "none";
+
 export interface Stage {
   id: string;
   name: string;
@@ -117,6 +119,7 @@ export interface Stage {
   systemCategory?: string; // e.g. "booked", "completed", "draft", "paid", "verified"
   isSystemCategoryRequired?: boolean; // Required system categories cannot be deleted
   isPredefined?: boolean; // Predefined stages cannot be deleted
+  phase?: StagePhase;
   aiSettings?: AISettings;
   stageType?: string;
   selectedInboundNumbers?: string[];
@@ -785,9 +788,9 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
     ],
   },
   claim: {
-    id: "process-claim-default",
-    name: "Claims Management",
-    description: "Submission, adjudication, and reimbursement lifecycle",
+    id: "proc-insurance-claim",
+    name: "Insurance claim",
+    description: "Complete single pipeline for insurance claims from eligibility and authorization to charge capture and payer acceptance",
     assignedToUserId: 1,
     entityType: "claim",
     aiSettings: {
@@ -798,11 +801,35 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       style: "Balanced",
     },
     stages: [
-      { id: "clm-1", name: "Draft", description: "Claim prepared, pending submission", status: "active", color: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "clm-2", name: "Submitted", description: "Sent to clearinghouse / payer", status: "active", color: "#3B82F6", systemCategory: "submitted", isSystemCategoryRequired: true, stagePosition: "intermediate" },
-      { id: "clm-3", name: "In Review", description: "Under adjudication by payer", status: "active", color: "#8B5CF6", systemCategory: "in_review", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "clm-4", name: "Paid", description: "Claim paid and reconciled", status: "active", color: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "clm-5", name: "Denied", description: "Claim denied or rejected by payer", status: "active", color: "#EF4444", systemCategory: "denied", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "proc-insurance-claim-run-eligibility", name: "Run eligibility", description: "", status: "active", color: "#64748B", phase: "eligibility", systemCategory: "initial", stageCategory: "in_progress", isInitial: true, stagePosition: "initial" },
+      { id: "proc-insurance-claim-needs-fix", name: "Needs fix", description: "", status: "active", color: "#F59E0B", phase: "eligibility", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-credentialing-issue", name: "Credentialing issue", description: "", status: "active", color: "#E11D48", phase: "eligibility", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-inconclusive", name: "Inconclusive", description: "", status: "active", color: "#EAB308", phase: "eligibility", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate", enableCalling: true },
+      { id: "proc-insurance-claim-pending-review", name: "Pending review", description: "", status: "active", color: "#8B5CF6", phase: "eligibility", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-eligible", name: "Eligible", description: "", status: "active", color: "#10B981", phase: "eligibility", systemCategory: "completed", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-insurance-claim-auth-required", name: "Auth required", description: "", status: "active", color: "#EC4899", phase: "prior_auth", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-auth-submitted", name: "Auth submitted", description: "", status: "active", color: "#06B6D4", phase: "prior_auth", systemCategory: "submitted", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-auth-approved", name: "Auth approved", description: "", status: "active", color: "#10B981", phase: "prior_auth", systemCategory: "completed", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-auth-denied", name: "Auth denied", description: "", status: "active", color: "#B91C1C", phase: "prior_auth", systemCategory: "denied", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-auth-expired", name: "Auth expired", description: "", status: "active", color: "#DC2626", phase: "prior_auth", systemCategory: "denied", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-cleared-for-visit", name: "Cleared for visit", description: "", status: "active", color: "#059669", phase: "prior_auth", systemCategory: "completed", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-insurance-claim-awaiting-note", name: "Awaiting note", description: "", status: "active", color: "#64748B", phase: "charge_capture", systemCategory: "draft", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-coding", name: "Coding", description: "", status: "active", color: "#3B82F6", phase: "charge_capture", systemCategory: "draft", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-ready-to-bill", name: "Ready to bill", description: "", status: "active", color: "#10B981", phase: "charge_capture", systemCategory: "ready", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-insurance-claim-draft", name: "Draft", description: "", status: "active", color: "#64748B", phase: "claim", systemCategory: "draft", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-scrub-failed", name: "Scrub failed", description: "", status: "active", color: "#F59E0B", phase: "claim", systemCategory: "scrub_failed", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-ready-to-submit", name: "Ready to submit", description: "", status: "active", color: "#06B6D4", phase: "claim", systemCategory: "ready", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-submitted", name: "Submitted", description: "", status: "active", color: "#3B82F6", phase: "claim", systemCategory: "submitted", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-rejected", name: "Rejected", description: "", status: "active", color: "#EF4444", phase: "claim", systemCategory: "rejected", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-insurance-claim-accepted-by-payer", name: "Accepted by payer", description: "", status: "active", color: "#10B981", phase: "claim", systemCategory: "accepted", stageCategory: "success", stagePosition: "final", isFinal: true, isFinalStage: true },
+
+      { id: "proc-insurance-claim-inactive-coverage", name: "Inactive coverage", description: "", status: "active", color: "#94A3B8", phase: "none", systemCategory: "lost", stageCategory: "lost", stagePosition: "final", isFinal: true, isFinalStage: true },
+      { id: "proc-insurance-claim-self-pay", name: "Self-pay", description: "", status: "active", color: "#64748B", phase: "none", systemCategory: "lost", stageCategory: "lost", stagePosition: "final", isFinal: true, isFinalStage: true },
+      { id: "proc-insurance-claim-visit-cancelled", name: "Visit cancelled", description: "", status: "active", color: "#475569", phase: "none", systemCategory: "lost", stageCategory: "lost", stagePosition: "final", isFinal: true, isFinalStage: true },
+      { id: "proc-insurance-claim-closed---not-billable", name: "Closed - not billable", description: "", status: "active", color: "#334155", phase: "none", systemCategory: "lost", stageCategory: "lost", stagePosition: "final", isFinal: true, isFinalStage: true },
     ],
   },
   task: {

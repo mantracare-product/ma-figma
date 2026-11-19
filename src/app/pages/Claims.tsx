@@ -126,11 +126,9 @@ export default function Claims() {
       if (workflowPicked.current || claims.length === 0) return;
       workflowPicked.current = true;
     }
-    // default = the workflow with the most records; Eligibility / Prior auth (decided by workflow type) only when no claim workflow has any
-    const claimTypes = insuranceProcesses.filter((w) => !isPreClaimWorkflow(w) && (workflowCounts[w.id] || 0) > 0);
-    const pool = claimTypes.length > 0 ? claimTypes : insuranceProcesses;
-    const best = [...pool].sort((a, b) => (workflowCounts[b.id] || 0) - (workflowCounts[a.id] || 0))[0];
-    setSelectedProcessFilter(best.id);
+    // default = the pipeline with the most records
+    const best = [...insuranceProcesses].sort((a, b) => (workflowCounts[b.id] || 0) - (workflowCounts[a.id] || 0))[0];
+    if (best) setSelectedProcessFilter(best.id);
   }, [insuranceProcesses, workflowCounts, selectedProcessFilter]);
 
   const insuranceProcess = useMemo(() => {

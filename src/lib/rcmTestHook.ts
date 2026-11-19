@@ -75,6 +75,7 @@ import * as sampleSuffix from "./sampleSuffixMigration";
 import * as stageCallMigration from "./stageCallMigration";
 import * as paymentMode from "./paymentMode";
 import * as rcmDefaultsR4 from "./rcmDefaultsR4";
+import * as rcmPipelineR6 from "./rcmPipelineR6";
 import * as moveToWorkflow from "./moveToWorkflowAction";
 import * as ruleContextFields from "./ruleContextFields";
 import * as rcmCatalog from "./rcmCatalog";

@@ -17,6 +17,7 @@ import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
 import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
 import { migrateProviderCredentialsToTeamMember } from "./lib/providerCredentialMigration";
 import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
+import { migrateToSingleClaimPipeline } from "./lib/rcmPipelineR6";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -52,6 +53,9 @@ import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
 
   // Round 5: global voice switch migrated to Inconclusive stage call setting (once, logged).
   try { if (!testRunActive()) migrateStageCallSwitch(); } catch { /* ignore */ }
+
+  // Round 6: single claim pipeline migration (once, logged).
+  try { if (!testRunActive()) migrateToSingleClaimPipeline(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

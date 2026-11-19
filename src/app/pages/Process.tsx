@@ -78,12 +78,15 @@ export interface StageChannelSource {
   source: string;
 }
 
+export type StagePhase = "eligibility" | "prior_auth" | "charge_capture" | "claim" | "none";
+
 export interface Stage {
   id: string;
   name: string;
   description: string;
   status: string;
   color?: string;
+  phase?: StagePhase;
   systemCategory?: string;
   isSystemCategoryRequired?: boolean;
   isPredefined?: boolean;
@@ -2592,6 +2595,7 @@ export default function Process() {
     systemCategory?: string;
     isSystemCategoryRequired?: boolean;
     isFinalStage?: boolean;
+    phase?: StagePhase;
     nextProcessTransitions?: ProcessTransitionTarget[];
   } | null>(null);
   const [showTransitionModal, setShowTransitionModal] = useState(false);
@@ -3046,6 +3050,7 @@ export default function Process() {
       systemCategory: stage.systemCategory,
       isSystemCategoryRequired: stage.isSystemCategoryRequired,
       isFinalStage: stage.isFinalStage || stage.isFinal || false,
+      phase: stage.phase,
       nextProcessTransitions: stage.nextProcessTransitions ? [...stage.nextProcessTransitions] : [],
     });
     setShowEditStageModal(true);
@@ -3065,6 +3070,7 @@ export default function Process() {
                   ...s,
                   name: editingStage.name,
                   color: editingStage.color,
+                  phase: editingStage.phase,
                   isFinalStage: editingStage.isFinalStage,
                   isFinal: editingStage.isFinalStage,
                   stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
@@ -6136,6 +6142,29 @@ export default function Process() {
                 placeholder="Enter stage name"
               />
             </div>
+
+            {selectedProcessData?.entityType === "claim" && (
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Stage Phase
+                </label>
+                <select
+                  value={editingStage?.phase || "claim"}
+                  onChange={(e) => setEditingStage(editingStage ? { ...editingStage, phase: e.target.value as any } : null)}
+                  className="w-full px-4 py-2 bg-white border border-border rounded-lg text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  <option value="eligibility">Eligibility</option>
+                  <option value="prior_auth">Prior auth</option>
+                  <option value="charge_capture">Charge capture</option>
+                  <option value="claim">Claim</option>
+                  <option value="none">None (Closed / Other)</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Determines whether records in this stage count as pre-claim (Eligibility / Prior auth) or active claims.
+                </p>
+              </div>
+            )}
 
 
 

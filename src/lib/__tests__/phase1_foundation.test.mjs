@@ -1,6 +1,7 @@
 // Phase 1 Foundation Unit Tests
 // Tests singleton guard, migration, and required-category protection
 import assert from "node:assert";
+import { describe, it } from "vitest";
 
 // Provide browser mock globals
 const storage = {};
@@ -18,11 +19,11 @@ globalThis.sessionStorage = {
   clear: () => { Object.keys(sessionStore).forEach((k) => delete sessionStore[k]); },
 };
 globalThis.window = {
-  dispatchEvent: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
+  dispatchEvent: () => { },
+  addEventListener: () => { },
+  removeEventListener: () => { },
 };
-globalThis.Event = class {};
+globalThis.Event = class { };
 
 async function runTests() {
   console.log("Starting Phase 1 Verification Tests...\n");
@@ -49,7 +50,7 @@ async function runTests() {
   console.log("Test 1: Default Process Seeding & Entity Types");
   const initial = getStoredProcesses();
   assert(Array.isArray(initial), "Processes must be an array");
-  
+
   const entities = ["client", "appointment", "invoice", "insurance", "claim"];
   for (const et of entities) {
     const found = initial.some((p) => (p.entityType || "client") === et);
@@ -59,12 +60,12 @@ async function runTests() {
 
   // TEST 2: Singleton Enforcement
   console.log("Test 2: Singleton Guard (no duplication or deletion of non-client processes)");
-  
+
   // Attempt 2a: Try deleting non-client processes by saving only client processes
   const onlyClients = initial.filter((p) => p.entityType === "client");
   saveStoredProcesses(onlyClients);
   const afterDeleteAttempt = getStoredProcesses();
-  
+
   assert(
     afterDeleteAttempt.some((p) => p.entityType === "appointment"),
     "Appointment singleton must be auto-preserved when deletion is attempted"
@@ -96,7 +97,7 @@ async function runTests() {
 
   // TEST 3: Required System Category Protection
   console.log("Test 3: Required System Category Protection");
-  
+
   // Appointment required: booked, rescheduled, completed, cancelled
   assert.strictEqual(isRequiredSystemCategory("appointment", "booked"), true);
   assert.strictEqual(isRequiredSystemCategory("appointment", "rescheduled"), true);
@@ -180,7 +181,8 @@ async function runTests() {
   console.log("=========================================");
 }
 
-runTests().catch((err) => {
-  console.error("❌ Test Failed:", err);
-  process.exit(1);
+describe("Phase 1 Foundation", () => {
+  it("runs phase 1 foundation tests", async () => {
+    await runTests();
+  });
 });

@@ -628,6 +628,19 @@ export async function executeRulesForEvent(
           continue;
         }
 
+        if (rawTargetEntity === "claim" && event.recordType === "appointment") {
+          try {
+            const apptKey = String(event.recordId);
+            const rec = getStoredClaims().find((c) => c.sourceType === "appointment" && c.sourceId === apptKey) || getStoredClaims().find((c) => c.appointmentId === apptKey);
+            if (rec && targetStageId) {
+              claimService.moveFromRule(rec.id, act.params?.processId || rec.processId, String(targetStageId), ruleCause(rule, event, depth, visitedRules));
+            }
+          } catch (e) {
+            console.warn("[RuleEngine] Failed to move linked claim from appointment event:", e);
+          }
+          continue;
+        }
+
         if (targetStageId) {
           const appointmentProcesses = processes.filter((p) => p.entityType === "appointment");
           const targetInAppt = appointmentProcesses.some((p) =>

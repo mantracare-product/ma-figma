@@ -513,6 +513,18 @@ export function getStoredClaims(): Claim[] {
   }
 }
 
+export function saveStoredClaims(claims: Claim[]): void {
+  try {
+    const key = isFreshWorkspace()
+      ? `claims_${localStorage.getItem("signup_org_id") || "signup"}`
+      : CLAIMS_STORAGE_KEY;
+    localStorage.setItem(key, JSON.stringify(claims));
+    window.dispatchEvent(new CustomEvent(CLAIMS_CHANGED_EVENT, { detail: claims }));
+  } catch (e) {
+    console.error("Failed to persist claims:", e);
+  }
+}
+
 export function saveClaim(claim: Claim): void {
   const current = getStoredClaims();
   const index = current.findIndex((c) => c.id === claim.id);

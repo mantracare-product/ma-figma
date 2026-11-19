@@ -327,3 +327,14 @@ Checklist:
   - `ClientProfile.tsx`: in `handleSaveNewClient`, persists any insurance coverages / consents entered during new client creation via `saveInsuranceField`.
 - Tests: `clientInsurance.test.ts` (6/6 passed) testing empty row addition, cell updates, sequential priorities, row removal, and consent fields.
 - Gate: typecheck OK, build OK, vitest OK.
+
+## Round 6 - Detailed claim pipeline, AR entity & cycle, remittance, credentialing, overview dashboards
+
+Checklist (resume from first unchecked part):
+- [x] Part A: One detailed claim pipeline (eligibility is part of the claim, nothing else) - done
+- [ ] Part B: AR entity and the AR Cycle page
+- [ ] Part C: Claim drawer: Remittance tab (only this tab is added)
+- [ ] Part D: Credentialing: organization and providers against payers
+- [ ] Part E: Overview dashboards: tabs, per-tab filters, custom dashboards
+- [ ] Part F: Dummy data, tests, docs
+
