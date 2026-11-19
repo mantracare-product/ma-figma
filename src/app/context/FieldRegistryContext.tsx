@@ -367,12 +367,12 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
     options: (col.options && col.options.length > 0)
       ? col.options
       : inputType === "list_select"
-      ? [
+        ? [
           { id: 1, label: "Option A", value: "option_a" },
           { id: 2, label: "Option B", value: "option_b" },
           { id: 3, label: "Option C", value: "option_c" },
         ]
-      : [],
+        : [],
     crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "service", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
@@ -710,7 +710,7 @@ export function isProcessMatchingAssignment(
   let stored: { id: string; name: string }[] = [];
   try {
     stored = getStoredProcesses();
-  } catch {}
+  } catch { }
 
   const targetProc = stored.find(
     (p) =>
@@ -2138,7 +2138,7 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
 
 export function getLiveTeamMembers() {
   const list = new Set<string>();
-  
+
   // Try loading from settings_allUsers
   try {
     const raw = sessionStorage.getItem("settings_allUsers");
@@ -2150,7 +2150,7 @@ export function getLiveTeamMembers() {
         });
       }
     }
-  } catch {}
+  } catch { }
 
   // Try loading from userManagement_users
   try {
@@ -2163,7 +2163,7 @@ export function getLiveTeamMembers() {
         });
       }
     }
-  } catch {}
+  } catch { }
 
   // Fallbacks
   const fallbacks = [
@@ -2690,20 +2690,20 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
       typeof f.id === "number"
         ? f.id
         : typeof f.id === "string" && !isNaN(Number(f.id))
-        ? Number(f.id)
-        : Date.now() + Math.floor(Math.random() * 1000),
+          ? Number(f.id)
+          : Date.now() + Math.floor(Math.random() * 1000),
     key: f.key || (f.label || f.name || "field").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
     label: f.label || f.name || "Untitled Field",
     module: targetModule,
     source: f.source === "system" || (typeof f.id === "number" && f.id < 0) || (f.key && SYSTEM_FIELD_KEYS.has(f.key))
       ? "system"
       : f.source === "template"
-      ? "template"
-      : f.source === "custom" && f.createdIn === "client"
-      ? "custom"
-      : f.createdIn === "client"
-      ? "custom"
-      : "template",
+        ? "template"
+        : f.source === "custom" && f.createdIn === "client"
+          ? "custom"
+          : f.createdIn === "client"
+            ? "custom"
+            : "template",
     createdIn: f.createdIn || (f.source === "custom" && f.createdIn === "client" ? "client" : "admin"),
     inputType: normalizedType,
     placeholder: f.placeholder || "",
@@ -2711,8 +2711,8 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     validation: f.validation || "",
     options: Array.isArray(f.options)
       ? f.options.map((opt: any, idx: number) =>
-          typeof opt === "string" ? { id: idx + 1, label: opt, value: opt } : opt
-        )
+        typeof opt === "string" ? { id: idx + 1, label: opt, value: opt } : opt
+      )
       : undefined,
     tableColumns: f.tableColumns,
     sectionId: f.sectionId,
@@ -2749,8 +2749,8 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     subFields: Array.isArray(f.subFields)
       ? f.subFields
       : Array.isArray(f.tableColumns) && f.tableColumns.length > 0
-      ? f.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
-      : undefined,
+        ? f.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
+        : undefined,
     crmBindConfig: f.crmBindConfig ?? undefined,
     selectionMode: normalizedSelectionMode,
     listEntryType: isStructured ? "structured" : (f.listEntryType || (normalizedType === "list_open" ? "plain_text" : undefined)),
@@ -2912,7 +2912,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       // Save the sanitized canonical object to localStorage
       try {
         localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
-      } catch {}
+      } catch { }
       return registry;
     } catch (e) {
       console.error("Error reading fieldRegistry from localStorage, falling back", e);
@@ -2982,7 +2982,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
           }
         });
       }
-    } catch {}
+    } catch { }
   }
 
   ensureScribeSeeds(registry);
@@ -2998,7 +2998,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
   // Write the canonical module-keyed object to localStorage
   try {
     localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
-  } catch {}
+  } catch { }
 
   return registry;
 }
@@ -3013,19 +3013,19 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
     source: s.source === "system" || SYSTEM_SECTION_IDS.has(s.id)
       ? "system"
       : s.source === "template"
-      ? "template"
-      : s.source === "custom" && s.createdIn === "client"
-      ? "custom"
-      : s.createdIn === "client"
-      ? "custom"
-      : "template",
+        ? "template"
+        : s.source === "custom" && s.createdIn === "client"
+          ? "custom"
+          : s.createdIn === "client"
+            ? "custom"
+            : "template",
     createdIn: s.createdIn || (s.source === "custom" && s.createdIn === "client" ? "client" : "admin"),
     iconName: undefined,
     fieldKeys: Array.isArray(s.fieldKeys)
       ? s.fieldKeys
       : Array.isArray(s.fieldIds)
-      ? s.fieldIds
-      : [],
+        ? s.fieldIds
+        : [],
     required: Boolean(s.required),
     requiredStages: Array.isArray(s.requiredStages) && s.requiredStages.length > 0 ? s.requiredStages : undefined,
     showAlways: s.showAlways !== false,
@@ -3110,7 +3110,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
 
       try {
         localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
-      } catch {}
+      } catch { }
       return sections;
     } catch (e) {
       console.error("Error reading sectionRegistry from localStorage", e);
@@ -3155,7 +3155,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
 
   try {
     localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
-  } catch {}
+  } catch { }
 
   return sections;
 }
@@ -3399,7 +3399,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
             sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
             window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: { sender: instanceId.current, ...nextState } }));
-          } catch {}
+          } catch { }
           return nextState;
         }
 
@@ -3409,15 +3409,15 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         const newField: FieldDefinition = matchCustom
           ? { ...matchCustom, ...normalizedPatch, module: norm }
           : {
-              id: id || Date.now(),
-              key: patch.key || `field_${Date.now()}`,
-              label: patch.label || patch.key || "Field",
-              module: norm,
-              source: "custom",
-              inputType: patch.inputType || "text",
-              createdAt: Date.now(),
-              ...normalizedPatch,
-            };
+            id: id || Date.now(),
+            key: patch.key || `field_${Date.now()}`,
+            label: patch.label || patch.key || "Field",
+            module: norm,
+            source: "custom",
+            inputType: patch.inputType || "text",
+            createdAt: Date.now(),
+            ...normalizedPatch,
+          };
 
         const nextState = {
           ...prev,
@@ -3427,7 +3427,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
           sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
           window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
-        } catch {}
+        } catch { }
         return nextState;
       }
 
@@ -3503,7 +3503,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
         sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
         window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
-      } catch {}
+      } catch { }
       return nextState;
     });
   };
@@ -3829,19 +3829,19 @@ export function useFieldRegistry(): FieldRegistryContextValue {
           localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(nextState));
           sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(nextState));
           window.dispatchEvent(new CustomEvent(FIELD_REGISTRY_EVENT, { detail: nextState }));
-        } catch {}
+        } catch { }
       },
-      deleteCustomField: () => {},
+      deleteCustomField: () => { },
       getSystemSections: getSysSections,
       getCustomSections: getCustSections,
       getAllSections: (module: FieldModule) => [...getSysSections(module), ...getCustSections(module)],
       getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
         [...getSysSections(module), ...getCustSections(module)].filter((s) => isSectionMatchingOrg(s, org, processId)),
       addCustomSection: () => ({ id: `sec-${Date.now()}`, title: "", module: "client", source: "custom", createdAt: Date.now(), fieldKeys: [] }),
-      updateCustomSection: () => {},
-      deleteCustomSection: () => {},
-      assignFieldToSection: () => {},
-      removeFieldFromSection: () => {},
+      updateCustomSection: () => { },
+      deleteCustomSection: () => { },
+      assignFieldToSection: () => { },
+      removeFieldFromSection: () => { },
     };
   }
   return ctx;

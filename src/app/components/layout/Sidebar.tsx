@@ -222,11 +222,10 @@ function CollapsedOrgSwitcher({
                     setIsOpen(false);
                     toast.success(`Switched to ${org.name}`);
                   }}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                    isCurrent
-                      ? "bg-blue-50 text-[#1456f0]"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${isCurrent
+                    ? "bg-blue-50 text-[#1456f0]"
+                    : "text-gray-700 hover:bg-gray-50"
+                    }`}
                 >
                   <div className="flex items-center gap-2 truncate">
                     <div className="w-5 h-5 rounded-md bg-[#1E293B] text-white flex items-center justify-center text-[10px] font-bold">
@@ -313,11 +312,11 @@ function CollapsedUserMenu({
         >
           {user?.name
             ? user.name
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase()
+              .split(" ")
+              .map((n: string) => n[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()
             : "AU"}
         </button>
       </SidebarPortalTooltip>
@@ -621,9 +620,8 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${
-        collapsed && !isConfiguring ? "w-[68px] min-w-[68px] max-w-[68px]" : "w-64 min-w-[256px] max-w-[256px]"
-      }`}
+      className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${collapsed && !isConfiguring ? "w-[68px] min-w-[68px] max-w-[68px]" : "w-64 min-w-[256px] max-w-[256px]"
+        }`}
     >
       {/* Floating Circular Collapse/Expand Toggle Button on the dividing border (hidden during configure mode) */}
       {!isConfiguring && (
@@ -689,11 +687,10 @@ export default function Sidebar() {
                           setShowOrgDropdown(false);
                           toast.success(`Switched to ${org.name}`);
                         }}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                          isCurrent
-                            ? "bg-blue-50 text-[#1456f0]"
-                            : "text-gray-700 hover:bg-gray-50"
-                        }`}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${isCurrent
+                          ? "bg-blue-50 text-[#1456f0]"
+                          : "text-gray-700 hover:bg-gray-50"
+                          }`}
                       >
                         <div className="flex items-center gap-2 truncate">
                           <div className="w-5 h-5 rounded-md bg-[#1E293B] text-white flex items-center justify-center text-[10px] font-bold">
@@ -770,15 +767,14 @@ export default function Sidebar() {
                             setDragOverItem(null);
                           }
                         }}
-                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl text-xs transition-all border select-none ${
-                          isDragging
-                            ? "opacity-30 border-blue-400 bg-blue-50/30 scale-98"
-                            : isOver
+                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl text-xs transition-all border select-none ${isDragging
+                          ? "opacity-30 border-blue-400 bg-blue-50/30 scale-98"
+                          : isOver
                             ? "border-blue-500 bg-blue-50/60 shadow-xs ring-1 ring-blue-500/20"
                             : item.visible
-                            ? "bg-white border-gray-200 text-gray-800 shadow-2xs hover:border-gray-300"
-                            : "bg-gray-50/70 border-dashed border-gray-200 text-gray-400 opacity-60"
-                        }`}
+                              ? "bg-white border-gray-200 text-gray-800 shadow-2xs hover:border-gray-300"
+                              : "bg-gray-50/70 border-dashed border-gray-200 text-gray-400 opacity-60"
+                          }`}
                       >
                         {/* Drag Handle + Icon + Title */}
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -790,17 +786,15 @@ export default function Sidebar() {
                           </div>
 
                           <div
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                              item.visible ? "bg-blue-50 text-[#1456f0]" : "bg-gray-100 text-gray-400"
-                            }`}
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${item.visible ? "bg-blue-50 text-[#1456f0]" : "bg-gray-100 text-gray-400"
+                              }`}
                           >
                             <Icon className="w-3.5 h-3.5" />
                           </div>
 
                           <span
-                            className={`truncate text-xs font-medium ${
-                              item.visible ? "text-gray-800" : "text-gray-400 line-through"
-                            }`}
+                            className={`truncate text-xs font-medium ${item.visible ? "text-gray-800" : "text-gray-400 line-through"
+                              }`}
                           >
                             {item.label}
                           </span>
@@ -826,11 +820,10 @@ export default function Sidebar() {
                                 });
                               }
                             }}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                              isGearOpen
-                                ? "bg-gray-200 text-gray-900 shadow-2xs"
-                                : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                            }`}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isGearOpen
+                              ? "bg-gray-200 text-gray-900 shadow-2xs"
+                              : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                              }`}
                             title="Menu options"
                           >
                             <Settings className="w-3.5 h-3.5" />
@@ -854,11 +847,10 @@ export default function Sidebar() {
                 <SidebarPortalTooltip key={item.id} text={item.label} badge={item.badge}>
                   <Link
                     to={item.path}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer relative ${
-                      active
-                        ? "bg-[#1E293B] text-white shadow-xs"
-                        : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-100"
-                    }`}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer relative ${active
+                      ? "bg-[#1E293B] text-white shadow-xs"
+                      : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-100"
+                      }`}
                   >
                     <Icon className={`w-4.5 h-4.5 shrink-0 ${active ? "text-white" : "text-[#64748B]"}`} />
                   </Link>
@@ -911,16 +903,14 @@ export default function Sidebar() {
                           <Link
                             key={item.id}
                             to={item.path}
-                            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all ${
-                              active
-                                ? "bg-[#1E293B] text-white font-semibold shadow-xs"
-                                : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-50"
-                            }`}
+                            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all ${active
+                              ? "bg-[#1E293B] text-white font-semibold shadow-xs"
+                              : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-50"
+                              }`}
                           >
                             <Icon
-                              className={`w-4 h-4 shrink-0 ${
-                                active ? "text-white" : "text-[#64748B]"
-                              }`}
+                              className={`w-4 h-4 shrink-0 ${active ? "text-white" : "text-[#64748B]"
+                                }`}
                             />
                             <span className="truncate flex-1">{item.label}</span>
                             {item.badge && (
@@ -976,8 +966,7 @@ export default function Sidebar() {
                 onClick={() => {
                   toggleItemFeatured(openGearItem.sectionId, openGearItem.item.id);
                   toast.success(
-                    `${openGearItem.item.label} ${
-                      openGearItem.item.isFeatured ? "removed from featured pages" : "marked as featured"
+                    `${openGearItem.item.label} ${openGearItem.item.isFeatured ? "removed from featured pages" : "marked as featured"
                     }`
                   );
                   setOpenGearItem(null);
@@ -986,11 +975,10 @@ export default function Sidebar() {
               >
                 <span>{openGearItem.item.isFeatured ? "Unfeature this page" : "Feature this page"}</span>
                 <Star
-                  className={`w-3.5 h-3.5 ${
-                    openGearItem.item.isFeatured
-                      ? "fill-amber-400 text-amber-500"
-                      : "text-gray-400"
-                  }`}
+                  className={`w-3.5 h-3.5 ${openGearItem.item.isFeatured
+                    ? "fill-amber-400 text-amber-500"
+                    : "text-gray-400"
+                    }`}
                 />
               </button>
             </div>,
@@ -1088,11 +1076,11 @@ export default function Sidebar() {
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#1E293B] to-[#334155] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ring-1 ring-black/5">
                   {user?.name
                     ? user.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
                     : "AU"}
                 </div>
                 <div className="flex flex-col text-left min-w-0">

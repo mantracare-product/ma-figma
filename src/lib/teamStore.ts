@@ -27,6 +27,8 @@ export interface TeamMember {
   taxonomy?: string;
   licenseNumber?: string;
   licenseState?: string;
+  providesServices?: boolean;
+  isRenderingProvider?: boolean;
   customFields?: Record<string, any>;
 }
 

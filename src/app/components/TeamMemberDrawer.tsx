@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
 import SecurityTab from "./settings/SecurityTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TeamMember } from "../../lib/teamStore";
+import { isClinicalRole } from "../../lib/providerCredentialMigration";
 import { payersStore, type Payer } from "../../lib/billingSetupStore";
 import {
   getStoredCredentialing,
@@ -312,25 +313,28 @@ export function TeamMemberDrawer({
 
   const isBookable = canBookAppointments;
 
+  const currentMemberId = member?.id ? String(member.id) : null;
+  const prevMemberIdRef = useRef<string | null>(null);
+
+  const computeIsRendering = (m: any) => {
+    if (!m) return false;
+    if (m.providesServices !== undefined) return Boolean(m.providesServices);
+    if (m.isRenderingProvider !== undefined) return Boolean(m.isRenderingProvider);
+    if (m.npi || m.taxonomy || m.licenseNumber) return true;
+    if (isClinicalRole(m.role)) return true;
+    return false;
+  };
+
   const [providesServices, setProvidesServices] = useState<boolean>(() => {
-    return Boolean(
-      member?.npi ||
-      (member as any)?.isRenderingProvider ||
-      (member as any)?.providesServices
-    );
+    return computeIsRendering(member);
   });
 
   useEffect(() => {
-    if (member) {
-      setProvidesServices(
-        Boolean(
-          member.npi ||
-          (member as any)?.isRenderingProvider ||
-          (member as any)?.providesServices
-        )
-      );
+    if (isOpen && currentMemberId && currentMemberId !== prevMemberIdRef.current) {
+      prevMemberIdRef.current = currentMemberId;
+      setProvidesServices(computeIsRendering(member));
     }
-  }, [member]);
+  }, [isOpen, currentMemberId, member]);
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -852,7 +856,7 @@ export function TeamMemberDrawer({
                             : "border-transparent text-gray-600 hover:text-gray-900"
                           }`}
                       >
-                        Provider Credentials
+                        Credentials
                       </button>
                     )}
                     <button
@@ -2024,7 +2028,7 @@ export function TeamMemberDrawer({
                       <div>
                         <h4 className="text-sm font-bold text-[#020817] flex items-center gap-2">
                           <Award className="w-4 h-4 text-blue-600" />
-                          Provider Credentials
+                          Credentials
                         </h4>
                         <p className="text-xs text-[#64748B] mt-0.5">
                           NPI, taxonomy code, and state license for medical billing
@@ -2743,6 +2747,8 @@ export function TeamMemberDrawer({
                     department: personalInfo.department,
                     status: personalInfo.status,
                     canBookAppointments: canBookAppointments,
+                    providesServices: providesServices,
+                    isRenderingProvider: providesServices,
                     npi: customFieldValues.npi,
                     taxonomy: customFieldValues.taxonomy,
                     licenseNumber: customFieldValues.licenseNumber,
@@ -2770,6 +2776,8 @@ export function TeamMemberDrawer({
                     department: personalInfo.department,
                     status: personalInfo.status,
                     canBookAppointments: canBookAppointments,
+                    providesServices: providesServices,
+                    isRenderingProvider: providesServices,
                     npi: customFieldValues.npi,
                     taxonomy: customFieldValues.taxonomy,
                     licenseNumber: customFieldValues.licenseNumber,

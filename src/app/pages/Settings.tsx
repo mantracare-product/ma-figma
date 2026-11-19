@@ -12741,14 +12741,10 @@ export default function Settings() {
           isOpen={isTeamDrawerOpen}
           onClose={handleCloseTeamDrawer}
           member={selectedTeamMember ? {
-            id: (selectedTeamMember as any).id,
-            name: (selectedTeamMember as any).name || "",
-            email: (selectedTeamMember as any).email || "",
-            role: (selectedTeamMember as any).role || "",
-            phone: (selectedTeamMember as any).phone || "",
-            department: (selectedTeamMember as any).department || "",
-            canBookAppointments: (selectedTeamMember as any).canBookAppointments,
-            locations: (selectedTeamMember as any).locations,
+            ...(selectedTeamMember as any),
+            status: typeof (selectedTeamMember as any).status === "boolean"
+              ? (selectedTeamMember as any).status
+              : (selectedTeamMember as any).status === "active",
           } : null}
         />
 

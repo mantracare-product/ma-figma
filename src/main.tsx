@@ -15,7 +15,10 @@
 import { migrateFeeSchedulesToServicePrices } from "./lib/feeScheduleMigration";
 import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
 import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
-import { migrateProviderCredentialsToTeamMember } from "./lib/providerCredentialMigration";
+import {
+  migrateProviderCredentialsToTeamMember,
+  migrateTeamMemberProvidesServices,
+} from "./lib/providerCredentialMigration";
 import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
 import { migrateToSingleClaimPipeline } from "./lib/rcmPipelineR6";
   import { logMigration } from "./lib/stageCallMigration";
@@ -50,6 +53,7 @@ import { migrateToSingleClaimPipeline } from "./lib/rcmPipelineR6";
 
   // Round 5: provider credentials move to team member records (once, logged).
   try { if (!testRunActive()) migrateProviderCredentialsToTeamMember(); } catch { /* ignore */ }
+  try { if (!testRunActive()) migrateTeamMemberProvidesServices(); } catch { /* ignore */ }
 
   // Round 5: global voice switch migrated to Inconclusive stage call setting (once, logged).
   try { if (!testRunActive()) migrateStageCallSwitch(); } catch { /* ignore */ }

@@ -72,3 +72,70 @@ export function migrateProviderCredentialsToTeamMember(): { migrated: number } {
   }
   return result;
 }
+
+export const TEAM_PROVIDES_SERVICES_FLAG = "mantra_r6_team_rendering_v1";
+
+const CLINICAL_ROLES = [
+  "doctor",
+  "physician",
+  "provider",
+  "surgeon",
+  "ophthalmologist",
+  "optometrist",
+  "practitioner",
+  "nurse",
+  "therapist",
+  "clinician",
+  "specialist",
+];
+
+export function isClinicalRole(role?: string): boolean {
+  if (!role) return false;
+  const r = role.toLowerCase();
+  return CLINICAL_ROLES.some((c) => r.includes(c));
+}
+
+export function migrateTeamMemberProvidesServices(): { updated: number } {
+  const result = { updated: 0 };
+  try {
+    if (typeof localStorage !== "undefined" && localStorage.getItem(TEAM_PROVIDES_SERVICES_FLAG) === "1") {
+      return result;
+    }
+
+    const members = getStoredTeamMembers();
+    let changed = false;
+
+    const updated = members.map((m) => {
+      const hasCreds = Boolean(m.npi || (m as any).taxonomy || (m as any).licenseNumber);
+      const isClin = isClinicalRole(m.role);
+      if (hasCreds || isClin) {
+        if ((m as any).providesServices !== true || (m as any).isRenderingProvider !== true) {
+          changed = true;
+          result.updated++;
+          return {
+            ...m,
+            providesServices: true,
+            isRenderingProvider: true,
+          };
+        }
+      }
+      return m;
+    });
+
+    if (changed) {
+      saveStoredTeamMembers(updated);
+    }
+
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(TEAM_PROVIDES_SERVICES_FLAG, "1");
+    }
+
+    logMigration(
+      "R6.fix1",
+      `Preset rendering provider toggle ON for ${result.updated} clinical/credentialed team members.`
+    );
+  } catch (e) {
+    console.error("[migrateTeamMemberProvidesServices] Failed:", e);
+  }
+  return result;
+}
