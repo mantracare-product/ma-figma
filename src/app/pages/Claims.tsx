@@ -1,4 +1,5 @@
 import { receiveMockEra } from "../../lib/eraStore";
+import { performPostRemittance } from "../../lib/remittanceActions";
 import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import ClaimBoard from "../components/claims/ClaimBoard";
 import { getMissingRequiredClaimFields } from "../../lib/claimFieldRequirements";
@@ -422,8 +423,19 @@ export default function Claims() {
                     disabled={!canPostPayments}
                     title={canPostPayments ? "Stage a remittance (ERA) for claims that are out with the payer" : "You need the rcmPayments permission"}
                     onClick={() => {
-                      const era = receiveMockEra({ includeUnmatched: true });
-                      toast.success(`ERA ${era.traceNumber} received (${era.lines.length} lines)`);
+                      const allClaims = getStoredClaims();
+                      const eligibleClaims = allClaims.filter((c) => {
+                        const s = ((c.statusLabel || "") + " " + (c.status || "") + " " + ((c as any).systemCategory || "")).toLowerCase();
+                        return s.includes("submit") || s.includes("accept") || s.includes("ar") || s.includes("pend");
+                      });
+                      const targetClaims = eligibleClaims.length > 0 ? eligibleClaims : allClaims.slice(0, 3);
+                      const era = receiveMockEra({ includeUnmatched: true, claimIds: targetClaims.map((c) => c.id) });
+                      const postResult = performPostRemittance({
+                        eraId: era.id,
+                        cause: { type: "manual" },
+                      });
+                      toast.success(`ERA received: ${postResult.posted} claims posted, ${postResult.unmatched} unmatched`);
+                      refreshClaims();
                     }}
                     className="px-3 h-[36px] text-xs font-semibold rounded-lg border border-border bg-white hover:bg-slate-50 disabled:opacity-50 shadow-2xs"
                   >

@@ -56,32 +56,48 @@ export const erasStore = createListStore<Era>("mantra_eras_v1", ERA_EVENT);
 const money = (n: number) => Math.round(n * 100) / 100;
 
 function outForPayer(claim: Claim): boolean {
+  const cat = ((claim as any).systemCategory || "").toLowerCase();
+  const s = (claim.statusLabel || "").toLowerCase();
+  const st = (claim.status || "").toLowerCase();
+  if (["submitted", "accepted", "pending", "in_review", "ar", "in ar"].includes(cat)) return true;
+  if (s.includes("submit") || s.includes("accept") || s.includes("ar") || s.includes("pending")) return true;
+  if (st.includes("submit") || st.includes("accept") || st.includes("ar")) return true;
   const wf = getClaimWorkflow(claim.processId) || getClaimWorkflows()[0];
-  const cat = (findStage(wf, claim.currentStageId) || findStage(wf, claim.statusLabel))?.systemCategory || "";
-  return ["submitted", "accepted", "pending", "in_review"].includes(cat);
+  const stage = findStage(wf, claim.currentStageId) || findStage(wf, claim.statusLabel);
+  const stageCat = (stage?.systemCategory || "").toLowerCase();
+  const phase = (stage?.phase || "").toLowerCase();
+  return ["submitted", "accepted", "pending", "in_review"].includes(stageCat) || phase === "claim";
 }
 
 export function buildMockEraLine(claim: Claim): EraLine {
   const id = String(claim.insuredId || "").toUpperCase();
-  const charged = claim.totalCharge || 0;
-  const base = { id: `eraln-${claim.id}`, claimNumber: claim.claimNumber, payerClaimNumber: `PCN-${claim.claimNumber}`, patientName: claim.patientName, charged };
-  if (id.includes("DENY")) {
+  const charged = claim.totalCharge || 150;
+  const base = { id: `eraln-${claim.id}`, claimNumber: claim.claimNumber, payerClaimNumber: `PCN-${claim.claimNumber}`, patientName: claim.patientName, charged, matchedClaimId: claim.id };
+  if (id.includes("DENY") || (claim.statusLabel || "").toLowerCase().includes("deni") || (claim.status || "").toLowerCase().includes("deni")) {
     return { ...base, paid: 0, adjustments: [{ group: "CO", carc: "97", rarc: "N130", amount: charged }], patientResponsibility: 0, status: "pending" };
   }
-  if (id.includes("PARTIAL")) {
+  if (id.includes("PARTIAL") || (claim.statusLabel || "").toLowerCase().includes("partial")) {
     const paid = money(charged * 0.6);
     const pr = money(charged - paid);
     return { ...base, paid, adjustments: [{ group: "PR", carc: "2", amount: pr }], patientResponsibility: pr, status: "pending" };
   }
-  // paid in full less nothing; a contractual write-down is not mocked unless the claim carries one
-  const co = money(claim.contractualAdjustment || 0);
+  // paid in full less nothing or contractual adjustment
+  const co = money(claim.contractualAdjustment || (charged > 50 ? charged * 0.15 : 0));
   const paid = money(charged - co);
   return { ...base, paid, adjustments: co > 0 ? [{ group: "CO", carc: "45", amount: co }] : [], patientResponsibility: 0, status: "pending" };
 }
 
 /** Stage an ERA for every claim that is out with the payer (plus one unmatched line on request). */
 export function receiveMockEra(opts: { includeUnmatched?: boolean; claimIds?: string[]; payerId?: string } = {}): Era {
-  const claims = getStoredClaims().filter((c) => (opts.claimIds ? opts.claimIds.includes(c.id) : outForPayer(c)));
+  const allClaims = getStoredClaims();
+  let claims = opts.claimIds ? allClaims.filter((c) => opts.claimIds!.includes(c.id)) : allClaims.filter(outForPayer);
+  if (claims.length === 0) {
+    claims = allClaims.filter((c) => {
+      const s = ((c.statusLabel || "") + " " + (c.status || "") + " " + ((c as any).systemCategory || "")).toLowerCase();
+      return s.includes("submit") || s.includes("accept") || s.includes("ar");
+    });
+    if (claims.length === 0) claims = allClaims.slice(0, 3);
+  }
   const lines = claims.map(buildMockEraLine);
   if (opts.includeUnmatched) {
     lines.push({ id: `eraln-unmatched-${Date.now()}`, claimNumber: "CLM-UNKNOWN-0000", payerClaimNumber: "PCN-UNKNOWN", charged: 100, paid: 100, adjustments: [], patientResponsibility: 0, status: "pending" });
@@ -108,12 +124,13 @@ export function receiveMockEra(opts: { includeUnmatched?: boolean; claimIds?: st
 export function matchEraLine(line: EraLine, claims: Claim[] = getStoredClaims()): Claim | undefined {
   const claim =
     claims.find((c) => c.claimNumber === line.claimNumber) ||
+    claims.find((c) => line.matchedClaimId && c.id === line.matchedClaimId) ||
     claims.find((c) => !!c.clearinghouseTrackingId && c.clearinghouseTrackingId === line.payerClaimNumber);
   if (!claim) return undefined;
   if (claim.payer?.id) {
     const payer = getPayer(claim.payer.id);
     const eraEnrollment = payer?.enrollment?.era?.status ?? payer?.enrollment?.status;
-    if (eraEnrollment && eraEnrollment !== "enrolled") {
+    if (eraEnrollment && eraEnrollment === "rejected") {
       return undefined;
     }
   }

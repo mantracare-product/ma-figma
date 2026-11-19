@@ -44,7 +44,7 @@ import {
   CLAIMS_CHANGED_EVENT,
 } from "../../../lib/claimsStore";
 import { claimService } from "../../../lib/claimService";
-import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
+import { CompactPhaseBar } from "./CompactPhaseBar";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 import ActivityTab, { ActivityLogEntry } from "../activity/ActivityTab";
 import DocumentsTab from "../profile/DocumentsTab";
@@ -269,7 +269,7 @@ export default function ClaimDetailDrawer({
     return isPreClaimClaim(liveClaim);
   }, [liveClaim, insuranceProcess]);
   useEffect(() => {
-    if (preClaim && (activeTab === "billing" || activeTab === "remittance")) {
+    if (preClaim && activeTab === "billing") {
       setActiveTab("overview");
     }
   }, [preClaim, activeTab]);
@@ -508,8 +508,29 @@ export default function ClaimDetailDrawer({
 
     try {
       const result = claimService.moveToStage(liveClaim.id, targetStage.id, { type: "manual" });
+      const currentHist: string[] = (liveClaim as any)?.stageHistory || [];
+      const updatedHistory = Array.from(new Set([
+        ...currentHist,
+        currentClaimStage?.id,
+        currentClaimStage?.name,
+        targetStage.id,
+        targetStage.name,
+      ])).filter(Boolean) as string[];
+
       if (result) {
-        setLiveClaim(result.claim);
+        const withHist = { ...result.claim, stageHistory: updatedHistory } as Claim;
+        saveClaim(withHist);
+        setLiveClaim(withHist);
+      } else {
+        const patched = {
+          ...liveClaim,
+          currentStageId: targetStage.id,
+          statusLabel: targetStage.name,
+          stageHistory: updatedHistory,
+          updatedAt: new Date().toISOString(),
+        } as Claim;
+        saveClaim(patched);
+        setLiveClaim(patched);
       }
 
       const primaryId = liveClaim.patientId || effectiveClientId;
@@ -671,6 +692,53 @@ export default function ClaimDetailDrawer({
     });
     return unsub;
   }, [liveClaim?.id, liveClaim?.status, liveClaim?.currentStageId, effectiveClientId, insuranceProcess.name, currentClaimStage?.name, isCreateMode]);
+
+  const visitedStageNames = useMemo(() => {
+    const set = new Set<string>();
+    if (currentClaimStage) {
+      set.add(currentClaimStage.id);
+      set.add(currentClaimStage.name);
+      set.add(currentClaimStage.name.toLowerCase());
+    }
+    if (liveClaim) {
+      if (liveClaim.currentStageId) set.add(liveClaim.currentStageId);
+      if (liveClaim.statusLabel) {
+        set.add(liveClaim.statusLabel);
+        set.add(liveClaim.statusLabel.toLowerCase());
+      }
+      if ((liveClaim as any).stageHistory && Array.isArray((liveClaim as any).stageHistory)) {
+        for (const item of (liveClaim as any).stageHistory) {
+          set.add(String(item));
+          set.add(String(item).toLowerCase());
+        }
+      }
+      if (liveClaim.submittedAt) {
+        set.add("Submitted");
+        set.add("submitted");
+        set.add("Ready to submit");
+        set.add("ready to submit");
+      }
+      if (liveClaim.amountPaid && liveClaim.amountPaid > 0) {
+        set.add("Accepted by payer");
+        set.add("accepted by payer");
+        set.add("Paid");
+        set.add("paid");
+      }
+    }
+    for (const act of activities) {
+      if (act.type === "stage_update") {
+        if (act.fromStage) {
+          set.add(act.fromStage);
+          set.add(act.fromStage.toLowerCase());
+        }
+        if (act.toStage) {
+          set.add(act.toStage);
+          set.add(act.toStage.toLowerCase());
+        }
+      }
+    }
+    return set;
+  }, [currentClaimStage, liveClaim, activities]);
 
   if (!isOpen || !liveClaim) return null;
 
@@ -899,26 +967,27 @@ export default function ClaimDetailDrawer({
           </div>
         </div>
 
-        {/* ── Stage Progression Ribbon (Interactive Chevron) ── */}
+        {/* ── Stage Progression Ribbon (Compact Phase Bar) ── */}
         <div className="flex-shrink-0 bg-slate-50/70 border-b border-slate-200 px-7 py-2.5">
           <div className="flex items-center justify-between gap-3 mb-1.5">
             <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Insurance & Claims Workflow Stages
+              Insurance & Claims Workflow Phases & Stages
             </span>
             <span className="text-[11px] text-slate-500 font-medium">
-              Click any stage to advance claim
+              Click a phase to view stages or advance claim
             </span>
           </div>
-          <ChevronStageRibbon
+          <CompactPhaseBar
             stages={claimStages}
-            activeStageId={currentClaimStage.id}
-            activeStageName={currentClaimStage.name}
-            onStageClick={(stg) => {
+            currentStage={currentClaimStage}
+            visitedStageNames={visitedStageNames}
+            onSelectStage={(stg) => {
               const matched = claimStages.find(
                 (s) => String(s.id) === String(stg.id) || s.name.toLowerCase() === stg.name.toLowerCase()
               );
               if (matched) handleStageSelect(matched);
             }}
+            claimStatus={liveClaim?.status}
           />
           {!isCreateMode && (liveClaim?.missingData || []).length > 0 && (
             <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="claim-missing-data">
@@ -972,76 +1041,25 @@ export default function ClaimDetailDrawer({
               </button>
             )}
 
-            {!preClaim && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("remittance")}
-                className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-                  activeTab === "remittance"
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <DollarSign className="w-3.5 h-3.5" />
-                <span>Remittance</span>
-                {remittanceCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-                    {remittanceCount}
-                  </span>
-                )}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setActiveTab("remittance")}
+              className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+                activeTab === "remittance"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Remittance</span>
+              {remittanceCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                  {remittanceCount}
+                </span>
+              )}
+            </button>
           </div>
-
-          {/* Manage Fields & Custom Sections Dropdown */}
-          {activeTab === "overview" && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Settings className="w-3 h-3 text-slate-500" />
-                  <span>Configure Sections</span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-white border border-slate-200 shadow-lg rounded-xl py-1">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setFieldManagerMode("select");
-                    setFieldManagerOpen(true);
-                  }}
-                  className="text-xs px-3 py-2 cursor-pointer text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                >
-                  <Plus className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Add Registered Fields</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setFieldManagerMode("create");
-                    setFieldManagerOpen(true);
-                  }}
-                  className="text-xs px-3 py-2 cursor-pointer text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                >
-                  <Plus className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Create Custom Field</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 border-slate-100" />
-                <DropdownMenuItem
-                  onClick={() => {
-                    setEditingSection(null);
-                    setSectionDrawerOpen(true);
-                  }}
-                  className="text-xs px-3 py-2 cursor-pointer text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                >
-                  <Layers className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Add New Section</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
 
         {/* ── Scrollable Body Area ── */}
@@ -1259,7 +1277,7 @@ export default function ClaimDetailDrawer({
           {/* ─────────────────────────────────────────────────────────────
               TAB 4: REMITTANCE (ERA & Payment Records)
              ───────────────────────────────────────────────────────────── */}
-          {activeTab === "remittance" && !preClaim && (
+          {activeTab === "remittance" && (
             <div className="p-6">
               <RemittancePanel claim={liveClaim} />
             </div>

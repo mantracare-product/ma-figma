@@ -307,11 +307,66 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
         if (isDenial) {
           clm.denialCategory = d[0]; clm.denialCodes = [`CO-${d[1]}`]; clm.denialSummary = (CARC[d[1]] && CARC[d[1]].text) || "Denied by payer"; clm.appealDeadline = dayYmd(-ageDays + 60 + 30);
           clm.amountPaid = 0;
+          clm.remittances = [{
+            id: `${ID}rem-den-${n + 1}`,
+            eraId: `${ID}era-${payer.id}`,
+            traceNumber: `TRN-DEN-${550000 + n * 23}`,
+            checkNumber: `DEN-835-${990000 + n * 11}`,
+            paymentDate: dayYmd(-Math.max(1, ageDays - 10)),
+            payerName: payer.name || "Insurance Payer",
+            status: "Denied",
+            billed: charge,
+            allowed: 0,
+            paid: 0,
+            patientResponsibility: 0,
+            adjustments: charge,
+            lines: [{
+              id: `${ID}remln-den-${n + 1}`,
+              cptCode: s.cpt,
+              serviceName: s.desc,
+              billed: charge,
+              allowed: 0,
+              paid: 0,
+              patientResponsibility: 0,
+              adjustments: [{ group: "CO" as const, carc: d[1], rarc: "N130", amount: charge, description: clm.denialSummary }],
+              rarc: "N130",
+              status: "Denied",
+            }],
+          }];
         }
         if (cat === "appeal_drafted" || cat === "appeal_submitted") clm.appealDraft = { text: `Re: ${clm.claimNumber}. We request reconsideration of the denial (${clm.denialSummary}). Supporting documentation from the visit on ${a.date} is attached.`, revision: 1, proposedAt: dayIso(-4), status: cat === "appeal_submitted" ? "accepted" : "proposed" };
         if (paid || partially) {
           const eraId = `${ID}era-${payer.id}`;
-          clm.payments = [{ id: `${ID}pay-${n + 1}`, eraId, traceNumber: `TRN${440000 + payers.indexOf(payer) * 311}`, amount: amountPaid, date: dayYmd(-Math.max(2, ageDays - 15)) }];
+          const trn = `TRN${440000 + payers.indexOf(payer) * 311}`;
+          clm.payments = [{ id: `${ID}pay-${n + 1}`, eraId, traceNumber: trn, amount: amountPaid, date: dayYmd(-Math.max(2, ageDays - 15)) }];
+          clm.remittances = [{
+            id: `${ID}rem-${n + 1}`,
+            eraId,
+            traceNumber: trn,
+            checkNumber: `CHK${880000 + n * 17}`,
+            paymentDate: dayYmd(-Math.max(2, ageDays - 15)),
+            payerName: payer.name || "Insurance Payer",
+            status: partially ? "Partially Paid" : "Paid",
+            billed: charge,
+            allowed: money(charge * 0.85),
+            paid: amountPaid,
+            patientResponsibility: paid ? money(charge * 0.05) : 0,
+            adjustments: money(charge * (partially ? 0.2 : 0.15)),
+            lines: [{
+              id: `${ID}remln-${n + 1}`,
+              cptCode: s.cpt,
+              serviceName: s.desc,
+              billed: charge,
+              allowed: money(charge * 0.85),
+              paid: amountPaid,
+              patientResponsibility: paid ? money(charge * 0.05) : 0,
+              adjustments: [
+                { group: "CO" as const, carc: "45", amount: money(charge * (partially ? 0.2 : 0.15)), description: CARC["45"]?.text || "Charges exceed fee schedule" },
+                ...(paid ? [{ group: "PR" as const, carc: "2", amount: money(charge * 0.05), description: CARC["2"]?.text || "Coinsurance amount" }] : []),
+              ],
+              status: partially ? "Partially Paid" : "Paid",
+            }],
+          }];
           (eraLinesByPayer[payer.id] ||= []).push({ id: `${ID}eral-${n + 1}`, claimNumber: clm.claimNumber, payerClaimNumber: `PCN${900000 + n}`, patientName: c.name, charged: charge, paid: amountPaid, adjustments: [{ group: "CO", carc: "45", amount: money(charge * (partially ? 0.2 : 0.15)) }, ...(paid ? [{ group: "PR", carc: "2", amount: money(charge * 0.05) }] : [])], patientResponsibility: paid ? money(charge * 0.05) : 0, status: "posted", matchedClaimId: clm.id, postedAt: dayIso(-Math.max(2, ageDays - 15)) });
           invoiceSeeds.push({ claim: clm });
         }
