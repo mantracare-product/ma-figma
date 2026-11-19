@@ -67,6 +67,7 @@ import {
   Building2,
   Copy,
   AlertCircle,
+  Award,
 } from "lucide-react";
 
 export const OPEN_USER_PROFILE_DRAWER_EVENT = "mantra-open-user-profile-drawer";
@@ -103,7 +104,7 @@ export interface TeamMemberDrawerProps {
     [key: string]: any;
   }) | null;
   zIndex?: number;
-  initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services" | "security";
+  initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services" | "security" | "provider-credentials";
   onSave?: (updated?: any) => void;
 }
 
@@ -186,7 +187,9 @@ export function TeamMemberDrawer({
   const { user: currentUser } = useAuth();
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services" | "security">(initialTab);
+  const [activeTab, setActiveTab] = useState<
+    "personal-info" | "calendar" | "availability" | "days-off" | "services" | "security" | "provider-credentials"
+  >(initialTab);
 
   // Actions dropdown state
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
@@ -265,15 +268,9 @@ export function TeamMemberDrawer({
     }
   };
 
-  useEffect(() => {
-    if (isOpen && initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [isOpen, initialTab]);
-
-  // Only team members who are eligible for appointments have availability & days off
-  const isBookable = useMemo(() => {
-    if (member?.canBookAppointments !== undefined) return member.canBookAppointments;
+  // Appointment booking eligibility (canBookAppointments controls whether member appears in appointments & provider credentials)
+  const [canBookAppointments, setCanBookAppointments] = useState<boolean>(() => {
+    if (member?.canBookAppointments !== undefined) return Boolean(member.canBookAppointments);
     try {
       const allMembers = getStoredTeamMembers();
       const found = allMembers.find(
@@ -281,10 +278,46 @@ export function TeamMemberDrawer({
           (member?.id && String(m.id) === String(member.id)) ||
           (member?.email && m.email.toLowerCase() === member.email.toLowerCase())
       );
-      if (found) return found.canBookAppointments === true;
+      if (found && found.canBookAppointments !== undefined) return found.canBookAppointments === true;
     } catch {}
     return false;
+  });
+
+  useEffect(() => {
+    if (member) {
+      if (member.canBookAppointments !== undefined) {
+        setCanBookAppointments(Boolean(member.canBookAppointments));
+      } else {
+        try {
+          const allMembers = getStoredTeamMembers();
+          const found = allMembers.find(
+            (m) =>
+              (member.id && String(m.id) === String(member.id)) ||
+              (member.email && m.email.toLowerCase() === member.email.toLowerCase())
+          );
+          setCanBookAppointments(found?.canBookAppointments === true);
+        } catch {}
+      }
+    }
   }, [member]);
+
+  const isBookable = canBookAppointments;
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      if (initialTab === "provider-credentials" && !isBookable) {
+        setActiveTab("personal-info");
+      } else {
+        setActiveTab(initialTab);
+      }
+    }
+  }, [isOpen, initialTab, isBookable]);
+
+  useEffect(() => {
+    if (!isBookable && (activeTab === "provider-credentials" || activeTab === "availability" || activeTab === "days-off")) {
+      setActiveTab("personal-info");
+    }
+  }, [isBookable, activeTab]);
 
   // Personal Information Form State
   const [personalInfo, setPersonalInfo] = useState({
@@ -321,21 +354,39 @@ export function TeamMemberDrawer({
   const allTeamMemberSections = useMemo(() => getAllSections("teamMember"), [getAllSections]);
 
   const BUILTIN_TEAM_SECTION_TITLES = useMemo(
-    () => new Set(["basic info", "custom fields"]),
+    () => new Set(["basic info", "custom fields", "provider credentials"]),
     []
   );
 
   const customTeamMemberSections = useMemo(() => {
-    const BUILTIN_SEC_IDS = new Set(["sec-team-basic", "sec-team-custom"]);
+    const BUILTIN_SEC_IDS = new Set(["sec-team-basic", "sec-team-custom", "sec-provider-credentials"]);
     return allTeamMemberSections.filter((s) => {
       if (s.source === "system") return false;
       if (BUILTIN_SEC_IDS.has(s.id)) return false;
       if (s.id.startsWith("sec-team-")) return false;
+      if (s.id === "sec-provider-credentials") return false;
       const lower = (s.title || "").toLowerCase().trim();
       if (BUILTIN_TEAM_SECTION_TITLES.has(lower)) return false;
+      if (lower === "provider credentials") return false;
       return true;
     });
   }, [allTeamMemberSections, BUILTIN_TEAM_SECTION_TITLES]);
+
+  const providerCredentialsSection = useMemo(() => {
+    return allTeamMemberSections.find(
+      (s) => s.id === "sec-provider-credentials" || s.title?.toLowerCase().trim() === "provider credentials"
+    );
+  }, [allTeamMemberSections]);
+
+  const providerCredSectionId = providerCredentialsSection?.id || "sec-provider-credentials";
+
+  const extraProviderFields = useMemo(() => {
+    return allTeamMemberFields.filter(
+      (f) =>
+        (f.sectionId === providerCredSectionId || providerCredentialsSection?.fieldKeys?.includes(f.key)) &&
+        !["npi", "taxonomy", "licenseNumber", "licenseState"].includes(f.key)
+    );
+  }, [allTeamMemberFields, providerCredSectionId, providerCredentialsSection]);
 
   // Registry-backed custom field values for this team member
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>(() => {
@@ -762,6 +813,17 @@ export function TeamMemberDrawer({
                           }`}
                       >
                         Availability & Days Off
+                      </button>
+                    )}
+                    {isBookable && (
+                      <button
+                        onClick={() => setActiveTab("provider-credentials")}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "provider-credentials"
+                            ? "border-[#1F2937] text-[#1F2937] font-semibold"
+                            : "border-transparent text-gray-600 hover:text-gray-900"
+                          }`}
+                      >
+                        Provider Credentials
                       </button>
                     )}
                     <button
@@ -1325,6 +1387,29 @@ export function TeamMemberDrawer({
                           <Switch
                             checked={personalInfo.status}
                             onCheckedChange={(checked) => updatePersonalInfo({ status: checked })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Available for Appointments */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            AVAILABLE FOR APPOINTMENTS
+                          </label>
+                        </div>
+                        <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2">
+                          <div>
+                            <span className="text-xs text-gray-700 font-medium">{canBookAppointments ? "Available" : "Not Available"}</span>
+                            <p className="text-[11px] text-gray-400">Allow this team member to be booked for appointments</p>
+                          </div>
+                          <Switch
+                            checked={canBookAppointments}
+                            onCheckedChange={(checked) => {
+                              setCanBookAppointments(checked);
+                              setHasUnsavedChanges(true);
+                            }}
                           />
                         </div>
                       </div>
@@ -1902,6 +1987,194 @@ export function TeamMemberDrawer({
                 />
               )}
 
+              {/* Provider Credentials Tab */}
+              {isBookable && activeTab === "provider-credentials" && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div>
+                        <h4 className="text-sm font-bold text-[#020817] flex items-center gap-2">
+                          <Award className="w-4 h-4 text-blue-600" />
+                          Provider Credentials
+                        </h4>
+                        <p className="text-xs text-[#64748B] mt-0.5">
+                          NPI, taxonomy code, and state license for medical billing
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 pt-4">
+                      {/* NPI */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                              NPI
+                            </label>
+                          </div>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="text"
+                            value={customFieldValues.npi ?? ""}
+                            onChange={(e) => handleCustomFieldValueChange("npi", e.target.value)}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                            placeholder="Enter npi..."
+                          />
+                          <Tag className="w-4 h-4 text-slate-400" />
+                        </div>
+                        {customFieldValues.npi && (
+                          <div className="mt-1 px-1 text-[11px] flex items-center gap-1">
+                            {(() => {
+                              const val = String(customFieldValues.npi).trim();
+                              if (val.length === 10) {
+                                const ok = isValidNpiLuhn(val);
+                                return ok ? (
+                                  <span className="text-emerald-600 font-medium flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-600" /> Valid 10-digit NPI (Luhn check passed)
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 font-medium flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3 text-amber-600" /> Invalid 10-digit NPI (checksum failed)
+                                  </span>
+                                );
+                              } else {
+                                return (
+                                  <span className="text-slate-400 font-normal">
+                                    10 digits required ({val.length}/10)
+                                  </span>
+                                );
+                              }
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Taxonomy */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                              TAXONOMY
+                            </label>
+                          </div>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="text"
+                            value={customFieldValues.taxonomy ?? ""}
+                            onChange={(e) => handleCustomFieldValueChange("taxonomy", e.target.value)}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                            placeholder="Enter taxonomy..."
+                          />
+                          <Tag className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+
+                      {/* License Number */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                              LICENSE NUMBER
+                            </label>
+                          </div>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="text"
+                            value={customFieldValues.licenseNumber ?? ""}
+                            onChange={(e) => handleCustomFieldValueChange("licenseNumber", e.target.value)}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                            placeholder="Enter license number..."
+                          />
+                          <Tag className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+
+                      {/* License State */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                              LICENSE STATE
+                            </label>
+                          </div>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="text"
+                            value={customFieldValues.licenseState ?? ""}
+                            onChange={(e) => handleCustomFieldValueChange("licenseState", e.target.value)}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                            placeholder="Enter license state..."
+                          />
+                          <Tag className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+
+                      {/* Extra custom fields added to Provider Credentials */}
+                      {extraProviderFields.map((field) => (
+                        <div key={field.id || field.key}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <GripVertical className="w-3 h-3 text-slate-300" />
+                              <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                                {field.label}
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingFieldDef(field)}
+                                className="text-[10px] text-slate-400 hover:text-blue-600 p-0.5 rounded cursor-pointer"
+                                title="Edit field settings"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFieldFromSection(providerCredSectionId, field.key)}
+                                className="text-[10px] text-slate-300 hover:text-red-500 cursor-pointer"
+                                title="Remove from section"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                            <input
+                              type="text"
+                              value={customFieldValues[field.key] ?? ""}
+                              onChange={(e) => handleCustomFieldValueChange(field.key, e.target.value)}
+                              className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                              placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            />
+                            <Tag className="w-4 h-4 text-slate-400" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* + Add Field inside Provider Credentials */}
+                    <div className="flex justify-end mt-4 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddField(providerCredSectionId)}
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Field
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Services Tab */}
               {activeTab === "services" && (
                 <div className="space-y-6">
@@ -2299,6 +2572,7 @@ export function TeamMemberDrawer({
                     role: personalInfo.role,
                     department: personalInfo.department,
                     status: personalInfo.status,
+                    canBookAppointments: canBookAppointments,
                     npi: customFieldValues.npi,
                     taxonomy: customFieldValues.taxonomy,
                     licenseNumber: customFieldValues.licenseNumber,
@@ -2325,6 +2599,7 @@ export function TeamMemberDrawer({
                     role: personalInfo.role,
                     department: personalInfo.department,
                     status: personalInfo.status,
+                    canBookAppointments: canBookAppointments,
                     npi: customFieldValues.npi,
                     taxonomy: customFieldValues.taxonomy,
                     licenseNumber: customFieldValues.licenseNumber,
