@@ -1055,6 +1055,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       },
     } as any);
 
+    // Persist any insurance coverages / consents entered during creation
+    if (dynamicFieldValues.ins_coverages) {
+      saveInsuranceField(newId, "ins_coverages", dynamicFieldValues.ins_coverages);
+    }
+    Object.keys(dynamicFieldValues).forEach((k) => {
+      if (k.startsWith("consent_")) {
+        saveInsuranceField(newId, k, dynamicFieldValues[k]);
+      }
+    });
+
     try {
       localStorage.setItem("ma_client_overview_sections", JSON.stringify(clientSections));
     } catch {}

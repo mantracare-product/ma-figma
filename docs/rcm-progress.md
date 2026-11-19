@@ -219,6 +219,7 @@ Checklist:
 - [x] Part 5: Provider credentials in Team member profile (registry section, inline Luhn hint, migration) (done, commit "R5-fix.5")
 - [x] Part 6: Revenue cycle alerts in Settings > Notifications & stage call switch (5 alerts card, stage call switch) (done, commit "R5-fix.6")
 - [x] Part 7: Unit tests, tm-tests, rcm-all.user.js, page-mapping docs (done, commit "R5-fix.7")
+- [x] Part 8: Client insurance Add row in Contact Overview (done, commit "Fix: client insurance Add row in Contact overview")
 
 ### Part A: Remove the eligibility scenario picker (done, commit "R5.A")
 - Deleted `MockScenarioPicker` and its dev-only control / label text from `src/app/components/claims/ClaimsSetup.tsx`.
@@ -316,4 +317,13 @@ Checklist:
   - Verified Claims | Payers top bar toggle, shared TableComponent with sharp edges, gear dropdown drawers (Claim defaults, Scrub rules), credentials in Team member profile, and alerts in Settings > Notifications.
 - Rebuilt `tools/tm-tests/rcm-all.user.js` via `node tools/tm-tests/build.mjs`.
 - Added Amendment note in `docs/rcm-page-mapping.md` summarizing the new layout.
+- Gate: typecheck OK, build OK, vitest OK.
+
+### Part 8 / Part I: Client insurance Add row in Contact Overview (done, commit "Fix: client insurance Add row in Contact overview")
+- Root cause: `saveInsuranceField` in `src/lib/clientInsurance.ts` filtered incoming table rows with `.filter((r) => r && (r.member_id || r.payer))`, immediately dropping empty rows created when clicking "+ Add Row".
+- Fix:
+  - `rowOf(c: Coverage)` in `src/lib/clientInsurance.ts`: included stable `id: c.id`.
+  - `saveInsuranceField`: keeps all incoming rows including newly added empty rows; safely handles deletions by checking existing vs incoming IDs; deterministically assigns sequential priorities (`primary` -> `secondary` -> `tertiary`) without collisions.
+  - `ClientProfile.tsx`: in `handleSaveNewClient`, persists any insurance coverages / consents entered during new client creation via `saveInsuranceField`.
+- Tests: `clientInsurance.test.ts` (6/6 passed) testing empty row addition, cell updates, sequential priorities, row removal, and consent fields.
 - Gate: typecheck OK, build OK, vitest OK.
