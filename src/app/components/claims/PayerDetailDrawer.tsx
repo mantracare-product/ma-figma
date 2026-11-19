@@ -11,6 +11,8 @@ import {
   Phone,
   Info,
   Plus,
+  Building2,
+  Users,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/switch";
@@ -31,12 +33,23 @@ import { loadServices, type Service } from "../../../lib/servicesStore";
 import { coveragesStore } from "../../../lib/coveragesStore";
 import { getStoredClaims } from "../../../lib/claimsStore";
 import { newId } from "../../../lib/refStore";
+import {
+  getStoredCredentialing,
+  upsertCredentialingRecord,
+  getRenderingProviders,
+  getOrgCredentialing,
+  getProviderCredentialing,
+  type CredentialingRecord,
+  type CredentialingStatus,
+  type NetworkStatus,
+} from "../../../lib/credentialingStore";
+import { getOrgBilling } from "../../../lib/orgBilling";
 
 export interface PayerDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   payerId?: string | null;
-  initialTab?: "general" | "enrollment" | "rules";
+  initialTab?: "general" | "enrollment" | "rules" | "credentialing";
 }
 
 const ENROLLMENT_OPTIONS: Array<{ value: EnrollmentStatus; label: string }> = [
@@ -59,7 +72,7 @@ export default function PayerDetailDrawer({
   payerId,
   initialTab = "general",
 }: PayerDetailDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"general" | "enrollment" | "rules">(initialTab);
+  const [activeTab, setActiveTab] = useState<"general" | "enrollment" | "rules" | "credentialing">(initialTab);
   const [services, setServices] = useState<Service[]>([]);
 
   // Payer state
@@ -77,6 +90,19 @@ export default function PayerDetailDrawer({
   const [claimsNotes, setClaimsNotes] = useState("");
   const [eraStatus, setEraStatus] = useState<EnrollmentStatus>("not_started");
   const [eraNotes, setEraNotes] = useState("");
+
+  // Organization credentialing state
+  const [orgCredStatus, setOrgCredStatus] = useState<CredentialingStatus>("not_started");
+  const [orgNetworkStatus, setOrgNetworkStatus] = useState<NetworkStatus>("in_network");
+  const [orgPayerAssignedId, setOrgPayerAssignedId] = useState("");
+  const [orgBillingNpi, setOrgBillingNpi] = useState("");
+  const [orgEffectiveDate, setOrgEffectiveDate] = useState("");
+  const [orgExpiresDate, setOrgExpiresDate] = useState("");
+  const [orgNotes, setOrgNotes] = useState("");
+
+  // Rendering providers list & their credentialing records
+  const [renderingProviders, setRenderingProviders] = useState(getRenderingProviders());
+  const [providerCreds, setProviderCreds] = useState<Record<string, Partial<CredentialingRecord>>>({});
 
   // Prior auth rules for this payer (draft copy)
   const [rules, setRules] = useState<PriorAuthRule[]>([]);
@@ -113,6 +139,42 @@ export default function PayerDetailDrawer({
         // Load rules for this payer
         const payerRules = priorAuthRulesStore.get().filter((r) => r.payerId === payerId);
         setRules(payerRules);
+
+        // Load credentialing
+        const orgCred = getOrgCredentialing(payerId);
+        if (orgCred) {
+          setOrgCredStatus(orgCred.status);
+          setOrgNetworkStatus(orgCred.networkStatus);
+          setOrgPayerAssignedId(orgCred.payerAssignedId || "");
+          setOrgBillingNpi(orgCred.billingNpi || "");
+          setOrgEffectiveDate(orgCred.effectiveDate || "");
+          setOrgExpiresDate(orgCred.expiresDate || "");
+          setOrgNotes(orgCred.notes || "");
+        } else {
+          setOrgCredStatus("not_started");
+          setOrgNetworkStatus("in_network");
+          setOrgPayerAssignedId("");
+          setOrgBillingNpi("");
+          setOrgEffectiveDate("");
+          setOrgExpiresDate("");
+          setOrgNotes("");
+        }
+
+        const renderers = getRenderingProviders();
+        setRenderingProviders(renderers);
+        const credMap: Record<string, Partial<CredentialingRecord>> = {};
+        renderers.forEach((m) => {
+          const pCred = getProviderCredentialing(m.id, payerId);
+          credMap[String(m.id)] = pCred ? { ...pCred } : {
+            scope: "provider",
+            memberId: String(m.id),
+            memberName: m.name,
+            payerId,
+            networkStatus: "in_network",
+            status: "not_started",
+          };
+        });
+        setProviderCreds(credMap);
         return;
       }
     }
@@ -130,6 +192,16 @@ export default function PayerDetailDrawer({
     setClaimsNotes("");
     setEraStatus("not_started");
     setEraNotes("");
+    setOrgCredStatus("not_started");
+    setOrgNetworkStatus("in_network");
+    setOrgPayerAssignedId("");
+    setOrgBillingNpi("");
+    setOrgEffectiveDate("");
+    setOrgExpiresDate("");
+    setOrgNotes("");
+    const renderers = getRenderingProviders();
+    setRenderingProviders(renderers);
+    setProviderCreds({});
     setRules([]);
   }, [isOpen, payerId]);
 
@@ -194,6 +266,39 @@ export default function PayerDetailDrawer({
       sample: false,
     }));
     priorAuthRulesStore.save([...otherPayerRules, ...updatedPayerRules]);
+
+    // Save organization credentialing
+    upsertCredentialingRecord({
+      scope: "organization",
+      payerId: currentId,
+      payerName: name.trim(),
+      status: orgCredStatus,
+      networkStatus: orgNetworkStatus,
+      payerAssignedId: orgPayerAssignedId.trim() || undefined,
+      billingNpi: orgBillingNpi.trim() || undefined,
+      effectiveDate: orgEffectiveDate || undefined,
+      expiresDate: orgExpiresDate || undefined,
+      notes: orgNotes.trim() || undefined,
+    });
+
+    // Save rendering providers credentialing
+    Object.values(providerCreds).forEach((pCred) => {
+      if (pCred.memberId) {
+        upsertCredentialingRecord({
+          scope: "provider",
+          memberId: pCred.memberId,
+          memberName: pCred.memberName,
+          payerId: currentId,
+          payerName: name.trim(),
+          status: pCred.status || "not_started",
+          networkStatus: pCred.networkStatus || "in_network",
+          payerAssignedId: pCred.payerAssignedId?.trim() || undefined,
+          effectiveDate: pCred.effectiveDate || undefined,
+          expiresDate: pCred.expiresDate || undefined,
+          notes: pCred.notes?.trim() || undefined,
+        });
+      }
+    });
 
     toast.success(`Payer "${updatedPayer.name}" saved successfully`);
     onClose();
@@ -393,6 +498,20 @@ export default function PayerDetailDrawer({
             Prior-auth rules
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
               {rules.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("credentialing")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "credentialing"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            Credentialing
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+              {renderingProviders.filter((m) => providerCreds[String(m.id)]?.status === "credentialed").length}/{renderingProviders.length}
             </span>
           </button>
         </div>
@@ -727,6 +846,265 @@ export default function PayerDetailDrawer({
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === "credentialing" && (
+            <div className="space-y-6 max-w-4xl">
+              {/* Organization Credentialing Card */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Organization Credentialing
+                    </h3>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      orgCredStatus === "credentialed"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : orgCredStatus === "denied" || orgCredStatus === "expired"
+                        ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {orgCredStatus.replace("_", " ")}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Credentialing Status
+                    </label>
+                    <select
+                      value={orgCredStatus}
+                      onChange={(e) => setOrgCredStatus(e.target.value as CredentialingStatus)}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="not_started">Not Started</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="in_review">In Review</option>
+                      <option value="credentialed">Credentialed</option>
+                      <option value="denied">Denied</option>
+                      <option value="expired">Expired</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Network Status
+                    </label>
+                    <select
+                      value={orgNetworkStatus}
+                      onChange={(e) => setOrgNetworkStatus(e.target.value as NetworkStatus)}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="in_network">In Network</option>
+                      <option value="out_of_network">Out of Network</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Payer-Assigned ID
+                    </label>
+                    <input
+                      type="text"
+                      value={orgPayerAssignedId}
+                      onChange={(e) => setOrgPayerAssignedId(e.target.value)}
+                      placeholder="e.g. BCBS-GRP-9821"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Billing NPI Override
+                    </label>
+                    <input
+                      type="text"
+                      value={orgBillingNpi}
+                      onChange={(e) => setOrgBillingNpi(e.target.value)}
+                      placeholder="Defaults to org Group NPI"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Effective Date
+                    </label>
+                    <input
+                      type="date"
+                      value={orgEffectiveDate}
+                      onChange={(e) => setOrgEffectiveDate(e.target.value)}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Expiration Date
+                    </label>
+                    <input
+                      type="date"
+                      value={orgExpiresDate}
+                      onChange={(e) => setOrgExpiresDate(e.target.value)}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Notes
+                  </label>
+                  <input
+                    type="text"
+                    value={orgNotes}
+                    onChange={(e) => setOrgNotes(e.target.value)}
+                    placeholder="Credentialing notes, tracking numbers, contact person..."
+                    className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Rendering Providers Credentialing Table */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Rendering Providers
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Staff members configured as rendering providers or with billing NPIs
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {renderingProviders.length} providers
+                  </span>
+                </div>
+
+                {renderingProviders.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    No rendering providers configured. Add an NPI or enable service rendering in Team settings.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+                        <tr>
+                          <th className="px-3 py-2">Provider</th>
+                          <th className="px-3 py-2">NPI</th>
+                          <th className="px-3 py-2">Network Status</th>
+                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Payer-Assigned ID</th>
+                          <th className="px-3 py-2">Effective</th>
+                          <th className="px-3 py-2">Expires</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                        {renderingProviders.map((m) => {
+                          const mId = String(m.id);
+                          const cred = providerCreds[mId] || {
+                            scope: "provider",
+                            memberId: mId,
+                            memberName: m.name,
+                            payerId: payerId || "",
+                            networkStatus: "in_network",
+                            status: "not_started",
+                          };
+
+                          const updateField = (patch: Partial<CredentialingRecord>) => {
+                            setProviderCreds((prev) => ({
+                              ...prev,
+                              [mId]: { ...prev[mId], ...patch, memberId: mId, memberName: m.name },
+                            }));
+                            if (payerId) {
+                              upsertCredentialingRecord({
+                                scope: "provider",
+                                memberId: mId,
+                                memberName: m.name,
+                                payerId,
+                                payerName: name.trim(),
+                                ...(providerCreds[mId] || {}),
+                                ...patch,
+                              });
+                            }
+                          };
+
+                          return (
+                            <tr key={mId} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="px-3 py-2">
+                                <span className="font-semibold text-slate-900">{m.name}</span>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-slate-600">
+                                {m.npi || "—"}
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={cred.networkStatus || "in_network"}
+                                  onChange={(e) => updateField({ networkStatus: e.target.value as NetworkStatus })}
+                                  className="h-7 px-2 bg-white border border-slate-200 rounded text-xs outline-none cursor-pointer"
+                                >
+                                  <option value="in_network">In Network</option>
+                                  <option value="out_of_network">Out of Network</option>
+                                </select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={cred.status || "not_started"}
+                                  onChange={(e) => updateField({ status: e.target.value as CredentialingStatus })}
+                                  className="h-7 px-2 bg-white border border-slate-200 rounded text-xs outline-none cursor-pointer font-medium"
+                                >
+                                  <option value="not_started">Not Started</option>
+                                  <option value="submitted">Submitted</option>
+                                  <option value="in_review">In Review</option>
+                                  <option value="credentialed">Credentialed</option>
+                                  <option value="denied">Denied</option>
+                                  <option value="expired">Expired</option>
+                                  <option value="terminated">Terminated</option>
+                                </select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={cred.payerAssignedId || ""}
+                                  onChange={(e) => updateField({ payerAssignedId: e.target.value })}
+                                  placeholder="e.g. PR-0042"
+                                  className="h-7 px-2 w-28 bg-white border border-slate-200 rounded text-xs outline-none"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  value={cred.effectiveDate || ""}
+                                  onChange={(e) => updateField({ effectiveDate: e.target.value })}
+                                  className="h-7 px-1.5 bg-white border border-slate-200 rounded text-[11px] outline-none"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  value={cred.expiresDate || ""}
+                                  onChange={(e) => updateField({ expiresDate: e.target.value })}
+                                  className="h-7 px-1.5 bg-white border border-slate-200 rounded text-[11px] outline-none"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

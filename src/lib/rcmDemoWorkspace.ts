@@ -23,6 +23,7 @@ import { getStoredProcesses } from "./useProcessStore";
 import { getStoredClaims } from "./claimsStore";
 import { getStoredCallLogs, saveCallLogs } from "./processLogsStore";
 import { getStoredTasks, saveStoredTasks } from "./tasksStore";
+import { CREDENTIALING_STORAGE_KEY, type CredentialingRecord } from "./credentialingStore";
 import { getStoredNotifications, saveStoredNotifications } from "./notificationsStore";
 import { getStoredAuditLogs } from "./auditLogsStore";
 import { getScribeSessions } from "./scribeSessionStore";
@@ -426,6 +427,103 @@ export function seedDemoWorkspace(opts: { force?: boolean; now?: number } = {}):
     }));
     added.audit = addMissing("mantra_admin_audit_logs", audits, true, getStoredAuditLogs());
 
+    // ── Credentialing: org and providers against payers ──
+    const credRecords: CredentialingRecord[] = [];
+    const p1 = payers[0];
+    const p2 = payers[1] || payers[0];
+    const p3 = payers[2] || payers[0];
+
+    // Org credentialed with p1 and p2, not credentialed with p3
+    credRecords.push({
+      id: `${ID}cred-org-${p1.id}`,
+      scope: "organization",
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "ORG-BCBS-900",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(365),
+      notes: "Annual in-network contract active",
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    credRecords.push({
+      id: `${ID}cred-org-${p2.id}`,
+      scope: "organization",
+      payerId: p2.id,
+      payerName: p2.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "ORG-AET-440",
+      effectiveDate: "2024-03-01",
+      expiresDate: dayYmd(300),
+      createdAt: dayIso(-20, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    credRecords.push({
+      id: `${ID}cred-org-${p3.id}`,
+      scope: "organization",
+      payerId: p3.id,
+      payerName: p3.name,
+      networkStatus: "out_of_network",
+      status: "not_started",
+      notes: "Contracting under review",
+      createdAt: dayIso(-10, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+
+    // Providers against p1:
+    // Prov 1: credentialed
+    credRecords.push({
+      id: `${ID}cred-p1-${PROVIDERS[0].name.replace(/\s+/g, "")}`,
+      scope: "provider",
+      memberId: PROVIDERS[0].npi,
+      memberName: PROVIDERS[0].name,
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "PR-901",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(365),
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    // Prov 2: expiring in 30 days!
+    credRecords.push({
+      id: `${ID}cred-p2-${PROVIDERS[1].name.replace(/\s+/g, "")}`,
+      scope: "provider",
+      memberId: PROVIDERS[1].npi,
+      memberName: PROVIDERS[1].name,
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "in_network",
+      status: "credentialed",
+      payerAssignedId: "PR-902",
+      effectiveDate: "2024-01-01",
+      expiresDate: dayYmd(30),
+      notes: "Re-credentialing packet sent to payer",
+      createdAt: dayIso(-30, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+    // Prov 3: not credentialed!
+    credRecords.push({
+      id: `${ID}cred-p3-${PROVIDERS[2].name.replace(/\s+/g, "")}`,
+      scope: "provider",
+      memberId: PROVIDERS[2].npi,
+      memberName: PROVIDERS[2].name,
+      payerId: p1.id,
+      payerName: p1.name,
+      networkStatus: "out_of_network",
+      status: "not_started",
+      notes: "Application pending provider signature",
+      createdAt: dayIso(-5, 9),
+      updatedAt: dayIso(-1, 9),
+    });
+
+    added.credentialing = addMissing(CREDENTIALING_STORAGE_KEY, credRecords);
+
     if (!opts.force) localStorage.setItem(DEMO_WORKSPACE_FLAG, "1");
     window.dispatchEvent(new Event("storage"));
     for (const ev of ["mantra_claims_changed", "mantra_era_updated", "mantra_coverages_updated", "processLogs_updated", "mantra-tasks-updated", "mantra-notifications-updated"]) {
@@ -445,7 +543,7 @@ const isDemoRecord = (r: any) => {
   return id.startsWith(ID) || id.includes("-DM-") || (Number.isFinite(n) && n >= 910000 && n < 920000) || (Number.isFinite(appt) && appt >= 910000 && appt < 920000);
 };
 
-const DEMO_KEYS = ["mantra_coverages_v1", "mantra_claims_v1", "mantra_eras_v1", "mantra_invoices_v1", "mantra_payments_v1", "mantra_tasks_store", "callLogs", "callLogs_demo", "appointments_v1", "mantra_notifications_store", "mantra_admin_audit_logs"];
+const DEMO_KEYS = ["mantra_coverages_v1", "mantra_claims_v1", "mantra_eras_v1", "mantra_invoices_v1", "mantra_payments_v1", "mantra_tasks_store", "callLogs", "callLogs_demo", "appointments_v1", "mantra_notifications_store", "mantra_admin_audit_logs", CREDENTIALING_STORAGE_KEY];
 
 /** Remove exactly the records this seed created (and their field values). */
 export function removeDemoRecords(): number {

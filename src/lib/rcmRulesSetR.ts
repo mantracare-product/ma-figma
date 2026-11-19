@@ -89,6 +89,12 @@ export function buildSetRRules(): SampleRuleDef[] {
           processId: PIPE,
           stageName: "Credentialing issue",
         }),
+        step("r2-cred-task", "create_task", {
+          title: "Provider/Org credentialing issue for {{client.name}}",
+          queue: "Insurance fixes",
+          priority: "high",
+          dueInDays: 1,
+        }),
       ],
       {
         order: 10,
@@ -109,7 +115,13 @@ export function buildSetRRules(): SampleRuleDef[] {
           stageMap: ELIGIBILITY_RESULT_STAGES,
         }),
       ],
-      { order: 20 }
+      {
+        order: 20,
+        conditions: [
+          cond("c1", "_providerCredentialed", "not_equals", "false"),
+          cond("c2", "_orgCredentialed", "not_equals", "false"),
+        ],
+      }
     ),
 
     // ── 3. Eligibility issue handling ──────────────────────────────────────────────

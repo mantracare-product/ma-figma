@@ -23,6 +23,13 @@ import { isValidNpiLuhn } from "./scrubMigration";
 import { getOrgBilling, getOrgLocations } from "./orgBilling";
 import { getStoredServices } from "./servicesStore";
 import { getStoredTeamMembers } from "./teamStore";
+import {
+  isOrgCredentialed,
+  isProviderCredentialed,
+  getProviderNetworkStatus,
+  getOrgCredentialing,
+  getProviderCredentialing,
+} from "./credentialingStore";
 import { getScribeSessionById } from "./scribeSessionStore";
 import { getSessionCodes, applyCodesToClaim } from "./scribeBilling";
 import { readLocalRecordFields } from "./recordWriter";
@@ -114,6 +121,13 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   let diagnosisCodes: ClaimDiagnosisCode[] = [];
   let lines: ClaimServiceLine[] = [];
   const linesFrom = input.linesFrom || (input.sessionId ? "scribe_codes" : "service_cpt");
+  const payerKey = payerRecord?.id || payer?.id || payer?.payerId || "";
+  const orgCred = payerKey ? getOrgCredentialing(payerKey) : undefined;
+  const provCred = payerKey && member?.id ? getProviderCredentialing(member.id, payerKey) : undefined;
+  const billingNpiToUse = orgCred?.billingNpi || entity.npi;
+  const renderingNpiToUse = cred?.npi || member?.npi || "";
+  const payerAssignedIdToUse = provCred?.payerAssignedId || orgCred?.payerAssignedId;
+
   const baseClaim: Claim = {
     id: `clm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     claimNumber: generateClaimNumber(),
@@ -131,9 +145,10 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
     scribeSessionId: input.sessionId,
     serviceId: appt ? String(appt.serviceId) : undefined,
     renderingProviderName: member?.name || "",
-    renderingProviderNpi: cred?.npi || "",
+    renderingProviderNpi: renderingNpiToUse,
+    payerAssignedProviderId: payerAssignedIdToUse,
     billingProviderName: entity.legalName,
-    billingProviderNpi: entity.npi,
+    billingProviderNpi: billingNpiToUse,
     billingProviderTaxId: entity.ein,
     billingProviderAddress: entity.address,
     billingLocationId: loc?.id || defaults.defaultBillingLocationId,
@@ -324,6 +339,8 @@ function evalConditionOnRecord(
         npi: context.claim.renderingProviderNpi || context.renderingProvider?.npi,
         name: context.claim.renderingProviderName || context.renderingProvider?.name,
         _npiValid: context.derived._npiValid,
+        _providerCredentialed: context.derived._providerCredentialed,
+        _providerNetworkStatus: context.derived._providerNetworkStatus,
       };
       break;
     case "appointment":
@@ -333,7 +350,11 @@ function evalConditionOnRecord(
       sourceObj = context.authorization || {};
       break;
     case "organization":
-      sourceObj = { ...(context.organization || {}), _groupNpiValid: context.derived._groupNpiValid };
+      sourceObj = {
+        ...(context.organization || {}),
+        _groupNpiValid: context.derived._groupNpiValid,
+        _orgCredentialed: context.derived._orgCredentialed,
+      };
       break;
     default:
       sourceObj = { ...context.claim, ...context.local, ...context.derived };
@@ -469,6 +490,12 @@ export function scrubClaim(claim: Claim, rules: ScrubRule[] = scrubRulesStore.ge
   const isNpiValid = npiToCheck ? isValidNpiLuhn(npiToCheck) : false;
   const isGroupNpiValid = orgBilling?.groupNpi ? isValidNpiLuhn(orgBilling.groupNpi) : false;
 
+  const payerKey = claim.payer?.id || claim.payer?.payerId || (claim as any).payerId || payerRecord?.id || payerRecord?.payerIdCode || "";
+  const renderingId = renderingProviderCred?.id || (claim as any).renderingProviderId;
+  const isOrgCred = payerKey ? isOrgCredentialed(payerKey) : true;
+  const isProvCred = payerKey ? isProviderCredentialed(renderingId || npiToCheck, payerKey, claim.serviceDate) : true;
+  const provNet = payerKey ? getProviderNetworkStatus(renderingId || npiToCheck, payerKey) : "in_network";
+
   const evalContext = {
     claim,
     patient,
@@ -484,6 +511,9 @@ export function scrubClaim(claim: Claim, rules: ScrubRule[] = scrubRulesStore.ge
       _daysPastFiling: daysPastFiling,
       _npiValid: isNpiValid,
       _groupNpiValid: isGroupNpiValid,
+      _orgCredentialed: isOrgCred,
+      _providerCredentialed: isProvCred,
+      _providerNetworkStatus: provNet,
     },
     local,
   };

@@ -292,6 +292,52 @@ export const SEEDED_SCRUB_RULES: ScrubRule[] = [
       },
     ],
   },
+  {
+    id: "scrub-rule-org-credentialed",
+    name: "Organization not credentialed with the payer",
+    enabled: true,
+    severity: "error",
+    message: "Organization is not credentialed with the claim payer",
+    matchType: "ALL",
+    groups: [
+      {
+        id: "g-org-cred",
+        matchType: "ALL",
+        conditions: [
+          {
+            id: "c-org-cred-1",
+            record: "organization",
+            field: "_orgCredentialed",
+            operator: "is",
+            value: "false",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scrub-rule-provider-credentialed",
+    name: "Rendering provider not credentialed with the payer on the date of service",
+    enabled: true,
+    severity: "error",
+    message: "Rendering provider is not credentialed with the claim payer on the date of service",
+    matchType: "ALL",
+    groups: [
+      {
+        id: "g-prov-cred",
+        matchType: "ALL",
+        conditions: [
+          {
+            id: "c-prov-cred-1",
+            record: "rendering_provider",
+            field: "_providerCredentialed",
+            operator: "is",
+            value: "false",
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 /**

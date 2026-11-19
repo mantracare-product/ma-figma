@@ -22,6 +22,15 @@ import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
 import SecurityTab from "./settings/SecurityTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TeamMember } from "../../lib/teamStore";
+import { payersStore, type Payer } from "../../lib/billingSetupStore";
+import {
+  getStoredCredentialing,
+  upsertCredentialingRecord,
+  getProviderCredentialing,
+  type CredentialingRecord,
+  type CredentialingStatus,
+  type NetworkStatus,
+} from "../../lib/credentialingStore";
 import { useAuth } from "../context/AuthContext";
 import {
   useFieldRegistry,
@@ -302,6 +311,26 @@ export function TeamMemberDrawer({
   }, [member]);
 
   const isBookable = canBookAppointments;
+
+  const [providesServices, setProvidesServices] = useState<boolean>(() => {
+    return Boolean(
+      member?.npi ||
+      (member as any)?.isRenderingProvider ||
+      (member as any)?.providesServices
+    );
+  });
+
+  useEffect(() => {
+    if (member) {
+      setProvidesServices(
+        Boolean(
+          member.npi ||
+          (member as any)?.isRenderingProvider ||
+          (member as any)?.providesServices
+        )
+      );
+    }
+  }, [member]);
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -2001,7 +2030,34 @@ export function TeamMemberDrawer({
                           NPI, taxonomy code, and state license for medical billing
                         </p>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-semibold text-slate-700 cursor-pointer">
+                          Provides services (rendering provider)
+                        </label>
+                        <Switch
+                          checked={providesServices}
+                          onCheckedChange={(val) => {
+                            setProvidesServices(val);
+                            if (member?.id) {
+                              const all = getStoredTeamMembers();
+                              const updated = all.map((m) =>
+                                String(m.id) === String(member.id)
+                                  ? { ...m, isRenderingProvider: val, providesServices: val }
+                                  : m
+                              );
+                              saveStoredTeamMembers(updated);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
+
+                    {!providesServices ? (
+                      <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-4">
+                        Enable "Provides services (rendering provider)" above to configure medical billing credentials and payer credentialing for this member.
+                      </div>
+                    ) : (
+                      <>
 
                     <div className="space-y-4 pt-4">
                       {/* NPI */}
@@ -2171,6 +2227,120 @@ export function TeamMemberDrawer({
                         Add Field
                       </button>
                     </div>
+
+                    {/* Payer Credentialing Table */}
+                    <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
+                      <div>
+                        <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          Payer Credentialing
+                        </h5>
+                        <p className="text-[11px] text-slate-500">
+                          Credentialing status for this rendering provider across all payers
+                        </p>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+                            <tr>
+                              <th className="px-3 py-2">Payer</th>
+                              <th className="px-3 py-2">Network Status</th>
+                              <th className="px-3 py-2">Status</th>
+                              <th className="px-3 py-2">Payer-Assigned ID</th>
+                              <th className="px-3 py-2">Effective</th>
+                              <th className="px-3 py-2">Expires</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                            {payersStore.get().map((payer) => {
+                              const pCred: Partial<CredentialingRecord> = getProviderCredentialing(member?.id, payer.id) || {
+                                scope: "provider",
+                                memberId: String(member?.id),
+                                memberName: member?.name,
+                                payerId: payer.id,
+                                payerName: payer.name,
+                                networkStatus: "in_network",
+                                status: "not_started",
+                              };
+
+                              const updateCred = (patch: Partial<CredentialingRecord>) => {
+                                if (member?.id) {
+                                  upsertCredentialingRecord({
+                                    scope: "provider",
+                                    memberId: String(member.id),
+                                    memberName: member.name,
+                                    payerId: payer.id,
+                                    payerName: payer.name,
+                                    ...pCred,
+                                    ...patch,
+                                  });
+                                }
+                              };
+
+                              return (
+                                <tr key={payer.id} className="hover:bg-slate-50/70 transition-colors">
+                                  <td className="px-3 py-2 font-semibold text-slate-900">
+                                    {payer.name}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <select
+                                      value={pCred.networkStatus || "in_network"}
+                                      onChange={(e) => updateCred({ networkStatus: e.target.value as NetworkStatus })}
+                                      className="h-7 px-2 bg-white border border-slate-200 rounded text-xs outline-none cursor-pointer"
+                                    >
+                                      <option value="in_network">In Network</option>
+                                      <option value="out_of_network">Out of Network</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <select
+                                      value={pCred.status || "not_started"}
+                                      onChange={(e) => updateCred({ status: e.target.value as CredentialingStatus })}
+                                      className="h-7 px-2 bg-white border border-slate-200 rounded text-xs outline-none cursor-pointer font-medium"
+                                    >
+                                      <option value="not_started">Not Started</option>
+                                      <option value="submitted">Submitted</option>
+                                      <option value="in_review">In Review</option>
+                                      <option value="credentialed">Credentialed</option>
+                                      <option value="denied">Denied</option>
+                                      <option value="expired">Expired</option>
+                                      <option value="terminated">Terminated</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="text"
+                                      value={pCred.payerAssignedId || ""}
+                                      onChange={(e) => updateCred({ payerAssignedId: e.target.value })}
+                                      placeholder="e.g. PR-0042"
+                                      className="h-7 px-2 w-28 bg-white border border-slate-200 rounded text-xs outline-none"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="date"
+                                      value={pCred.effectiveDate || ""}
+                                      onChange={(e) => updateCred({ effectiveDate: e.target.value })}
+                                      className="h-7 px-1.5 bg-white border border-slate-200 rounded text-[11px] outline-none"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="date"
+                                      value={pCred.expiresDate || ""}
+                                      onChange={(e) => updateCred({ expiresDate: e.target.value })}
+                                      className="h-7 px-1.5 bg-white border border-slate-200 rounded text-[11px] outline-none"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
                   </div>
                 </div>
               )}

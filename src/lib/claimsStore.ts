@@ -103,6 +103,7 @@ export interface Claim {
   // Clinical & Billing Provider Info (CMS-1500 Box 24J, 31, 32, 33)
   renderingProviderName: string;
   renderingProviderNpi: string;
+  payerAssignedProviderId?: string;
   billingProviderName: string;
   billingProviderNpi: string;
   billingProviderTaxId?: string; // EIN/SSN

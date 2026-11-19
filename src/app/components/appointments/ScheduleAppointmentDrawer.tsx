@@ -1414,7 +1414,17 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </SectionCard>
 
-        {values.client && <ScheduleCoverageSection serviceId={values.serviceId} paymentMode={values.paymentMode} onPaymentModeChange={(m) => onChange({ paymentMode: m })} clientId={String(values.client.id)} date={values.date} />}
+        {values.client && (
+          <ScheduleCoverageSection
+            serviceId={values.serviceId}
+            paymentMode={values.paymentMode}
+            onPaymentModeChange={(m) => onChange({ paymentMode: m })}
+            clientId={String(values.client.id)}
+            date={values.date}
+            providerId={values.provider?.id}
+            providerName={values.provider?.name}
+          />
+        )}
 
         {/* ================================================================ */}
         {/* SECTION 4 — SCHEDULE                                             */}

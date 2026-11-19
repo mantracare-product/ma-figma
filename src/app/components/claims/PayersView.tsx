@@ -10,6 +10,7 @@ import {
   PRIOR_AUTH_RULES_EVENT,
   priorAuthRulesStore,
 } from "../../../lib/priorAuthRulesStore";
+import { getCredentialedProvidersCount } from "../../../lib/credentialingStore";
 import { TableComponent, type TableColumn } from "../ui/TableComponent";
 import PageTopBar, { type FilterFieldConfig, type TopBarMode } from "../layout/PageTopBar";
 import { Tooltip } from "../ui/Tooltip";
@@ -30,9 +31,11 @@ export default function PayersView({ modes, activeMode, onModeChange }: PayersVi
     const bump = () => setTick((t) => t + 1);
     window.addEventListener(BILLING_SETUP_EVENT, bump);
     window.addEventListener(PRIOR_AUTH_RULES_EVENT, bump);
+    window.addEventListener("mantra:credentialing_changed", bump);
     return () => {
       window.removeEventListener(BILLING_SETUP_EVENT, bump);
       window.removeEventListener(PRIOR_AUTH_RULES_EVENT, bump);
+      window.removeEventListener("mantra:credentialing_changed", bump);
     };
   }, []);
 
@@ -145,6 +148,27 @@ export default function PayersView({ modes, activeMode, onModeChange }: PayersVi
                 {chipText}
               </span>
             </Tooltip>
+          );
+        },
+      },
+      {
+        header: "Credentialed",
+        render: (p) => {
+          const { credentialed, total } = getCredentialedProvidersCount(p.id);
+          const chipText = total > 0 ? `${credentialed} of ${total} providers` : "None";
+          const chipClass =
+            total > 0 && credentialed === total
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
+              : credentialed > 0
+              ? "bg-blue-50 text-blue-700 border-blue-200/60"
+              : "bg-slate-100 text-slate-500 border-slate-200";
+
+          return (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider inline-block ${chipClass}`}
+            >
+              {chipText}
+            </span>
           );
         },
       },

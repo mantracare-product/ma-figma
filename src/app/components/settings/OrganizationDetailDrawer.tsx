@@ -1410,7 +1410,7 @@ export default function OrganizationDetailDrawer({
               {([
                 ["legalName", "LEGAL NAME", "Legal entity name on claims"],
                 ["ein", "EIN / TAX ID", "12-3456789"],
-                ["groupNpi", "GROUP NPI", "10-digit billing NPI"],
+                ["groupNpi", "GROUP NPI (TYPE 2)", "10-digit Type 2 billing NPI"],
                 ["taxonomy", "TAXONOMY CODE", "e.g. 207Q00000X"],
                 ["phone", "BILLING PHONE", "Billing office phone"],
               ] as Array<[keyof OrgBilling, string, string]>).map(([k, label, ph]) => (
