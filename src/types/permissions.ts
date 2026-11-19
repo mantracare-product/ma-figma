@@ -1,4 +1,4 @@
-export type ActionScope = "inherit" | "deny" | "own" | "role" | "all";
+export type ActionScope = "inherit" | "deny" | "own" | "role" | "department" | "all";
 
 export const ACTIONS = ["read", "add", "edit", "delete", "export", "import"] as const;
 export type Action = (typeof ACTIONS)[number];

@@ -1065,7 +1065,7 @@ export default function AdminUserManagement() {
                   <tr className="bg-[#1E293B] text-white text-[11px] font-bold uppercase tracking-wider">
                     <th className="py-3 px-4 w-[34%]">ADMIN MODULE</th>
                     <th className="py-3 px-4 w-[42%]">PERMISSIONS</th>
-                    <th className="py-3 px-4 w-[24%]">LEVEL</th>
+                    <th className="py-3 px-4 w-[24%]">SCOPE</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs">
@@ -1113,7 +1113,8 @@ export default function AdminUserManagement() {
                               className="w-full h-8 px-2.5 pr-7 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                             >
                               <option value="all">All Records</option>
-                              <option value="department">Role</option>
+                              <option value="department">Department</option>
+                              <option value="role">Role</option>
                               <option value="own">Own Records</option>
                               <option value="deny">Deny</option>
                             </select>

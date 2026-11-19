@@ -28,6 +28,7 @@ export default function Tasks() {
   const {
     tasks,
     createTask,
+    createMultipleTasks,
     updateTask,
     deleteTask,
     toggleTaskStatus,
@@ -727,6 +728,7 @@ export default function Tasks() {
         isOpen={showQuickCreate}
         onClose={handleCloseDrawer}
         onCreateTask={createTask}
+        onCreateMultipleTasks={createMultipleTasks}
         onUpdateTask={updateTask}
         taskToEdit={taskToEdit}
         isAdmin={isAdmin}

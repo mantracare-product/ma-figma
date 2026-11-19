@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Drawer } from "../ui/drawer";
-import { ChevronDown, MapPin, Video, Building2 } from "lucide-react";
+import { ChevronDown, MapPin, Video, Building2, Copy, Check, ExternalLink, Mail, CheckCircle2, Shield, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { addTeamMemberToStore, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
+import { getStoredDepartments } from "../../../lib/departmentStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredRoles } from "../../../lib/rolesStore";
 
@@ -13,14 +14,14 @@ export interface AddTeamMemberDrawerProps {
   initialCanBookAppointments?: boolean;
 }
 
-const DEFAULT_DEPARTMENTS = ["Engineering", "Medical", "Sales", "Reception"];
+const DEFAULT_DEPARTMENTS = ["Clinical Operations", "Administration", "Customer Support"];
 const DEFAULT_ROLES = [
-  { id: "1", name: "Admin", department: "Engineering" },
-  { id: "2", name: "Manager", department: "Medical" },
-  { id: "3", name: "Specialist", department: "Medical" },
-  { id: "4", name: "Reception", department: "Reception" },
-  { id: "5", name: "Sales", department: "Sales" },
-  { id: "6", name: "Agent", department: "Sales" },
+  { id: "admin", name: "Admin", department: "Administration" },
+  { id: "manager", name: "Manager", department: "Administration" },
+  { id: "specialist", name: "Specialist", department: "Clinical Operations" },
+  { id: "reception", name: "Reception", department: "Customer Support" },
+  { id: "sales", name: "Sales", department: "Customer Support" },
+  { id: "agent", name: "Agent", department: "Customer Support" },
 ];
 
 export default function AddTeamMemberDrawer({
@@ -32,10 +33,18 @@ export default function AddTeamMemberDrawer({
   const { activeOrganization } = useOrganization();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [department, setDepartment] = useState("");
-  const [role, setRole] = useState("Specialist");
+  const [assignedDepartments, setAssignedDepartments] = useState<
+    Array<{ department: string; role: string }>
+  >([]);
+  const [isDeptDropdownOpen, setIsDeptDropdownOpen] = useState(false);
+  const [selectedDeptInput, setSelectedDeptInput] = useState("");
+  const [selectedRoleInput, setSelectedRoleInput] = useState("Admin");
   const [canBookAppointments, setCanBookAppointments] = useState(initialCanBookAppointments);
   const [locVersion, setLocVersion] = useState(0);
+
+  // Invitation Success & Copy Link State
+  const [invitedMember, setInvitedMember] = useState<TeamMember | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Listen to storage/team updates
   useEffect(() => {
@@ -47,6 +56,41 @@ export default function AddTeamMemberDrawer({
       window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
     };
   }, []);
+
+  const availableDepts = useMemo(() => {
+    try {
+      const stored = getStoredDepartments();
+      if (stored && stored.length > 0) return stored.map((d) => d.name);
+    } catch {}
+    return DEFAULT_DEPARTMENTS;
+  }, [isOpen, locVersion]);
+
+  const availableRolesList = useMemo(() => {
+    try {
+      const stored = getStoredRoles();
+      if (stored && stored.length > 0) {
+        return stored.map((r: any) => ({
+          id: r.id || r.name,
+          name: r.name,
+          department: r.department,
+        }));
+      }
+    } catch {}
+    try {
+      const raw = sessionStorage.getItem("settings_roles");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((r: any) => ({
+            id: r.id || r.name,
+            name: r.name,
+            department: r.department,
+          }));
+        }
+      }
+    } catch {}
+    return DEFAULT_ROLES;
+  }, [isOpen, locVersion]);
 
   // Fetch organization locations strictly from storage / context + Online
   const orgLocations = useMemo(() => {
@@ -98,19 +142,56 @@ export default function AddTeamMemberDrawer({
   }, [activeOrganization, locVersion]);
 
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       setName("");
       setEmail("");
-      setDepartment("");
-      setRole("Specialist");
+      const firstDept = availableDepts[0] || "Clinical Operations";
+      const matchingRole = availableRolesList.find(
+        (r) => (r.department || "").toLowerCase() === firstDept.toLowerCase()
+      );
+      setSelectedDeptInput(firstDept);
+      setSelectedRoleInput(matchingRole?.name || availableRolesList[0]?.name || "Specialist");
+      setAssignedDepartments([]);
+      setIsDeptDropdownOpen(false);
       setCanBookAppointments(initialCanBookAppointments);
       setSelectedLocationIds(orgLocations.map((l) => l.id));
+      setInvitedMember(null);
+      setCopiedLink(false);
+      setIsSubmitting(false);
     }
-  }, [isOpen, initialCanBookAppointments, orgLocations]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, initialCanBookAppointments, availableDepts, availableRolesList, orgLocations]);
+
+  const handleAssignDepartment = () => {
+    if (!selectedDeptInput) {
+      toast.error("Please select a department");
+      return;
+    }
+    if (assignedDepartments.some((d) => d.department.toLowerCase() === selectedDeptInput.toLowerCase())) {
+      setAssignedDepartments((prev) =>
+        prev.map((d) =>
+          d.department.toLowerCase() === selectedDeptInput.toLowerCase()
+            ? { ...d, role: selectedRoleInput }
+            : d
+        )
+      );
+      toast.success(`Updated role for "${selectedDeptInput}" to "${selectedRoleInput}"`);
+    } else {
+      setAssignedDepartments((prev) => [
+        ...prev,
+        { department: selectedDeptInput, role: selectedRoleInput },
+      ]);
+      toast.success(`Assigned to "${selectedDeptInput}" (${selectedRoleInput})`);
+    }
+  };
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!name.trim() || !email.trim()) {
       toast.error("Please fill in all required fields");
       return;
@@ -127,16 +208,29 @@ export default function AddTeamMemberDrawer({
       return;
     }
 
+    setIsSubmitting(true);
+
     const selectedLocationNames = orgLocations
       .filter((l) => selectedLocationIds.includes(l.id))
       .map((l) => l.name);
 
+    let finalAssigned = [...assignedDepartments];
+    if (finalAssigned.length === 0 && selectedDeptInput) {
+      finalAssigned = [{ department: selectedDeptInput, role: selectedRoleInput }];
+    }
+
+    const primaryRole = finalAssigned[0]?.role || selectedRoleInput || "Admin";
+    const departmentStr = finalAssigned.map((d) => d.department).join(", ");
+    const deptList = finalAssigned.map((d) => d.department);
+
     const created = addTeamMemberToStore({
       name: name.trim(),
       email: email.trim(),
-      role,
-      roleId: getStoredRoles().find((r) => r.name === role)?.id,
-      department: department || undefined,
+      role: primaryRole,
+      roleId: (getStoredRoles?.() || []).find((r: any) => r.name === primaryRole)?.id,
+      department: departmentStr || undefined,
+      departments: deptList,
+      assignedDepartments: finalAssigned,
       status: true,
       organizationId: activeOrganization?.id || "1",
       canBookAppointments,
@@ -157,25 +251,62 @@ export default function AddTeamMemberDrawer({
       window.dispatchEvent(new Event("storage"));
     } catch {}
 
-    toast.success(`Team member "${created.name}" added successfully`);
+    const directInviteUrl = `${window.location.origin}/chats?memberId=${created.id}&invite=1`;
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(directInviteUrl);
+        setCopiedLink(true);
+      }
+    } catch {}
+
+    toast.success(`Team member "${created.name}" added & invitation link copied!`, {
+      description: directInviteUrl,
+      action: {
+        label: "Copy Link",
+        onClick: () => {
+          try {
+            navigator.clipboard.writeText(directInviteUrl);
+            toast.success("Invitation link copied to clipboard!");
+          } catch {}
+        },
+      },
+      duration: 8000,
+    });
+
+    setInvitedMember(created);
+    setIsSubmitting(false);
+
     if (onSuccess) {
       onSuccess(created);
     }
-    onClose();
   };
 
-  // Prefer the roles configured in Settings > Team > Roles; the static list is only a fallback for an empty store.
-  const storedRoles = getStoredRoles();
-  const roleSource: Array<{ id: string; name: string; department?: string }> =
-    storedRoles.length > 0 ? storedRoles : DEFAULT_ROLES;
-  const filteredRoles = department
-    ? roleSource.filter((r) => !r.department || r.department === department)
-    : roleSource;
+  const inviteUrl = invitedMember
+    ? `${window.location.origin}/chats?memberId=${invitedMember.id}&invite=1`
+    : "";
+
+  const handleCopyLink = () => {
+    if (!inviteUrl) return;
+    try {
+      navigator.clipboard.writeText(inviteUrl);
+      setCopiedLink(true);
+      toast.success("Invitation link copied to clipboard!");
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      toast.success("Link copied!");
+    }
+  };
+
+  const handleCloseAll = () => {
+    setInvitedMember(null);
+    onClose();
+  };
 
   return (
     <Drawer
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleCloseAll}
       title={
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
@@ -199,16 +330,137 @@ export default function AddTeamMemberDrawer({
           </div>
           <div>
             <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Add Team Member
+              {invitedMember ? "Team Member Invited" : "Add Team Member"}
             </div>
             <div className="text-[11px] text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Fill in the details below to add a new user
+              {invitedMember ? "Invitation sent with direct login link" : "Fill in the details below to add a new user"}
             </div>
           </div>
         </div>
       }
       maxWidth="max-w-[420px] w-full sm:max-w-[480px]"
     >
+      {invitedMember ? (
+        <div className="space-y-4 py-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {/* Success Banner */}
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs font-bold text-emerald-900">
+                Invitation Sent Automatically!
+              </h4>
+              <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                An invitation email was sent to{" "}
+                <span className="font-semibold underline">{invitedMember.email}</span>.
+              </p>
+            </div>
+          </div>
+
+          {/* Member Card */}
+          <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {invitedMember.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="text-xs font-bold text-slate-900 truncate">
+                    {invitedMember.name}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    {invitedMember.role || "Specialist"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  {invitedMember.email} · {invitedMember.department || "Medical"}
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Shield className="w-3.5 h-3.5 text-blue-600" />
+                Access Permissions:
+              </span>
+              <span className="font-semibold text-slate-800">
+                {invitedMember.role} Access Scope
+              </span>
+            </div>
+          </div>
+
+          {/* Copy Link Box */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800">
+                Direct User Invitation Link
+              </label>
+              <span className="text-[10px] text-slate-400">
+                Role & permission enabled
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={inviteUrl}
+                className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none select-all shadow-2xs truncate"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0 ${
+                  copiedLink
+                    ? "bg-emerald-600 text-white"
+                    : "bg-[#1456f0] text-white hover:bg-blue-700"
+                }`}
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Opening this link will automatically open MantraAssist as{" "}
+              <span className="font-bold text-slate-700">{invitedMember.name}</span> with their configured permissions.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => window.open(inviteUrl, "_blank")}
+              className="flex-1 px-3 py-2.5 text-xs font-bold text-[#1456f0] bg-blue-50/70 hover:bg-blue-100 border border-blue-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span>Open in New Tab</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleCloseAll}
+              className="flex-1 px-4 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-4" style={{ fontFamily: "Outfit, sans-serif" }}>
         {/* Name */}
         <div>
@@ -237,72 +489,166 @@ export default function AddTeamMemberDrawer({
           />
         </div>
 
-        {/* Department (optional) */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            <span className="flex items-center gap-1.5">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-slate-500"
-              >
-                <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-                <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-                <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-                <path d="M10 6h4" />
-                <path d="M10 10h4" />
-                <path d="M10 14h4" />
-                <path d="M10 18h4" />
-              </svg>
-              Department <span className="text-slate-400 font-normal">(optional)</span>
+        {/* Department & Role Assignment (Allows multiple departments) */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-slate-700">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                Departments & Roles
+              </span>
+              <span className="text-[11px] font-normal text-slate-400">
+                {assignedDepartments.length > 0
+                  ? `${assignedDepartments.length} assigned`
+                  : "Assign one or more"}
+              </span>
             </span>
           </label>
-          <div className="relative">
-            <select
-              value={department}
-              onChange={(e) => {
-                setDepartment(e.target.value);
-                setRole("Specialist");
-              }}
-              className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none cursor-pointer"
-            >
-              <option value="">All departments</option>
-              {DEFAULT_DEPARTMENTS.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
-          </div>
-        </div>
 
-        {/* Role */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Role <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none cursor-pointer"
+          {/* Collapsible Dropdown Wrapper */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsDeptDropdownOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
             >
-              {filteredRoles.map((r) => (
-                <option key={r.id} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-2 truncate">
+                <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">
+                  {assignedDepartments.length === 0
+                    ? "Select department and role..."
+                    : assignedDepartments.map((d) => `${d.department} (${d.role})`).join(", ")}
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${
+                  isDeptDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {/* Dropdown Content */}
+            {isDeptDropdownOpen && (
+              <div className="p-3.5 bg-slate-50/80 border-t border-slate-100 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Department
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedDeptInput}
+                        onChange={(e) => {
+                          const newDept = e.target.value;
+                          setSelectedDeptInput(newDept);
+                          const matchingRole = availableRolesList.find(
+                            (r) => (r.department || "").toLowerCase() === newDept.toLowerCase()
+                          );
+                          if (matchingRole) {
+                            setSelectedRoleInput(matchingRole.name);
+                          }
+                        }}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 transition-colors appearance-none cursor-pointer"
+                      >
+                        {availableDepts.map((dept) => (
+                          <option key={dept} value={dept}>
+                            {dept}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Role
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedRoleInput}
+                        onChange={(e) => setSelectedRoleInput(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 transition-colors appearance-none cursor-pointer"
+                      >
+                        {(() => {
+                          const matchingRoles = availableRolesList.filter(
+                            (r) => (r.department || "").toLowerCase() === selectedDeptInput.toLowerCase()
+                          );
+                          const otherRoles = availableRolesList.filter(
+                            (r) => (r.department || "").toLowerCase() !== selectedDeptInput.toLowerCase()
+                          );
+                          return (
+                            <>
+                              {matchingRoles.length > 0 && (
+                                <optgroup label={`${selectedDeptInput} Roles`}>
+                                  {matchingRoles.map((r) => (
+                                    <option key={r.id || r.name} value={r.name}>
+                                      {r.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {otherRoles.length > 0 && (
+                                <optgroup label="Other Available Roles">
+                                  {otherRoles.map((r) => (
+                                    <option key={r.id || r.name} value={r.name}>
+                                      {r.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Below on right corner: option to assign department */}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAssignDepartment}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Assign Department
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Assigned Departments List Tags */}
+          {assignedDepartments.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {assignedDepartments.map((item, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 shadow-2xs"
+                >
+                  <Building2 className="w-3 h-3 text-slate-500" />
+                  <span>{item.department}</span>
+                  <span className="text-slate-400 font-normal">·</span>
+                  <span className="text-blue-600 font-medium">{item.role}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAssignedDepartments((prev) =>
+                        prev.filter((d) => d.department !== item.department)
+                      )
+                    }
+                    className="ml-1 text-slate-400 hover:text-red-500 cursor-pointer p-0.5 rounded hover:bg-slate-200 transition-colors"
+                    title="Remove assignment"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Checkbox: Can Book Appointments */}
@@ -420,8 +766,9 @@ export default function AddTeamMemberDrawer({
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={handleSave}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-xs"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -438,10 +785,11 @@ export default function AddTeamMemberDrawer({
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            Add Team Member
+            {isSubmitting ? "Adding..." : "Add Team Member"}
           </button>
         </div>
       </div>
+      )}
     </Drawer>
   );
 }

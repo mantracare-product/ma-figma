@@ -29,7 +29,7 @@ import { getStoredTeamMembers, TeamMember } from "../../../lib/teamStore";
 export interface MessageComposerBarProps {
   conversation?: Conversation;
   session: SessionWindowStatus;
-  channel?: "all" | "whatsapp" | "sms" | "website" | "email" | "companion" | null;
+  channel?: "all" | "whatsapp" | "sms" | "website" | "email" | "companion" | "team" | null;
   onSendMessage: (
     text: string,
     options?: {
@@ -98,6 +98,9 @@ export default function MessageComposerBar({
 
   // Determine if this is a website conversation (hide More Actions & Settings on website channel)
   const isWebsite = conversation?.channel === "website" || channel === "website";
+
+  // Determine if this is an internal team conversation (hide CRM share template/gear actions)
+  const isTeam = conversation?.channel === "team" || channel === "team" || Boolean(conversation?.isTeam);
 
   // Determine if this is a Companion conversation
   const isCompanion = conversation?.channel === "companion" || conversation?.id === "care-bot-system" || channel === "companion";
@@ -324,8 +327,8 @@ export default function MessageComposerBar({
             </button>
           </Tooltip>
 
-          {/* Gear Settings Button + Popover (Hidden on Website channel) */}
-          {!isWebsite && (
+          {/* Gear Settings Button + Popover (Hidden on Website channel and Team chat) */}
+          {!isWebsite && !isTeam && (
             <div className="relative" ref={gearMenuRef}>
               <Tooltip content="Message Actions & Settings">
                 <button

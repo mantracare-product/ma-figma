@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback } from "react";
 import { recordAuditLog } from "./auditLogsStore";
 import { PermissionAction } from "../app/components/settings/PermissionSelect";
 
-export type ScopeLevelOption = "all" | "department" | "own" | "deny";
+export type ScopeLevelOption = "all" | "department" | "role" | "own" | "deny";
 
 export interface AdminModulePermission {
   actions: PermissionAction[];
@@ -73,7 +73,7 @@ export const ADMIN_ROLES_EVENT = "mantra-admin-roles-updated";
 function makeFullPermissions(): Record<string, AdminModulePermission> {
   const result: Record<string, AdminModulePermission> = {};
   ADMIN_MODULES.forEach((mod) => {
-    result[mod.id] = { actions: ["read", "write", "delete", "import", "export"], level: "all" };
+    result[mod.id] = { actions: ["view", "create", "edit", "delete", "import", "export"], level: "all" };
   });
   return result;
 }
@@ -81,7 +81,7 @@ function makeFullPermissions(): Record<string, AdminModulePermission> {
 function makeViewOnlyPermissions(): Record<string, AdminModulePermission> {
   const result: Record<string, AdminModulePermission> = {};
   ADMIN_MODULES.forEach((mod) => {
-    result[mod.id] = { actions: ["read", "export"], level: "all" };
+    result[mod.id] = { actions: ["view", "export"], level: "all" };
   });
   return result;
 }

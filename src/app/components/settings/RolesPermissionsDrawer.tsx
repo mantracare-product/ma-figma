@@ -58,7 +58,7 @@ export const ROLE_PERMISSION_MODULES: RoleModuleItem[] = [
   { id: "rcmReports", label: "RCM reports" },
 ];
 
-export type ScopeLevelOption = "all" | "department" | "own" | "deny";
+export type ScopeLevelOption = "all" | "department" | "role" | "own" | "deny";
 
 export interface SimpleModulePermission {
   actions: PermissionAction[];
@@ -99,6 +99,7 @@ export function getModuleWorkflows(moduleId: string, allProcesses: Process[]): W
 }
 
 // ─── DEFAULT ROLES ────────────────────────────────────────────────────────────
+// ─── DEFAULT ROLES ────────────────────────────────────────────────────────────
 // (moved to src/lib/defaultRoles.ts; re-exported here for existing importers)
 import { DEFAULT_ROLES } from "../../../lib/defaultRoles";
 export { DEFAULT_ROLES };
@@ -121,8 +122,9 @@ function getModulePermsFromRole(role?: Role | null): Record<string, SimpleModule
     }
 
     const acts: PermissionAction[] = [];
-    if (perms.read && perms.read !== "deny") acts.push("read");
-    if ((perms.add && perms.add !== "deny") || (perms.edit && perms.edit !== "deny")) acts.push("write");
+    if (perms.read && perms.read !== "deny") acts.push("view");
+    if (perms.add && perms.add !== "deny") acts.push("create");
+    if (perms.edit && perms.edit !== "deny") acts.push("edit");
     if (perms.delete && perms.delete !== "deny") acts.push("delete");
     if (perms.import && perms.import !== "deny") acts.push("import");
     if (perms.export && perms.export !== "deny") acts.push("export");
@@ -130,7 +132,8 @@ function getModulePermsFromRole(role?: Role | null): Record<string, SimpleModule
     let lvl: ScopeLevelOption = "all";
     const ref = perms.read || perms.add || perms.edit || perms.delete || "all";
     if (ref === "own") lvl = "own";
-    else if (ref === "role" || (ref as any) === "department") lvl = "department";
+    else if (ref === "department") lvl = "department";
+    else if (ref === "role") lvl = "role";
     else if (ref === "deny" && acts.length === 0) lvl = "deny";
 
     result[mod.id] = { actions: acts, level: lvl };
@@ -164,9 +167,9 @@ function getWorkflowPermsFromRole(
         result[modId][wf.id] = { isInherit: true, actions: [], level: "all" };
       } else {
         const acts: PermissionAction[] = [];
-        if (inst.read && inst.read !== "deny") acts.push("read");
-        if ((inst.add && inst.add !== "deny") || (inst.edit && inst.edit !== "deny"))
-          acts.push("write");
+        if (inst.read && inst.read !== "deny") acts.push("view");
+        if (inst.add && inst.add !== "deny") acts.push("create");
+        if (inst.edit && inst.edit !== "deny") acts.push("edit");
         if (inst.delete && inst.delete !== "deny") acts.push("delete");
         if (inst.import && inst.import !== "deny") acts.push("import");
         if (inst.export && inst.export !== "deny") acts.push("export");
@@ -174,7 +177,8 @@ function getWorkflowPermsFromRole(
         let lvl: ScopeLevelOption = "all";
         const ref = inst.read || inst.add || inst.edit || inst.delete || "all";
         if (ref === "own") lvl = "own";
-        else if (ref === "role" || (ref as any) === "department") lvl = "department";
+        else if (ref === "department") lvl = "department";
+        else if (ref === "role") lvl = "role";
         else if (ref === "deny" && acts.length === 0) lvl = "deny";
 
         result[modId][wf.id] = { isInherit: false, actions: acts, level: lvl };
@@ -200,18 +204,27 @@ function convertToItemPermissions(
       state.level === "all"
         ? "all"
         : state.level === "department"
+        ? "department"
+        : state.level === "role"
         ? "role"
         : state.level === "own"
         ? "own"
         : "deny";
 
+    const hasView = acts.includes("view") || acts.includes("read");
+    const hasCreate = acts.includes("create") || acts.includes("write");
+    const hasEdit = acts.includes("edit") || acts.includes("write");
+    const hasDelete = acts.includes("delete");
+    const hasExport = acts.includes("export");
+    const hasImport = acts.includes("import");
+
     const permObj: ModulePermissions = {
-      read: acts.includes("read") ? scope : "deny",
-      add: acts.includes("write") ? scope : "deny",
-      edit: acts.includes("write") ? scope : "deny",
-      delete: acts.includes("delete") ? scope : "deny",
-      export: acts.includes("export") ? scope : "deny",
-      import: acts.includes("import") ? scope : "deny",
+      read: hasView ? scope : "deny",
+      add: hasCreate ? scope : "deny",
+      edit: hasEdit ? scope : "deny",
+      delete: hasDelete ? scope : "deny",
+      export: hasExport ? scope : "deny",
+      import: hasImport ? scope : "deny",
     };
 
     // Every listed module is saved (modules not in the base shape used to be silently dropped).
@@ -242,18 +255,27 @@ function convertToItemPermissions(
           wPerm.level === "all"
             ? "all"
             : wPerm.level === "department"
+            ? "department"
+            : wPerm.level === "role"
             ? "role"
             : wPerm.level === "own"
             ? "own"
             : "deny";
         const acts = wPerm.actions || [];
+        const hasView = acts.includes("view") || acts.includes("read");
+        const hasCreate = acts.includes("create") || acts.includes("write");
+        const hasEdit = acts.includes("edit") || acts.includes("write");
+        const hasDelete = acts.includes("delete");
+        const hasExport = acts.includes("export");
+        const hasImport = acts.includes("import");
+
         processInstances[wf.id] = {
-          read: acts.includes("read") ? scope : "deny",
-          add: acts.includes("write") ? scope : "deny",
-          edit: acts.includes("write") ? scope : "deny",
-          delete: acts.includes("delete") ? scope : "deny",
-          export: acts.includes("export") ? scope : "deny",
-          import: acts.includes("import") ? scope : "deny",
+          read: hasView ? scope : "deny",
+          add: hasCreate ? scope : "deny",
+          edit: hasEdit ? scope : "deny",
+          delete: hasDelete ? scope : "deny",
+          export: hasExport ? scope : "deny",
+          import: hasImport ? scope : "deny",
         };
       }
     });
@@ -272,6 +294,7 @@ export interface RolesPermissionsDrawerProps {
   onSaveRoles: (updatedRoles: Role[]) => void;
   assignedUserCounts?: Record<string, number>;
   editingRole?: Role | null;
+  initialDepartment?: string;
   zIndex?: number;
 }
 
@@ -281,6 +304,7 @@ export function RolesPermissionsDrawer({
   roles,
   onSaveRoles,
   editingRole = null,
+  initialDepartment = "",
   zIndex = 9999,
 }: RolesPermissionsDrawerProps) {
   const allProcesses = useMemo(() => {
@@ -304,19 +328,28 @@ export function RolesPermissionsDrawer({
 
   useEffect(() => {
     if (isOpen) {
+      try {
+        const storedDepts = getStoredDepartments();
+        setDepartmentsList(storedDepts);
+      } catch {
+        setDepartmentsList([]);
+      }
+
       if (editingRole) {
         setRoleName(editingRole.name);
         setDescription(editingRole.description || "");
+        setDepartment(editingRole.department || initialDepartment || "");
         setModulePerms(getModulePermsFromRole(editingRole));
         setWorkflowPerms(getWorkflowPermsFromRole(editingRole, allProcesses));
       } else {
         setRoleName("");
         setDescription("");
+        setDepartment(initialDepartment || "");
         setModulePerms(getModulePermsFromRole(null));
         setWorkflowPerms(getWorkflowPermsFromRole(null, allProcesses));
       }
     }
-  }, [isOpen, editingRole, allProcesses]);
+  }, [isOpen, editingRole, initialDepartment, allProcesses]);
 
   if (!isOpen) return null;
 
@@ -416,6 +449,7 @@ export function RolesPermissionsDrawer({
               ...r,
               name: trimmed,
               description: description.trim(),
+              department: department.trim() || undefined,
               permissions,
             }
           : r
@@ -427,6 +461,7 @@ export function RolesPermissionsDrawer({
         id: "role_" + Date.now(),
         name: trimmed,
         description: description.trim(),
+        department: department.trim() || undefined,
         isDefault: false,
         permissions,
       };
@@ -467,8 +502,8 @@ export function RolesPermissionsDrawer({
 
         {/* Drawer Scrollable Body */}
         <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6 bg-white">
-          {/* Top 2-Column Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Top 3-Column Inputs: Role Name, Department, Description */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
                 Role Name <span className="text-rose-500">*</span>
@@ -480,6 +515,27 @@ export function RolesPermissionsDrawer({
                 placeholder="e.g. Executive"
                 className="w-full h-10 px-3.5 bg-white border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 rounded-xl text-xs font-medium text-gray-800 transition-colors outline-none shadow-2xs"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
+                Department
+              </label>
+              <div className="relative">
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full h-10 px-3.5 pr-8 bg-white border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 rounded-xl text-xs font-medium text-gray-800 transition-colors outline-none appearance-none cursor-pointer shadow-2xs"
+                >
+                  <option value="">Unassigned</option>
+                  {departmentsList.map((d) => (
+                    <option key={d.id} value={d.name}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -503,7 +559,7 @@ export function RolesPermissionsDrawer({
                 <tr className="bg-[#1E293B] text-white text-[11px] font-bold uppercase tracking-wider">
                   <th className="py-3 px-4 w-[28%]">MODULE</th>
                   <th className="py-3 px-4 w-[44%]">PERMISSION</th>
-                  <th className="py-3 px-4 w-[28%]">LEVEL</th>
+                  <th className="py-3 px-4 w-[28%]">SCOPE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
@@ -554,7 +610,8 @@ export function RolesPermissionsDrawer({
                               className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                             >
                               <option value="all">All Records</option>
-                              <option value="department">Role</option>
+                              <option value="department">Department</option>
+                              <option value="role">Role</option>
                               <option value="own">Own Records</option>
                               <option value="deny">Deny</option>
                             </select>
@@ -616,7 +673,8 @@ export function RolesPermissionsDrawer({
                                       className="w-full h-9 px-3 pr-8 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 font-medium appearance-none cursor-pointer outline-none focus:border-blue-500 transition-colors shadow-2xs"
                                     >
                                       <option value="all">All Records</option>
-                                      <option value="department">Role</option>
+                                      <option value="department">Department</option>
+                                      <option value="role">Role</option>
                                       <option value="own">Own Records</option>
                                       <option value="deny">Deny</option>
                                     </select>

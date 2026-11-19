@@ -34,7 +34,8 @@ export type AuditModule =
   | "Security"
   | "Roles"
   | "Templates"
-  | "RCM";
+  | "RCM"
+  | "Tasks";
 
 export interface AuditLogEntry {
   id: string;

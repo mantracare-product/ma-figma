@@ -15,6 +15,8 @@ import {
   TaskResponsiblePerson,
 } from "../types/task";
 import { addNotification } from "./notificationsStore";
+import { recordAuditLog } from "./auditLogsStore";
+import { addActivityEntry } from "./activityLog";
 
 import { eventBus } from "./eventBus";
 export const TASKS_STORAGE_KEY = "mantra_tasks_store";
@@ -962,9 +964,102 @@ export function useTasks() {
     return () => clearInterval(interval);
   }, []);
 
-  const createTask = useCallback(
-    (newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => createTaskRecord(newTaskData),
+  const createMultipleTasks = useCallback(
+    (tasksData: Array<Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">>) => {
+      const current = getStoredTasks();
+      const nowLocal = new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+      let maxNumber = current.reduce((max, t) => {
+        const match = t.code?.match(/TSK-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          return num > max ? num : max;
+        }
+        return max;
+      }, 100);
+
+      const timestamp = Date.now();
+      const newTasks: TaskEntity[] = tasksData.map((data, idx) => {
+        maxNumber += 1;
+        const uniqueId = `tsk-${timestamp}-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`;
+        const taskCode = `TSK-${maxNumber}`;
+
+        const task: TaskEntity = {
+          ...data,
+          id: uniqueId,
+          code: taskCode,
+          createdAt: nowLocal,
+          updatedAt: nowLocal,
+        };
+
+        // 1. In-app notification log
+        addNotification({
+          type: "task",
+          title: "New Task Assigned",
+          message: `${task.code}: ${task.title} assigned to ${task.assignee?.assigneeName || "Responsible Person"}`,
+          link: `/${task.scopeLevel === "admin" ? "admin/tasks" : "tasks"}/${task.id}`,
+          meta: { taskId: task.id },
+        });
+
+        // 2. Centralized Audit Log entry
+        try {
+          recordAuditLog({
+            actorId: task.creator?.id || "admin-1",
+            actorName: task.creator?.name || "Platform Administrator",
+            actorEmail: task.creator?.id?.includes("@") ? task.creator.id : "admin@mantra.care",
+            actorRole: task.creator?.role || "SuperAdmin",
+            action: "created",
+            module: "Tasks",
+            entityType: "Task",
+            entityId: task.id,
+            targetName: `${task.code}: ${task.title} (${task.assignee?.assigneeName || "Responsible Person"})`,
+            summary: `Created task ${task.code} assigned to ${task.assignee?.assigneeName || "Responsible Person"}`,
+            after: task,
+          });
+        } catch {}
+
+        // 3. Client Activity Log entry if assigned to contact/client
+        try {
+          const contactId =
+            task.assignee?.clientId ||
+            (task.assignee?.scopeLevel === "contact" ? task.assignee?.userId : undefined);
+          if (contactId) {
+            addActivityEntry({
+              clientId: contactId,
+              processId: task.workflowId || "task-flow",
+              processName: task.workflowName || "Task Workflow",
+              type: "task_assigned",
+              status: "success",
+              refId: task.id,
+              direction: "outbound",
+              details: {
+                primary: `Task ${task.code}: ${task.title} assigned to ${task.assignee?.assigneeName}`,
+                secondary: task.deadline ? `Deadline: ${task.deadline}` : undefined,
+              },
+            });
+          }
+        } catch {}
+
+        try {
+          void eventBus.emit("task.created", "task", task.id, { taskId: task.id, queueId: task.queueId, entityRef: task.entityRef });
+        } catch {}
+
+        return task;
+      });
+
+      const updated = [...newTasks, ...current];
+      saveStoredTasks(updated);
+      return newTasks;
+    },
     []
+  );
+
+  const createTask = useCallback(
+    (newTaskData: Omit<TaskEntity, "id" | "code" | "createdAt" | "updatedAt">) => {
+      const [created] = createMultipleTasks([newTaskData]);
+      return created;
+    },
+    [createMultipleTasks]
   );
 
   const updateTask = useCallback((id: string, patch: Partial<TaskEntity>) => {
@@ -1360,6 +1455,7 @@ export function useTasks() {
     tasks,
     setTasks,
     createTask,
+    createMultipleTasks,
     updateTask,
     deleteTask,
     toggleTaskStatus,

@@ -9,6 +9,8 @@ export interface TeamMember {
   /** Id of the Role (rolesStore) assigned to this member; `role` stays the display name. */
   roleId?: string;
   department?: string;
+  departments?: string[];
+  assignedDepartments?: Array<{ department: string; role: string }>;
   status?: boolean;
   organizationId?: string;
   canBookAppointments?: boolean; // Controls whether this user appears in Appointments
@@ -82,29 +84,30 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
   },
 ];
 
-const LEGACY_MOCK_NAMES = new Set([
-  "abhishe prod",
-  "avani test",
-  "avani malviya",
-  "vaibhav bhardwaj",
-  "anshul gupta",
-  "ritika sahni",
-  "navodya",
-  "varsha",
-  "karan hinduja",
-  "john smith",
-  "sarah johnson",
-  "michael chen",
-  "emily davis",
-  "dr. robert martinez",
-  "lisa anderson",
-  "james wilson",
-  "john agent",
-  "alex turner",
-]);
+export function cleanLegacyMembers(list: any[]): TeamMember[] {
+  if (!Array.isArray(list)) return INITIAL_TEAM_MEMBERS;
+  const seenEmails = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const deduped: TeamMember[] = [];
 
-function cleanLegacyMembers(list: any[]): TeamMember[] {
-  let filtered = list.filter((m) => m && m.name && !LEGACY_MOCK_NAMES.has(m.name.toLowerCase()));
+  for (const m of list) {
+    if (!m || !m.name) continue;
+    const emailKey = (m.email || "").toLowerCase().trim();
+    const idKey = String(m.id ?? "").trim();
+    const nameKey = (m.name || "").toLowerCase().trim();
+
+    if (emailKey && seenEmails.has(emailKey)) continue;
+    if (idKey && seenIds.has(idKey)) continue;
+    if (nameKey && emailKey && seenNames.has(`${nameKey}::${emailKey}`)) continue;
+
+    if (emailKey) seenEmails.add(emailKey);
+    if (idKey) seenIds.add(idKey);
+    if (nameKey && emailKey) seenNames.add(`${nameKey}::${emailKey}`);
+    deduped.push(m);
+  }
+
+  let filtered = deduped;
 
   // Ensure primary demo clinicians (Akshita Sharma & Alice) are always available
   if (!filtered.some((m) => m.name?.toLowerCase().includes("akshita"))) {
@@ -151,12 +154,20 @@ export function getStoredTeamMembers(): TeamMember[] {
 
 export function saveStoredTeamMembers(members: TeamMember[]) {
   try {
-    const serialized = JSON.stringify(members);
+    const cleaned = cleanLegacyMembers(members);
+    const serialized = JSON.stringify(cleaned);
     localStorage.setItem(TEAM_STORAGE_KEY, serialized);
     localStorage.setItem(SETTINGS_USERS_KEY, serialized);
     sessionStorage.setItem(SETTINGS_USERS_KEY, serialized);
     window.dispatchEvent(new Event(TEAM_STORE_EVENT));
     window.dispatchEvent(new Event("storage"));
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("mantra_team_chat_channel");
+        bc.postMessage({ type: "TEAM_MEMBERS_UPDATED" });
+        bc.close();
+      }
+    } catch {}
   } catch {}
 }
 
@@ -181,6 +192,34 @@ export function enableMultipleAppointmentBooking(memberIds: (string | number)[])
 
 export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: string | number }): TeamMember {
   const members = getStoredTeamMembers();
+  const normalizedEmail = (newMember.email || "").toLowerCase().trim();
+  const normalizedName = (newMember.name || "").toLowerCase().trim();
+
+  // Check if member already exists by email or name
+  const existingIndex = members.findIndex((m) => {
+    const mEmail = (m.email || "").toLowerCase().trim();
+    const mName = (m.name || "").toLowerCase().trim();
+    if (normalizedEmail && mEmail === normalizedEmail) return true;
+    if (normalizedName && mName === normalizedName) return true;
+    return false;
+  });
+
+  if (existingIndex >= 0) {
+    const existing = members[existingIndex];
+    const updatedMember: TeamMember = {
+      ...existing,
+      ...newMember,
+      id: existing.id,
+      status: newMember.status !== undefined ? newMember.status : true,
+      locations: newMember.locations || (newMember as any).availableLocations || existing.locations || [],
+    };
+    const updated = cleanLegacyMembers(
+      members.map((m, idx) => (idx === existingIndex ? updatedMember : m))
+    );
+    saveStoredTeamMembers(updated);
+    return updatedMember;
+  }
+
   const nextId = newMember.id || (Math.max(...members.map((m) => Number(m.id) || 0), 0) + 1);
   const created: TeamMember = {
     ...newMember,
@@ -189,7 +228,7 @@ export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: 
     canBookAppointments: newMember.canBookAppointments !== undefined ? newMember.canBookAppointments : false,
     locations: newMember.locations || (newMember as any).availableLocations || [],
   };
-  const updated = [...members, created];
+  const updated = cleanLegacyMembers([...members, created]);
   saveStoredTeamMembers(updated);
   return created;
 }

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Drawer } from "../ui/drawer";
-import { Building2, Plus, Trash2, Pencil, Check, X, Shield } from "lucide-react";
+import { Building2, Plus, Shield, Search, Check } from "lucide-react";
 import { toast } from "sonner";
 import type { Department, Role } from "../../../types/permissions";
 import {
@@ -16,14 +16,17 @@ export interface GenericRoleLike {
   name?: string;
   roleName?: string;
   department?: string;
+  description?: string;
+  [key: string]: any;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 export interface DepartmentDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  roles?: GenericRoleLike[];
+  roles?: any[];
   onDepartmentsChange?: (deps: Department[]) => void;
+  onRolesChange?: (roles: any[]) => void;
   initialEditDepartment?: Department | null;
   zIndex?: number;
 }
@@ -34,97 +37,136 @@ export function DepartmentDrawer({
   onClose,
   roles = [],
   onDepartmentsChange,
+  onRolesChange,
   initialEditDepartment = null,
   zIndex = 10100,
 }: DepartmentDrawerProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editDesc, setEditDesc] = useState("");
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [selectedRoleIds, setSelectedRoleIds] = useState<Set<string>>(new Set());
+  const [roleSearch, setRoleSearch] = useState("");
 
   useEffect(() => {
     if (isOpen) {
       const stored = getStoredDepartments();
       setDepartments(stored);
-      setNewName("");
-      setNewDesc("");
+      setRoleSearch("");
+
       if (initialEditDepartment) {
-        setEditingId(initialEditDepartment.id);
-        setEditName(initialEditDepartment.name);
-        setEditDesc(initialEditDepartment.description || "");
+        setName(initialEditDepartment.name);
+        setDesc(initialEditDepartment.description || "");
+
+        // Pre-select roles already assigned to this department
+        const targetDeptName = initialEditDepartment.name.toLowerCase();
+        const initialSelected = new Set<string>();
+        roles.forEach((r) => {
+          const rDept = (r.department || "").toLowerCase();
+          const rId = r.id || r.name;
+          if (rDept === targetDeptName && rId) {
+            initialSelected.add(String(rId));
+          }
+        });
+        setSelectedRoleIds(initialSelected);
       } else {
-        setEditingId(null);
-        setEditName("");
-        setEditDesc("");
+        setName("");
+        setDesc("");
+        setSelectedRoleIds(new Set());
       }
     }
-  }, [isOpen, initialEditDepartment]);
+  }, [isOpen, initialEditDepartment, roles]);
 
-  const persist = (updated: Department[]) => {
-    setDepartments(updated);
-    saveStoredDepartments(updated);
-    onDepartmentsChange?.(updated);
+  const toggleRole = (roleId: string) => {
+    setSelectedRoleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleId)) {
+        next.delete(roleId);
+      } else {
+        next.add(roleId);
+      }
+      return next;
+    });
   };
 
-  const handleCreate = () => {
-    const trimmed = newName.trim();
+  const handleSave = () => {
+    const trimmed = name.trim();
     if (!trimmed) {
       toast.error("Department name is required.");
       return;
     }
-    if (departments.some((d) => d.name.toLowerCase() === trimmed.toLowerCase())) {
-      toast.error("A department with this name already exists.");
-      return;
-    }
-    const newDept: Department = {
-      id: "dept_" + Date.now(),
-      name: trimmed,
-      description: newDesc.trim(),
-    };
-    persist([...departments, newDept]);
-    setNewName("");
-    setNewDesc("");
-    toast.success(`Department "${trimmed}" created successfully.`);
-  };
 
-  const handleDelete = (id: string) => {
-    const dept = departments.find((d) => d.id === id);
-    persist(departments.filter((d) => d.id !== id));
-    toast.success(`Department "${dept?.name || ""}" removed.`);
-  };
-
-  const handleStartEdit = (dept: Department) => {
-    setEditingId(dept.id);
-    setEditName(dept.name);
-    setEditDesc(dept.description || "");
-  };
-
-  const handleSaveEdit = () => {
-    const trimmed = editName.trim();
-    if (!trimmed) {
-      toast.error("Department name cannot be empty.");
-      return;
-    }
-    if (
-      departments.some(
-        (d) => d.name.toLowerCase() === trimmed.toLowerCase() && d.id !== editingId
-      )
-    ) {
-      toast.error("A department with this name already exists.");
-      return;
-    }
-    persist(
-      departments.map((d) =>
-        d.id === editingId ? { ...d, name: trimmed, description: editDesc.trim() } : d
-      )
+    const isDuplicate = departments.some(
+      (d) =>
+        d.name.toLowerCase() === trimmed.toLowerCase() &&
+        (!initialEditDepartment || d.id !== initialEditDepartment.id)
     );
-    setEditingId(null);
-    setEditName("");
-    setEditDesc("");
-    toast.success("Department updated.");
+    if (isDuplicate) {
+      toast.error("A department with this name already exists.");
+      return;
+    }
+
+    let updatedDepts: Department[];
+    if (initialEditDepartment) {
+      updatedDepts = departments.map((d) =>
+        d.id === initialEditDepartment.id
+          ? { ...d, name: trimmed, description: desc.trim() }
+          : d
+      );
+    } else {
+      const newDept: Department = {
+        id: "dept_" + Date.now(),
+        name: trimmed,
+        description: desc.trim(),
+      };
+      updatedDepts = [...departments, newDept];
+    }
+
+    // Persist departments
+    setDepartments(updatedDepts);
+    saveStoredDepartments(updatedDepts);
+    onDepartmentsChange?.(updatedDepts);
+
+    // Update roles mapping
+    if (roles && roles.length > 0) {
+      const prevDeptName = initialEditDepartment?.name?.toLowerCase() || "";
+      const updatedRoles = roles.map((r) => {
+        const rId = String(r.id || r.name);
+        const currentDept = (r.department || "").toLowerCase();
+
+        if (selectedRoleIds.has(rId)) {
+          // Assign to this department
+          return { ...r, department: trimmed };
+        } else if (prevDeptName && currentDept === prevDeptName) {
+          // Unassigned from this department
+          return { ...r, department: undefined };
+        }
+        return r;
+      });
+
+      onRolesChange?.(updatedRoles);
+      try {
+        sessionStorage.setItem("settings_roles", JSON.stringify(updatedRoles));
+      } catch {}
+    }
+
+    toast.success(
+      initialEditDepartment
+        ? `Department "${trimmed}" updated successfully.`
+        : `Department "${trimmed}" created successfully.`
+    );
+    onClose();
   };
+
+  const filteredRoles = useMemo(() => {
+    if (!roleSearch.trim()) return roles;
+    const query = roleSearch.toLowerCase();
+    return roles.filter(
+      (r) =>
+        (r.name && r.name.toLowerCase().includes(query)) ||
+        (r.roleName && r.roleName.toLowerCase().includes(query)) ||
+        (r.description && r.description.toLowerCase().includes(query))
+    );
+  }, [roles, roleSearch]);
 
   return (
     <Drawer
@@ -137,173 +179,159 @@ export function DepartmentDrawer({
           </div>
           <div>
             <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Departments
+              {initialEditDepartment ? "Edit Department" : "Create Department"}
             </div>
             <div className="text-[11px] text-slate-400 font-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {departments.length} department{departments.length !== 1 ? "s" : ""} total
+              {initialEditDepartment
+                ? "Update department details and assigned roles"
+                : "Add a department and assign roles to it"}
             </div>
           </div>
         </div>
       }
-      maxWidth="max-w-[40vw] w-[40vw]"
+      maxWidth="max-w-[42vw] w-[42vw]"
       zIndex={zIndex}
     >
-      <div className="space-y-5" style={{ fontFamily: "Outfit, sans-serif" }}>
-        {/* Create new department - Name and Description ONLY */}
-        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-2xs">
-          <p className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Add Department</p>
-          <div className="space-y-2.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Department Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Clinical Operations, Marketing, Finance..."
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors shadow-2xs"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Description <span className="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
-                placeholder="Brief description of department scope and responsibilities..."
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors shadow-2xs"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={!newName.trim()}
-              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
-            >
-              <Plus className="w-3.5 h-3.5 text-white" />
-              Add Department
-            </button>
+      <div className="space-y-6 pb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+        {/* Department Name & Description Form */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+              Department Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Clinical Operations, Marketing, Finance..."
+              className="w-full h-10 px-3.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors shadow-2xs font-medium text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+              Description <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <textarea
+              rows={2}
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              placeholder="Brief description of department scope and responsibilities..."
+              className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors shadow-2xs text-slate-700 resize-none"
+            />
           </div>
         </div>
 
-        {/* Departments list */}
-        <div className="space-y-2">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-0.5">
-            All Departments ({departments.length})
-          </p>
-          {departments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-              <Building2 className="w-8 h-8 text-slate-300 mb-2" />
-              <p className="text-xs text-slate-400 font-medium">No departments yet</p>
+        {/* Roles in Department Section */}
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Add Roles in the Department
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Select roles that belong to this department
+              </p>
             </div>
-          ) : (
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
-              {departments.map((dept) => {
-                const assignedRoles = roles.filter(
-                  (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
-                );
-                const roleCount = assignedRoles.length;
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+              <Shield className="w-3 h-3 text-blue-500" />
+              {selectedRoleIds.size} selected
+            </span>
+          </div>
 
-                return (
-                  <div key={dept.id} className="flex flex-col px-4 py-3 group hover:bg-slate-50/80 transition-colors">
-                    {editingId === dept.id ? (
-                      <div className="space-y-2">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Name</label>
-                          <input
-                            autoFocus
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            placeholder="Name..."
-                            className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Description</label>
-                          <input
-                            value={editDesc}
-                            onChange={(e) => setEditDesc(e.target.value)}
-                            placeholder="Description..."
-                            className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-500 bg-white"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={handleSaveEdit}
-                            className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingId(null)}
-                            className="px-3.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <Building2 className="w-3.5 h-3.5 text-slate-700" />
-                          </div>
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-bold text-slate-900 block truncate">{dept.name}</span>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                <Shield className="w-2.5 h-2.5 text-slate-600" />
-                                {roleCount} role{roleCount !== 1 ? "s" : ""}
-                              </span>
-                            </div>
-                            {dept.description ? (
-                              <span className="text-[11px] text-slate-500 block leading-snug">{dept.description}</span>
-                            ) : (
-                              <span className="text-[11px] text-slate-300 italic block">No description</span>
-                            )}
-                            {assignedRoles.length > 0 && (
-                              <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                                <span className="text-[10px] text-slate-400 font-medium">Roles:</span>
-                                {assignedRoles.map((r, idx) => (
-                                  <span
-                                    key={r.id || idx}
-                                    className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
-                                  >
-                                    {r.name || r.roleName}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => handleStartEdit(dept)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
-                            title="Edit Department"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(dept.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
-                            title="Delete Department"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          {/* Quick Search */}
+          {roles.length > 3 && (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={roleSearch}
+                onChange={(e) => setRoleSearch(e.target.value)}
+                placeholder="Search available roles..."
+                className="w-full h-9 pl-9 pr-3 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+              />
             </div>
           )}
+
+          {/* Roles List */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
+            {filteredRoles.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                No roles found.
+              </div>
+            ) : (
+              filteredRoles.map((r) => {
+                const rId = String(r.id || r.name);
+                const isSelected = selectedRoleIds.has(rId);
+                const roleName = r.name || r.roleName || "Untitled Role";
+                const isAssignedElsewhere =
+                  r.department &&
+                  r.department.toLowerCase() !== (initialEditDepartment?.name || "").toLowerCase();
+
+                return (
+                  <label
+                    key={rId}
+                    className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors ${
+                      isSelected ? "bg-blue-50/40" : "hover:bg-slate-50/70"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleRole(rId)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer accent-blue-600 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900">{roleName}</span>
+                        {isAssignedElsewhere && !isSelected && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            (Currently in {r.department})
+                          </span>
+                        )}
+                      </div>
+                      {r.description ? (
+                        <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
+                          {r.description}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-300 italic">No description</p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!name.trim()}
+            className="flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
+          >
+            {initialEditDepartment ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                Save Department
+              </>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5" />
+                Add Department
+              </>
+            )}
+          </button>
         </div>
       </div>
     </Drawer>

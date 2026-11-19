@@ -14,7 +14,6 @@ import {
   Edit,
   Trash2,
   Building2,
-  Sliders,
   Sparkles,
   Monitor,
   ExternalLink,
@@ -505,7 +504,6 @@ export default function ReceptionSettingsTab() {
 
   const features = config.features || DEFAULT_RECEPTION_FEATURES;
   const terminals = config.terminals || [];
-  const accentColor = /^#[0-9A-Fa-f]{6}$/.test(config.primaryColor || "") ? config.primaryColor! : "#2f2447";
 
   return (
     <div className="w-full space-y-7 pb-8">
@@ -617,7 +615,7 @@ export default function ReceptionSettingsTab() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">
                   Clinic Name
@@ -659,31 +657,6 @@ export default function ReceptionSettingsTab() {
                     onChange={(e) => updateDraft((prev) => ({ ...prev, supportEmail: e.target.value }))}
                     placeholder="desk@clinic.test"
                     className="w-full pl-9 pr-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">
-                  Primary Color
-                </label>
-                <div className="flex items-center gap-3 px-3 py-1.5 border border-gray-200 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1456f0]/20 focus-within:border-[#1456f0]">
-                  <label className="relative flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 overflow-hidden cursor-pointer shrink-0 shadow-2xs">
-                    <span className="w-full h-full block" style={{ backgroundColor: accentColor }} />
-                    <input
-                      type="color"
-                      value={accentColor}
-                      onChange={(e) => updateDraft((prev) => ({ ...prev, primaryColor: e.target.value }))}
-                      aria-label="Primary brand color picker"
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    />
-                  </label>
-                  <input
-                    type="text"
-                    value={config.primaryColor || "#2f2447"}
-                    onChange={(e) => updateDraft((prev) => ({ ...prev, primaryColor: e.target.value }))}
-                    placeholder="#2f2447"
-                    className="flex-1 text-sm font-mono text-gray-800 bg-transparent focus:outline-none"
                   />
                 </div>
               </div>
@@ -754,90 +727,7 @@ export default function ReceptionSettingsTab() {
             </div>
           </div>
 
-          {/* Section 3: Queue & Onboarding Rules (Horizontal 3-Column Section) */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-6 space-y-5 shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Sliders className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Queue &amp; Onboarding Rules
-                </h3>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-              <div className="p-4 bg-gray-50/80 border border-gray-200/90 rounded-xl space-y-2 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-800">Late Arrival Window</label>
-                    <span className="font-mono text-xs font-bold text-[#1456f0]">{config.lateArrivalWindowMin} min</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="45"
-                    step="5"
-                    value={config.lateArrivalWindowMin}
-                    onChange={(e) =>
-                      updateDraft((prev) => ({ ...prev, lateArrivalWindowMin: Number(e.target.value) }))
-                    }
-                    className="w-full cursor-pointer accent-[#1456f0]"
-                  />
-                </div>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Appointments arriving &gt; {config.lateArrivalWindowMin}m late are automatically downgraded to Priority 0.
-                </p>
-              </div>
-
-              <div className="p-4 bg-gray-50/80 border border-gray-200/90 rounded-xl space-y-2 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-800">Anti-Starvation Queue Aging Cap</label>
-                    <span className="font-mono text-xs font-bold text-[#1456f0]">{config.queueAgingCapMin} min</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="20"
-                    max="90"
-                    step="5"
-                    value={config.queueAgingCapMin}
-                    onChange={(e) =>
-                      updateDraft((prev) => ({ ...prev, queueAgingCapMin: Number(e.target.value) }))
-                    }
-                    className="w-full cursor-pointer accent-[#1456f0]"
-                  />
-                </div>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Walk-in tickets waiting &gt; {config.queueAgingCapMin}m receive an automatic priority boost.
-                </p>
-              </div>
-
-              <div className="p-4 bg-gray-50/80 border border-gray-200/90 rounded-xl space-y-2 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-gray-800">Default Onboarding Process</label>
-                  <select
-                    value={config.defaultOnboardingProcessId || "Appointment Scheduling"}
-                    onChange={(e) =>
-                      updateDraft((prev) => ({ ...prev, defaultOnboardingProcessId: e.target.value }))
-                    }
-                    className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] outline-none cursor-pointer font-medium text-slate-800"
-                  >
-                    <option value="Appointment Scheduling">Appointment Scheduling (Default)</option>
-                    <option value="Patient Intake">Patient Intake</option>
-                    <option value="Follow-up Calls">Follow-up Calls</option>
-                    <option value="Clinical Visit Journey">Clinical Visit Journey</option>
-                  </select>
-                </div>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Walk-ins registered at kiosks enter this process automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Receptionist terminals (Horizontal) */}
+          {/* Section 3: Receptionist terminals (Horizontal) */}
           <div className="bg-white border border-gray-200/90 rounded-2xl p-6 space-y-5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">

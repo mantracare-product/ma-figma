@@ -37,7 +37,7 @@ import {
   getStoredIntegrationConfig,
 } from "../../lib/integrationsRegistry";
 import IntegrationConfigDrawer from "../components/settings/IntegrationConfigDrawer";
-import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
+import { getStoredTeamMembers, saveStoredTeamMembers, cleanLegacyMembers, TEAM_STORE_EVENT, INITIAL_TEAM_MEMBERS } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
 import { getStoredVoices, saveStoredVoices, toggleClientVoiceStatus, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
 import { getStoredAIModels, toggleClientAIModelActive, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
@@ -200,6 +200,9 @@ interface User {
   permissions: ItemPermissions;
   role?: string;
   roleId?: string;
+  department?: string;
+  departments?: string[];
+  assignedDepartments?: Array<{ department: string; role: string }>;
   calendarConnected?: boolean;
   connectedCalendar?: "google" | "outlook" | null;
   availability?: WeeklyAvailability;
@@ -1256,24 +1259,9 @@ export default function Settings() {
   const [allUsers, setAllUsers] = useState<User[]>(() => {
     try {
       const stored = getStoredTeamMembers();
-      if (stored && stored.length > 0) return stored as any;
+      if (stored && stored.length > 0) return cleanLegacyMembers(stored) as any;
     } catch {}
-    return [
-      {
-        id: 1,
-        name: "Admin User",
-        email: "admin@mantra.care",
-        status: true,
-        organizationId: "1",
-        role: "Admin",
-        permissions: DEFAULT_ROLES[0]?.permissions,
-        calendarConnected: true,
-        connectedCalendar: "google",
-        availability: createDefaultAvailability(),
-        daysOff: [],
-        assignedServices: [1, 2],
-      },
-    ];
+    return cleanLegacyMembers(INITIAL_TEAM_MEMBERS) as any;
   });
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
@@ -1296,7 +1284,7 @@ export default function Settings() {
   });
 
   // Team Tab Toolbar & Filter State (Matching Image 3)
-  const [teamSubTab, setTeamSubTab] = useState<"users" | "roles" | "departments">("users");
+  const [teamSubTab, setTeamSubTab] = useState<"users" | "roles" | "departments">("departments");
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
   const [teamRoleFilter, setTeamRoleFilter] = useState("All");
   const [selectedTeamRows, setSelectedTeamRows] = useState<Set<string>>(new Set());
@@ -1383,12 +1371,28 @@ export default function Settings() {
 
   // Roles & Permissions state
   // Roles live in the shared rolesStore (localStorage) so guards and hooks outside Settings can read them.
-  const [roles, setRoles] = useState<Role[]>(() => getStoredRoles(DEFAULT_ROLES));
+  const [roles, setRoles] = useState<Role[]>(() => {
+    try {
+      const stored = getStoredRoles(DEFAULT_ROLES);
+      const hasAssignedDept = Array.isArray(stored) && stored.some((r: any) => Boolean(r.department));
+      if (hasAssignedDept && stored.length >= 5) {
+        return stored;
+      }
+      saveStoredRoles(DEFAULT_ROLES);
+      try {
+        sessionStorage.setItem("settings_roles", JSON.stringify(DEFAULT_ROLES));
+      } catch {}
+      return DEFAULT_ROLES;
+    } catch {
+      return DEFAULT_ROLES;
+    }
+  });
   const [showRolesDrawer, setShowRolesDrawer] = useState(false);
   const [editingClientRole, setEditingClientRole] = useState<Role | null>(null);
   const [departments, setDepartments] = useState<Department[]>(() => getStoredDepartments());
   const [isDepartmentDrawerOpen, setIsDepartmentDrawerOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [preselectedDepartment, setPreselectedDepartment] = useState<string>("");
 
   const handleSaveRoles = (updatedRoles: Role[]) => {
     setRoles(updatedRoles);
@@ -1545,9 +1549,10 @@ export default function Settings() {
       if (isInternalSaveRef.current) return;
       const stored = getStoredTeamMembers();
       if (stored && stored.length > 0) {
+        const cleaned = cleanLegacyMembers(stored);
         setAllUsers((prev) => {
-          if (JSON.stringify(prev) === JSON.stringify(stored)) return prev;
-          return stored as any;
+          if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+          return cleaned as any;
         });
       }
     };
@@ -4894,19 +4899,19 @@ export default function Settings() {
                 {/* Team Toolbar using standard PageTopBar */}
                 <PageTopBar
                   modes={[
-                    { id: "users", label: "Users", badge: allUsers.length },
-                    { id: "roles", label: "Roles", badge: roles.length },
                     { id: "departments", label: "Departments", badge: departments.length },
+                    { id: "roles", label: "Roles", badge: roles.length },
+                    { id: "users", label: "Users", badge: allUsers.length },
                   ]}
                   activeMode={teamSubTab}
                   onModeChange={(m) => setTeamSubTab(m as any)}
                   searchQuery={teamSearchQuery}
                   onSearchChange={setTeamSearchQuery}
                   searchPlaceholder={
-                    teamSubTab === "roles"
-                      ? "Search roles..."
-                      : teamSubTab === "departments"
+                    teamSubTab === "departments"
                       ? "Search departments..."
+                      : teamSubTab === "roles"
+                      ? "Search roles..."
                       : "Search users..."
                   }
                   filterPresets={[
@@ -4957,19 +4962,20 @@ export default function Settings() {
                   ]}
                   primaryAction={{
                     label:
-                      teamSubTab === "roles"
-                        ? "Create Role"
-                        : teamSubTab === "departments"
+                      teamSubTab === "departments"
                         ? "Create Department"
+                        : teamSubTab === "roles"
+                        ? "Create Role"
                         : "Add User",
                     icon: <Plus className="w-3.5 h-3.5" />,
                     onClick: () => {
-                      if (teamSubTab === "roles") {
-                        setEditingClientRole(null);
-                        setShowRolesDrawer(true);
-                      } else if (teamSubTab === "departments") {
+                      if (teamSubTab === "departments") {
                         setEditingDepartment(null);
                         setIsDepartmentDrawerOpen(true);
+                      } else if (teamSubTab === "roles") {
+                        setEditingClientRole(null);
+                        setPreselectedDepartment("");
+                        setShowRolesDrawer(true);
                       } else {
                         setShowAddUserModal(true);
                       }
@@ -4977,7 +4983,143 @@ export default function Settings() {
                   }}
                 />
 
-                {/* VIEW 1: ROLES TABLE */}
+                {/* VIEW 1: DEPARTMENTS TABLE */}
+                {teamSubTab === "departments" && (() => {
+                  const filteredDepartments = departments.filter(
+                    (d) =>
+                      !teamSearchQuery.trim() ||
+                      d.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      (d.description && d.description.toLowerCase().includes(teamSearchQuery.toLowerCase()))
+                  );
+
+                  const deptColumns: TableColumn<Department>[] = [
+                    {
+                      key: "name",
+                      header: "DEPARTMENT NAME",
+                      align: "left",
+                      render: (dept) => (
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                            <Building2 className="w-3.5 h-3.5 text-slate-700" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDepartment(dept);
+                              setIsDepartmentDrawerOpen(true);
+                            }}
+                            className="text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {dept.name}
+                          </button>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "description",
+                      header: "DESCRIPTION",
+                      align: "left",
+                      render: (dept) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {dept.description || "—"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "roles",
+                      header: "ASSIGNED ROLES",
+                      align: "left",
+                      render: (dept) => {
+                        const assignedRoles = roles.filter(
+                          (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
+                        );
+                        if (assignedRoles.length === 0) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-400 italic">No roles assigned</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPreselectedDepartment(dept.name);
+                                  setEditingClientRole(null);
+                                  setShowRolesDrawer(true);
+                                }}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" /> Add Role
+                              </button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {assignedRoles.map((r) => (
+                              <span
+                                key={r.id}
+                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                              >
+                                {r.name}
+                              </span>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreselectedDepartment(dept.name);
+                                setEditingClientRole(null);
+                                setShowRolesDrawer(true);
+                              }}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                              title="Create Role in this Department"
+                            >
+                              <Plus className="w-3 h-3" /> Role
+                            </button>
+                          </div>
+                        );
+                      },
+                    },
+                  ];
+
+                  const deptRowActions: TableRowAction<Department>[] = [
+                    {
+                      label: "Create Role in Department",
+                      onClick: (dept) => {
+                        setPreselectedDepartment(dept.name);
+                        setEditingClientRole(null);
+                        setShowRolesDrawer(true);
+                      },
+                    },
+                    {
+                      label: "Edit Department",
+                      onClick: (dept) => {
+                        setEditingDepartment(dept);
+                        setIsDepartmentDrawerOpen(true);
+                      },
+                    },
+                    {
+                      label: "Delete Department",
+                      isDanger: true,
+                      onClick: (dept) => {
+                        const updated = departments.filter((d) => d.id !== dept.id);
+                        setDepartments(updated);
+                        saveStoredDepartments(updated);
+                        toast.success(`Department "${dept.name}" removed.`);
+                      },
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={deptColumns}
+                      data={filteredDepartments}
+                      getRowId={(d) => d.id}
+                      rowActions={deptRowActions}
+                      emptyMessage="No departments found. Click 'Create Department' to add one."
+                    />
+                  );
+                })()}
+
+                {/* VIEW 2: ROLES TABLE */}
                 {teamSubTab === "roles" && (() => {
                   const filteredRoles = roles.filter(
                     (r) =>
@@ -4996,6 +5138,7 @@ export default function Settings() {
                           type="button"
                           onClick={() => {
                             setEditingClientRole(r);
+                            setPreselectedDepartment(r.department || "");
                             setShowRolesDrawer(true);
                           }}
                           className="text-xs font-semibold text-[#0F172A] hover:text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
@@ -5046,25 +5189,26 @@ export default function Settings() {
                         );
                       },
                     },
+                  ];
+
+                  const roleRowActions: TableRowAction<Role>[] = [
                     {
-                      key: "actions",
-                      header: "ACTIONS",
-                      align: "center",
-                      render: (r) => (
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingClientRole(r);
-                              setShowRolesDrawer(true);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Role Permissions"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ),
+                      label: "Edit Role",
+                      onClick: (r) => {
+                        setEditingClientRole(r);
+                        setPreselectedDepartment(r.department || "");
+                        setShowRolesDrawer(true);
+                      },
+                    },
+                    {
+                      label: "Delete Role",
+                      isDanger: true,
+                      hidden: (r) => Boolean(r.isDefault) || (r.name || "").toLowerCase() === "admin",
+                      onClick: (r) => {
+                        const updated = roles.filter((role) => role.id !== r.id);
+                        handleSaveRoles(updated);
+                        toast.success(`Role "${r.name}" deleted.`);
+                      },
                     },
                   ];
 
@@ -5083,15 +5227,17 @@ export default function Settings() {
                       columns={roleColumns}
                       data={filteredRoles}
                       getRowId={(r) => r.id}
+                      rowActions={roleRowActions}
                       emptyMessage="No roles found matching your search."
                     />
                     </>
                   );
                 })()}
 
-                {/* VIEW 2: USERS TABLE (Dynamic synced with team store) */}
+                {/* VIEW 3: USERS TABLE (Dynamic synced with team store) */}
                 {teamSubTab === "users" && (() => {
-                  const filteredUsers = allUsers.filter((u) => {
+                  const dedupedUsers = cleanLegacyMembers(allUsers);
+                  const filteredUsers = dedupedUsers.filter((u) => {
                     const matchSearch =
                       teamSearchQuery === "" ||
                       u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
@@ -5200,6 +5346,20 @@ export default function Settings() {
 
                   const userRowActions: TableRowAction<User>[] = [
                     {
+                      label: "Copy Invitation Link",
+                      onClick: (u) => {
+                        const link = `${window.location.origin}/chats?memberId=${u.id}&invite=1`;
+                        try {
+                          navigator.clipboard.writeText(link);
+                          toast.success(`Invitation link for "${u.name}" copied to clipboard!`, {
+                            description: link,
+                          });
+                        } catch {
+                          toast.success(`Invitation link: ${link}`);
+                        }
+                      },
+                    },
+                    {
                       label: "Edit",
                       onClick: (u) => {
                         setSelectedTeamMember(u);
@@ -5238,126 +5398,13 @@ export default function Settings() {
                   return (
                     <TableComponent
                       columns={userColumns}
-                      data={filteredUsers}
+                      data={filteredUsers as any}
                       getRowId={(u) => String(u.id)}
                       enableSelection={true}
                       selectedIds={selectedTeamRows}
                       onSelectionChange={setSelectedTeamRows}
                       rowActions={userRowActions}
                       emptyMessage="No users found matching your filters."
-                    />
-                  );
-                })()}
-
-                {/* VIEW 3: DEPARTMENTS TABLE */}
-                {teamSubTab === "departments" && (() => {
-                  const filteredDepartments = departments.filter(
-                    (d) =>
-                      !teamSearchQuery.trim() ||
-                      d.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
-                      (d.description && d.description.toLowerCase().includes(teamSearchQuery.toLowerCase()))
-                  );
-
-                  const deptColumns: TableColumn<Department>[] = [
-                    {
-                      key: "name",
-                      header: "DEPARTMENT NAME",
-                      align: "left",
-                      render: (dept) => (
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                            <Building2 className="w-3.5 h-3.5 text-slate-700" />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingDepartment(dept);
-                              setIsDepartmentDrawerOpen(true);
-                            }}
-                            className="text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {dept.name}
-                          </button>
-                        </div>
-                      ),
-                    },
-                    {
-                      key: "description",
-                      header: "DESCRIPTION",
-                      align: "left",
-                      render: (dept) => (
-                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {dept.description || "—"}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "roles",
-                      header: "ASSIGNED ROLES",
-                      align: "left",
-                      render: (dept) => {
-                        const assignedRoles = roles.filter(
-                          (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
-                        );
-                        if (assignedRoles.length === 0) {
-                          return <span className="text-xs text-slate-400 italic">No roles assigned</span>;
-                        }
-                        return (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {assignedRoles.map((r) => (
-                              <span
-                                key={r.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200"
-                              >
-                                {r.name}
-                              </span>
-                            ))}
-                          </div>
-                        );
-                      },
-                    },
-                    {
-                      key: "actions",
-                      header: "ACTIONS",
-                      align: "center",
-                      render: (dept) => (
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingDepartment(dept);
-                              setIsDepartmentDrawerOpen(true);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Department"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = departments.filter((d) => d.id !== dept.id);
-                              setDepartments(updated);
-                              saveStoredDepartments(updated);
-                              toast.success(`Department "${dept.name}" removed.`);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Department"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ),
-                    },
-                  ];
-
-                  return (
-                    <TableComponent
-                      columns={deptColumns}
-                      data={filteredDepartments}
-                      getRowId={(d) => d.id}
-                      emptyMessage="No departments found. Click 'Create Department' to add one."
                     />
                   );
                 })()}
@@ -8792,313 +8839,6 @@ export default function Settings() {
           </div>
         </Modal>
 
-        {/* Add User Drawer */}
-        <Drawer
-          isOpen={showAddUserModal}
-          onClose={() => {
-            setShowAddUserModal(false);
-            setAddUserDepartment("");
-            setUserFormData({
-              name: "",
-              email: "",
-              role: "Agent",
-              canBookAppointments: false,
-              permissions: createDefaultPermissions(),
-            });
-            setCorePermission("");
-            setOperationsPermission("");
-            setSystemPermission("");
-          }}
-          title={
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-800"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-              </div>
-              <div>
-                <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>Add Team Member</div>
-                <div className="text-[11px] text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>Fill in the details below to add a new user</div>
-              </div>
-            </div>
-          }
-          maxWidth="max-w-[40vw] w-[40vw]"
-        >
-          <div className="space-y-5" style={{ fontFamily: "Outfit, sans-serif" }}>
-            {/* Name */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Name <span className="text-red-500">*</span></label>
-              <input
-                value={userFormData.name}
-                onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
-                placeholder="Enter team member name"
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email <span className="text-red-500">*</span></label>
-              <input
-                type="email"
-                value={userFormData.email}
-                onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
-                placeholder="Enter email address"
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
-              />
-            </div>
-
-            {/* Role */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Role <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={userFormData.role}
-                  onChange={(e) => {
-                    const selectedRoleName = e.target.value;
-                    const matchedRole = roles.find((r) => r.name === selectedRoleName);
-                    if (matchedRole) {
-                      setUserFormData({ ...userFormData, role: selectedRoleName, roleId: matchedRole.id, permissions: { ...matchedRole.permissions } });
-                    } else {
-                      setUserFormData({ ...userFormData, role: selectedRoleName, roleId: undefined });
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"
-                >
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.name}>{role.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
-              </div>
-            </div>
-
-            {/* Assigned Products / Services */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-blue-600" />
-                  Assigned Products / Services <span className="text-slate-400 font-normal">(optional)</span>
-                </span>
-              </label>
-              {addMemberSelectedServiceIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
-                  {addMemberSelectedServiceIds.map((sid) => {
-                    const svc = settingsServices.find((s) => s.id === sid);
-                    if (!svc) return null;
-                    return (
-                      <span
-                        key={sid}
-                        onClick={() => setAddMemberSelectedServiceIds((prev) => prev.filter((id) => id !== sid))}
-                        title="Click to remove"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 shadow-2xs cursor-pointer hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
-                      >
-                        <span>{svc.name}</span>
-                        <X className="w-3 h-3 text-slate-400 hover:text-rose-600" />
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowMemberServiceDrop(!showMemberServiceDrop)}
-                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white flex items-center justify-between focus:outline-none focus:border-slate-400 transition-colors cursor-pointer"
-                >
-                  <span className={addMemberSelectedServiceIds.length === 0 ? "text-slate-400" : "text-slate-800 font-medium"}>
-                    {addMemberSelectedServiceIds.length === 0
-                      ? "Select products & services to assign..."
-                      : `${addMemberSelectedServiceIds.length} product${addMemberSelectedServiceIds.length > 1 ? "s" : ""} selected`}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showMemberServiceDrop ? "rotate-180" : ""}`} />
-                </button>
-                {showMemberServiceDrop && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => { setShowMemberServiceDrop(false); setMemberServiceSearch(""); }} />
-                    <div className="absolute left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100">
-                      <div className="p-2 border-b border-slate-100 bg-slate-50/70">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                          <input
-                            type="text"
-                            placeholder="Search products & services..."
-                            value={memberServiceSearch}
-                            onChange={(e) => setMemberServiceSearch(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
-                            autoFocus
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
-                        {settingsServices
-                          .filter((s) => s.name.toLowerCase().includes(memberServiceSearch.toLowerCase()))
-                          .map((s) => {
-                            const isSelected = addMemberSelectedServiceIds.includes(s.id);
-                            return (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isSelected) {
-                                    setAddMemberSelectedServiceIds((prev) => prev.filter((id) => id !== s.id));
-                                  } else {
-                                    setAddMemberSelectedServiceIds((prev) => [...prev, s.id]);
-                                    setUserFormData((prev) => ({ ...prev, canBookAppointments: true }));
-                                  }
-                                }}
-                                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
-                                  isSelected ? "bg-blue-50/70" : "hover:bg-slate-50"
-                                }`}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-semibold text-slate-800 truncate">{s.name}</p>
-                                  <p className="text-[11px] text-slate-400">${s.price} · {s.duration} min</p>
-                                </div>
-                                {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0 ml-2" />}
-                              </button>
-                            );
-                          })}
-                        {settingsServices.filter((s) => s.name.toLowerCase().includes(memberServiceSearch.toLowerCase())).length === 0 && (
-                          <p className="text-center text-xs text-slate-400 py-4">No products found</p>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Assigned services will immediately reflect in the Product & Services catalogue.
-              </p>
-            </div>
-
-            {/* Appointment Booking Option */}
-            <div className="pt-1">
-              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
-                <input
-                  type="checkbox"
-                  checked={userFormData.canBookAppointments}
-                  onChange={(e) =>
-                    setUserFormData({
-                      ...userFormData,
-                      canBookAppointments: e.target.checked,
-                    })
-                  }
-                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
-                />
-                <div className="space-y-0.5 min-w-0">
-                  <div className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Allow appointment booking for this team member
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    When enabled, this team member will appear in the Appointments schedule and clients can book appointments with them.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Available Locations for Booking */}
-            {userFormData.canBookAppointments && (
-              <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      Available Locations
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      Select clinic locations where this member can be booked
-                    </div>
-                  </div>
-                  {settingsOrgLocations.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (addMemberSelectedLocationIds.length === settingsOrgLocations.length) {
-                          setAddMemberSelectedLocationIds([]);
-                        } else {
-                          setAddMemberSelectedLocationIds(settingsOrgLocations.map((l) => l.id));
-                        }
-                      }}
-                      className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                    >
-                      {addMemberSelectedLocationIds.length === settingsOrgLocations.length ? "Deselect All" : "Select All"}
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-1.5 max-h-[160px] overflow-y-auto pr-0.5">
-                  {settingsOrgLocations.length === 0 ? (
-                    <div className="p-2.5 text-center text-xs text-slate-400">
-                      No organization locations found
-                    </div>
-                  ) : (
-                    settingsOrgLocations.map((loc, idx) => {
-                      const isChecked = addMemberSelectedLocationIds.includes(loc.id);
-                      return (
-                        <label
-                          key={loc.id}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all cursor-pointer ${
-                            isChecked
-                              ? "bg-white border-blue-200 text-slate-900 shadow-2xs"
-                              : "bg-white/60 border-slate-200/80 text-slate-500 hover:bg-white"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setAddMemberSelectedLocationIds([...addMemberSelectedLocationIds, loc.id]);
-                              } else {
-                                setAddMemberSelectedLocationIds(addMemberSelectedLocationIds.filter((id) => id !== loc.id));
-                              }
-                            }}
-                            className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
-                          />
-                          <span className="text-xs font-medium flex-1 truncate">{loc.name}</span>
-                          {idx === 0 && (
-                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                              Primary
-                            </span>
-                          )}
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddUserModal(false);
-                  setAddUserDepartment("");
-                  setUserFormData({ name: "", email: "", role: "Agent", canBookAppointments: false, permissions: createDefaultPermissions() });
-                  setCorePermission("");
-                  setOperationsPermission("");
-                  setSystemPermission("");
-                }}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveUser}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Add Team Member
-              </button>
-            </div>
-          </div>
-        </Drawer>
 
         {/* Edit User Modal - Manage Permissions */}
         <Modal
@@ -9367,7 +9107,7 @@ export default function Settings() {
                         </div>
 
                         <div className="inline-flex rounded-md border border-gray-200 overflow-hidden text-[10px] shadow-xs flex-shrink-0">
-                          {(["deny", "own", "role", "all"] as ActionScope[]).map((opt) => (
+                          {(["deny", "own", "role", "department", "all"] as ActionScope[]).map((opt) => (
                             <button
                               key={opt}
                               type="button"
@@ -13326,11 +13066,13 @@ export default function Settings() {
           onClose={() => {
             setShowRolesDrawer(false);
             setEditingClientRole(null);
+            setPreselectedDepartment("");
           }}
           roles={roles}
           onSaveRoles={handleSaveRoles}
           assignedUserCounts={assignedUserCounts}
           editingRole={editingClientRole}
+          initialDepartment={preselectedDepartment}
         />
 
         <DepartmentDrawer
@@ -13340,6 +13082,7 @@ export default function Settings() {
             setEditingDepartment(null);
           }}
           roles={roles}
+          onRolesChange={handleSaveRoles}
           initialEditDepartment={editingDepartment}
           onDepartmentsChange={(updated) => setDepartments(updated)}
           zIndex={10100}
@@ -13349,9 +13092,9 @@ export default function Settings() {
           isOpen={showAddUserModal}
           onClose={() => setShowAddUserModal(false)}
           onSuccess={(newMember) => {
-            setAllUsers((prev) => [...prev, newMember as any]);
-            setShowAddUserModal(false);
-            toast.success(`Team member ${newMember.name} added`);
+            setAllUsers((prev) => {
+              return cleanLegacyMembers([...prev, newMember as any]) as any;
+            });
           }}
         />
       </div>
