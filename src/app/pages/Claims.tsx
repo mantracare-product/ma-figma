@@ -41,6 +41,7 @@ import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
 import CreateClaimModal from "../components/claims/CreateClaimModal";
 import { stripSampleSuffix } from "../../lib/sampleSuffixMigration";
 import PayersView from "../components/claims/PayersView";
+import ClaimDefaultsDrawer from "../components/claims/ClaimDefaultsDrawer";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -133,6 +134,8 @@ export default function Claims() {
   const canPostPayments = hasClaimPermission("rcmPayments", "add");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isClaimDefaultsOpen, setIsClaimDefaultsOpen] = useState(false);
+  const [isScrubRulesOpen, setIsScrubRulesOpen] = useState(false);
   // Claims | Payers toggle (Payers needs the billingSetup permission; deep link: ?view=setup or ?view=payers)
   const canSetup = hasClaimPermission("billingSetup", "read");
   const [view, setView] = useState<"claims" | "payers">(() => {
@@ -374,6 +377,8 @@ export default function Claims() {
                     processId={insuranceProcess.id}
                     processName={insuranceProcess.name}
                     buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                    onOpenClaimDefaults={canSetup ? () => setIsClaimDefaultsOpen(true) : undefined}
+                    onOpenScrubRules={canSetup ? () => setIsScrubRulesOpen(true) : undefined}
                   />
                 </div>
               )}
@@ -611,6 +616,12 @@ export default function Claims() {
           claim={activeCMS1500Claim}
           isOpen={!!activeCMS1500Claim}
           onClose={() => setActiveCMS1500Claim(null)}
+        />
+
+        {/* Claim Defaults Drawer */}
+        <ClaimDefaultsDrawer
+          isOpen={isClaimDefaultsOpen}
+          onClose={() => setIsClaimDefaultsOpen(false)}
         />
 
         {/* Claim Detail Drawer (Standard Architecture: Draggable Sections + Activity Feed + Documents) */}

@@ -1,5 +1,6 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 import { assignClaimsToWorkflows, getClaimWorkflows } from "./claimWorkflows";
+import { logMigration } from "./stageCallMigration";
 
 export type ClaimStatus =
   | "Draft"
@@ -68,7 +69,12 @@ export interface Claim {
   billingProviderNpi: string;
   billingProviderTaxId?: string; // EIN/SSN
   billingProviderAddress?: string;
+  billingLocationId?: string;
   placeOfService: string; // e.g. "11 - Office", "02 - Telehealth"
+  acceptAssignment?: boolean;
+  timelyFilingDays?: number;
+  signatureOnFile?: boolean;
+  releaseOfInformation?: boolean;
 
   // Medical coding
   serviceDate: string;
@@ -407,12 +413,67 @@ const SEED_CLAIMS: Claim[] = [
 ];
 
 export const CLAIMS_SCHEMA_FLAG = "claims_schema_v2";
+export const CLAIMS_BILLING_DEFAULTS_FLAG = "mantra_claim_defaults_migrated_v1";
+
+function ensureClaimBillingDefaults(list: Claim[], storageKey: string): Claim[] {
+  try {
+    if (list.length === 0) return list;
+    if (typeof localStorage !== "undefined" && localStorage.getItem(CLAIMS_BILLING_DEFAULTS_FLAG) === "1") {
+      return list;
+    }
+    let changed = false;
+    let migratedCount = 0;
+    const migrated = list.map((c) => {
+      let claimChanged = false;
+      const patch: Partial<Claim> = {};
+      if (!c.frequencyCode) {
+        patch.frequencyCode = "1";
+        claimChanged = true;
+      }
+      if (c.acceptAssignment === undefined) {
+        patch.acceptAssignment = true;
+        claimChanged = true;
+      }
+      if (c.signatureOnFile === undefined) {
+        patch.signatureOnFile = true;
+        claimChanged = true;
+      }
+      if (c.releaseOfInformation === undefined) {
+        patch.releaseOfInformation = true;
+        claimChanged = true;
+      }
+      if (claimChanged) {
+        changed = true;
+        migratedCount++;
+        return { ...c, ...patch };
+      }
+      return c;
+    });
+
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(CLAIMS_BILLING_DEFAULTS_FLAG, "1");
+    }
+    if (changed) {
+      logMigration(
+        "R5-fix",
+        `Migrated ${migratedCount} claims: set frequencyCode='1', acceptAssignment=true, signatureOnFile=true, releaseOfInformation=true`
+      );
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(storageKey, JSON.stringify(migrated));
+      }
+    }
+    return migrated;
+  } catch {
+    return list;
+  }
+}
 
 /** One-time migration: every claim gets a workflow (Claim.processId) and a valid stage in it. Idempotent. */
 function ensureClaimWorkflows(list: Claim[], storageKey: string): Claim[] {
   try {
-    if (list.length === 0 || localStorage.getItem(CLAIMS_SCHEMA_FLAG) === "1") return list;
-    const { claims, changed } = assignClaimsToWorkflows(list, getClaimWorkflows());
+    const withDefaults = ensureClaimBillingDefaults(list, storageKey);
+    if (withDefaults.length === 0 || localStorage.getItem(CLAIMS_SCHEMA_FLAG) === "1") return withDefaults;
+    const { claims, changed } = assignClaimsToWorkflows(withDefaults, getClaimWorkflows());
     localStorage.setItem(CLAIMS_SCHEMA_FLAG, "1");
     if (changed) localStorage.setItem(storageKey, JSON.stringify(claims));
     return claims;

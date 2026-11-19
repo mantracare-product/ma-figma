@@ -111,6 +111,7 @@ export const SEC_APPT_AUTHORIZATION = "sec-appt-authorization";
 export const SEC_CLAIM_RCM = "sec-clm-revenue-cycle";
 export const SEC_CLAIM_ELIGIBILITY = "sec-clm-eligibility";
 export const SEC_CLAIM_AUTH = "sec-clm-authorization";
+export const SEC_CLAIM_BILLING = "sec-clm-billing";
 
 /** Client Overview > Insurance section: the Coverages table (rows sync to the coverages store) + guarantor, self-pay, consents. */
 export const CLIENT_FIELDS: SeedField[] = [
@@ -152,6 +153,17 @@ export const CLAIM_RCM_FIELDS: SeedField[] = [
   TS("rcm_scrub_issues", "Scrub issues", SEC_CLAIM_RCM, "textarea"),
 ];
 
+/** Claim drawer: billing details section. */
+export const CLAIM_BILLING_FIELDS: SeedField[] = [
+  TS("billing_location", "Billing location", SEC_CLAIM_BILLING),
+  TS("place_of_service", "Place of service", SEC_CLAIM_BILLING),
+  TS("accept_assignment", "Accept assignment", SEC_CLAIM_BILLING, "yes_no"),
+  TS("timely_filing_days", "Timely filing days", SEC_CLAIM_BILLING, "number"),
+  TS("signature_on_file", "Signature on file", SEC_CLAIM_BILLING, "yes_no"),
+  TS("release_of_information", "Release of information", SEC_CLAIM_BILLING, "yes_no"),
+  TS("frequency_code", "Frequency code", SEC_CLAIM_BILLING, "text"),
+];
+
 /** Sections registered in the section registry (module -> list). */
 const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
   { module: "client", id: SEC_INSURANCE, title: "Insurance", description: "Coverages in priority order, guarantor, self-pay and consents", iconName: "shield", fieldKeys: ["ins_coverages", "guarantor", "selfPay", "consent_sms", "consent_voice", "consent_cardOnFile", "dob", "sex", "address"] },
@@ -160,6 +172,7 @@ const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; 
   { module: "appointment", id: SEC_APPT_ELIGIBILITY, title: "Eligibility", description: "Latest eligibility result for this visit", iconName: "shield", fieldKeys: ["elig_status", "elig_copay", "elig_deductible_remaining", "elig_checked_at"] },
   { module: "appointment", id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
   { module: "claim", id: SEC_CLAIM_RCM, title: "Revenue cycle", description: "Assignee, priority, deadlines, authorization, denial and appeal", iconName: "layers", fieldKeys: CLAIM_RCM_FIELDS.map((f) => f.key) },
+  { module: "claim", id: SEC_CLAIM_BILLING, title: "Billing details", description: "Location, place of service, accept assignment, filing deadline, signature and release consents", iconName: "file-text", fieldKeys: CLAIM_BILLING_FIELDS.map((f) => f.key) },
 ];
 
 const APPT_SECTION_OF: Record<string, string> = { elig_status: SEC_APPT_ELIGIBILITY, elig_copay: SEC_APPT_ELIGIBILITY, elig_deductible_remaining: SEC_APPT_ELIGIBILITY, elig_checked_at: SEC_APPT_ELIGIBILITY, auth_required: SEC_APPT_AUTHORIZATION, auth_status: SEC_APPT_AUTHORIZATION, auth_number: SEC_APPT_AUTHORIZATION };
@@ -175,7 +188,12 @@ function plan(): Record<Mod, SeedField[]> {
     process: [...EG1, ...EG2, ...EG3, EG4, EG5],
     appointment: [...APPT_SUMMARY.map(byKey), T("elig_instance_id", "Eligibility instance"), { key: "paymentMode", label: "Payment mode", inputType: "list_select", options: DEFAULT_PAYMENT_MODES }],
     // R4.4: the claim module carries the full eligibility / authorization groups (the insurance record's journey)
-    claim: [...[...EG1, ...EG2, EG4, EG5].map((f) => ({ ...f, sectionId: SEC_CLAIM_ELIGIBILITY })), ...EG3.map((f) => ({ ...f, sectionId: SEC_CLAIM_AUTH })), ...CLAIM_RCM_FIELDS],
+    claim: [
+      ...[...EG1, ...EG2, EG4, EG5].map((f) => ({ ...f, sectionId: SEC_CLAIM_ELIGIBILITY })),
+      ...EG3.map((f) => ({ ...f, sectionId: SEC_CLAIM_AUTH })),
+      ...CLAIM_RCM_FIELDS,
+      ...CLAIM_BILLING_FIELDS,
+    ],
     client: CLIENT_FIELDS,
   };
 }

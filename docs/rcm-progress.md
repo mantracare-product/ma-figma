@@ -216,7 +216,7 @@ Checklist:
 - [x] Part B: Fees live on the service only (done, commit "R5.B")
 - [x] Part C: Payers: table + detail drawer (done, commit "R5.C")
 - [x] Part D: Service drawer link (done, commit "R5.D")
-- [ ] Part E: Claim defaults and claim fields
+- [x] Part E: Claim defaults and claim fields (done, commit "R5-fix.3")
 - [ ] Part F: Scrub rules as condition blocks
 - [ ] Part G: Provider credentials move to the Team member drawer
 - [ ] Part H: Notifications page and the voice switch
@@ -268,3 +268,14 @@ Checklist:
 - Replaced demo placeholder phones with distinct plausible numbers for demo payers (and undefined/blank for Molina / Oscar to show "Add the payer phone to enable benefit calls").
 - Migration `migratePayersToThreeFunctionEnrollment` (`mantra_payers_migrated_v2`) updates any existing stored payer holding "800-555-0100" and logs to `mantra_migration_log_v1`.
 - Gate: typecheck OK, build OK, vitest at baseline (payerDetail.test.ts 4/4 passed).
+
+### R5-fix.3: Claim defaults drawer and claim billing fields (done, commit "R5-fix.3")
+- Settings gear in Claims top bar (`WorkflowGearDropdown.tsx`) opens "Claim defaults" as a right-side drawer (`ClaimDefaultsDrawer.tsx`), requiring billingSetup permission to edit (read-only otherwise).
+- Claim defaults drawer content: default billing location (from org locations), place of service fallback (national CMS POS codes 01-99 with names), timely filing days fallback, accept assignment, signature on file (CMS-1500 box 12, default Yes), release of information (CMS-1500 box 13, default Yes).
+- Claim drawer: "Billing details" section (`sec-clm-billing-details`) renders each default as an editable field on each claim (`billing_location`, `place_of_service`, `accept_assignment`, `timely_filing_days`, `signature_on_file`, `release_of_information`).
+- Place of service comes from the appointment's location first.
+- Frequency code is automatic: new claim 1, "Resubmit as replacement" 7, "Void claim" 8; displayed read-only on the claim and in drawer header badge.
+- Added actions "Resubmit as replacement" and "Void claim" to claim drawer and `claimActions.ts`.
+- Migration `ensureClaimBillingDefaults` (`mantra_claim_defaults_migrated_v1`) sets frequencyCode='1', acceptAssignment=true, signatureOnFile=true, releaseOfInformation=true for existing claims without them, logged to `mantra_migration_log_v1`.
+- Tests: `claimDefaults.test.ts` (4/4 passed), `claimActions.test.ts` (11/11 passed).
+- Gate: typecheck OK, build OK, vitest OK.

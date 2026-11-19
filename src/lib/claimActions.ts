@@ -84,6 +84,7 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   const serviceDate = appt?.date || todayStr();
   const demo = getClientDemographics(input.clientId);
   const cov = getCoverageOn(input.clientId, serviceDate, "primary");
+  const payerRecord = getPayer(input.payerId || cov?.payerId);
   const payer = claimPayerFrom(input.payerId || cov?.payerId);
   const missing: string[] = [];
 
@@ -98,10 +99,12 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
   if (!entity.legalName || !entity.npi) missing.push("billing_entity");
   const defaults = claimDefaultsStore.get();
   const orgLocs = getOrgLocations();
-  const loc = orgLocs.find((l) => l.id === defaults.defaultBillingLocationId) || orgLocs.find((l) => appt?.location && l.name === appt.location);
+  // Place of service comes from the appointment's location first
+  const loc = (appt?.location ? orgLocs.find((l) => l.name === appt.location || l.id === appt.location) : undefined) || orgLocs.find((l) => l.id === defaults.defaultBillingLocationId);
   const pos = loc?.pos || defaults.defaultPos || "";
   if (!pos) missing.push("place_of_service");
   if (!payer) missing.push("coverage");
+  const timelyDays = payerRecord?.timelyFilingDays ?? defaults.timelyFilingDays ?? 90;
 
   let diagnosisCodes: ClaimDiagnosisCode[] = [];
   let lines: ClaimServiceLine[] = [];
@@ -128,7 +131,10 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
     billingProviderNpi: entity.npi,
     billingProviderTaxId: entity.ein,
     billingProviderAddress: entity.address,
+    billingLocationId: loc?.id || defaults.defaultBillingLocationId,
     placeOfService: pos,
+    acceptAssignment: defaults.acceptAssignment !== false,
+    timelyFilingDays: timelyDays,
     serviceDate,
     diagnosisCodes,
     lines,
@@ -136,7 +142,10 @@ export function performCreateClaim(input: CreateClaimInput): { claimId: string; 
     amountPaid: 0,
     status: "Draft",
     assignee: input.assignee,
-    timelyFilingDeadline: addDays(serviceDate, defaults.timelyFilingDays || 90),
+    timelyFilingDeadline: addDays(serviceDate, timelyDays),
+    signatureOnFile: defaults.signatureOnFile !== false,
+    releaseOfInformation: defaults.releaseOfInformation !== false,
+    frequencyCode: "1",
     sourceType: input.sourceType,
     sourceId: input.sourceId,
     dedupeKey,
@@ -370,4 +379,30 @@ export function executeSubmitClaimStep(args: { rule: AutomationRule; stepId?: st
     if (!claimId) throw new Error(`submit_claim: cannot resolve a claim from ${event.recordType} ${event.recordId}`);
     return performSubmitClaim(input) as any;
   });
+}
+
+/** Resubmit an existing claim as a replacement (frequency code 7). */
+export function resubmitClaimAsReplacement(claimId: string): Claim {
+  const claim = getStoredClaims().find((c) => c.id === claimId);
+  if (!claim) throw new Error(`Claim ${claimId} not found`);
+  const updated: Claim = {
+    ...claim,
+    frequencyCode: "7",
+    updatedAt: new Date().toISOString(),
+  };
+  saveClaim(updated);
+  return updated;
+}
+
+/** Void an existing claim (frequency code 8). */
+export function voidClaim(claimId: string): Claim {
+  const claim = getStoredClaims().find((c) => c.id === claimId);
+  if (!claim) throw new Error(`Claim ${claimId} not found`);
+  const updated: Claim = {
+    ...claim,
+    frequencyCode: "8",
+    updatedAt: new Date().toISOString(),
+  };
+  saveClaim(updated);
+  return updated;
 }

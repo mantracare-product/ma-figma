@@ -24,7 +24,11 @@ import {
   HelpCircle,
   Edit,
   Trash2,
+  ChevronDown,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
+import { claimDefaultsStore } from "../../../lib/billingSetupStore";
 import {
   Claim,
   ClaimStatus,
@@ -120,6 +124,23 @@ const DEFAULT_CLAIM_SECTIONS: OverviewSection[] = [
       "prior_auth_number",
       "allowed_amount",
       "paid_amount",
+    ],
+  },
+  {
+    id: "sec-clm-billing-details",
+    title: "Billing details",
+    description: "Billing location, place of service, accept assignment, filing deadline, signature on file, and release of info",
+    iconName: "file-text",
+    source: "system",
+    module: "claim",
+    fieldKeys: [
+      "billing_location",
+      "place_of_service",
+      "accept_assignment",
+      "timely_filing_days",
+      "signature_on_file",
+      "release_of_information",
+      "frequency_code",
     ],
   },
 ];
@@ -327,13 +348,20 @@ export default function ClaimDetailDrawer({
 
   useEffect(() => {
     if (!liveClaim) return;
+    const defaults = claimDefaultsStore.get();
     if (isCreateMode) {
       setFieldValues({
         claim_number: liveClaim.claimNumber,
         service_date: liveClaim.serviceDate || new Date().toISOString().slice(0, 10),
         billed_amount: "",
         claim_type: "Professional (CMS-1500 / 837P)",
-        place_of_service: liveClaim.placeOfService || "11 - Office",
+        place_of_service: liveClaim.placeOfService || defaults.defaultPos || "11 - Office",
+        billing_location: defaults.defaultBillingLocationId || "",
+        accept_assignment: defaults.acceptAssignment !== false ? "yes" : "no",
+        timely_filing_days: defaults.timelyFilingDays || 90,
+        signature_on_file: defaults.signatureOnFile !== false ? "yes" : "no",
+        release_of_information: defaults.releaseOfInformation !== false ? "yes" : "no",
+        frequency_code: "1 - New claim (Original)",
         client_name: "",
         patient_dob: "",
         client_phone: "",
@@ -356,7 +384,13 @@ export default function ClaimDetailDrawer({
       service_date: liveClaim.serviceDate || "",
       billed_amount: liveClaim.totalCharge ? liveClaim.totalCharge : "",
       claim_type: liveClaim.submissionMethod === "clearinghouse" ? "Professional (837P)" : "CMS-1500 Paper",
-      place_of_service: liveClaim.placeOfService || "11 - Office",
+      place_of_service: liveClaim.placeOfService || defaults.defaultPos || "11 - Office",
+      billing_location: liveClaim.billingLocationId || defaults.defaultBillingLocationId || "",
+      accept_assignment: liveClaim.acceptAssignment !== undefined ? (liveClaim.acceptAssignment ? "yes" : "no") : (defaults.acceptAssignment !== false ? "yes" : "no"),
+      timely_filing_days: liveClaim.timelyFilingDays ?? defaults.timelyFilingDays ?? 90,
+      signature_on_file: liveClaim.signatureOnFile !== undefined ? (liveClaim.signatureOnFile ? "yes" : "no") : (defaults.signatureOnFile !== false ? "yes" : "no"),
+      release_of_information: liveClaim.releaseOfInformation !== undefined ? (liveClaim.releaseOfInformation ? "yes" : "no") : (defaults.releaseOfInformation !== false ? "yes" : "no"),
+      frequency_code: liveClaim.frequencyCode === "7" ? "7 - Resubmit as replacement" : liveClaim.frequencyCode === "8" ? "8 - Void claim" : "1 - New claim (Original)",
       client_name: liveClaim.patientName || "",
       patient_dob: liveClaim.patientDob || "",
       client_phone: liveClaim.patientPhone || "",
@@ -406,6 +440,12 @@ export default function ClaimDetailDrawer({
       rcm_assignee: (v) => ({ assignee: String(v || "") || undefined }),
       rcm_priority: (v) => ({ priority: (["low", "normal", "high", "urgent"].includes(v) ? v : "normal") as Claim["priority"] }),
       rcm_timely_filing: (v) => ({ timelyFilingDeadline: String(v || "") || undefined }),
+      billing_location: (v) => ({ billingLocationId: String(v || "") || undefined }),
+      place_of_service: (v) => ({ placeOfService: String(v || "") }),
+      accept_assignment: (v) => ({ acceptAssignment: v === "yes" || v === true }),
+      timely_filing_days: (v) => ({ timelyFilingDays: Number(v) || undefined }),
+      signature_on_file: (v) => ({ signatureOnFile: v === "yes" || v === true }),
+      release_of_information: (v) => ({ releaseOfInformation: v === "yes" || v === true }),
     };
     if (rcmPatch[key] && liveClaim && !isCreateMode) {
       const patched = { ...liveClaim, ...rcmPatch[key](value), updatedAt: new Date().toISOString() } as Claim;
@@ -668,6 +708,11 @@ export default function ClaimDetailDrawer({
       },
       serviceDate: fieldValues.service_date || liveClaim.serviceDate,
       placeOfService: fieldValues.place_of_service || liveClaim.placeOfService,
+      billingLocationId: fieldValues.billing_location ?? liveClaim.billingLocationId,
+      acceptAssignment: fieldValues.accept_assignment !== undefined ? (fieldValues.accept_assignment === "yes" || fieldValues.accept_assignment === true) : liveClaim.acceptAssignment,
+      timelyFilingDays: fieldValues.timely_filing_days ? Number(fieldValues.timely_filing_days) : liveClaim.timelyFilingDays,
+      signatureOnFile: fieldValues.signature_on_file !== undefined ? (fieldValues.signature_on_file === "yes" || fieldValues.signature_on_file === true) : liveClaim.signatureOnFile,
+      releaseOfInformation: fieldValues.release_of_information !== undefined ? (fieldValues.release_of_information === "yes" || fieldValues.release_of_information === true) : liveClaim.releaseOfInformation,
       totalCharge: billedAmt,
       billingProviderNpi: fieldValues.provider_npi || liveClaim.billingProviderNpi,
       updatedAt: new Date().toISOString(),
@@ -716,9 +761,54 @@ export default function ClaimDetailDrawer({
             >
               #{liveClaim.claimNumber.replace(/^#/, "")}
             </span>
+            {liveClaim.frequencyCode && liveClaim.frequencyCode !== "1" && (
+              <span className="font-semibold text-[11px] px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                {liveClaim.frequencyCode === "7" ? "Replacement (7)" : liveClaim.frequencyCode === "8" ? "Void (8)" : `Freq ${liveClaim.frequencyCode}`}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
+            {!isCreateMode && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                    title="Claim Actions"
+                  >
+                    <span>Actions</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 shadow-lg rounded-xl py-1 z-[99999]">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const updated = { ...liveClaim, frequencyCode: "7", updatedAt: new Date().toISOString() };
+                      saveClaim(updated);
+                      setLiveClaim(updated);
+                      toast.success("Claim marked as replacement (frequency code 7)");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Resubmit as replacement</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const updated = { ...liveClaim, frequencyCode: "8", updatedAt: new Date().toISOString() };
+                      saveClaim(updated);
+                      setLiveClaim(updated);
+                      toast.success("Claim marked as void (frequency code 8)");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                  >
+                    <Ban className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Void claim</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <button
               type="button"
               onClick={onClose}

@@ -5,6 +5,7 @@ import {
   SlidersHorizontal,
   FolderPlus,
   FolderMinus,
+  ShieldCheck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,6 +23,8 @@ export interface WorkflowGearDropdownProps {
   className?: string;
   buttonClassName?: string;
   align?: "start" | "end" | "center";
+  onOpenClaimDefaults?: () => void;
+  onOpenScrubRules?: () => void;
 }
 
 export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
@@ -31,6 +34,8 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
   className = "",
   buttonClassName,
   align = "end",
+  onOpenClaimDefaults,
+  onOpenScrubRules,
 }) => {
   const navigate = useNavigate();
   const { isInWorkspace, addToWorkspace, removeFromWorkspace } = useSidebarMenu();
@@ -234,6 +239,27 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span className="whitespace-nowrap">Edit workflow</span>
           </DropdownMenuItem>
+
+          {/* Claim Defaults & Scrub rules (for claims / insurance) */}
+          {onOpenClaimDefaults && (
+            <DropdownMenuItem
+              onClick={onOpenClaimDefaults}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 focus:bg-slate-100 focus:text-slate-900 hover:bg-slate-100 hover:text-slate-900 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900 rounded-lg cursor-pointer transition-colors outline-none"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="whitespace-nowrap">Claim defaults</span>
+            </DropdownMenuItem>
+          )}
+
+          {onOpenScrubRules && (
+            <DropdownMenuItem
+              onClick={onOpenScrubRules}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 focus:bg-slate-100 focus:text-slate-900 hover:bg-slate-100 hover:text-slate-900 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900 rounded-lg cursor-pointer transition-colors outline-none"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="whitespace-nowrap">Scrub rules</span>
+            </DropdownMenuItem>
+          )}
 
           {/* 2. Add to workspace / Remove from workspace */}
           <DropdownMenuItem
