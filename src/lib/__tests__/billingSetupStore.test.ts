@@ -27,13 +27,13 @@ describe("billing setup stores", () => {
     expect(s.billingEntityStore.get().legalName).toBe("");
   });
 
-  it("seeds 15 payers, 3 providers and the default POS (entity and locations live on the organization)", () => {
+  it("seeds 15 payers, scrub rules, and the default POS (fees & providers moved, entity on organization)", () => {
     const r = s.seedBillingSetupSamples();
     expect(r.added).toBeGreaterThan(20);
     expect(s.getPayers()).toHaveLength(15);
     expect(s.getPayers().every((p) => p.sample)).toBe(true);
     expect(s.billingLocationsStore.get()).toHaveLength(0);
-    expect(s.providerCredentialsStore.get()).toHaveLength(3);
+    expect(s.scrubRulesStore.get().length).toBeGreaterThan(0);
     expect(s.billingEntityStore.get().legalName).toBe("");
     expect(s.claimDefaultsStore.get().defaultPos).toBe("11");
   });
@@ -55,16 +55,16 @@ describe("billing setup stores", () => {
     expect(s.billingEntityStore.get().legalName).toBe("Mine");
   });
 
-  it("lookupFee prefers the payer schedule, falls back to the default schedule", () => {
+  it("fees live on the service only; lookupFee is backward-compatible fallback", () => {
     s.seedBillingSetupSamples();
     expect(s.lookupFee("99214", "payer-bcbs")).toBe(120);
     expect(s.lookupFee("99214", "payer-aetna")).toBe(150);
     expect(s.lookupFee("00000")).toBeUndefined();
   });
 
-  it("provider credentials are looked up by team member id", () => {
+  it("provider credentials look up by team member id or name from team store", () => {
     s.seedBillingSetupSamples();
     expect(s.getProviderCredential(1)?.npi).toBe("1111111112");
-    expect(s.getProviderCredential(99)).toBeUndefined();
+    expect(s.getProviderCredential(999)).toBeUndefined();
   });
 });

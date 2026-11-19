@@ -167,7 +167,7 @@
       },
     },
     {
-      title: "UI: billingSetup user opens Insurance & Claims > Setup; /settings/team and /settings/organization stay blocked",
+      title: "UI: billingSetup user opens Insurance & Claims > Payers; /settings/team and /settings/organization stay blocked",
       usesAuth: true,
       reloadAfter: true,
       arrange(ctx) {
@@ -184,7 +184,7 @@
         {
           nav: "/claims?view=setup",
           async verify() {
-            await T.waitFor(() => T.ui.has("claims-setup"), { timeout: 10000, msg: "Setup to render on the Claims page" });
+            await T.waitFor(() => T.ui.has("payers-view"), { timeout: 10000, msg: "Payers to render on the Claims page" });
             eq(location.pathname, "/claims", "stayed on the Claims page");
           },
         },

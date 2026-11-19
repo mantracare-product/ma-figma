@@ -201,10 +201,10 @@
       },
     },
     {
-      title: "No Sample / Mock data / Demo set wording on the Claims, Setup and Automation screens",
+      title: "No Sample / Mock data / Demo set wording on the Claims, Payers and Automation screens",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
-        { nav: "/claims?view=setup", async verify() { await T.ui.wait("claims-setup", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Setup is clean"); } },
+        { nav: "/claims?view=payers", async verify() { await T.ui.wait("payers-view", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Payers is clean"); } },
         { nav: "/claims", async verify() { await T.ui.wait("claims-filter-workflow", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
         { nav: "/automation", async verify() { await T.ui.wait("run-daily-jobs", 15000); assert(!/mock data|\(sample\)|demo set|sample templates/i.test(T.ui.appText()), "Automation is clean"); } },
       ],

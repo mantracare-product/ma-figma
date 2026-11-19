@@ -31,16 +31,16 @@
       },
     },
     {
-      title: "UI: Insurance & Claims > Setup has its sections and no Billing entity / Locations sections",
+      title: "UI: Insurance & Claims > Payers uses shared components, gear drawers for defaults and scrub rules",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
-          nav: "/claims?view=setup",
+          nav: "/claims?view=payers",
           async verify() {
-            await T.ui.wait("claims-setup", 12000);
-            for (const id of ["payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
-            for (const id of ["entity", "locations"]) assert(!T.ui.has("billing-section-" + id), "no " + id + " section (organization is the source)");
-            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Setup page");
+            await T.ui.wait("payers-view", 12000);
+            assert(T.ui.has("payers-view"), "Payers view rendered");
+            assert(T.ui.has("claims-gear-btn"), "claims gear settings button present");
+            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Payers page");
           },
         },
       ],

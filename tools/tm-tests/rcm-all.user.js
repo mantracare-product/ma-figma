@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MantraAssist RCM tests
 // @namespace    mantra-assist-rcm-tests
-// @version      2026.11.16
+// @version      2026.11.19
 // @description  Browser tests for the RCM slices 1-6 (needs the Vite dev server: they use window.__rcm)
 // @match        http://localhost:*/*
 // @match        http://127.0.0.1:*/*
@@ -614,7 +614,7 @@
       },
     },
     {
-      title: "UI: billingSetup user opens Insurance & Claims > Setup; /settings/team and /settings/organization stay blocked",
+      title: "UI: billingSetup user opens Insurance & Claims > Payers; /settings/team and /settings/organization stay blocked",
       usesAuth: true,
       reloadAfter: true,
       arrange(ctx) {
@@ -631,7 +631,7 @@
         {
           nav: "/claims?view=setup",
           async verify() {
-            await T.waitFor(() => T.ui.has("claims-setup"), { timeout: 10000, msg: "Setup to render on the Claims page" });
+            await T.waitFor(() => T.ui.has("payers-view"), { timeout: 10000, msg: "Payers to render on the Claims page" });
             eq(location.pathname, "/claims", "stayed on the Claims page");
           },
         },
@@ -744,16 +744,16 @@
       },
     },
     {
-      title: "UI: Insurance & Claims > Setup has its sections and no Billing entity / Locations sections",
+      title: "UI: Insurance & Claims > Payers uses shared components, gear drawers for defaults and scrub rules",
       arrange(ctx) { ctx.fresh(); },
       phases: [
         {
-          nav: "/claims?view=setup",
+          nav: "/claims?view=payers",
           async verify() {
-            await T.ui.wait("claims-setup", 12000);
-            for (const id of ["payers", "fees", "defaults", "scrub", "providers", "notifications"]) assert(T.ui.has("billing-section-" + id), "section button " + id);
-            for (const id of ["entity", "locations"]) assert(!T.ui.has("billing-section-" + id), "no " + id + " section (organization is the source)");
-            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Setup page");
+            await T.ui.wait("payers-view", 12000);
+            assert(T.ui.has("payers-view"), "Payers view rendered");
+            assert(T.ui.has("claims-gear-btn"), "claims gear settings button present");
+            assert(!/mock data|\(sample\)/i.test(T.ui.appText()), "no mock / sample wording on the Payers page");
           },
         },
       ],
@@ -1198,15 +1198,15 @@
       ],
     },
     {
-      title: "UI: Claims Setup > Payers shows the prior-auth rules table (the eligibility scenario picker is dev-only)",
+      title: "UI: Claims Payers table shows the prior-auth rules count and drawer (no dev scenario picker)",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
         {
-          nav: "/claims?view=setup",
+          nav: "/claims?view=payers",
           async verify() {
-            await T.ui.click("billing-section-payers", 12000);
+            await T.ui.wait("payers-view", 12000);
             await T.ui.waitText("Prior-auth rules");
-            await T.ui.waitText("Eligibility scenario (development only)");
+            assert(!/eligibility scenario/i.test(T.ui.appText()), "no dev scenario picker visible");
             assert(!/mock data/i.test(T.ui.appText()), "no Mock data wording");
           },
         },
@@ -1932,10 +1932,10 @@
       },
     },
     {
-      title: "No Sample / Mock data / Demo set wording on the Claims, Setup and Automation screens",
+      title: "No Sample / Mock data / Demo set wording on the Claims, Payers and Automation screens",
       arrange(ctx) { T.h.rcmWorld(ctx); },
       phases: [
-        { nav: "/claims?view=setup", async verify() { await T.ui.wait("claims-setup", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Setup is clean"); } },
+        { nav: "/claims?view=payers", async verify() { await T.ui.wait("payers-view", 15000); assert(!/mock data|\(sample\)|demo set/i.test(T.ui.appText()), "Payers is clean"); } },
         { nav: "/claims", async verify() { await T.ui.wait("claims-filter-workflow", 15000); assert(!T.ui.has("mock-data-banner") && !/mock data|\(sample\)/i.test(T.ui.appText()), "Claims is clean"); } },
         { nav: "/automation", async verify() { await T.ui.wait("run-daily-jobs", 15000); assert(!/mock data|\(sample\)|demo set|sample templates/i.test(T.ui.appText()), "Automation is clean"); } },
       ],

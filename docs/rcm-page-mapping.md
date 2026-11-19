@@ -780,3 +780,18 @@ This note records what changed after the mapping above was written; the rows abo
 - **One record per appointment.** The "Coverage & authorization" client process and its instances (rows 24 and 26 for eligibility) are replaced by ONE insurance record per appointment: a claim-entity record that moves through the workflows Eligibility -> Prior auth -> Charge capture -> Claim -> Denial & appeal with `move_to_workflow` (dedupe key = appointment id). Eligibility and Prior auth are claim-entity workflows of workflow type `eligibility` / `prior_auth`; records in them are not claims yet and are excluded from claim counts, A/R, denial rate and first-pass. The generic multi-instance process code stays; the Coverage & authorization process is retired from the starting set and from the Deals board (existing instances were migrated to records, a copy of the process is kept).
 - **Appointment workflows by rule.** The appointment entity has several workflows ("Appointment via Insurance" next to the default); a rule on `appointment.booked` with conditions on the booking (payment mode, service, provider, channel) chooses the workflow through `move_to_workflow`.
 - **Rules.** Set R (insurance record) replaces Set E for the starting set; A14-A30 continue the same record.
+
+---
+
+## Amendment (Round 5 / R5-fix): Reshape Insurance & Claims Setup layout
+
+This note records what changed in Round 5; earlier sections are not rewritten:
+
+- **No Setup page**: The separate Setup sub-page, tab navigation, and pill rows are removed.
+- **Payers in Top Bar**: The Claims page mode toggle becomes "Claims | Payers" (Payers visible only with the `billingSetup` permission; legacy `?view=setup` opens Payers). Payers view uses the shared `PageTopBar` (search, filters: Type, Enrollment, Active, Add payer) and shared `TableComponent` (32px rows, navy header, sharp edges). Clicking a payer opens `PayerDetailDrawer` with General, Enrollment (3-function: eligibility, claims, ERA), and Prior-auth rules tabs.
+- **Claim Defaults & Scrub Rules in Gear Drawers**: The settings gear in the Claims top bar opens right-side drawers for "Claim defaults" and "Scrub rules" (both edit-gated by `billingSetup`).
+- **Claim Defaults & Billing Details**: Default billing location, CMS POS fallback, timely filing days, accept assignment, signature on file (default Yes), and release of information (default Yes) persist in `claimDefaultsStore` and render as editable fields in each claim's "Billing details" section. Frequency code is automatic (new claim 1, replacement 7, void 8) and read-only.
+- **Condition-Block Scrubber**: Scrub rules are built as dynamic WHEN condition blocks (record type, registry/derived fields, operators, typed values, lines quantifier) and THEN severity (Error / Warning) + message. Scrubber evaluates condition blocks dynamically without hard-coded rule logic.
+- **Single Price per Service**: The clinic's fee per service is a single number on the service ("Price per unit (USD)"). Fee schedules tab and payer-specific fee reads are removed.
+- **Provider Credentials on Team Member**: Individual NPI, taxonomy, license number, and license state live in the "Provider credentials" section on the team member profile (`TeamMemberDrawer.tsx`), with real-time 10-digit CMS Luhn checksum validation.
+- **Revenue Cycle Alerts & Voice Switch**: Revenue cycle alerts live in Settings > Notifications as a 5-toggle "Revenue cycle alerts" card. The global voice switch is removed; payer-benefits calls occur only when the Inconclusive stage call is ON with purpose "payer_benefits".

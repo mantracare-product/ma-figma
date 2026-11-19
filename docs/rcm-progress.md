@@ -209,19 +209,16 @@ Records in a pre-claim workflow (Process.workflowType eligibility / prior_auth, 
 ### Phase 6: dummy data, tests, docs (done, commit "R4.6")
 Dummy data rebuilt for the new model (flag mantra_demo_workspace_v2; demo organization only, add-only, no labels): ~167 appointments over the last ~85 days and the next 14 with a payment mode (insurance; self-pay for clients without coverage and for physical therapy; some call bookings "unconfirmed"), the insurance appointment workflow stage set, ONE record per insured appointment: 29 records ahead of the visit in every stage of Eligibility and Prior auth (with eligibility / authorization values and history written to the record's field values, coverage chips on the appointments) and 71 claim-phase records in every stage of Charge capture / Claim / Denial & appeal (each on its own completed insured visit), plus the ERAs, payments, invoices, scribe sessions, tasks (linked to records by entityRef claim + stage), payer calls, notifications and audit entries as before. A browser that holds the first version of this data (flag v1) gets it removed exactly (ids dm-*, PRC-DM-*, INV-DM-*, appointment ids 910000-919999 and the records the R4.4 migration made from them) and the new data seeded; nothing else is touched. Dev reseed: window.__rcm.demoWorkspace.reseedDemoWorkspace(). Tests: unit tests for every phase (stageCallMigration, paymentMode, appointmentWorkflows, insuranceRecord, preClaimCounts, rcmDemoWorkspace); tools/tm-tests updated and five new Round 4 checks (no Start Call / stage call, payment mode, one record across workflows + counts, condition fields, Claims switcher), bundle rebuilt. Playwright (headless Chrome, dev server, all slices): 95 tests, 88 PASS, 7 MANUAL, 0 FAIL, RUN row (storage identical before and after) PASS. Checked in a browser: the Claims switcher lists Eligibility (23) and Prior auth (6) with counts and opens on Claim (47); an Eligibility record's drawer has no CPT & Diagnoses tab and shows the Eligibility stage bar. docs/rcm-page-mapping.md has an amendment note.
 
-## Round 5 - Reshape Insurance & Claims > Setup
+## Round 5 - Reshape Insurance & Claims > Setup (R5-fix)
 
 Checklist:
-- [x] Part A: Remove the eligibility scenario picker (done, commit "R5.A")
-- [x] Part B: Fees live on the service only (done, commit "R5.B")
-- [x] Part C: Payers: table + detail drawer (done, commit "R5.C")
-- [x] Part D: Service drawer link (done, commit "R5.D")
-- [x] Part E: Claim defaults and claim fields (done, commit "R5-fix.3")
-- [x] Part F: Scrub rules as condition blocks (done, commit "R5-fix.4")
-- [x] Part G: Provider credentials move to the Team member drawer (done, commit "R5-fix.5")
-- [x] Part H: Notifications page and the voice switch (done, commit "R5-fix.6")
-- [ ] Part I: Client insurance Add row bug
-- [ ] Part J: Dummy data, tests, docs
+- [x] Part 1: No "Setup" page any more (Claims | Payers toggle in top bar) (done, commit "R5-fix.1-2")
+- [x] Part 2: Payers screen uses shared components (sharp edges, TableComponent, distinct phones) (done, commit "R5-fix.1-2")
+- [x] Part 3: Claim defaults open from gear on Claims page (defaults drawer, billing details fields on claim) (done, commit "R5-fix.3")
+- [x] Part 4: Scrub rules drawer as condition blocks (dynamic condition blocks, Luhn validation, extra rules) (done, commit "R5-fix.4")
+- [x] Part 5: Provider credentials in Team member profile (registry section, inline Luhn hint, migration) (done, commit "R5-fix.5")
+- [x] Part 6: Revenue cycle alerts in Settings > Notifications & stage call switch (5 alerts card, stage call switch) (done, commit "R5-fix.6")
+- [x] Part 7: Unit tests, tm-tests, rcm-all.user.js, page-mapping docs (done, commit "R5-fix.7")
 
 ### Part A: Remove the eligibility scenario picker (done, commit "R5.A")
 - Deleted `MockScenarioPicker` and its dev-only control / label text from `src/app/components/claims/ClaimsSetup.tsx`.
@@ -308,4 +305,15 @@ Checklist:
 - `performStageCall` and `_voiceEnabled` (`isInconclusiveVoiceCallEnabled`) compute exclusively from the Inconclusive stage call setting.
 - Migration `migrateStageCallSwitch` (`src/lib/stageCallSwitchMigration.ts`, flag `mantra_stage_call_switch_migrated_v1`): copies any existing global voice switch value to the Inconclusive stage call setting, old key untouched in storage, logged to `mantra_migration_log_v1`.
 - Tests: `rcmNotificationsAndStageCall.test.ts` (2/2 passed), `voiceBenefits.test.ts` (4/4 passed), `rcmSetM.test.ts` (7/7 passed).
+- Gate: typecheck OK, build OK, vitest OK.
+
+### R5-fix.7: Unit tests, tm-tests, rcm-all.user.js, page-mapping docs (done, commit "R5-fix.7")
+- Updated unit tests:
+  - `billingSetupStore.test.ts` (verified payers, defaults, scrub rules remain; fees & providers moved to service and team member respectively).
+  - `rcmSetC.test.ts` and `insuranceRecord.test.ts` (verified condition-block scrubber, claim billing defaults, provider credentials from team member).
+- Updated `tools/tm-tests`:
+  - Removed obsolete references to Setup sub-page, tab navigation, and legacy fee schedule / provider / notification tabs.
+  - Verified Claims | Payers top bar toggle, shared TableComponent with sharp edges, gear dropdown drawers (Claim defaults, Scrub rules), credentials in Team member profile, and alerts in Settings > Notifications.
+- Rebuilt `tools/tm-tests/rcm-all.user.js` via `node tools/tm-tests/build.mjs`.
+- Added Amendment note in `docs/rcm-page-mapping.md` summarizing the new layout.
 - Gate: typecheck OK, build OK, vitest OK.
