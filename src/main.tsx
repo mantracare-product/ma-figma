@@ -15,6 +15,7 @@
 import { migrateFeeSchedulesToServicePrices } from "./lib/feeScheduleMigration";
 import { migratePayersToThreeFunctionEnrollment } from "./lib/payerMigration";
 import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
+import { migrateProviderCredentialsToTeamMember } from "./lib/providerCredentialMigration";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -44,6 +45,9 @@ import { migrateScrubRulesToConditionBlocks } from "./lib/scrubMigration";
 
   // Round 5: scrub rules condition blocks & extra rules (once, logged).
   try { if (!testRunActive()) migrateScrubRulesToConditionBlocks(); } catch { /* ignore */ }
+
+  // Round 5: provider credentials move to team member records (once, logged).
+  try { if (!testRunActive()) migrateProviderCredentialsToTeamMember(); } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

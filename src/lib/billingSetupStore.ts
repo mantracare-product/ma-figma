@@ -7,6 +7,7 @@
  * All sample data is MOCK data and flagged `sample: true` so the UI can label it.
  */
 import { createListStore, createObjectStore, seedMissing } from "./refStore";
+import { getStoredTeamMembers } from "./teamStore";
 
 export const BILLING_SETUP_EVENT = "mantra_billing_setup_updated";
 
@@ -196,6 +197,28 @@ export function lookupFee(cpt: string, payerId?: string): number | undefined {
 }
 
 export function getProviderCredential(memberId: string | number): ProviderCredential | undefined {
+  if (!memberId) return undefined;
+  try {
+    const members = getStoredTeamMembers();
+    const midStr = String(memberId).trim().toLowerCase();
+    const m = members.find((x) => String(x.id) === String(memberId) || (x.name && x.name.trim().toLowerCase() === midStr));
+    if (m) {
+      const npi = (m as any).npi || (m as any).customFields?.npi || "";
+      const taxonomy = (m as any).taxonomy || (m as any).customFields?.taxonomy || "";
+      const licenseNumber = (m as any).licenseNumber || (m as any).customFields?.licenseNumber || "";
+      const licenseState = (m as any).licenseState || (m as any).customFields?.licenseState || "";
+      if (npi || taxonomy || licenseNumber || licenseState) {
+        return {
+          id: String(m.id),
+          name: m.name,
+          npi,
+          taxonomy,
+          licenseNumber,
+          licenseState,
+        };
+      }
+    }
+  } catch { /* fallback to store */ }
   return providerCredentialsStore.find(String(memberId));
 }
 

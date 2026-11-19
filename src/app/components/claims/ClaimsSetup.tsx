@@ -7,12 +7,10 @@ import {
   BILLING_SETUP_EVENT,
   claimDefaultsStore,
   payersStore,
-  providerCredentialsStore,
   scrubRulesStore,
   type ClaimDefaults,
   type EnrollmentStatus,
   type Payer,
-  type ProviderCredential,
   type ScrubRule,
 } from "../../../lib/billingSetupStore";
 import { KNOWN_RCM_NOTIFICATIONS, RCM_NOTIFICATION_EVENT, isRcmNotificationEnabled, setRcmNotificationEnabled } from "../../../lib/rcmNotificationSettings";
@@ -25,13 +23,12 @@ import PageTopBar, { type FilterFieldConfig } from "../layout/PageTopBar";
 import { Tooltip } from "../ui/Tooltip";
 import PayerDetailDrawer from "./PayerDetailDrawer";
 
-type Section = "payers" | "defaults" | "scrub" | "providers" | "notifications";
+type Section = "payers" | "defaults" | "scrub" | "notifications";
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: "payers", label: "Payers & enrollment" },
   { id: "defaults", label: "Claim defaults" },
   { id: "scrub", label: "Scrub rules" },
-  { id: "providers", label: "Provider credentials" },
   { id: "notifications", label: "Notification toggles" },
 ];
 
@@ -365,30 +362,6 @@ function ScrubSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function ProvidersSection({ canEdit }: { canEdit: boolean }) {
-  useStoreTick();
-  const { teamMembers } = useTeamMembers();
-  const creds = providerCredentialsStore.get();
-  const forMember = (id: string): ProviderCredential => creds.find((c) => c.id === id) || { id, npi: "", taxonomy: "", licenseNumber: "", licenseState: "" };
-  const upd = (c: ProviderCredential, patch: Partial<ProviderCredential>) => providerCredentialsStore.upsert({ ...c, ...patch, sample: false });
-  return (
-    <div className="space-y-2">
-      {teamMembers.map((m) => {
-        const c = forMember(String(m.id));
-        return (
-          <div key={String(m.id)} className="grid grid-cols-[2fr_1fr_1fr_1fr_0.6fr] gap-2 items-center">
-            <div className="text-sm font-medium truncate">{m.name}</div>
-            <input className={inputCls} disabled={!canEdit} value={c.npi} placeholder="NPI" onChange={(e) => upd(c, { npi: e.target.value })} />
-            <input className={inputCls} disabled={!canEdit} value={c.taxonomy} placeholder="Taxonomy" onChange={(e) => upd(c, { taxonomy: e.target.value })} />
-            <input className={inputCls} disabled={!canEdit} value={c.licenseNumber} placeholder="License #" onChange={(e) => upd(c, { licenseNumber: e.target.value })} />
-            <input className={inputCls} disabled={!canEdit} value={c.licenseState} placeholder="State" onChange={(e) => upd(c, { licenseState: e.target.value })} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Insurance & Claims > Setup (gated by the billingSetup permission; editing needs the edit action). */
 export default function ClaimsSetup() {
   const { hasPermission } = useCurrentPermissions();
@@ -401,7 +374,7 @@ export default function ClaimsSetup() {
       <div>
         <h2 className="text-lg font-semibold text-[#0F172A]" style={{ fontFamily: "DM Sans, sans-serif" }} data-testid="claims-setup">Setup</h2>
         <p className="text-sm text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-          Payers, fees, claim defaults, scrub rules and provider credentials. The billing entity, NPI and place of service are on the Organization (Settings, then Organization).
+          Payers, fees, claim defaults and scrub rules. The billing entity, NPI and place of service are on the Organization (Settings, then Organization).
           {!canEdit && " You have read-only access."}
         </p>
       </div>
@@ -421,7 +394,6 @@ export default function ClaimsSetup() {
         {section === "payers" && <PayersSection canEdit={canEdit} />}
         {section === "defaults" && <DefaultsSection canEdit={canEdit} />}
         {section === "scrub" && <ScrubSection canEdit={canEdit} />}
-        {section === "providers" && <ProvidersSection canEdit={canEdit} />}
         {section === "notifications" && <NotificationsSection canEdit={canEdit} />}
       </div>
     </div>

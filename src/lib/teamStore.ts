@@ -22,6 +22,12 @@ export interface TeamMember {
   permissions?: any;
   locations?: string[]; // Location IDs/names where the member is available
   availableLocations?: string[];
+  /** Provider billing credentials (R5-fix.5) */
+  npi?: string;
+  taxonomy?: string;
+  licenseNumber?: string;
+  licenseState?: string;
+  customFields?: Record<string, any>;
 }
 
 export const TEAM_STORE_EVENT = "mantra_team_members_updated";
@@ -42,6 +48,11 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     connectedCalendar: "google",
     locations: ["California", "California Branch", "Online"],
     availableLocations: ["California", "California Branch", "Online"],
+    npi: "1111111112",
+    taxonomy: "207W00000X",
+    licenseNumber: "LIC-0001",
+    licenseState: "CA",
+    customFields: { npi: "1111111112", taxonomy: "207W00000X", licenseNumber: "LIC-0001", licenseState: "CA" },
   },
   {
     id: 2,
@@ -55,6 +66,11 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     calendarConnected: true,
     locations: ["California", "California Branch", "Online"],
     availableLocations: ["California", "California Branch", "Online"],
+    npi: "2222222228",
+    taxonomy: "207WX0009X",
+    licenseNumber: "LIC-0002",
+    licenseState: "CA",
+    customFields: { npi: "2222222228", taxonomy: "207WX0009X", licenseNumber: "LIC-0002", licenseState: "CA" },
   },
   {
     id: 3,
@@ -68,6 +84,11 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     calendarConnected: true,
     locations: ["California", "California Branch", "Online"],
     availableLocations: ["California", "California Branch", "Online"],
+    npi: "3333333334",
+    taxonomy: "152W00000X",
+    licenseNumber: "LIC-0003",
+    licenseState: "CA",
+    customFields: { npi: "3333333334", taxonomy: "152W00000X", licenseNumber: "LIC-0003", licenseState: "CA" },
   },
   {
     id: 4,

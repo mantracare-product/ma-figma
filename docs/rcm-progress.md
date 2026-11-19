@@ -218,7 +218,7 @@ Checklist:
 - [x] Part D: Service drawer link (done, commit "R5.D")
 - [x] Part E: Claim defaults and claim fields (done, commit "R5-fix.3")
 - [x] Part F: Scrub rules as condition blocks (done, commit "R5-fix.4")
-- [ ] Part G: Provider credentials move to the Team member drawer
+- [x] Part G: Provider credentials move to the Team member drawer (done, commit "R5-fix.5")
 - [ ] Part H: Notifications page and the voice switch
 - [ ] Part I: Client insurance Add row bug
 - [ ] Part J: Dummy data, tests, docs
@@ -289,4 +289,14 @@ Checklist:
 - Valid 10-digit CMS Luhn checksum validator (`isValidNpiLuhn`). Demo provider NPIs updated to valid Luhn check numbers.
 - Migration `migrateScrubRulesToConditionBlocks` (`src/lib/scrubMigration.ts`, flag `mantra_scrub_rules_migrated_v1`): migrates 5 legacy rules to condition blocks keeping On and severity, turns seeded prior-auth rule to Error and On, seeds 5 extra rules (member ID missing, duplicate claim, date of service in the future, filing deadline passed, NPI invalid), logged to `mantra_migration_log_v1`.
 - Tests: `scrubRules.test.ts` (3/3 passed), `claimActions.test.ts` (11/11 passed).
+- Gate: typecheck OK, build OK, vitest OK.
+
+### R5-fix.5: Provider credentials move to Team member drawer (done, commit "R5-fix.5")
+- Removed "Provider credentials" tab and `ProvidersSection` from `ClaimsSetup.tsx`.
+- Registered section "Provider credentials" (`sec-provider-credentials`) and fields (`npi`, `taxonomy`, `licenseNumber`, `licenseState`) for module `teamMember` in `rcmFieldSeeds.ts`.
+- `TeamMemberDrawer.tsx`: dynamically renders Provider credentials registry section, with real-time 10-digit CMS Luhn checksum validation indicator (inline hint, no submit block) when editing NPI.
+- Save handler in `TeamMemberDrawer.tsx` persists credentials directly to member model and `customFields`.
+- `getProviderCredential` in `billingSetupStore.ts` reads directly from team member records (by ID or name) first, falling back to legacy store.
+- Migration `migrateProviderCredentialsToTeamMember` (`src/lib/providerCredentialMigration.ts`, flag `mantra_provider_credentials_migrated_v1`): migrates existing provider credentials to matching team members by ID or name, keeps old store untouched in storage, logged to `mantra_migration_log_v1`.
+- Tests: `providerCredentials.test.ts` (3/3 passed).
 - Gate: typecheck OK, build OK, vitest OK.

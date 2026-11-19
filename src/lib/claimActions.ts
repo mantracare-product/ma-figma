@@ -201,10 +201,10 @@ export function executeCreateClaimStep(args: { rule: AutomationRule; stepId?: st
   const sessionId = (event.data as any)?.sessionId as string | undefined;
   const sourceType: CreateClaimInput["sourceType"] =
     params.source === "scribe" || (sessionId && !ctx.appointmentId) ? "scribe"
-    : ctx.appointmentId ? "appointment"
-    : event.recordType === "invoice" ? "invoice"
-    : ctx.instance ? "instance"
-    : "client";
+      : ctx.appointmentId ? "appointment"
+        : event.recordType === "invoice" ? "invoice"
+          : ctx.instance ? "instance"
+            : "client";
   const sourceId = sourceType === "scribe" ? String(sessionId || event.recordId) : sourceType === "appointment" ? String(ctx.appointmentId) : sourceType === "instance" ? String(ctx.instance!.instanceId || ctx.instance!.id) : String(event.recordId);
   // a note signed for an appointment continues that appointment's insurance record
   const apptLinked = sourceType === "scribe" && !!ctx.appointmentId;

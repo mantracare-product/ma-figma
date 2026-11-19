@@ -66,9 +66,12 @@ import {
   Send,
   Building2,
   Copy,
+  AlertCircle,
 } from "lucide-react";
 
 export const OPEN_USER_PROFILE_DRAWER_EVENT = "mantra-open-user-profile-drawer";
+
+import { isValidNpiLuhn } from "../../lib/scrubMigration";
 
 export interface MemberCustomFieldItem {
   id: string;
@@ -336,12 +339,26 @@ export function TeamMemberDrawer({
 
   // Registry-backed custom field values for this team member
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>(() => {
-    return (member as any)?.customFields || {};
+    const cf = (member as any)?.customFields || {};
+    return {
+      npi: (member as any)?.npi || cf.npi || "",
+      taxonomy: (member as any)?.taxonomy || cf.taxonomy || "",
+      licenseNumber: (member as any)?.licenseNumber || cf.licenseNumber || "",
+      licenseState: (member as any)?.licenseState || cf.licenseState || "",
+      ...cf,
+    };
   });
 
   useEffect(() => {
-    if ((member as any)?.customFields) {
-      setCustomFieldValues((member as any).customFields);
+    if (member) {
+      const cf = (member as any)?.customFields || {};
+      setCustomFieldValues({
+        npi: (member as any)?.npi || cf.npi || "",
+        taxonomy: (member as any)?.taxonomy || cf.taxonomy || "",
+        licenseNumber: (member as any)?.licenseNumber || cf.licenseNumber || "",
+        licenseState: (member as any)?.licenseState || cf.licenseState || "",
+        ...cf,
+      });
     }
   }, [member]);
 
@@ -1472,6 +1489,31 @@ export function TeamMemberDrawer({
                                   />
                                   <Tag className="w-4 h-4 text-slate-400" />
                                 </div>
+                                {field.key === "npi" && customFieldValues[field.key] && (
+                                  <div className="mt-1 px-1 text-[11px] flex items-center gap-1">
+                                    {(() => {
+                                      const val = String(customFieldValues[field.key]).trim();
+                                      if (val.length === 10) {
+                                        const ok = isValidNpiLuhn(val);
+                                        return ok ? (
+                                          <span className="text-emerald-600 font-medium flex items-center gap-1">
+                                            <Check className="w-3 h-3 text-emerald-600" /> Valid 10-digit NPI (Luhn check passed)
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-600 font-medium flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3 text-amber-600" /> Invalid 10-digit NPI (checksum failed)
+                                          </span>
+                                        );
+                                      } else {
+                                        return (
+                                          <span className="text-slate-400 font-normal">
+                                            10 digits required ({val.length}/10)
+                                          </span>
+                                        );
+                                      }
+                                    })()}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -2257,6 +2299,10 @@ export function TeamMemberDrawer({
                     role: personalInfo.role,
                     department: personalInfo.department,
                     status: personalInfo.status,
+                    npi: customFieldValues.npi,
+                    taxonomy: customFieldValues.taxonomy,
+                    licenseNumber: customFieldValues.licenseNumber,
+                    licenseState: customFieldValues.licenseState,
                     customFields: customFieldValues,
                   };
                   try {
@@ -2279,6 +2325,10 @@ export function TeamMemberDrawer({
                     role: personalInfo.role,
                     department: personalInfo.department,
                     status: personalInfo.status,
+                    npi: customFieldValues.npi,
+                    taxonomy: customFieldValues.taxonomy,
+                    licenseNumber: customFieldValues.licenseNumber,
+                    licenseState: customFieldValues.licenseState,
                     customFields: customFieldValues,
                   });
                 }

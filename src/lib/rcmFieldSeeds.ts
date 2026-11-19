@@ -19,7 +19,7 @@ import { FIELD_REGISTRY_KEY } from "./fieldRegistryCore";
 import { SAMPLE_COVERAGE_PROCESS_ID } from "./rcmSampleIds";
 import { DEFAULT_PAYMENT_MODES } from "./paymentMode";
 
-type Mod = "process" | "appointment" | "claim" | "client";
+type Mod = "process" | "appointment" | "claim" | "client" | "teamMember";
 
 interface SeedField {
   key: string;
@@ -112,6 +112,14 @@ export const SEC_CLAIM_RCM = "sec-clm-revenue-cycle";
 export const SEC_CLAIM_ELIGIBILITY = "sec-clm-eligibility";
 export const SEC_CLAIM_AUTH = "sec-clm-authorization";
 export const SEC_CLAIM_BILLING = "sec-clm-billing";
+export const SEC_TEAM_CREDENTIALS = "sec-provider-credentials";
+
+export const TEAM_CREDENTIAL_FIELDS: SeedField[] = [
+  TS("npi", "NPI", SEC_TEAM_CREDENTIALS),
+  TS("taxonomy", "Taxonomy", SEC_TEAM_CREDENTIALS),
+  TS("licenseNumber", "License number", SEC_TEAM_CREDENTIALS),
+  TS("licenseState", "License state", SEC_TEAM_CREDENTIALS),
+];
 
 /** Client Overview > Insurance section: the Coverages table (rows sync to the coverages store) + guarantor, self-pay, consents. */
 export const CLIENT_FIELDS: SeedField[] = [
@@ -165,7 +173,7 @@ export const CLAIM_BILLING_FIELDS: SeedField[] = [
 ];
 
 /** Sections registered in the section registry (module -> list). */
-const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
+const SECTIONS: Array<{ module: "client" | "appointment" | "claim" | "teamMember"; id: string; title: string; description: string; iconName: string; fieldKeys: string[] }> = [
   { module: "client", id: SEC_INSURANCE, title: "Insurance", description: "Coverages in priority order, guarantor, self-pay and consents", iconName: "shield", fieldKeys: ["ins_coverages", "guarantor", "selfPay", "consent_sms", "consent_voice", "consent_cardOnFile", "dob", "sex", "address"] },
   { module: "claim", id: SEC_CLAIM_ELIGIBILITY, title: "Eligibility", description: "Result of the insurance check", iconName: "shield", fieldKeys: [...EG1, ...EG2, EG4, EG5].map((f) => f.key) },
   { module: "claim", id: SEC_CLAIM_AUTH, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: EG3.map((f) => f.key) },
@@ -173,6 +181,7 @@ const SECTIONS: Array<{ module: "client" | "appointment" | "claim"; id: string; 
   { module: "appointment", id: SEC_APPT_AUTHORIZATION, title: "Authorization", description: "Prior authorization for this visit", iconName: "file-text", fieldKeys: ["auth_required", "auth_status", "auth_number"] },
   { module: "claim", id: SEC_CLAIM_RCM, title: "Revenue cycle", description: "Assignee, priority, deadlines, authorization, denial and appeal", iconName: "layers", fieldKeys: CLAIM_RCM_FIELDS.map((f) => f.key) },
   { module: "claim", id: SEC_CLAIM_BILLING, title: "Billing details", description: "Location, place of service, accept assignment, filing deadline, signature and release consents", iconName: "file-text", fieldKeys: CLAIM_BILLING_FIELDS.map((f) => f.key) },
+  { module: "teamMember", id: SEC_TEAM_CREDENTIALS, title: "Provider credentials", description: "NPI, taxonomy code, and state license for medical billing", iconName: "award", fieldKeys: ["npi", "taxonomy", "licenseNumber", "licenseState"] },
 ];
 
 const APPT_SECTION_OF: Record<string, string> = { elig_status: SEC_APPT_ELIGIBILITY, elig_copay: SEC_APPT_ELIGIBILITY, elig_deductible_remaining: SEC_APPT_ELIGIBILITY, elig_checked_at: SEC_APPT_ELIGIBILITY, auth_required: SEC_APPT_AUTHORIZATION, auth_status: SEC_APPT_AUTHORIZATION, auth_number: SEC_APPT_AUTHORIZATION };
@@ -195,6 +204,7 @@ function plan(): Record<Mod, SeedField[]> {
       ...CLAIM_BILLING_FIELDS,
     ],
     client: CLIENT_FIELDS,
+    teamMember: TEAM_CREDENTIAL_FIELDS,
   };
 }
 
