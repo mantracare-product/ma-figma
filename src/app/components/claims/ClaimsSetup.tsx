@@ -20,7 +20,6 @@ import { newId } from "../../../lib/refStore";
 import { getOrgLocations } from "../../../lib/orgBilling";
 import { VOICE_ENABLED_KEY } from "../../../lib/ruleContextFields";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
-import { ELIGIBILITY_SETTINGS_EVENT, getMockScenario, setMockScenario, type MockScenario } from "../../../lib/eligibility";
 
 type Section = "payers" | "fees" | "defaults" | "scrub" | "providers" | "notifications";
 
@@ -75,7 +74,6 @@ function PayersSection({ canEdit }: { canEdit: boolean }) {
       ))}
       <button className={btnCls} disabled={!canEdit} onClick={() => payersStore.upsert({ id: newId("payer"), name: "New payer", payerIdCode: "", enrollment: { status: "not_started" } })}>Add payer</button>
       <PriorAuthRulesTable canEdit={canEdit} payers={rows} />
-      {import.meta.env.DEV && <MockScenarioPicker canEdit={canEdit} />}
     </div>
   );
 }
@@ -114,25 +112,7 @@ function PriorAuthRulesTable({ canEdit, payers }: { canEdit: boolean; payers: Pa
   );
 }
 
-const SCENARIOS: MockScenario[] = ["auto", "active", "inactive", "not_found", "provider_not_enrolled", "payer_down", "timeout"];
 
-function MockScenarioPicker({ canEdit }: { canEdit: boolean }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const bump = () => setTick((t) => t + 1);
-    window.addEventListener(ELIGIBILITY_SETTINGS_EVENT, bump);
-    return () => window.removeEventListener(ELIGIBILITY_SETTINGS_EVENT, bump);
-  }, []);
-  return (
-    <div className="mt-6 space-y-1">
-      <h3 className="text-sm font-semibold">Eligibility scenario (development only)</h3>
-      <p className="text-xs text-slate-500">Pick what the development payer adapter answers (auto = derived from the member ID and enrollment). Not shown in production.</p>
-      <select className={inputCls + " max-w-xs"} disabled={!canEdit} value={getMockScenario()} onChange={(e) => setMockScenario(e.target.value as MockScenario)}>
-        {SCENARIOS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-      </select>
-    </div>
-  );
-}
 
 function NotificationsSection({ canEdit }: { canEdit: boolean }) {
   const [, setTick] = useState(0);
