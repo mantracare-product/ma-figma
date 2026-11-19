@@ -50,6 +50,7 @@ export const DEFAULT_ROLES: Role[] = [
       eligibility: { ...ALL_PERMS },
       priorAuth: { ...ALL_PERMS },
       claims: { ...ALL_PERMS },
+      arCycle: { ...ALL_PERMS },
       rcmPayments: { ...ALL_PERMS },
       denials: { ...ALL_PERMS },
       rcmReports: { ...ALL_PERMS },

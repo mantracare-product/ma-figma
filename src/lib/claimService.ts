@@ -11,6 +11,7 @@ import { getStoredClaims, saveClaim, type Claim } from "./claimsStore";
 import { claimStatusForStage, findStage, getClaimWorkflow, getClaimWorkflows, initialStageOf } from "./claimWorkflows";
 import { logStageMove, type StageMove } from "./useAutomationStore";
 import { eventBus } from "./eventBus";
+import { arService } from "./arService";
 
 export type MoveCause = StageMove["cause"];
 
@@ -73,6 +74,13 @@ function move(claimId: string, workflowId: string | undefined, stageRef: string 
     { recordData: { ...updated, claimId: updated.id } }
   );
   emitDomainEvent(updated, stage.systemCategory, cause);
+  if (stage.systemCategory === "accepted" || stage.name.toLowerCase().includes("accepted")) {
+    try {
+      arService.createArFromClaim(updated, undefined, cause);
+    } catch (e) {
+      console.warn("Failed to create AR record on claim accepted:", e);
+    }
+  }
   return { claim: updated, moved: true, fromWorkflowId: fromWorkflow?.id, toWorkflowId: toWorkflow.id, stageName: stage.name };
 }
 

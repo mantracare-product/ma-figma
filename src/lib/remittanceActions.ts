@@ -18,6 +18,8 @@ import { erasStore, matchEraLine, type Era, type EraLine } from "./eraStore";
 import { categorizeDenial, CARC, RARC } from "./denialCodes";
 import type { ClaimRemittanceRecord, ClaimRemittanceServiceLine } from "./claimsStore";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
+import { getStoredArRecords } from "./arStore";
+import { arService } from "./arService";
 
 export const POST_REMITTANCE_STEP_KEYS = ["post_remittance", "post-remittance"];
 export const DRAFT_APPEAL_STEP_KEYS = ["draft_appeal", "draft-appeal"];
@@ -118,6 +120,63 @@ export function performPostRemittance(input: PostRemittanceInput): PostRemittanc
       updated = { ...updated, denialCategory: a.category, denialCodes: a.codes, denialSummary: a.summary, denialNext: a.next, appealDeadline: addDays(era.receivedAt, input.appealDays ?? 180) };
     }
     saveClaim(updated);
+
+    // Update linked AR record amounts and stage
+    try {
+      let arRec = getStoredArRecords().find((r) => r.claimId === claim.id);
+      if (!arRec) {
+        arRec = arService.createArFromClaim(updated, undefined, input.cause);
+      }
+      if (arRec) {
+        const arBilled = updated.totalCharge || 0;
+        const arPaid = updated.amountPaid || 0;
+        const arAdj = updated.contractualAdjustment || 0;
+        const arPr = updated.patientResponsibility || 0;
+        const arOutstanding = Math.max(0, arBilled - arPaid - arAdj);
+
+        let targetArStage = arRec.currentStageId;
+        let appealDraft = arRec.appealDraft;
+        let appealDeadline = arRec.appealDeadline;
+        let denialCategory = arRec.denialCategory;
+        let carcCodes = arRec.carcCodes;
+
+        if (denied) {
+          targetArStage = "proc-ar-denied";
+          appealDeadline = updated.appealDeadline;
+          denialCategory = updated.denialCategory;
+          carcCodes = updated.denialCodes;
+          appealDraft = {
+            letter: buildAppealLetter(updated),
+            createdDate: new Date().toISOString(),
+          };
+        } else if (fullyPaid) {
+          targetArStage = arPr > 0 ? "proc-ar-patient-balance" : "proc-ar-closed-paid-in-full";
+        } else if (arOutstanding <= 0) {
+          targetArStage = "proc-ar-closed-paid-in-full";
+        } else {
+          targetArStage = arPr > 0 ? "proc-ar-patient-balance" : "proc-ar-partially-paid";
+        }
+
+        arService.updateArRecord(arRec.id, {
+          billedAmount: arBilled,
+          allowedAmount: arPaid + arAdj + arPr,
+          paidAmount: arPaid,
+          adjustmentAmount: arAdj,
+          patientResponsibility: arPr,
+          outstandingAmount: arOutstanding,
+          denialCategory,
+          carcCodes,
+          appealDeadline,
+          appealDraft,
+        });
+
+        if (targetArStage && targetArStage !== arRec.currentStageId) {
+          arService.moveToStage(arRec.id, targetArStage, input.cause);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to update AR record in performPostRemittance:", e);
+    }
 
     const target = denied ? input.onDenied : fullyPaid ? input.onPaid : input.onPartial;
     if (target) claimService.moveToStage(claim.id, target, input.cause);

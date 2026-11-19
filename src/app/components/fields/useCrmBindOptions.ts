@@ -6,6 +6,7 @@ import { getStoredServices } from "../../../lib/servicesStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredProcesses, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { CLIENTS_STORE_EVENT } from "../../../lib/clientProcessState";
+import { getStoredArRecords } from "../../../lib/arStore";
 
 export interface CrmOption {
   value: string;
@@ -22,6 +23,7 @@ export const CRM_MODULE_LABELS: Record<CrmBindModule, string> = {
   service: "Services",
   invoice: "Invoices",
   claim: "Insurance Claims",
+  ar: "A/R Records",
   organization: "Organizations",
   teamMember: "Team Members",
   scribe: "AI Scribe",
@@ -35,6 +37,7 @@ export const CRM_MODULE_DEFAULT_DISPLAY_FIELDS: Record<CrmBindModule, string[]> 
   service: ["name", "price", "duration", "category"],
   invoice: ["invoiceNumber", "clientName", "amount", "status", "dueDate"],
   claim: ["claimNumber", "patientName", "serviceDate", "totalCharge", "status"],
+  ar: ["claimNumber", "patientName", "payerName", "billedAmount", "outstandingAmount", "statusLabel"],
   organization: ["name", "industry", "website", "location"],
   teamMember: ["name", "role", "email", "department"],
   scribe: ["sessionName", "patientName", "chiefComplaint", "diagnosis", "doctorName"],
@@ -70,6 +73,8 @@ export function fetchCrmRecords(module: CrmBindModule): any[] {
         const raw = localStorage.getItem("mantra_claims_v1");
         return raw ? JSON.parse(raw) : [];
       }
+      case "ar":
+        return getStoredArRecords();
       default:
         return [];
     }
@@ -206,6 +211,7 @@ export function useCrmBindOptions(
       appointment: "ma_appointments_changed",
       invoice: "ma_invoices_changed",
       claim: "mantra_claims_changed",
+      ar: "mantra:ar_records_changed",
       scribe: "ma_scribe_changed",
     };
 

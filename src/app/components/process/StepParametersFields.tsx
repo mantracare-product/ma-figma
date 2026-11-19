@@ -4070,6 +4070,19 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {stepKey === "create_ar_record" && (
+              <div className="space-y-4">
+                {renderField("Target AR Stage (blank = initial stage)", (
+                  <input
+                    value={params.stage || ""}
+                    onChange={(e) => onChange({ stage: e.target.value })}
+                    placeholder="e.g. Awaiting payer"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm"
+                  />
+                ))}
+              </div>
+            )}
+
             {(stepKey === "create_claim" || stepKey === "scrub_claim" || stepKey === "submit_claim") && (
               <div className="space-y-4">
                 {stepKey === "create_claim" && (<>

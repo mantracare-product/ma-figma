@@ -93,7 +93,7 @@ export interface ProcessTransitionTarget {
   endCurrentProcess?: boolean;
 }
 
-export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim" | "task";
+export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim" | "task" | "ar";
 
 export interface StagePortalReceptionSettings {
   enabled?: boolean;
@@ -397,6 +397,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   // Claim workflows declare their own (Process.requiredCategories); none are required by default.
   claim: [],
   task: ["created", "completed", "overdue"],
+  ar: ["won", "lost"],
 };
 
 export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
@@ -851,6 +852,40 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       { id: "task-stg-overdue", name: "Task Overdue", description: "Deadline passed without completion (Lost)", status: "active", color: "#EF4444", systemCategory: "overdue", stageCategory: "lost", isSystemCategoryRequired: true, isPredefined: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
     ],
   },
+  ar: {
+    id: "proc-ar-cycle-default",
+    name: "AR cycle",
+    description: "Accounts receivable follow-up, denials, patient balances, and settlement",
+    assignedToUserId: 1,
+    entityType: "ar",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "proc-ar-awaiting-payer", name: "Awaiting payer", description: "Payer review in progress", status: "active", color: "#64748B", phase: "none", systemCategory: "initial", stageCategory: "in_progress", isInitial: true, stagePosition: "initial" },
+      { id: "proc-ar-follow-up-needed", name: "Follow-up needed", description: "No status update past threshold", status: "active", color: "#F59E0B", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-info-requested", name: "Info requested by payer", description: "Medical records or auth requested", status: "active", color: "#EC4899", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-partially-paid", name: "Partially paid", description: "Underpaid or contractual adjustment applied", status: "active", color: "#06B6D4", phase: "none", systemCategory: "partially_paid", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-paid-by-payer", name: "Paid by payer", description: "Payment received from payer", status: "active", color: "#10B981", phase: "none", systemCategory: "paid", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-ar-denied", name: "Denied", description: "Payer denied claim", status: "active", color: "#EF4444", phase: "none", systemCategory: "denied", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-appeal-drafted", name: "Appeal drafted", description: "Appeal letter prepared for submission", status: "active", color: "#8B5CF6", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-appeal-submitted", name: "Appeal submitted", description: "Appeal sent to payer", status: "active", color: "#3B82F6", phase: "none", systemCategory: "submitted", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-appeal-won", name: "Appeal won", description: "Appeal overturned in clinic favor", status: "active", color: "#059669", phase: "none", systemCategory: "completed", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-appeal-lost", name: "Appeal lost", description: "Final appeal uphold by payer", status: "active", color: "#B91C1C", phase: "none", systemCategory: "lost", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-ar-patient-balance", name: "Patient balance", description: "Transferred to patient responsibility", status: "active", color: "#F97316", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-payment-plan", name: "Payment plan", description: "Patient enrolled in payment plan", status: "active", color: "#0EA5E9", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "proc-ar-collections", name: "Collections", description: "Delinquent account escalated to collections", status: "active", color: "#7C3AED", phase: "none", systemCategory: "pending", stageCategory: "in_progress", stagePosition: "intermediate" },
+
+      { id: "proc-ar-closed-paid-in-full", name: "Closed - paid in full", description: "Zero remaining balance", status: "active", color: "#10B981", phase: "none", systemCategory: "won", stageCategory: "success", stagePosition: "final", isFinal: true, isFinalStage: true },
+      { id: "proc-ar-written-off", name: "Written off", description: "Uncollectible balance written off", status: "active", color: "#475569", phase: "none", systemCategory: "lost", stageCategory: "lost", stagePosition: "final", isFinal: true, isFinalStage: true },
+    ],
+  },
 };
 
 export const DEFAULT_TASK_PROCESSES: Process[] = [
@@ -1022,6 +1057,10 @@ export function getWorkflowsForModule(module: string, allProcesses: Process[]): 
     if (DEFAULT_ENTITY_PROCESSES.claim) defaults.push(DEFAULT_ENTITY_PROCESSES.claim);
     if (DEFAULT_ENTITY_PROCESSES.insurance) defaults.push(DEFAULT_ENTITY_PROCESSES.insurance);
     return defaults;
+  }
+  if ((module as string) === "ar") {
+    const list = allProcesses.filter((p) => (p.entityType as string) === "ar");
+    return list.length > 0 ? list : (DEFAULT_ENTITY_PROCESSES.ar ? [DEFAULT_ENTITY_PROCESSES.ar] : []);
   }
   return [];
 }
@@ -1326,6 +1365,8 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   DEFAULT_ENTITY_PROCESSES.appointment,
   DEFAULT_ENTITY_PROCESSES.invoice,
   DEFAULT_ENTITY_PROCESSES.insurance,
+  DEFAULT_ENTITY_PROCESSES.claim,
+  DEFAULT_ENTITY_PROCESSES.ar,
   ...DEFAULT_TASK_PROCESSES,
 ];
 

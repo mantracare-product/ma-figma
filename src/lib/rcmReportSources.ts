@@ -4,6 +4,7 @@
  * when it came from sample/mock sources so reports can show the banner.
  */
 import { getStoredClaims, type Claim } from "./claimsStore";
+import { getStoredArRecords } from "./arStore";
 import { claimsOnly, findStage, getClaimWorkflow, getClaimWorkflows, getStagePhase, preClaimRecords } from "./claimWorkflows";
 import { readLocalRecordFields } from "./recordWriter";
 import { getProcessInstances } from "./processLogsStore";
@@ -54,13 +55,30 @@ export function buildRcmReportRows(source: RcmReportSource, now: number = Date.n
       return claims.flatMap((c) =>
         (c.payments || []).map((p) => ({ id: p.id, claimNumber: c.claimNumber, client: c.patientName, payer: c.payer?.name || "", amount: p.amount, date: p.date, trace: p.traceNumber }))
       );
-    case "ar_aging":
+    case "ar_aging": {
+      const arRecords = getStoredArRecords();
+      if (arRecords.length > 0) {
+        return arRecords
+          .filter((ar) => ar.outstandingAmount > 0 && !["paid", "closed - paid in full", "written off"].includes((ar.statusLabel || "").toLowerCase()))
+          .map((ar) => ({
+            id: ar.id,
+            claimNumber: ar.claimNumber,
+            client: ar.patientName,
+            payer: ar.payerName || "",
+            outstanding: ar.outstandingAmount,
+            ageDays: ar.ageInDays,
+            bucket: agingBucket(ar.ageInDays),
+            stage: ar.statusLabel || "",
+            date: ymd(ar.submittedDate || ar.createdAt),
+          }));
+      }
       return claims
         .filter((c) => outstandingOf(c) > 0 && !["paid", "closed", "written_off"].includes((stageOf(c).stage?.systemCategory || "").toLowerCase()))
         .map((c) => {
           const age = daysSince(c.submittedAt || c.createdAt, now);
           return { id: c.id, claimNumber: c.claimNumber, client: c.patientName, payer: c.payer?.name || "", outstanding: outstandingOf(c), ageDays: age, bucket: agingBucket(age), stage: stageOf(c).stage?.name || c.statusLabel || "", date: ymd(c.submittedAt || c.createdAt) };
         });
+    }
     case "eligibility":
       return [
         ...getStoredClaims().filter((c) => {

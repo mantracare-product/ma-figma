@@ -56,3 +56,28 @@ export function addRolesIfMissing(incoming: Role[], defaults: Role[] = []): { ro
   saveStoredRoles(roles);
   return { roles, added: fresh.length };
 }
+
+/** Migration: roles with claims read get arCycle read, edit/add follow claims. */
+export function migrateRolesForArCycle(): void {
+  try {
+    if (typeof localStorage === "undefined" || localStorage.getItem("mantra_roles_ar_migrated_v1") === "1") return;
+    const roles = getStoredRoles();
+    let changed = false;
+    const updated = roles.map((r) => {
+      const claimsPerm = r.permissions?.claims;
+      if (claimsPerm && !r.permissions?.arCycle) {
+        changed = true;
+        return {
+          ...r,
+          permissions: {
+            ...r.permissions,
+            arCycle: { ...claimsPerm },
+          },
+        };
+      }
+      return r;
+    });
+    if (changed) saveStoredRoles(updated);
+    localStorage.setItem("mantra_roles_ar_migrated_v1", "1");
+  } catch {}
+}

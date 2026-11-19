@@ -24,6 +24,7 @@ function role(id: string, name: string, description: string, grants: Partial<Rec
     eligibility: { ...NONE },
     priorAuth: { ...NONE },
     claims: { ...NONE },
+    arCycle: { ...NONE },
     rcmPayments: { ...NONE },
     denials: { ...NONE },
     rcmReports: { ...NONE },
@@ -39,6 +40,7 @@ export function buildSampleRcmRoles(): Role[] {
     role("sample-rcm-front-desk", "Front Desk (Eligibility)", "Runs eligibility checks and views prior auths", { eligibility: FULL, priorAuth: READ }),
     role("sample-rcm-biller", "Biller", "Works claims, payments and denials", {
       claims: FULL,
+      arCycle: FULL,
       rcmPayments: FULL,
       denials: FULL,
       eligibility: READ,

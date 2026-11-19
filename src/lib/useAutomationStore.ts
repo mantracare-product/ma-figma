@@ -269,6 +269,13 @@ export const EVENT_CATALOG: Record<
     { event: "task.completed", label: "Task completed", description: "Task checklist and deliverables finished" },
     { event: "task.overdue", label: "Task overdue", description: "Task exceeds planned deadline" },
   ],
+  ar: [
+    { event: "ar.created", label: "A/R record created", description: "A new accounts receivable record is created" },
+    { event: "ar.denied", label: "A/R denied", description: "A/R balance is denied by payer" },
+    { event: "ar.paid", label: "A/R paid", description: "A/R balance is paid in full" },
+    { event: "ar.partially_paid", label: "A/R partially paid", description: "A/R balance is partially paid" },
+    { event: "ar.closed", label: "A/R closed", description: "A/R record reached a closed outcome" },
+  ],
 };
 
 export const DEFAULT_CHECKIN_CARE_JOURNEY_RULE: AutomationRule = {

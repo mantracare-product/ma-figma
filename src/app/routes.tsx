@@ -64,6 +64,7 @@ const Invoices = withLazy(() => import("./pages/Invoices"));
 const Reports = withLazy(() => import("./pages/Reports"));
 const AIScribeConsole = withLazy(() => import("./pages/AIScribeConsole"));
 const Claims = withLazy(() => import("./pages/Claims"));
+const ArCycle = withLazy(() => import("./pages/ArCycle"));
 const AdminCustomFields = withLazy(() => import("./pages/admin/AdminCustomFields"));
 const AdminIndustries = withLazy(() => import("./pages/admin/AdminIndustries"));
 const AdminProcessTemplates = withLazy(() => import("./pages/admin/AdminProcessTemplates"));
@@ -248,6 +249,7 @@ export const router = createBrowserRouter([
           { path: "payments", Component: Payments },
           { path: "invoices", Component: Invoices },
           { path: "claims", Component: Claims },
+          { path: "ar-cycle", Component: ArCycle },
           { path: "reports", Component: Reports },
           { path: "transactions", Component: Transactions },
           {

@@ -99,6 +99,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   send_message: ["stage", "incall", "inchat", "postcall"],
   move_to_workflow: ["stage", "postcall"],
   create_claim: ["stage", "postcall"],
+  create_ar_record: ["stage", "postcall"],
   post_remittance: ["stage", "postcall"],
   update_invoice_from_claim: ["stage", "postcall"],
   check_claim_status: ["stage", "postcall"],

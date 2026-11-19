@@ -28,6 +28,7 @@ export const RCM_ACTIONS: RcmActionDef[] = [
   { key: "request_prior_auth", label: "Request Prior Auth", group: "Eligibility & Auth", iconKey: "shield", desc: "Record a prior-authorization request when one is required; writes the Authorization fields and a history row." },
 
   { key: "create_claim", label: "Create insurance record", group: "Claims", iconKey: "filetext", desc: "Create the appointment's insurance record in any workflow and stage (it can start with no lines); there is only ever one per appointment: if it exists it is kept, or moved to the chosen workflow." },
+  { key: "create_ar_record", label: "Create AR record", group: "Claims", iconKey: "dollar", desc: "Create or initialize the accounts receivable record for this claim at Awaiting payer or specified stage." },
   { key: "scrub_claim", label: "Scrub Claim", group: "Claims", iconKey: "check", desc: "Check the claim against the scrub rules and move it on pass or fail." },
   { key: "submit_claim", label: "Submit Claim", group: "Claims", iconKey: "send", desc: "Submit the claim to the clearinghouse and handle the acknowledgement." },
   { key: "check_claim_status", label: "Check Claim Status", group: "Claims", iconKey: "search", desc: "Ask the clearinghouse where a submitted claim is and move it on." },

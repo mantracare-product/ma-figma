@@ -62,6 +62,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "product-services", label: "Product & Services", iconName: "Package", path: "/services", visible: true },
         { id: "invoices", label: "Invoice", iconName: "Receipt", path: "/invoices", visible: true },
         { id: "insurance-claims", label: "Insurance & Claims", iconName: "ShieldCheck", path: "/claims", visible: true },
+        { id: "ar-cycle", label: "A/R Cycle", iconName: "RefreshCw", path: "/ar-cycle", visible: true },
         { id: "reports", label: "Reports", iconName: "BarChart3", path: "/reports", visible: true },
       ],
     },

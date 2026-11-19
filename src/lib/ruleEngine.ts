@@ -38,6 +38,7 @@ import { claimService } from "./claimService";
 import { getClaimWorkflow } from "./claimWorkflows";
 import { executeMoveToWorkflowStep, isMoveToWorkflowStep } from "./moveToWorkflowAction";
 import { executeNotifyStep, executeSendMessageStep, isNotifyStep, isSendMessageStep } from "./messageActions";
+import { arService } from "./arService";
 import { computeDerivedFields, derivedFieldsNeeded, linkedAppointmentFields } from "./ruleContextFields";
 import { executeRunEligibilityStep, isRunEligibilityStep } from "./runEligibility";
 import { executeAuthStep, isCheckAuthStep, isRequestAuthStep } from "./authActions";
@@ -799,6 +800,17 @@ export async function executeRulesForEvent(
       if (isCreateClaimStep(stepKey)) {
         const run = executeCreateClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });
         if (run.status === "failed") console.warn(`[RuleEngine] create_claim failed in rule "${rule.name}": ${run.error}`);
+      }
+      if (stepKey === "create_ar_record" || stepKey === "create-ar-record") {
+        try {
+          const claimId = String((act.params && act.params.claimId) || (event.data as any)?.claimId || (event.recordType === "claim" ? event.recordId : ""));
+          const claim = getStoredClaims().find((c) => c.id === claimId);
+          if (claim) {
+            arService.createArFromClaim(claim, act.params?.stage || act.params?.stageName, ruleCause(rule, event, depth, visitedRules));
+          }
+        } catch (e) {
+          console.warn(`[RuleEngine] create_ar_record failed in rule "${rule.name}":`, e);
+        }
       }
       if (isScrubClaimStep(stepKey)) {
         const run = executeScrubClaimStep({ rule, stepId: act.id, params: act.params || {}, event, cause: ruleCause(rule, event, depth, visitedRules) });

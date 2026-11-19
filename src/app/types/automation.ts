@@ -199,6 +199,19 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     ],
   },
   {
+    type: "ar",
+    label: "A/R Cycle",
+    description: "Trigger when accounts receivable records change or settle",
+    iconKey: "dollar",
+    events: [
+      { event: "ar.created", label: "A/R record created", description: "A new accounts receivable record is created for an accepted claim" },
+      { event: "ar.denied", label: "A/R denied", description: "An accounts receivable balance is denied by the payer" },
+      { event: "ar.paid", label: "A/R paid", description: "An accounts receivable balance is paid by the payer" },
+      { event: "ar.partially_paid", label: "A/R partially paid", description: "An accounts receivable balance is partially paid" },
+      { event: "ar.closed", label: "A/R closed", description: "An accounts receivable record reaches a closed outcome (won/lost)" },
+    ],
+  },
+  {
     type: "era",
     label: "Remittance",
     description: "Trigger when a remittance (ERA) arrives",

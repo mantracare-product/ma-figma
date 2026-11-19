@@ -58,6 +58,7 @@ import { useSidebarMenu } from "../../context/SidebarMenuContext";
 import { getSidebarIcon } from "./ConfigureMenuModal";
 import { toast } from "sonner";
 import { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
+import { useCurrentPermissions } from "../../../hooks/useCurrentPermissions";
 
 interface NavItem {
   id: string;
@@ -380,6 +381,7 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { hasPermission } = useCurrentPermissions();
   const { organizations, activeOrganization, setActiveOrganization } = useOrganization();
   const { collapsed, setCollapsed } = useSidebar();
   const {
@@ -427,6 +429,28 @@ export default function Sidebar() {
             iconName: "Bell",
             path: "/settings/notifications",
             visible: true,
+          });
+        }
+        if (sec.id === "billing" && !rawItems.some((it) => it.id === "ar-cycle" || it.path === "/ar-cycle")) {
+          const claimsIdx = rawItems.findIndex((it) => it.id === "insurance-claims" || it.path === "/claims");
+          const arItem = {
+            id: "ar-cycle",
+            label: "A/R Cycle",
+            iconName: "RefreshCw",
+            path: "/ar-cycle",
+            visible: true,
+          };
+          if (claimsIdx !== -1) {
+            rawItems.splice(claimsIdx + 1, 0, arItem);
+          } else {
+            rawItems.push(arItem);
+          }
+        }
+        if (sec.id === "billing") {
+          rawItems = rawItems.filter((it) => {
+            if ((it.id === "ar-cycle" || it.path === "/ar-cycle") && !hasPermission("arCycle", "read")) return false;
+            if ((it.id === "insurance-claims" || it.path === "/claims") && !hasPermission("claims", "read")) return false;
+            return true;
           });
         }
         return {
@@ -548,7 +572,7 @@ export default function Sidebar() {
       curParams.get("process") || curParams.get("processName") || curParams.get("processId")
     );
 
-    if (hasCurProcessParam && (itemId === "processes" || itemId === "deals" || itemId === "appointments" || itemId === "invoices" || itemId === "insurance-claims")) {
+    if (hasCurProcessParam && (itemId === "processes" || itemId === "deals" || itemId === "appointments" || itemId === "invoices" || itemId === "insurance-claims" || itemId === "ar-cycle")) {
       const curProcVal = curParams.get("process") || curParams.get("processName") || curParams.get("processId");
       const hasSpecificMatchingItem = sections.some((sec) =>
         sec.items.some((it) => {

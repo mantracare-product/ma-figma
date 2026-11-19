@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { getStoredProcesses } from "../../lib/useProcessStore";
 
-export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice" | "claim";
+export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice" | "claim" | "ar";
 
 export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "client",
@@ -13,6 +13,7 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "teamMember",
   "invoice",
   "claim",
+  "ar",
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -26,6 +27,7 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
   invoice: { singular: "invoice", plural: "invoices" },
   claim: { singular: "claim", plural: "claims" },
+  ar: { singular: "A/R record", plural: "A/R records" },
 };
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -92,7 +94,7 @@ export type SubFieldInputType =
   | "crm_bind"
   | "file";
 
-export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "claim" | "organization" | "teamMember" | "scribe";
+export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "claim" | "ar" | "organization" | "teamMember" | "scribe";
 
 export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: string }[]> = {
   client: [
@@ -155,6 +157,15 @@ export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: str
     { key: "payer", label: "Insurance Payer" },
     { key: "totalCharge", label: "Total Billed" },
     { key: "status", label: "Status" },
+  ],
+  ar: [
+    { key: "claimNumber", label: "Claim / AR #" },
+    { key: "patientName", label: "Patient Name" },
+    { key: "payerName", label: "Insurance Payer" },
+    { key: "providerName", label: "Rendering Provider" },
+    { key: "billedAmount", label: "Total Billed" },
+    { key: "outstandingAmount", label: "Outstanding Balance" },
+    { key: "statusLabel", label: "Stage" },
   ],
   organization: [
     { key: "name", label: "Organization Name" },
@@ -662,6 +673,9 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-clm-details",
   "sec-clm-patient",
   "sec-clm-billing",
+  "sec-ar-details",
+  "sec-ar-amounts",
+  "sec-ar-follow-up",
 ]);
 
 /**
@@ -2097,6 +2111,29 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "allowed_amount", label: "Payer Allowed Amount", module: "claim", sectionId: "sec-clm-billing", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
     { key: "paid_amount", label: "Payer Paid / Settled Amount", module: "claim", sectionId: "sec-clm-billing", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
   ],
+  ar: [
+    { key: "claimNumber", label: "Claim / AR #", module: "ar", sectionId: "sec-ar-details", inputType: "text", placeholder: "CLM-0001", required: true, showAlways: true },
+    { key: "patientName", label: "Patient Name", module: "ar", sectionId: "sec-ar-details", inputType: "text", placeholder: "Patient Name", required: true, showAlways: true },
+    { key: "payerName", label: "Insurance Payer", module: "ar", sectionId: "sec-ar-details", inputType: "text", placeholder: "Payer Name", required: true, showAlways: true },
+    { key: "providerName", label: "Rendering Provider", module: "ar", sectionId: "sec-ar-details", inputType: "text", placeholder: "Provider Name", showAlways: true },
+    { key: "dateOfService", label: "Date of Service", module: "ar", sectionId: "sec-ar-details", inputType: "date", showAlways: true },
+    { key: "submittedDate", label: "Submitted Date", module: "ar", sectionId: "sec-ar-details", inputType: "date", showAlways: true },
+    { key: "ageInDays", label: "Age in Days", module: "ar", sectionId: "sec-ar-details", inputType: "number", placeholder: "0", showAlways: true },
+
+    { key: "billedAmount", label: "Billed Charge Amount", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "allowedAmount", label: "Allowed Amount", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "paidAmount", label: "Paid Amount", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "adjustmentAmount", label: "Contractual Adjustment", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "patientResponsibility", label: "Patient Responsibility", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "outstandingAmount", label: "Outstanding Balance", module: "ar", sectionId: "sec-ar-amounts", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+
+    { key: "nextFollowUpDate", label: "Next Follow-up Date", module: "ar", sectionId: "sec-ar-follow-up", inputType: "date", showAlways: true },
+    { key: "assigneeId", label: "Assignee", module: "ar", sectionId: "sec-ar-follow-up", inputType: "text", placeholder: "Assignee Name", showAlways: true },
+    { key: "priority", label: "Priority", module: "ar", sectionId: "sec-ar-follow-up", inputType: "text", placeholder: "normal", showAlways: true },
+    { key: "denialCategory", label: "Denial Category", module: "ar", sectionId: "sec-ar-follow-up", inputType: "text", placeholder: "Medical Necessity", showAlways: true },
+    { key: "carcCodes", label: "CARC Reason Codes", module: "ar", sectionId: "sec-ar-follow-up", inputType: "text", placeholder: "16, 96", showAlways: true },
+    { key: "appealDeadline", label: "Appeal Deadline", module: "ar", sectionId: "sec-ar-follow-up", inputType: "date", showAlways: true },
+  ],
 };
 
 export function getLiveTeamMembers() {
@@ -2541,6 +2578,35 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       createdAt: 0,
     },
   ],
+  ar: [
+    {
+      id: "sec-ar-details",
+      title: "Details",
+      description: "AR claim reference, patient, payer, and service dates",
+      module: "ar",
+      source: "system",
+      fieldKeys: ["claimNumber", "patientName", "payerName", "providerName", "dateOfService", "submittedDate", "ageInDays"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-ar-amounts",
+      title: "Amounts",
+      description: "Billed, allowed, paid, adjustments, and outstanding balance",
+      module: "ar",
+      source: "system",
+      fieldKeys: ["billedAmount", "allowedAmount", "paidAmount", "adjustmentAmount", "patientResponsibility", "outstandingAmount"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-ar-follow-up",
+      title: "Follow-up",
+      description: "Follow-up schedule, assignee, appeal deadlines, and denial codes",
+      module: "ar",
+      source: "system",
+      fieldKeys: ["nextFollowUpDate", "assigneeId", "priority", "denialCategory", "carcCodes", "appealDeadline"],
+      createdAt: 0,
+    },
+  ],
 };
 
 interface FieldRegistryContextValue {
@@ -2583,6 +2649,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
   if (lower === "invoice" || lower === "invoices") return "invoice";
   if (lower === "claim" || lower === "claims" || lower === "insurance" || lower === "insurance & claims" || lower === "insurance_claims") return "claim";
+  if (lower === "ar" || lower === "ar_cycle" || lower === "arcycle" || lower === "accounts_receivable") return "ar";
   return "client";
 }
 
@@ -2784,6 +2851,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
     invoice: [],
     claim: [],
+    ar: [],
   };
 
   if (typeof window === "undefined") {
@@ -2806,6 +2874,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
         scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
         invoice: [],
         claim: [],
+        ar: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2862,6 +2931,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
     invoice: [],
     claim: [],
+    ar: [],
   };
 
   // Check legacy sessionStorage keys
@@ -2998,6 +3068,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     scribe: [],
     invoice: [],
     claim: [],
+    ar: [],
   };
 
   if (typeof window === "undefined") {
@@ -3020,6 +3091,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
         scribe: [],
         invoice: [],
         claim: [],
+        ar: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -3057,6 +3129,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     scribe: [],
     invoice: [],
     claim: [],
+    ar: [],
   };
 
   const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");

@@ -29,6 +29,7 @@ export interface ItemPermissions {
   eligibility?: ModulePermissions;
   priorAuth?: ModulePermissions;
   claims?: ModulePermissions;
+  arCycle?: ModulePermissions;
   rcmPayments?: ModulePermissions; // not "payments": that name is the Settings billing sub-tab
   denials?: ModulePermissions;
   rcmReports?: ModulePermissions;
@@ -61,6 +62,7 @@ export const RCM_PERMISSION_KEYS = [
   "eligibility",
   "priorAuth",
   "claims",
+  "arCycle",
   "rcmPayments",
   "denials",
   "rcmReports",
@@ -72,6 +74,7 @@ export const RCM_PERMISSION_LABELS: Record<RcmPermissionKey, string> = {
   eligibility: "Eligibility",
   priorAuth: "Prior authorization",
   claims: "Claims",
+  arCycle: "A/R Cycle",
   rcmPayments: "RCM payments",
   denials: "Denials & appeals",
   rcmReports: "RCM reports",
