@@ -32,6 +32,7 @@ import {
 import { arService } from "../../lib/arService";
 import { DEFAULT_ENTITY_PROCESSES, PROCESS_STORE_EVENT, Stage } from "../../lib/useProcessStore";
 import ARDetailDrawer from "../components/ar/ARDetailDrawer";
+import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { useCurrentPermissions } from "@/hooks/useCurrentPermissions";
 import { useNavigate } from "react-router";
 
@@ -50,6 +51,7 @@ export default function ArCycle() {
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>("all");
   const [selectedBucketFilter, setSelectedBucketFilter] = useState<string>("all");
   const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>("all");
+  const [selectedArIds, setSelectedArIds] = useState<string[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<ArRecord | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
@@ -342,20 +344,21 @@ export default function ArCycle() {
       key: "statusLabel",
       header: "Stage",
       render: (r) => {
-        const isClosed = r.statusLabel?.toLowerCase().includes("closed") || r.statusLabel?.toLowerCase().includes("written");
-        const isDenied = r.statusLabel?.toLowerCase().includes("denied");
+        const wf = arWorkflows.find((w) => w.id === r.processId) || activeWorkflow;
+        const stages = wf?.stages || [];
         return (
-          <span
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-              isClosed
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : isDenied
-                ? "bg-rose-50 text-rose-700 border border-rose-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}
-          >
-            {r.statusLabel}
-          </span>
+          <div className="flex items-center min-w-[140px]" onClick={(e) => e.stopPropagation()}>
+            <SegmentedStageBar
+              stages={stages}
+              currentStageId={r.currentStageId}
+              currentStageName={r.statusLabel}
+              interactive={true}
+              onStageSelect={(stg) => {
+                arService.moveToStage(r.id, stg.id, { type: "manual" });
+                setRecords(getStoredArRecords());
+              }}
+            />
+          </div>
         );
       },
     },
@@ -483,6 +486,24 @@ export default function ArCycle() {
                 ))}
               </select>
 
+              {/* Provider Filter */}
+              <select
+                aria-label="Provider"
+                value={selectedProviderFilter}
+                onChange={(e) => {
+                  setSelectedProviderFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-[36px] text-xs px-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-700 outline-none cursor-pointer shadow-2xs"
+              >
+                <option value="all">All providers</option>
+                {uniqueProviders.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+
               {/* View Toggle */}
               <div className="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200">
                 <button
@@ -559,7 +580,9 @@ export default function ArCycle() {
               columns={columns}
               getRowId={(r) => r.id}
               onRowClick={(r) => setSelectedRecord(r)}
-              pagination={true}
+              selectedIds={new Set(selectedArIds)}
+              onSelectionChange={(ids) => setSelectedArIds(Array.from(ids) as string[])}
+              defaultRowsPerPage={20}
               emptyMessage="No AR records found"
             />
           </div>

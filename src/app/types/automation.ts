@@ -252,6 +252,18 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
       { event: "task.completed", label: "Task completed", description: "A task is marked done" },
     ],
   },
+  {
+    type: "ar",
+    label: "A/R",
+    description: "Trigger when an accounts receivable record changes or ages",
+    iconKey: "dollar",
+    events: [
+      { event: "ar.created", label: "A/R record created", description: "A claim or balance enters accounts receivable" },
+      { event: "ar.stage_changed", label: "A/R stage changed", description: "An A/R record moves to a different follow-up stage" },
+      { event: "ar.balance_updated", label: "A/R balance updated", description: "Payment or adjustment posted against A/R record" },
+      { event: "ar.aging_threshold", label: "A/R aging threshold reached", description: "Claim crosses aging threshold (30, 60, 90, 120+ days)" },
+    ],
+  },
 ];
 
 /** Real name of a trigger event: the catalog label, else the event written out in words. */

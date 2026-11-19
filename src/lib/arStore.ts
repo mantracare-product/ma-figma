@@ -212,4 +212,132 @@ export function migrateExistingClaimsToAr(): void {
   } catch (err) {
     console.warn("Failed to run migrateExistingClaimsToAr:", err);
   }
+
+  ensureArRecordsAllStages();
+}
+
+/**
+ * Ensures an AR record exists in every stage of the AR workflow (add-only, idempotent).
+ */
+export function ensureArRecordsAllStages(): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (localStorage.getItem("mantra_r6_ar_every_stage_v1") === "1") return;
+
+    const arWorkflow = getArWorkflow();
+    if (!arWorkflow || !arWorkflow.stages) return;
+
+    const currentRecords = getStoredArRecords();
+    const claims = getStoredClaims();
+    const stageCounts: Record<string, number> = {};
+
+    for (const r of currentRecords) {
+      if (r.currentStageId) stageCounts[r.currentStageId] = (stageCounts[r.currentStageId] || 0) + 1;
+      if (r.statusLabel) stageCounts[r.statusLabel] = (stageCounts[r.statusLabel] || 0) + 1;
+    }
+
+    const addedRecords: ArRecord[] = [];
+    const PATIENTS = [
+      { id: "cl-101", name: "Sarah Johnson", phone: "555-0101" },
+      { id: "cl-102", name: "Michael Chang", phone: "555-0102" },
+      { id: "cl-103", name: "David Kim", phone: "555-0103" },
+      { id: "cl-104", name: "Emily Watson", phone: "555-0104" },
+      { id: "cl-105", name: "Robert Martinez", phone: "555-0105" },
+    ];
+    const PAYERS = [
+      { id: "pyr-1", name: "Blue Cross Blue Shield" },
+      { id: "pyr-2", name: "Aetna Healthcare" },
+      { id: "pyr-3", name: "UnitedHealthcare" },
+      { id: "pyr-4", name: "Cigna Commercial" },
+      { id: "pyr-5", name: "Medicare Part B" },
+    ];
+    const STAFF = ["Dr. Sarah Chen", "Dr. Marcus Vance", "Emily Davis (Billing)", "Alex Rivera (RCM)"];
+
+    arWorkflow.stages.forEach((stage, idx) => {
+      const hasRecord = (stageCounts[stage.id] || 0) > 0 || (stageCounts[stage.name] || 0) > 0;
+      if (hasRecord) return;
+
+      const p = PATIENTS[idx % PATIENTS.length];
+      const pyr = PAYERS[idx % PAYERS.length];
+      const assignee = STAFF[idx % STAFF.length];
+      const claimNum = `CLM-${29000 + idx * 17}`;
+
+      const billed = 250 + (idx * 55) % 450;
+      const isWon = stage.stageCategory === "success" || stage.systemCategory === "won" || stage.name.toLowerCase().includes("won") || stage.name.toLowerCase().includes("paid");
+      const isLost = stage.stageCategory === "lost" || stage.systemCategory === "lost" || stage.name.toLowerCase().includes("lost") || stage.name.toLowerCase().includes("written");
+      const isPartially = stage.systemCategory === "partially_paid" || stage.name.toLowerCase().includes("partial");
+      const isPatient = stage.name.toLowerCase().includes("patient") || stage.name.toLowerCase().includes("plan") || stage.name.toLowerCase().includes("collection");
+
+      let paid = 0;
+      let adjustments = 0;
+      let patientResp = 0;
+      let outstanding = billed;
+
+      if (isWon) {
+        paid = Math.round(billed * 0.85 * 100) / 100;
+        adjustments = Math.round(billed * 0.15 * 100) / 100;
+        outstanding = 0;
+      } else if (isLost) {
+        if (stage.name.toLowerCase().includes("written")) {
+          adjustments = billed;
+          outstanding = 0;
+        } else {
+          outstanding = billed;
+        }
+      } else if (isPartially) {
+        paid = Math.round(billed * 0.5 * 100) / 100;
+        adjustments = Math.round(billed * 0.15 * 100) / 100;
+        outstanding = Math.round((billed - paid - adjustments) * 100) / 100;
+      } else if (isPatient) {
+        paid = Math.round(billed * 0.6 * 100) / 100;
+        adjustments = Math.round(billed * 0.15 * 100) / 100;
+        patientResp = Math.round((billed - paid - adjustments) * 100) / 100;
+        outstanding = patientResp;
+      }
+
+      const ageDays = 15 + idx * 8;
+      const dos = new Date(Date.now() - (ageDays + 3) * 86400000).toISOString().slice(0, 10);
+      const sub = new Date(Date.now() - ageDays * 86400000).toISOString().slice(0, 10);
+
+      const matchedClaim = claims.find((c) => c.statusLabel?.toLowerCase() === stage.name.toLowerCase() || c.status?.toLowerCase() === stage.name.toLowerCase());
+
+      addedRecords.push({
+        id: `ar-seed-${stage.id}`,
+        claimId: matchedClaim ? matchedClaim.id : `clm-seed-${stage.id}`,
+        claimNumber: matchedClaim ? matchedClaim.claimNumber : claimNum,
+        patientId: matchedClaim?.patientId || p.id,
+        patientName: matchedClaim?.patientName || p.name,
+        payerId: matchedClaim?.payer?.id || pyr.id,
+        payerName: matchedClaim?.payer?.name || pyr.name,
+        providerName: matchedClaim?.renderingProviderName || "Dr. Sarah Chen, MD",
+        dateOfService: matchedClaim?.serviceDate || dos,
+        submittedDate: matchedClaim?.submittedAt || sub,
+        ageInDays: ageDays,
+        billedAmount: billed,
+        allowedAmount: Math.round(billed * 0.85 * 100) / 100,
+        paidAmount: paid,
+        adjustmentAmount: adjustments,
+        patientResponsibility: patientResp,
+        outstandingAmount: outstanding,
+        processId: arWorkflow.id,
+        currentStageId: stage.id,
+        statusLabel: stage.name,
+        assigneeName: assignee,
+        nextFollowUpDate: new Date(Date.now() + ((idx % 7) + 2) * 86400000).toISOString().slice(0, 10),
+        denialCategory: stage.name.toLowerCase().includes("deni") ? "Medical Necessity" : undefined,
+        carcCodes: stage.name.toLowerCase().includes("deni") ? ["CO-50"] : undefined,
+        createdAt: new Date(Date.now() - ageDays * 86400000).toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    });
+
+    if (addedRecords.length > 0) {
+      saveStoredArRecords([...addedRecords, ...currentRecords]);
+      logMigration("R6.fix3", `Seeded ${addedRecords.length} AR records across missing AR cycle stages`);
+    }
+
+    localStorage.setItem("mantra_r6_ar_every_stage_v1", "1");
+  } catch (err) {
+    console.warn("Failed to run ensureArRecordsAllStages:", err);
+  }
 }

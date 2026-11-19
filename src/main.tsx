@@ -22,6 +22,7 @@ import {
 import { migrateStageCallSwitch } from "./lib/stageCallSwitchMigration";
 import { migrateToSingleClaimPipeline } from "./lib/rcmPipelineR6";
 import { migrateClaimRemittances } from "./lib/claimRemittanceMigration";
+import { migrateExistingClaimsToAr, ensureArRecordsAllStages } from "./lib/arStore";
   import { logMigration } from "./lib/stageCallMigration";
 
   // Repairs the demo org (purges leftover test records, re-applies seeds to empty stores). Idempotent.
@@ -62,6 +63,7 @@ import { migrateClaimRemittances } from "./lib/claimRemittanceMigration";
   // Round 6: single claim pipeline migration (once, logged).
   try { if (!testRunActive()) migrateToSingleClaimPipeline(); } catch { /* ignore */ }
   try { if (!testRunActive()) migrateClaimRemittances(); } catch { /* ignore */ }
+  try { if (!testRunActive()) { migrateExistingClaimsToAr(); ensureArRecordsAllStages(); } } catch { /* ignore */ }
 
   // Realistic starting data for the demo organization, once (add-only, never during a test run).
   try { if (!testRunActive()) { seedDemoWorkspace(); restoreDemoScribeSessions(); } } catch { /* ignore */ }

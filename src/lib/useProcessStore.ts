@@ -397,7 +397,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   // Claim workflows declare their own (Process.requiredCategories); none are required by default.
   claim: [],
   task: ["created", "completed", "overdue"],
-  ar: ["won", "lost"],
+  ar: [],
 };
 
 export function createDefaultStagesForEntity(entityType: EntityType, processIdPrefix: string): Stage[] {
@@ -1555,7 +1555,7 @@ export function getStoredProcesses(): Process[] {
 
   // Ensure singleton processes for non-client entities exist only if non-empty or not fresh
   if (!isFresh || list.length > 0) {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task", "ar"];
     for (const et of nonClientTypes) {
       const exists = list.some((p) => p.entityType === et);
       if (!exists) {
@@ -1633,7 +1633,7 @@ export function getActiveOrganizationSync(): {
 
 export function saveStoredProcesses(processes: Process[]) {
   try {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim", "task", "ar"];
     const sanitized: Process[] = [];
 
     // 1. Client processes (free to add, edit, delete, reorder)

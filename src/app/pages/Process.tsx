@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useLocation } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight, BookOpen, Radio, CheckSquare } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight, BookOpen, Radio, CheckSquare, DollarSign } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -1134,6 +1134,7 @@ export default function Process() {
     { id: "invoice", label: "Invoices", icon: FileText },
     { id: "claim", label: "Insurance & Claims", icon: Shield },
     { id: "task", label: "Tasks", icon: CheckSquare },
+    { id: "ar", label: "A/R", icon: DollarSign },
   ];
 
   const entityModes = useMemo(() => {
@@ -1179,8 +1180,8 @@ export default function Process() {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-    // For appointment, insurance, and task entities, allow multiple processes matching the client organization's category, industry, and location
-    if (selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "task") {
+    // For appointment, insurance, task, and AR entities, allow multiple processes matching the client organization's category, industry, and location
+    if (selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "task" || selectedEntity === "ar") {
       if (matching.length > 0) {
         return matching;
       }
@@ -1193,6 +1194,8 @@ export default function Process() {
               ? DEFAULT_ENTITY_PROCESSES.claim
               : selectedEntity === "insurance"
               ? DEFAULT_ENTITY_PROCESSES.insurance
+              : selectedEntity === "ar"
+              ? DEFAULT_ENTITY_PROCESSES.ar
               : DEFAULT_ENTITY_PROCESSES.task,
           ];
     }
@@ -2593,6 +2596,7 @@ export default function Process() {
     name: string;
     color: string;
     systemCategory?: string;
+    stageCategory?: "in_progress" | "success" | "lost";
     isSystemCategoryRequired?: boolean;
     isFinalStage?: boolean;
     phase?: StagePhase;
@@ -2838,6 +2842,7 @@ export default function Process() {
     const isInsurance = selectedEntity === "insurance" || selectedEntity === "claim";
     const isInvoice = selectedEntity === "invoice";
     const isTask = selectedEntity === "task";
+    const isAr = selectedEntity === "ar";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
     const targetEntityType: EntityType = isAppointment
       ? "appointment"
@@ -2847,6 +2852,8 @@ export default function Process() {
       ? "invoice"
       : isTask
       ? "task"
+      : isAr
+      ? "ar"
       : "client";
 
     // Auto-render predefined stages for this entity
@@ -2857,6 +2864,8 @@ export default function Process() {
             { id: `${newProcessId}-start`, name: "Start", description: "First stage", status: "active", color: "#64748B", stageCategory: "in_progress", stagePosition: "initial", isInitial: true },
             { id: `${newProcessId}-end`, name: "Done", description: "Last stage", status: "active", color: "#10B981", stageCategory: "success", stagePosition: "final", isFinal: true, isFinalStage: true },
           ]
+        : targetEntityType === "ar"
+        ? DEFAULT_ENTITY_PROCESSES.ar.stages.map((s, idx) => ({ ...s, id: `${newProcessId}-stg-${idx + 1}` }))
         : createDefaultStagesForEntity(targetEntityType, newProcessId);
 
     // Register initial workflow steps into storage so actions appear immediately
@@ -3048,6 +3057,7 @@ export default function Process() {
       name: stage.name,
       color: stage.color || "#22D3EE",
       systemCategory: stage.systemCategory,
+      stageCategory: stage.stageCategory || (stage.isFinalStage || stage.isFinal ? "success" : "in_progress"),
       isSystemCategoryRequired: stage.isSystemCategoryRequired,
       isFinalStage: stage.isFinalStage || stage.isFinal || false,
       phase: stage.phase,
@@ -3071,6 +3081,7 @@ export default function Process() {
                   name: editingStage.name,
                   color: editingStage.color,
                   phase: editingStage.phase,
+                  stageCategory: editingStage.stageCategory || s.stageCategory,
                   isFinalStage: editingStage.isFinalStage,
                   isFinal: editingStage.isFinalStage,
                   stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
@@ -3676,7 +3687,7 @@ export default function Process() {
           ]}
           onExport={() => setShowExportModal(true)}
           primaryAction={
-            selectedEntity === "client" || selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "invoice" || selectedEntity === "task"
+            selectedEntity === "client" || selectedEntity === "appointment" || (selectedEntity === "insurance" || selectedEntity === "claim") || selectedEntity === "invoice" || selectedEntity === "task" || selectedEntity === "ar"
               ? {
                 label:
                   selectedEntity === "appointment"
@@ -3687,6 +3698,8 @@ export default function Process() {
                     ? "Add Invoice Workflow"
                     : selectedEntity === "task"
                     ? "Add Task Workflow"
+                    : selectedEntity === "ar"
+                    ? "Add A/R Workflow"
                     : "Add Workflow",
                 icon: <Plus className="w-3.5 h-3.5" />,
                 onClick: () => {
@@ -5765,8 +5778,12 @@ export default function Process() {
               ? "Add Appointment Workflow"
               : (selectedEntity === "insurance" || selectedEntity === "claim")
               ? "Add Insurance & Claim Workflow"
+              : selectedEntity === "invoice"
+              ? "Add Invoice Workflow"
               : selectedEntity === "task"
               ? "Add Task Workflow"
+              : selectedEntity === "ar"
+              ? "Add A/R Workflow"
               : "Add Workflow"
           }
           footer={
@@ -5785,8 +5802,12 @@ export default function Process() {
                   ? "Add Appointment Workflow"
                   : (selectedEntity === "insurance" || selectedEntity === "claim")
                   ? "Add Insurance & Claim Workflow"
+                  : selectedEntity === "invoice"
+                  ? "Add Invoice Workflow"
                   : selectedEntity === "task"
                   ? "Add Task Workflow"
+                  : selectedEntity === "ar"
+                  ? "Add A/R Workflow"
                   : "Add Workflow"}
               </Button>
             </>
@@ -5802,8 +5823,12 @@ export default function Process() {
                   ? "e.g., Clinical Consultation Workflow"
                   : (selectedEntity === "insurance" || selectedEntity === "claim")
                   ? "e.g., Pre-Authorization & Claims Workflow"
+                  : selectedEntity === "invoice"
+                  ? "e.g., Patient Balance & Invoice Workflow"
                   : selectedEntity === "task"
                   ? "e.g., Clinical Tasks & QA Review"
+                  : selectedEntity === "ar"
+                  ? "e.g., Primary Payer AR Cycle"
                   : "Enter process name"
               }
             />
@@ -6143,13 +6168,29 @@ export default function Process() {
               />
             </div>
 
-            {selectedProcessData?.entityType === "claim" && (
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Stage Category
+              </label>
+              <select
+                value={editingStage?.stageCategory || "in_progress"}
+                onChange={(e) => setEditingStage(editingStage ? { ...editingStage, stageCategory: e.target.value as any } : null)}
+                className="w-full px-4 py-2 bg-white border border-border rounded-lg text-sm"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <option value="in_progress">In Progress</option>
+                <option value="success">Won / Success</option>
+                <option value="lost">Lost</option>
+              </select>
+            </div>
+
+            {(selectedProcessData?.entityType === "claim" || selectedProcessData?.entityType === "ar") && (
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   Stage Phase
                 </label>
                 <select
-                  value={editingStage?.phase || "claim"}
+                  value={editingStage?.phase || (selectedProcessData?.entityType === "ar" ? "none" : "claim")}
                   onChange={(e) => setEditingStage(editingStage ? { ...editingStage, phase: e.target.value as any } : null)}
                   className="w-full px-4 py-2 bg-white border border-border rounded-lg text-sm"
                   style={{ fontFamily: 'Outfit, sans-serif' }}
@@ -6161,7 +6202,7 @@ export default function Process() {
                   <option value="none">None (Closed / Other)</option>
                 </select>
                 <p className="text-xs text-slate-500 mt-1">
-                  Determines whether records in this stage count as pre-claim (Eligibility / Prior auth) or active claims.
+                  Determines the lifecycle phase of records in this stage.
                 </p>
               </div>
             )}
