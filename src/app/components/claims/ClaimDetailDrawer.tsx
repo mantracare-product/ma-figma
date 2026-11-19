@@ -27,7 +27,10 @@ import {
   ChevronDown,
   RotateCcw,
   Ban,
+  DollarSign,
 } from "lucide-react";
+import RemittancePanel from "./RemittancePanel";
+import { erasStore } from "../../../lib/eraStore";
 import { claimDefaultsStore } from "../../../lib/billingSetupStore";
 import {
   Claim,
@@ -209,7 +212,7 @@ export default function ClaimDetailDrawer({
   });
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "billing">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "billing" | "remittance">("overview");
   const [copiedId, setCopiedId] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -265,7 +268,31 @@ export default function ClaimDetailDrawer({
     if (!liveClaim) return isPreClaimWorkflow(insuranceProcess);
     return isPreClaimClaim(liveClaim);
   }, [liveClaim, insuranceProcess]);
-  useEffect(() => { if (preClaim && activeTab === "billing") setActiveTab("overview"); }, [preClaim, activeTab]);
+  useEffect(() => {
+    if (preClaim && (activeTab === "billing" || activeTab === "remittance")) {
+      setActiveTab("overview");
+    }
+  }, [preClaim, activeTab]);
+
+  const remittanceCount = useMemo(() => {
+    if (!liveClaim) return 0;
+    if (liveClaim.remittances && liveClaim.remittances.length > 0) return liveClaim.remittances.length;
+    const allEras = erasStore.get();
+    let count = 0;
+    for (const era of allEras) {
+      const match = (era.lines || []).some(
+        (l) =>
+          l.matchedClaimId === liveClaim.id ||
+          l.claimNumber === liveClaim.claimNumber ||
+          l.claimNumber === liveClaim.id ||
+          (liveClaim.clearinghouseTrackingId && l.claimNumber === liveClaim.clearinghouseTrackingId) ||
+          (liveClaim.payerClaimNumber && l.payerClaimNumber === liveClaim.payerClaimNumber)
+      );
+      if (match) count += 1;
+    }
+    return count > 0 ? count : (liveClaim.payments?.length || 0);
+  }, [liveClaim]);
+
   const CLAIM_ONLY_FIELDS = useMemo(() => new Set(["rcm_timely_filing", "rcm_denial_category", "rcm_denial_summary", "rcm_appeal_deadline", "rcm_appeal_draft", "rcm_scrub_issues"]), []);
 
   const claimStages: Stage[] = useMemo(() => {
@@ -944,6 +971,27 @@ export default function ClaimDetailDrawer({
                 <span>CPT & Diagnoses</span>
               </button>
             )}
+
+            {!preClaim && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("remittance")}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+                  activeTab === "remittance"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Remittance</span>
+                {remittanceCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                    {remittanceCount}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Manage Fields & Custom Sections Dropdown */}
@@ -1205,6 +1253,15 @@ export default function ClaimDetailDrawer({
                   </p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 4: REMITTANCE (ERA & Payment Records)
+             ───────────────────────────────────────────────────────────── */}
+          {activeTab === "remittance" && !preClaim && (
+            <div className="p-6">
+              <RemittancePanel claim={liveClaim} />
             </div>
           )}
         </div>

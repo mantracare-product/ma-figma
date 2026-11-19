@@ -41,9 +41,47 @@ export interface ClaimDiagnosisCode {
   description: string;
 }
 
+export interface ClaimRemittanceAdjustment {
+  group: "CO" | "PR" | "OA" | "PI";
+  carc: string;
+  rarc?: string;
+  amount: number;
+  description?: string;
+}
+
+export interface ClaimRemittanceServiceLine {
+  id: string;
+  cptCode?: string;
+  serviceName?: string;
+  billed: number;
+  allowed?: number;
+  paid: number;
+  patientResponsibility?: number;
+  adjustments: ClaimRemittanceAdjustment[];
+  rarc?: string;
+  status: string;
+}
+
+export interface ClaimRemittanceRecord {
+  id: string;
+  eraId?: string;
+  checkNumber?: string;
+  traceNumber?: string;
+  paymentDate: string;
+  payerName?: string;
+  status: string;
+  billed: number;
+  allowed: number;
+  paid: number;
+  patientResponsibility: number;
+  adjustments: number;
+  lines: ClaimRemittanceServiceLine[];
+}
+
 export interface Claim {
   id: string;
   claimNumber: string; // e.g. CLM-84920
+  payerClaimNumber?: string;
   patientId: string;
   patientName: string;
   patientDob: string;
@@ -105,6 +143,7 @@ export interface Claim {
   /** Result of the last scrub (scrub_claim) and how many times the claim was scrubbed / submitted. */
   /** Payments posted from ERAs (post_remittance) and what is still unpaid by the payer. */
   payments?: Array<{ id: string; eraId: string; traceNumber: string; amount: number; date: string }>;
+  remittances?: ClaimRemittanceRecord[];
   underpaidBy?: number;
   /** Denial facts written when a denial is posted (categories: see denialCodes.ts). */
   denialCategory?: string;

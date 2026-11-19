@@ -15,7 +15,8 @@ import type { AutomationRule, StageMove } from "./useAutomationStore";
 import { getStoredClaims, saveClaim, type Claim } from "./claimsStore";
 import { claimService } from "./claimService";
 import { erasStore, matchEraLine, type Era, type EraLine } from "./eraStore";
-import { categorizeDenial } from "./denialCodes";
+import { categorizeDenial, CARC, RARC } from "./denialCodes";
+import type { ClaimRemittanceRecord, ClaimRemittanceServiceLine } from "./claimsStore";
 import { actionIdempotencyKey, registerActionRetryHandler, runActionOnce, type RunOnceResult } from "./actionRuns";
 
 export const POST_REMITTANCE_STEP_KEYS = ["post_remittance", "post-remittance"];
@@ -70,12 +71,46 @@ export function performPostRemittance(input: PostRemittanceInput): PostRemittanc
     const fullyPaid = !denied && accounted >= money(claim.totalCharge) - 0.005;
 
     const payment = { id: `pay-${era.id}-${line.id}`, eraId: era.id, traceNumber: era.traceNumber, amount: line.paid, date: era.receivedAt.slice(0, 10) };
+    const remLine: ClaimRemittanceServiceLine = {
+      id: line.id,
+      cptCode: claim.lines?.[0]?.cptCode || "99214",
+      serviceName: claim.lines?.[0]?.description || "Office visit",
+      billed: line.charged,
+      allowed: money(line.paid + co + (line.patientResponsibility || 0)),
+      paid: line.paid,
+      patientResponsibility: line.patientResponsibility,
+      adjustments: line.adjustments.map((adj) => ({
+        group: adj.group,
+        carc: adj.carc,
+        amount: adj.amount,
+        description: CARC[adj.carc]?.text || `Reason ${adj.carc}`,
+      })),
+      rarc: line.adjustments.find((a) => a.rarc)?.rarc,
+      status: line.status || (denied ? "Denied" : fullyPaid ? "Paid" : "Partial"),
+    };
+    const remittanceBlock: ClaimRemittanceRecord = {
+      id: `rem-${era.id}-${line.id}`,
+      eraId: era.id,
+      traceNumber: era.traceNumber,
+      checkNumber: era.traceNumber,
+      paymentDate: era.receivedAt.slice(0, 10),
+      payerName: claim.payer?.name || "Insurance Payer",
+      status: denied ? "Denied" : fullyPaid ? "Paid" : "Partial",
+      billed: line.charged,
+      allowed: money(line.paid + co + (line.patientResponsibility || 0)),
+      paid: line.paid,
+      patientResponsibility: line.patientResponsibility,
+      adjustments: money(line.charged - line.paid - (line.patientResponsibility || 0)),
+      lines: [remLine],
+    };
+
     let updated: Claim = {
       ...claim,
       amountPaid: paidTotal,
       patientResponsibility: prTotal,
       contractualAdjustment: coTotal,
       payments: [...(claim.payments || []), payment],
+      remittances: [...(claim.remittances || []).filter((r) => r.id !== remittanceBlock.id), remittanceBlock],
       underpaidBy: denied || fullyPaid ? 0 : money(claim.totalCharge - accounted),
     };
     if (denied) {

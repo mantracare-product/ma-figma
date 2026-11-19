@@ -333,7 +333,7 @@ Checklist:
 Checklist (resume from first unchecked part):
 - [x] Part A: One detailed claim pipeline (eligibility is part of the claim, nothing else) - done
 - [ ] Part B: AR entity and the AR Cycle page
-- [ ] Part C: Claim drawer: Remittance tab (only this tab is added)
+- [x] Part C: Claim drawer: Remittance tab (only this tab is added) - done
 - [ ] Part D: Credentialing: organization and providers against payers
 - [ ] Part E: Overview dashboards: tabs, per-tab filters, custom dashboards
 - [ ] Part F: Dummy data, tests, docs
