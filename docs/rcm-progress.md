@@ -214,7 +214,7 @@ Dummy data rebuilt for the new model (flag mantra_demo_workspace_v2; demo organi
 Checklist:
 - [x] Part A: Remove the eligibility scenario picker (done, commit "R5.A")
 - [x] Part B: Fees live on the service only (done, commit "R5.B")
-- [ ] Part C: Payers: table + detail drawer
+- [x] Part C: Payers: table + detail drawer (done, commit "R5.C")
 - [ ] Part D: Service drawer link
 - [ ] Part E: Claim defaults and claim fields
 - [ ] Part F: Scrub rules as condition blocks
@@ -235,4 +235,22 @@ Checklist:
 - All reads of `feeSchedulesStore` / `lookupFee` removed from claim builder, scribe billing, scrubber, demo data, Overview, and reports. Old store stays untouched in storage.
 - Migration `migrateFeeSchedulesToServicePrices` (`src/lib/feeScheduleMigration.ts`, flag `mantra_fee_schedule_migrated_v1`): default fee schedule lines set a service's price only when it has none; on conflict keeps service price and logs it; unmatched lines logged, not dropped. Payer-specific schedules are no longer used or shown.
 - Unit tests: `feeScheduleMigration.test.ts` (3/3 passed), `claimActions.test.ts` (11/11 passed), `scribeBilling.test.ts` (5/5 passed).
+- Gate: typecheck OK, build OK, vitest at baseline.
+
+### Part C: Payers: table + detail drawer (done, commit "R5.C")
+- Replaced the inline form list and separate prior-auth table in `ClaimsSetup.tsx` with shared `TableComponent` (32px rows, navy header) and `PageTopBar`.
+- Columns: Payer name (opens drawer on click), Payer ID, Type, Phone (shows "Add the payer phone to enable benefit calls" when empty), Enrollment summary chip ("3 of 3 enrolled" / "X of 3 enrolled" / "None", with Tooltip listing all 3 functions), Prior-auth rules count, Active.
+- Row click opens `PayerDetailDrawer`.
+- `PayerDetailDrawer.tsx` (patterned after `OrganizationDetailDrawer`):
+  - Header: Payer name, Active/Inactive status badge, Payer ID & Type subtitle, Cancel, Save Changes, Close buttons.
+  - Tabs: General (name, payerIdCode, type, phone, timelyFilingDays, active switch), Enrollment (3 functions: eligibility 270/271, claims 837P, era 835, each with status, notes, timestamps), Prior-auth rules (table with Service select from services with CPT formatted "70553 MRI brain", Auth required, Units per approval, Approval validity (days) with tooltip, Notes, Add rule / remove row; unmatched codes displayed as read-only text with hint).
+  - Footer actions: Delete payer button checks if payer is referenced in coverages, claims, or rules; if so, archives (`active: false`) and explains why via toast; otherwise permanently deletes.
+- Behaviour:
+  - `run_eligibility` and `previewEligibility` check Eligibility enrollment (`payer.enrollment?.eligibility?.status === "enrolled"`).
+  - `submit_claim` (`mockAcknowledge`) rejects claims with "provider not enrolled for claims" if payer claims enrollment !== "enrolled".
+  - `matchEraLine` leaves lines unmatched if payer ERA enrollment !== "enrolled".
+  - Empty phone shows "Add the payer phone to enable benefit calls" in drawer and table.
+  - Inactive payers (`active: false`) are hidden from coverage dropdowns via `getActivePayers()`.
+- Migration `migratePayersToThreeFunctionEnrollment` (`src/lib/payerMigration.ts`, flag `mantra_payers_migrated_v1`): legacy single enrollment copied to eligibility, claims, era; type preset by name (medicare, medicaid, tricare/other, else commercial); logged to `mantra_migration_log_v1`.
+- Tests: `src/lib/__tests__/payerDetail.test.ts` (4/4 passed).
 - Gate: typecheck OK, build OK, vitest at baseline.

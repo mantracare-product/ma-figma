@@ -252,11 +252,12 @@ export function ensureRcmFieldSeeds(): number {
   }
   // keep the Coverages table's payer options in step with the payers list (only touches our own sub-field)
   try {
-    const payers = JSON.parse(localStorage.getItem("mantra_payers_v1") || "[]") as Array<{ id: string; name: string }>;
+    const payers = JSON.parse(localStorage.getItem("mantra_payers_v1") || "[]") as Array<{ id: string; name: string; active?: boolean }>;
     const cov = (registry.client || []).find((f: any) => f.key === "ins_coverages");
     const sub = cov && (cov.subFields || []).find((s: any) => s.id === "payer");
     if (sub && payers.length) {
-      const next = payers.map((p) => ({ id: p.id, label: p.name, value: p.id }));
+      const activePayers = payers.filter((p) => p.active !== false);
+      const next = activePayers.map((p) => ({ id: p.id, label: p.name, value: p.id }));
       if (JSON.stringify(sub.options || []) !== JSON.stringify(next)) { sub.options = next; added += 1; }
     }
   } catch { /* ignore */ }

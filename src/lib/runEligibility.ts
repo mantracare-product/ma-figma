@@ -186,7 +186,7 @@ export function performRunEligibility(input: RunEligibilityInput): RunEligibilit
       const payer = getPayer(cov.payerId);
       const baseReq = {
         payerId: cov.payerId,
-        payerEnrolled: payer ? payer.enrollment.status === "enrolled" : undefined,
+        payerEnrolled: payer ? ((payer.enrollment?.eligibility?.status ?? payer.enrollment?.status) === "enrolled") : undefined,
         memberId: cov.memberId,
         firstName: client?.legalFirstName || String(client?.name || "").split(/\s+/)[0],
         lastName: client?.legalLastName || String(client?.name || "").split(/\s+/).slice(1).join(" "),

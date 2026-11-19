@@ -45,7 +45,7 @@ export function previewEligibility(clientRef: string, serviceDate: string): Elig
   const payer = getPayer(cov.payerId);
   const req = {
     payerId: cov.payerId,
-    payerEnrolled: payer ? payer.enrollment.status === "enrolled" : undefined,
+    payerEnrolled: payer ? ((payer.enrollment?.eligibility?.status ?? payer.enrollment?.status) === "enrolled") : undefined,
     memberId: cov.memberId,
     firstName: (client as any).legalFirstName,
     lastName: (client as any).legalLastName,

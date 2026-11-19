@@ -295,8 +295,15 @@ export type ClearinghouseScenario = "auto" | "accept" | "reject";
 export const CLEARINGHOUSE_SETTINGS_EVENT = "mantra_clearinghouse_settings_updated";
 export const clearinghouseSettingsStore = createObjectStore<{ scenario: ClearinghouseScenario }>("mantra_clearinghouse_settings_v1", CLEARINGHOUSE_SETTINGS_EVENT, { scenario: "auto" });
 
-/** Mock 277CA acknowledgement: "auto" rejects a claim whose member id contains REJECT. */
+/** Mock 277CA acknowledgement: "auto" rejects a claim whose member id contains REJECT or if provider is not enrolled for claims. */
 export function mockAcknowledge(claim: Claim): { accepted: boolean; reason?: string } {
+  if (claim.payer?.id) {
+    const payer = getPayer(claim.payer.id);
+    const claimsEnrollment = payer?.enrollment?.claims?.status ?? payer?.enrollment?.status;
+    if (claimsEnrollment && claimsEnrollment !== "enrolled") {
+      return { accepted: false, reason: `Mock 277CA: provider not enrolled for claims with ${payer?.name || "payer"}` };
+    }
+  }
   const s = clearinghouseSettingsStore.get().scenario;
   const reject = s === "reject" || (s === "auto" && String(claim.insuredId || "").toUpperCase().includes("REJECT"));
   return reject ? { accepted: false, reason: "Mock 277CA: subscriber ID rejected by the payer" } : { accepted: true };

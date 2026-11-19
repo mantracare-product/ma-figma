@@ -34,13 +34,32 @@ export interface BillingLocation {
 
 export type EnrollmentStatus = "not_started" | "pending" | "enrolled" | "rejected";
 
+export interface EnrollmentFunctionDetail {
+  status: EnrollmentStatus;
+  submittedAt?: string;
+  enrolledAt?: string;
+  notes?: string;
+}
+
+export interface PayerEnrollment {
+  status: EnrollmentStatus;
+  eligibility?: EnrollmentFunctionDetail;
+  claims?: EnrollmentFunctionDetail;
+  era?: EnrollmentFunctionDetail;
+  submittedAt?: string;
+  enrolledAt?: string;
+  notes?: string;
+}
+
 export interface Payer {
   id: string;
   name: string;
   payerIdCode: string;
   phone?: string;
   type?: "commercial" | "medicare" | "medicaid" | "other";
-  enrollment: { status: EnrollmentStatus; submittedAt?: string; enrolledAt?: string; notes?: string };
+  timelyFilingDays?: number;
+  active?: boolean;
+  enrollment: PayerEnrollment;
   sample?: boolean;
 }
 
@@ -113,7 +132,11 @@ export const feeSchedulesStore = createListStore<FeeSchedule>("mantra_fee_schedu
 export const scrubRulesStore = createListStore<ScrubRule>("mantra_scrub_rules_v1", BILLING_SETUP_EVENT);
 export const providerCredentialsStore = createListStore<ProviderCredential>("mantra_provider_credentials_v1", BILLING_SETUP_EVENT);
 
-export const getPayers = () => payersStore.get();
+export const getPayers = (includeInactive = true) => {
+  const all = payersStore.get();
+  return includeInactive ? all : all.filter((p) => p.active !== false);
+};
+export const getActivePayers = () => payersStore.get().filter((p) => p.active !== false);
 export const getPayer = (id?: string | null) => (id ? payersStore.find(id) : undefined);
 
 /** Fee for a CPT: the payer's schedule first, else the default (no payer) schedule. */
@@ -139,7 +162,22 @@ const P = (id: string, name: string, code: string, type: Payer["type"], enrolled
   payerIdCode: code,
   type,
   phone: "800-555-0100",
-  enrollment: enrolled ? { status: "enrolled", enrolledAt: "2025-01-15" } : { status: "not_started" },
+  timelyFilingDays: 90,
+  active: true,
+  enrollment: enrolled
+    ? {
+        status: "enrolled",
+        eligibility: { status: "enrolled", enrolledAt: "2025-01-15" },
+        claims: { status: "enrolled", enrolledAt: "2025-01-15" },
+        era: { status: "enrolled", enrolledAt: "2025-01-15" },
+        enrolledAt: "2025-01-15",
+      }
+    : {
+        status: "not_started",
+        eligibility: { status: "not_started" },
+        claims: { status: "not_started" },
+        era: { status: "not_started" },
+      },
   sample: true,
 });
 

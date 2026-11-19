@@ -12,6 +12,7 @@ import { createListStore } from "./refStore";
 import { eventBus } from "./eventBus";
 import { getStoredClaims, type Claim } from "./claimsStore";
 import { findStage, getClaimWorkflow, getClaimWorkflows } from "./claimWorkflows";
+import { getPayer } from "./billingSetupStore";
 
 export const ERA_EVENT = "mantra_era_updated";
 
@@ -101,10 +102,20 @@ export function receiveMockEra(opts: { includeUnmatched?: boolean; claimIds?: st
   return era;
 }
 
-/** Match an ERA line to a claim: by claim number, then by clearinghouse tracking id / payer claim number. */
+/** Match an ERA line to a claim: by claim number, then by clearinghouse tracking id / payer claim number.
+ * Provider must be enrolled for ERA with the payer; otherwise remains unmatched.
+ */
 export function matchEraLine(line: EraLine, claims: Claim[] = getStoredClaims()): Claim | undefined {
-  return (
+  const claim =
     claims.find((c) => c.claimNumber === line.claimNumber) ||
-    claims.find((c) => !!c.clearinghouseTrackingId && c.clearinghouseTrackingId === line.payerClaimNumber)
-  );
+    claims.find((c) => !!c.clearinghouseTrackingId && c.clearinghouseTrackingId === line.payerClaimNumber);
+  if (!claim) return undefined;
+  if (claim.payer?.id) {
+    const payer = getPayer(claim.payer.id);
+    const eraEnrollment = payer?.enrollment?.era?.status ?? payer?.enrollment?.status;
+    if (eraEnrollment && eraEnrollment !== "enrolled") {
+      return undefined;
+    }
+  }
+  return claim;
 }

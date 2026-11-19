@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
+import { Plus, Shield, Info } from "lucide-react";
 import { useCurrentPermissions } from "../../hooks/useCurrentPermissions";
 import { useTeamMembers } from "../../../lib/teamStore";
 import {
@@ -19,6 +20,10 @@ import { newId } from "../../../lib/refStore";
 import { getOrgLocations } from "../../../lib/orgBilling";
 import { VOICE_ENABLED_KEY } from "../../../lib/ruleContextFields";
 import { PRIOR_AUTH_RULES_EVENT, priorAuthRulesStore, type PriorAuthRule } from "../../../lib/priorAuthRulesStore";
+import { TableComponent, type TableColumn } from "../ui/TableComponent";
+import PageTopBar, { type FilterFieldConfig } from "../layout/PageTopBar";
+import { Tooltip } from "../ui/Tooltip";
+import PayerDetailDrawer from "./PayerDetailDrawer";
 
 type Section = "payers" | "defaults" | "scrub" | "providers" | "notifications";
 
@@ -56,56 +61,234 @@ const ENROLLMENT: EnrollmentStatus[] = ["not_started", "pending", "enrolled", "r
 
 function PayersSection({ canEdit }: { canEdit: boolean }) {
   useStoreTick();
-  const rows = payersStore.get();
-  const upd = (p: Payer, patch: Partial<Payer>) => payersStore.upsert({ ...p, ...patch, sample: false });
-  return (
-    <div className="space-y-2">
-      {rows.map((p) => (
-        <div key={p.id} className="grid grid-cols-[3fr_1fr_1.2fr_auto] gap-2 items-center">
-          <input className={inputCls} disabled={!canEdit} value={p.name} onChange={(e) => upd(p, { name: e.target.value })} />
-          <input className={inputCls} disabled={!canEdit} value={p.payerIdCode} placeholder="Payer ID" onChange={(e) => upd(p, { payerIdCode: e.target.value })} />
-          <select className={inputCls} disabled={!canEdit} value={p.enrollment.status} onChange={(e) => upd(p, { enrollment: { ...p.enrollment, status: e.target.value as EnrollmentStatus } })}>
-            {ENROLLMENT.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-          </select>
-          <button className={btnCls} disabled={!canEdit} onClick={() => payersStore.remove(p.id)}>Remove</button>
-        </div>
-      ))}
-      <button className={btnCls} disabled={!canEdit} onClick={() => payersStore.upsert({ id: newId("payer"), name: "New payer", payerIdCode: "", enrollment: { status: "not_started" } })}>Add payer</button>
-      <PriorAuthRulesTable canEdit={canEdit} payers={rows} />
-    </div>
-  );
-}
-
-function PriorAuthRulesTable({ canEdit, payers }: { canEdit: boolean; payers: Payer[] }) {
-  const [, setTick] = useState(0);
+  const [, setPaTick] = useState(0);
   useEffect(() => {
-    const bump = () => setTick((t) => t + 1);
+    const bump = () => setPaTick((t) => t + 1);
     window.addEventListener(PRIOR_AUTH_RULES_EVENT, bump);
     return () => window.removeEventListener(PRIOR_AUTH_RULES_EVENT, bump);
   }, []);
-  const rules = priorAuthRulesStore.get();
-  const upd = (r: PriorAuthRule, patch: Partial<PriorAuthRule>) => priorAuthRulesStore.upsert({ ...r, ...patch, sample: false });
+
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [enrollmentFilter, setEnrollmentFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedPayerId, setSelectedPayerId] = useState<string | null>(null);
+
+  const payers = payersStore.get();
+  const priorAuthRules = priorAuthRulesStore.get();
+
+  const filteredPayers = useMemo(() => {
+    return payers.filter((p) => {
+      // Search
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matchName = (p.name || "").toLowerCase().includes(q);
+        const matchCode = (p.payerIdCode || "").toLowerCase().includes(q);
+        const matchPhone = (p.phone || "").toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchPhone) return false;
+      }
+      // Type
+      if (typeFilter !== "all" && (p.type || "commercial") !== typeFilter) {
+        return false;
+      }
+      // Active
+      if (activeFilter === "active" && p.active === false) return false;
+      if (activeFilter === "inactive" && p.active !== false) return false;
+
+      // Enrollment
+      if (enrollmentFilter !== "all") {
+        const elig = p.enrollment?.eligibility?.status ?? p.enrollment?.status ?? "not_started";
+        const clm = p.enrollment?.claims?.status ?? p.enrollment?.status ?? "not_started";
+        const era = p.enrollment?.era?.status ?? p.enrollment?.status ?? "not_started";
+        const enrolledCount = [elig, clm, era].filter((s) => s === "enrolled").length;
+
+        if (enrollmentFilter === "3" && enrolledCount !== 3) return false;
+        if (enrollmentFilter === "partial" && (enrolledCount === 0 || enrolledCount === 3)) return false;
+        if (enrollmentFilter === "none" && enrolledCount !== 0) return false;
+      }
+
+      return true;
+    });
+  }, [payers, search, typeFilter, activeFilter, enrollmentFilter]);
+
+  const columns: TableColumn<Payer>[] = useMemo(
+    () => [
+      {
+        header: "Payer Name",
+        accessorKey: "name",
+        render: (p) => (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedPayerId(p.id);
+              setIsDrawerOpen(true);
+            }}
+            className="font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+          >
+            {p.name}
+          </span>
+        ),
+      },
+      {
+        header: "Payer ID",
+        accessorKey: "payerIdCode",
+        render: (p) => <span className="font-mono text-xs text-slate-700">{p.payerIdCode || "—"}</span>,
+      },
+      {
+        header: "Type",
+        accessorKey: "type",
+        render: (p) => {
+          const typeLabel = p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1) : "Commercial";
+          return <span className="text-slate-700">{typeLabel}</span>;
+        },
+      },
+      {
+        header: "Phone",
+        accessorKey: "phone",
+        render: (p) =>
+          p.phone ? (
+            <span className="text-slate-700">{p.phone}</span>
+          ) : (
+            <span className="text-[11px] text-amber-600 italic">Add the payer phone to enable benefit calls</span>
+          ),
+      },
+      {
+        header: "Enrollment",
+        render: (p) => {
+          const elig = p.enrollment?.eligibility?.status ?? p.enrollment?.status ?? "not_started";
+          const clm = p.enrollment?.claims?.status ?? p.enrollment?.status ?? "not_started";
+          const era = p.enrollment?.era?.status ?? p.enrollment?.status ?? "not_started";
+          const count = [elig, clm, era].filter((s) => s === "enrolled").length;
+          const chipText = count === 3 ? "3 of 3 enrolled" : count > 0 ? `${count} of 3 enrolled` : "None";
+          const chipClass =
+            count === 3
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
+              : count > 0
+              ? "bg-blue-50 text-blue-700 border-blue-200/60"
+              : "bg-slate-100 text-slate-500 border-slate-200";
+          const tooltip = `Eligibility: ${elig.replace("_", " ")} | Claims: ${clm.replace("_", " ")} | ERA: ${era.replace("_", " ")}`;
+
+          return (
+            <Tooltip text={tooltip}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider inline-block cursor-help ${chipClass}`}>
+                {chipText}
+              </span>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        header: "Prior-auth rules",
+        render: (p) => {
+          const count = priorAuthRules.filter((r) => r.payerId === p.id).length;
+          return <span className="text-slate-700">{count} {count === 1 ? "rule" : "rules"}</span>;
+        },
+      },
+      {
+        header: "Active",
+        render: (p) => (
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+              p.active !== false
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                : "bg-gray-100 text-gray-500 border border-gray-200"
+            }`}
+          >
+            {p.active !== false ? "Active" : "Inactive"}
+          </span>
+        ),
+      },
+    ],
+    [priorAuthRules]
+  );
+
+  const filterFields: FilterFieldConfig[] = [
+    {
+      id: "type",
+      label: "Type",
+      type: "select",
+      value: typeFilter,
+      onChange: setTypeFilter,
+      options: [
+        { label: "All Types", value: "all" },
+        { label: "Commercial", value: "commercial" },
+        { label: "Medicare", value: "medicare" },
+        { label: "Medicaid", value: "medicaid" },
+        { label: "Other", value: "other" },
+      ],
+    },
+    {
+      id: "enrollment",
+      label: "Enrollment",
+      type: "select",
+      value: enrollmentFilter,
+      onChange: setEnrollmentFilter,
+      options: [
+        { label: "All Enrollments", value: "all" },
+        { label: "3 of 3 Enrolled", value: "3" },
+        { label: "Partially Enrolled", value: "partial" },
+        { label: "None Enrolled", value: "none" },
+      ],
+    },
+    {
+      id: "active",
+      label: "Active Status",
+      type: "select",
+      value: activeFilter,
+      onChange: setActiveFilter,
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+    },
+  ];
+
   return (
-    <div className="mt-6 space-y-2">
-      <h3 className="text-sm font-semibold">Prior-auth rules (payer x service)</h3>
-      {rules.map((r) => (
-        <div key={r.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.7fr_0.8fr_1.5fr_auto] gap-2 items-center">
-          <select className={inputCls} disabled={!canEdit} value={r.payerId} onChange={(e) => upd(r, { payerId: e.target.value })}>
-            <option value="">Payer</option>
-            {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <input className={inputCls} disabled={!canEdit} value={r.cptCode || ""} placeholder="CPT" onChange={(e) => upd(r, { cptCode: e.target.value })} />
-          <select className={inputCls} disabled={!canEdit} value={r.required ? "yes" : "no"} onChange={(e) => upd(r, { required: e.target.value === "yes" })}>
-            <option value="yes">Auth: Y</option>
-            <option value="no">Auth: N</option>
-          </select>
-          <input className={inputCls} disabled={!canEdit} type="number" value={r.units ?? ""} placeholder="Units" onChange={(e) => upd(r, { units: e.target.value === "" ? undefined : Number(e.target.value) })} />
-          <input className={inputCls} disabled={!canEdit} type="number" value={r.validityDays ?? ""} placeholder="Days" onChange={(e) => upd(r, { validityDays: e.target.value === "" ? undefined : Number(e.target.value) })} />
-          <input className={inputCls} disabled={!canEdit} value={r.notes || ""} placeholder="Notes" onChange={(e) => upd(r, { notes: e.target.value })} />
-          <button className={btnCls} disabled={!canEdit} onClick={() => priorAuthRulesStore.remove(r.id)}>Remove</button>
-        </div>
-      ))}
-      <button className={btnCls} disabled={!canEdit} onClick={() => priorAuthRulesStore.upsert({ id: newId("pa"), payerId: "", required: true })}>Add rule</button>
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Insurance payers, electronic EDI enrollment (eligibility, claims, ERA), and payer-specific prior authorization rules.
+      </p>
+
+      <PageTopBar
+        showSearch
+        searchQuery={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search payers by name, ID, or phone..."
+        filterFields={filterFields}
+        primaryAction={{
+          label: "Add payer",
+          icon: <Plus className="w-3.5 h-3.5" />,
+          onClick: () => {
+            setSelectedPayerId(null);
+            setIsDrawerOpen(true);
+          },
+          disabled: !canEdit,
+        }}
+      />
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <TableComponent<Payer>
+          data={filteredPayers}
+          columns={columns}
+          getRowId={(p) => p.id}
+          enableSelection={false}
+          enableColumnCustomization={false}
+          onRowClick={(p) => {
+            setSelectedPayerId(p.id);
+            setIsDrawerOpen(true);
+          }}
+          emptyMessage="No payers match your search or filter."
+        />
+      </div>
+
+      <PayerDetailDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        payerId={selectedPayerId}
+      />
     </div>
   );
 }
