@@ -83,6 +83,8 @@ export interface ClaimDefaults {
   acceptAssignment: boolean;
   timelyFilingDays: number;
   defaultBillingLocationId: string;
+  signatureOnFile?: boolean;
+  releaseOfInformation?: boolean;
 }
 
 export type ScrubSeverity = "error" | "warning";
@@ -120,6 +122,8 @@ const DEFAULT_CLAIM_DEFAULTS: ClaimDefaults = {
   acceptAssignment: true,
   timelyFilingDays: 90,
   defaultBillingLocationId: "",
+  signatureOnFile: true,
+  releaseOfInformation: true,
 };
 
 /** @deprecated Billing entity: use the Organization record (orgBilling.ts). Kept only so the one-time migration can read it. */
@@ -156,12 +160,12 @@ export function getProviderCredential(memberId: string | number): ProviderCreden
 
 // ── Sample (mock) data ───────────────────────────────────────────────────────────────────────────
 
-const P = (id: string, name: string, code: string, type: Payer["type"], enrolled = true): Payer => ({
+const P = (id: string, name: string, code: string, type: Payer["type"], phone?: string, enrolled = true): Payer => ({
   id: `payer-${id}`,
   name,
   payerIdCode: code,
   type,
-  phone: "800-555-0100",
+  phone,
   timelyFilingDays: 90,
   active: true,
   enrollment: enrolled
@@ -182,21 +186,21 @@ const P = (id: string, name: string, code: string, type: Payer["type"], enrolled
 });
 
 export const SAMPLE_PAYERS: Payer[] = [
-  P("bcbs", "Blue Cross Blue Shield", "BCBS1", "commercial"),
-  P("aetna", "Aetna", "AETNA", "commercial"),
-  P("uhc", "UnitedHealthcare", "UHC01", "commercial"),
-  P("cigna", "Cigna", "CIGNA", "commercial"),
-  P("medicare", "Medicare", "MCARE", "medicare"),
-  P("medicaid", "Medicaid", "MCAID", "medicaid"),
-  P("humana", "Humana", "HUMAN", "commercial"),
-  P("anthem", "Anthem", "ANTHM", "commercial"),
-  P("kaiser", "Kaiser Permanente", "KAISR", "commercial"),
-  P("tricare", "Tricare", "TRICR", "other"),
-  P("molina", "Molina Healthcare", "MOLNA", "medicaid", false),
-  P("centene", "Centene", "CENTN", "commercial"),
-  P("oscar", "Oscar Health", "OSCAR", "commercial", false),
-  P("emblem", "EmblemHealth", "EMBLM", "commercial"),
-  P("highmark", "Highmark", "HGHMK", "commercial"),
+  P("bcbs", "Blue Cross Blue Shield", "BCBS1", "commercial", "800-262-2583"),
+  P("aetna", "Aetna", "AETNA", "commercial", "800-872-3862"),
+  P("uhc", "UnitedHealthcare", "UHC01", "commercial", "877-842-3210"),
+  P("cigna", "Cigna", "CIGNA", "commercial", "800-882-4462"),
+  P("medicare", "Medicare", "MCARE", "medicare", "800-633-4227"),
+  P("medicaid", "Medicaid", "MCAID", "medicaid", "800-562-3022"),
+  P("humana", "Humana", "HUMAN", "commercial", "800-448-6262"),
+  P("anthem", "Anthem", "ANTHM", "commercial", "800-676-2583"),
+  P("kaiser", "Kaiser Permanente", "KAISR", "commercial", "800-464-4000"),
+  P("tricare", "Tricare", "TRICR", "other", "800-444-5445"),
+  P("molina", "Molina Healthcare", "MOLNA", "medicaid", undefined, false),
+  P("centene", "Centene", "CENTN", "commercial", "877-687-1180"),
+  P("oscar", "Oscar Health", "OSCAR", "commercial", undefined, false),
+  P("emblem", "EmblemHealth", "EMBLM", "commercial", "888-447-7747"),
+  P("highmark", "Highmark", "HGHMK", "commercial", "800-547-3627"),
 ];
 
 export const SAMPLE_LOCATIONS: BillingLocation[] = [

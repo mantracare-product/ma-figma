@@ -40,7 +40,7 @@ import ClaimProgressBar from "../components/claims/ClaimProgressBar";
 import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
 import CreateClaimModal from "../components/claims/CreateClaimModal";
 import { stripSampleSuffix } from "../../lib/sampleSuffixMigration";
-import ClaimsSetup from "../components/claims/ClaimsSetup";
+import PayersView from "../components/claims/PayersView";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -133,10 +133,13 @@ export default function Claims() {
   const canPostPayments = hasClaimPermission("rcmPayments", "add");
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  // Claims | Setup toggle (Setup needs the billingSetup permission; deep link: ?view=setup)
+  // Claims | Payers toggle (Payers needs the billingSetup permission; deep link: ?view=setup or ?view=payers)
   const canSetup = hasClaimPermission("billingSetup", "read");
-  const [view, setView] = useState<"claims" | "setup">(() => (new URLSearchParams(window.location.search).get("view") === "setup" ? "setup" : "claims"));
-  const activeView = view === "setup" && canSetup ? "setup" : "claims";
+  const [view, setView] = useState<"claims" | "payers">(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    return v === "setup" || v === "payers" ? "payers" : "claims";
+  });
+  const activeView = view === "payers" && canSetup ? "payers" : "claims";
 
   // Load claims
   const refreshClaims = () => {
@@ -291,127 +294,135 @@ export default function Claims() {
           subtitle={isProcessFixed && insuranceProcess.name ? `Manage ${insuranceProcess.name} lifecycle` : "End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."}
         />
 
-        {/* Filter and Search Bar powered by PageTopBar */}
-        <PageTopBar
-          isBottomPanelAttached={true}
-          leftElement={activeView === "setup" ? undefined : (
-            <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { workflowPicked.current = true; setSelectedProcessFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {insuranceProcesses.map((proc) => <option key={proc.id} value={proc.id}>{stripSampleSuffix(proc.name)} ({workflowCounts[proc.id] || 0})</option>)}
-            </select>
-          )}
-          modes={canSetup ? [{ id: "claims", label: "Claims" }, { id: "setup", label: "Setup" }] : undefined}
-          activeMode={activeView}
-          onModeChange={(m) => setView(m === "setup" ? "setup" : "claims")}
-          showSearch={activeView === "claims"}
-          searchQuery={searchQuery}
-          onSearchChange={(v) => {
-            setSearchQuery(v);
-            setCurrentPage(1);
-          }}
-          searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
-          secondaryActions={activeView === "setup" ? undefined : (
-            <div className="flex items-center gap-2 flex-wrap" data-testid="claims-filters">
-              <select aria-label="Payer" data-testid="claims-filter-payer" value={selectedPayerFilter} onChange={(e) => { setSelectedPayerFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <option value="all">All payers</option>
-                {uniquePayers.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <select aria-label="Assignee" data-testid="claims-filter-assignee" value={selectedAssigneeFilter} onChange={(e) => { setSelectedAssigneeFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <option value="all">All assignees</option>
-                <option value="none">Unassigned</option>
-                {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-              <div className="flex items-center rounded-xl border border-border overflow-hidden shadow-2xs">
-                <button type="button" data-testid="claims-view-list" onClick={() => setClaimViewMode("list")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "list" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>List</button>
-                <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "board" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>Board</button>
-              </div>
-            </div>
-          )}
-          primaryAction={activeView === "setup" || !hasClaimPermission("claims", "add") ? undefined : {
-            label: "Create Claim",
-            icon: <Plus className="w-4 h-4" />,
-            onClick: () => setShowCreateModal(true),
-          }}
-          afterPrimaryAction={activeView === "setup" ? undefined : (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                data-testid="claims-receive-era"
-                disabled={!canPostPayments}
-                title={canPostPayments ? "Stage a remittance (ERA) for claims that are out with the payer" : "You need the rcmPayments permission"}
-                onClick={() => {
-                  const era = receiveMockEra({ includeUnmatched: true });
-                  toast.success(`ERA ${era.traceNumber} received (${era.lines.length} lines)`);
-                }}
-                className="px-3 h-[36px] text-xs font-semibold rounded-lg border border-border bg-white hover:bg-slate-50 disabled:opacity-50 shadow-2xs"
-              >
-                Receive ERA
-              </button>
-              <Tooltip text="Export Claims">
-                <button
-                  type="button"
-                  disabled={!hasClaimPermission("claims", "export")}
-                  onClick={() => setShowExportModal(true)}
-                  className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-                  aria-label="Export Claims"
-                  title="Export Claims"
-                >
-                  <Download className="w-4 h-4 text-slate-600" />
-                </button>
-              </Tooltip>
-              <WorkflowGearDropdown
-                entityType="claim"
-                processId={insuranceProcess.id}
-                processName={insuranceProcess.name}
-                buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-              />
-            </div>
-          )}
-        />
+        {activeView === "payers" ? (
+          <PayersView
+            modes={canSetup ? [{ id: "claims", label: "Claims" }, { id: "payers", label: "Payers" }] : undefined}
+            activeMode="payers"
+            onModeChange={(m) => setView(m === "payers" ? "payers" : "claims")}
+          />
+        ) : (
+          <>
+            {/* Filter and Search Bar powered by PageTopBar */}
+            <PageTopBar
+              isBottomPanelAttached={true}
+              leftElement={(
+                <select aria-label="Workflow" data-testid="claims-filter-workflow" value={selectedProcessFilter} onChange={(e) => { workflowPicked.current = true; setSelectedProcessFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {insuranceProcesses.map((proc) => <option key={proc.id} value={proc.id}>{stripSampleSuffix(proc.name)} ({workflowCounts[proc.id] || 0})</option>)}
+                </select>
+              )}
+              modes={canSetup ? [{ id: "claims", label: "Claims" }, { id: "payers", label: "Payers" }] : undefined}
+              activeMode="claims"
+              onModeChange={(m) => setView(m === "payers" ? "payers" : "claims")}
+              showSearch={true}
+              searchQuery={searchQuery}
+              onSearchChange={(v) => {
+                setSearchQuery(v);
+                setCurrentPage(1);
+              }}
+              searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
+              secondaryActions={(
+                <div className="flex items-center gap-2 flex-wrap" data-testid="claims-filters">
+                  <select aria-label="Payer" data-testid="claims-filter-payer" value={selectedPayerFilter} onChange={(e) => { setSelectedPayerFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <option value="all">All payers</option>
+                    {uniquePayers.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <select aria-label="Assignee" data-testid="claims-filter-assignee" value={selectedAssigneeFilter} onChange={(e) => { setSelectedAssigneeFilter(e.target.value); setCurrentPage(1); }} className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <option value="all">All assignees</option>
+                    <option value="none">Unassigned</option>
+                    {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <div className="flex items-center rounded-xl border border-border overflow-hidden shadow-2xs">
+                    <button type="button" data-testid="claims-view-list" onClick={() => setClaimViewMode("list")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "list" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>List</button>
+                    <button type="button" data-testid="claims-view-board" onClick={() => setClaimViewMode("board")} className={"h-[36px] px-3 text-xs font-semibold " + (claimViewMode === "board" ? "bg-slate-900 text-white" : "bg-white text-gray-700")}>Board</button>
+                  </div>
+                </div>
+              )}
+              primaryAction={!hasClaimPermission("claims", "add") ? undefined : {
+                label: "Create Claim",
+                icon: <Plus className="w-4 h-4" />,
+                onClick: () => setShowCreateModal(true),
+              }}
+              afterPrimaryAction={(
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="claims-receive-era"
+                    disabled={!canPostPayments}
+                    title={canPostPayments ? "Stage a remittance (ERA) for claims that are out with the payer" : "You need the rcmPayments permission"}
+                    onClick={() => {
+                      const era = receiveMockEra({ includeUnmatched: true });
+                      toast.success(`ERA ${era.traceNumber} received (${era.lines.length} lines)`);
+                    }}
+                    className="px-3 h-[36px] text-xs font-semibold rounded-lg border border-border bg-white hover:bg-slate-50 disabled:opacity-50 shadow-2xs"
+                  >
+                    Receive ERA
+                  </button>
+                  <Tooltip text="Export Claims">
+                    <button
+                      type="button"
+                      disabled={!hasClaimPermission("claims", "export")}
+                      onClick={() => setShowExportModal(true)}
+                      className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                      aria-label="Export Claims"
+                      title="Export Claims"
+                    >
+                      <Download className="w-4 h-4 text-slate-600" />
+                    </button>
+                  </Tooltip>
+                  <WorkflowGearDropdown
+                    entityType="claim"
+                    processId={insuranceProcess.id}
+                    processName={insuranceProcess.name}
+                    buttonClassName="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                  />
+                </div>
+              )}
+            />
 
-        <CreateClaimModal
-          isOpen={showCreateModal && hasClaimPermission("claims", "add")}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={(claim) => {
-            refreshClaims();
-            setSelectedClaimForDetail(claim);
-            setIsCreateMode(false);
-            setIsDetailDrawerOpen(true);
-          }}
-        />
+            <CreateClaimModal
+              isOpen={showCreateModal && hasClaimPermission("claims", "add")}
+              onClose={() => setShowCreateModal(false)}
+              onCreated={(claim) => {
+                refreshClaims();
+                setSelectedClaimForDetail(claim);
+                setIsCreateMode(false);
+                setIsDetailDrawerOpen(true);
+              }}
+            />
 
-        {/* Unified DataExportModal */}
-        <DataExportModal
-          isOpen={showExportModal}
-          onClose={() => setShowExportModal(false)}
-          title="Export Claims"
-          subtitle="Export 837P and CMS-1500 insurance claims with payer, diagnosis, and billing details"
-          data={claims}
-          filenamePrefix="insurance_claims"
-          dateFieldKey="serviceDate"
-          dateLabel="Service Date"
-          statusFieldKey="status"
-          statusLabel="Claim Status"
-          statusOptions={[
-            { label: "Ready to Submit", value: "ready" },
-            { label: "Submitted", value: "submitted" },
-            { label: "Paid", value: "paid" },
-            { label: "Draft", value: "draft" },
-          ]}
-          allFields={[
-            { key: "claimNumber", label: "Claim #", getValue: (c) => c.claimNumber },
-            { key: "patientName", label: "Client / Patient", getValue: (c) => c.patientName },
-            { key: "insurancePayer", label: "Insurance Payer", getValue: (c) => c.payer?.name || "" },
-            { key: "policyNumber", label: "Policy #", getValue: (c) => c.insuredId || "" },
-            { key: "serviceDate", label: "Service Date", getValue: (c) => c.serviceDate },
-            { key: "totalAmount", label: "Total Billed", getValue: (c) => `$${(c.totalCharge || 0).toFixed(2)}` },
-            { key: "status", label: "Status", getValue: (c) => c.status },
-            { key: "cptCodes", label: "CPT Codes", getValue: (c) => (c.lines || []).map((x) => x.cptCode).join("; ") },
-            { key: "icd10Codes", label: "ICD-10 Diagnoses", getValue: (c) => (c.diagnosisCodes || []).map((x) => x.code).join("; ") },
-          ]}
-        />
+            {/* Unified DataExportModal */}
+            <DataExportModal
+              isOpen={showExportModal}
+              onClose={() => setShowExportModal(false)}
+              title="Export Claims"
+              subtitle="Export 837P and CMS-1500 insurance claims with payer, diagnosis, and billing details"
+              data={claims}
+              filenamePrefix="insurance_claims"
+              dateFieldKey="serviceDate"
+              dateLabel="Service Date"
+              statusFieldKey="status"
+              statusLabel="Claim Status"
+              statusOptions={[
+                { label: "Ready to Submit", value: "ready" },
+                { label: "Submitted", value: "submitted" },
+                { label: "Paid", value: "paid" },
+                { label: "Draft", value: "draft" },
+              ]}
+              allFields={[
+                { key: "claimNumber", label: "Claim #", getValue: (c) => c.claimNumber },
+                { key: "patientName", label: "Client / Patient", getValue: (c) => c.patientName },
+                { key: "insurancePayer", label: "Insurance Payer", getValue: (c) => c.payer?.name || "" },
+                { key: "policyNumber", label: "Policy #", getValue: (c) => c.insuredId || "" },
+                { key: "serviceDate", label: "Service Date", getValue: (c) => c.serviceDate },
+                { key: "totalAmount", label: "Total Billed", getValue: (c) => `$${(c.totalCharge || 0).toFixed(2)}` },
+                { key: "status", label: "Status", getValue: (c) => c.status },
+                { key: "cptCodes", label: "CPT Codes", getValue: (c) => (c.lines || []).map((x) => x.cptCode).join("; ") },
+                { key: "icd10Codes", label: "ICD-10 Diagnoses", getValue: (c) => (c.diagnosisCodes || []).map((x) => x.code).join("; ") },
+              ]}
+            />
 
-        {/* Claims Table View Connected with TableComponent */}
-        {activeView === "setup" ? <ClaimsSetup /> : (() => {
+            {/* Claims Table View Connected with TableComponent */}
+            {(() => {
           const claimColumns: TableColumn<Claim>[] = [
             {
               id: "claimNumber",
@@ -575,6 +586,8 @@ export default function Claims() {
             </>
           );
         })()}
+        </>
+        )}
 
         {/* Claim Submission Modal (Electronic 837P or Manual CMS-1500) */}
         <ClaimSubmissionModal

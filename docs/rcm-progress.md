@@ -260,3 +260,11 @@ Checklist:
 - Each payer name is a clickable link that opens `PayerDetailDrawer` on the `Prior-auth rules` tab (`initialTab="rules"`).
 - Preserved the per-service default authorization requirement switch (`requiresAuthDefault`).
 - Gate: typecheck OK, build OK, vitest at baseline.
+
+### R5-fix.1 & R5-fix.2: Payers screen replaces Setup (done, commit "R5-fix.1-2")
+- Replaced the Claims | Setup toggle with Claims | Payers in `PageTopBar` on `Claims.tsx` (gated by `hasPermission("billingSetup", "read")`; query params `?view=setup` and `?view=payers` open Payers).
+- Removed Setup heading, description lines, and pill tabs.
+- Payers view (`PayersView.tsx`) uses shared `PageTopBar` (search by name, ID, phone; filters: Type, Enrollment, Active; primary action: Add payer) and shared `TableComponent` with sharp edges (DESIGN.md: 32px rows, navy header).
+- Replaced demo placeholder phones with distinct plausible numbers for demo payers (and undefined/blank for Molina / Oscar to show "Add the payer phone to enable benefit calls").
+- Migration `migratePayersToThreeFunctionEnrollment` (`mantra_payers_migrated_v2`) updates any existing stored payer holding "800-555-0100" and logs to `mantra_migration_log_v1`.
+- Gate: typecheck OK, build OK, vitest at baseline (payerDetail.test.ts 4/4 passed).

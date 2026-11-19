@@ -7,7 +7,7 @@
 import { payersStore, SAMPLE_PAYERS, type Payer, type EnrollmentStatus } from "./billingSetupStore";
 import { logMigration } from "./stageCallMigration";
 
-const FLAG = "mantra_payers_migrated_v1";
+const FLAG = "mantra_payers_migrated_v2";
 
 export function migratePayersToThreeFunctionEnrollment(): { migrated: number } {
   const result = { migrated: 0 };
@@ -77,12 +77,19 @@ export function migratePayersToThreeFunctionEnrollment(): { migrated: number } {
         payerChanged = true;
       }
 
+      // 4. Distinct phone numbers (no shared 800-555-0100)
+      if (p.phone === "800-555-0100") {
+        const sampleMatch = SAMPLE_PAYERS.find((s) => s.id === p.id || s.name === p.name);
+        p.phone = sampleMatch ? sampleMatch.phone : undefined;
+        payerChanged = true;
+      }
+
       if (payerChanged) {
         result.migrated++;
         changed = true;
         logMigration(
-          "R5.C",
-          `Payer "${p.name}" (${p.id}): type set to "${p.type}", enrollment set to [eligibility: ${elig}, claims: ${claims}, era: ${era}], active=${p.active}`
+          "R5-fix",
+          `Payer "${p.name}" (${p.id}): type="${p.type}", phone="${p.phone || "none"}", enrollment=[eligibility: ${elig}, claims: ${claims}, era: ${era}], active=${p.active}`
         );
       }
     }
