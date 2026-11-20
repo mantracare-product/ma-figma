@@ -116,6 +116,8 @@ export interface PageTopBarProps {
   // Visual Customization
   className?: string;
   isBottomPanelAttached?: boolean;
+  /** Label of the button that holds the collapsed secondary actions (default "More"). */
+  moreLabel?: string;
 }
 
 export function PageTopBar({
@@ -156,6 +158,7 @@ export function PageTopBar({
   children,
   className = "",
   isBottomPanelAttached = false,
+  moreLabel = "More",
 }: PageTopBarProps) {
   const [internalShowModal, setInternalShowModal] = useState(false);
   const [showAddFieldDropdown, setShowAddFieldDropdown] = useState(false);
@@ -721,7 +724,7 @@ export function PageTopBar({
                 aria-expanded={moreOpen}
               >
                 <MoreHorizontal className="w-3.5 h-3.5" />
-                <span>More</span>
+                <span>{moreLabel}</span>
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-2 z-50 bg-white border border-border rounded-xl shadow-2xl p-3 flex flex-col items-stretch gap-2 min-w-[220px] max-w-[min(420px,90vw)]" data-testid="top-bar-more-menu">
