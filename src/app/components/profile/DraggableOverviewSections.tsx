@@ -409,15 +409,19 @@ export default function DraggableOverviewSections({
     if (mod === "claim") {
       return (DEFAULT_ENTITY_PROCESSES.insurance?.stages || DEFAULT_ENTITY_PROCESSES.claim?.stages || []).map((s) => s.name);
     }
-    if (mod === "process" || mode === "process") {
-      const proc = allProcesses.find((p) => p.name === log?.process || p.id === log?.process || p.id === log?.processId || (log?.process && p.name.toLowerCase() === log.process.toLowerCase())) || allProcesses[0];
-      if (proc && proc.stages && proc.stages.length > 0) {
-        return proc.stages.map((s) => (typeof s === "string" ? s : s.name));
+    if (mod === "process" || mode === "process" || mod === "client" || mode === "client") {
+      const activeProcs = allProcesses.filter((p) =>
+        (selectedProcesses && selectedProcesses.length > 0 && (selectedProcesses.includes(p.name) || selectedProcesses.includes(p.id))) ||
+        (client?.processes && (client.processes as any[]).some((cp: any) => cp === p.name || cp === p.id || cp?.name === p.name))
+      );
+      const chosenProc = activeProcs[0] || (log?.process ? allProcesses.find((p) => p.name === log.process || p.id === log.process) : undefined) || allProcesses[0];
+      if (chosenProc && chosenProc.stages && chosenProc.stages.length > 0) {
+        return chosenProc.stages.map((s: any) => (typeof s === "string" ? s : s.name));
       }
-      return ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Won / Lost"];
+      return ["Initial Contact", "Insurance Verify", "Schedule Appointment", "Deal Closed"];
     }
     return [];
-  }, [pipelineStages, mode, customFieldsModule, log, allProcesses]);
+  }, [pipelineStages, mode, customFieldsModule, log, allProcesses, selectedProcesses, client]);
 
   useEffect(() => {
     const handleUpdate = () => setAllProcesses(getStoredProcesses());
@@ -2491,8 +2495,9 @@ export default function DraggableOverviewSections({
           initialModule={(editingFieldDef.module as Exclude<FieldModule, "deal">) || (customFieldsModule === "deal" ? "process" : customFieldsModule)}
           activeProcessId={activeProcessObj?.id}
           activeProcessName={activeProcessName}
-          processStages={activeProcessStages}
+          processStages={activeProcessStages || (availablePipelineStages.length > 0 ? availablePipelineStages.map((s) => ({ id: s, name: s })) : undefined)}
           isAdmin={isUserAdmin}
+          hideAdminControls={true}
           onClose={() => setEditingFieldDef(null)}
           onHide={(f) => {
             const targetSec = sections.find((s) => s.fieldKeys?.includes(f.key));

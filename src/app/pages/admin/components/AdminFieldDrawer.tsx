@@ -77,6 +77,7 @@ import {
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT, getWorkflowsForModule } from "../../../../lib/useProcessStore";
 import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../lib/teamStore";
+import { getStoredDepartments } from "../../../../lib/departmentStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
@@ -1431,6 +1432,7 @@ export interface AdminFieldDrawerProps {
   sections?: SectionDefinition[];
   isScribeSeed?: boolean;
   isAdmin?: boolean;
+  hideAdminControls?: boolean;
   lockModule?: boolean;
   lockCategory?: boolean;
   initialCategory?: PrimaryFieldTypeCategory;
@@ -1450,6 +1452,7 @@ export function AdminFieldDrawer({
   sections = [],
   isScribeSeed = false,
   isAdmin = true,
+  hideAdminControls = false,
   lockModule = false,
   lockCategory = false,
   initialCategory,
@@ -1716,20 +1719,7 @@ export function AdminFieldDrawer({
   }, [form.selectedModules, form.module, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
 
   const targetProcessesForRequirement = useMemo(() => {
-    if (!form.selectedModules.includes("process") && form.module !== "process") return [];
-
-    // 1. Explicit active process context by ID or name
-    if (activeProcessId || activeProcessName) {
-      const target = allProcesses.find(
-        (p) =>
-          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
-          (activeProcessName &&
-            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
-      );
-      if (target) return [target];
-    }
-
-    // 2. Explicit processStages passed directly
+    // 1. Explicit processStages passed directly (e.g. from client overview or record view)
     if (processStages && processStages.length > 0) {
       return [{
         id: activeProcessId || "active_proc",
@@ -1741,13 +1731,25 @@ export function AdminFieldDrawer({
       }];
     }
 
+    // 2. Explicit active process context by ID or name
+    if (activeProcessId || activeProcessName) {
+      const target = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (target) return [target];
+    }
+
     // 3. Scoped processIds if specified
     if (form.processIds && form.processIds.length > 0 && !form.processIds.includes("all")) {
       const filtered = availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name));
       if (filtered.length > 0) return filtered;
     }
-    return availableProcesses.length > 0 ? availableProcesses : allProcesses;
-  }, [form.selectedModules, form.module, form.processIds, availableProcesses, allProcesses, activeProcessId, activeProcessName, processStages]);
+
+    return availableProcesses.length > 0 ? availableProcesses : (allProcesses.length > 0 ? [allProcesses[0]] : []);
+  }, [form.processIds, availableProcesses, allProcesses, activeProcessId, activeProcessName, processStages]);
 
   // Existing fields in current primary module
   const allFieldsInPrimaryModule = useMemo(() => {
@@ -2122,12 +2124,16 @@ export function AdminFieldDrawer({
       placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(effectiveInputType, form.label),
       tooltip: form.tooltip.trim() || undefined,
       required: form.required,
-      requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      requiredStages: form.required && form.requiredStages && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
-      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : (field?.visibleToUserIds || undefined),
-      visibleToDepartmentIds: form.userVisibility !== false && (form.visibleToDepartmentIds?.length || 0) > 0 ? form.visibleToDepartmentIds : (field?.visibleToDepartmentIds || undefined),
-      visibilityType: form.visibilityType || field?.visibilityType,
+      visibleToUserIds: form.userVisibility !== false && form.visibilityType === "user" && form.visibleToUserIds.length > 0
+        ? form.visibleToUserIds
+        : undefined,
+      visibleToDepartmentIds: form.userVisibility !== false && form.visibilityType === "department" && (form.visibleToDepartmentIds?.length || 0) > 0
+        ? form.visibleToDepartmentIds
+        : undefined,
+      visibilityType: form.userVisibility === false ? "all" : (form.visibilityType || "all"),
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       contactCategories: (form.selectedModules.includes("client") || form.module === "client") && form.contactCategories.length > 0
@@ -5737,16 +5743,42 @@ export function AdminFieldDrawer({
                       <InfoTooltip text="Users must provide a value before saving records." size="sm" />
                     </div>
 
-                    {form.required && (form.selectedModules.includes("process") || form.module === "process") && (
+                    {/* Stage Requirements */}
+                    {form.required && targetProcessesForRequirement.length > 0 && (
                       <div className="mt-2.5 ml-6 space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
-                            Process Stage Requirements
+                            Required on Stages
                           </span>
                           <span className="text-[10px] font-medium text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                            {targetProcessesForRequirement.length} {targetProcessesForRequirement.length === 1 ? "Process" : "Processes"}
+                            {(() => {
+                              const allStagesInAllProcs = targetProcessesForRequirement.flatMap((p) => p.stages || []);
+                              const isAll = !form.requiredStages || form.requiredStages.length === 0 || form.requiredStages.includes("all") || form.requiredStages.length === allStagesInAllProcs.length;
+                              return isAll ? "All stages" : `${form.requiredStages.length} of ${allStagesInAllProcs.length}`;
+                            })()}
                           </span>
                         </div>
+
+                        {/* All Stages Toggle */}
+                        <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-100/60 border border-amber-200 text-xs font-semibold text-amber-950 cursor-pointer select-none hover:bg-amber-100 transition-colors">
+                          <input
+                            type="checkbox"
+                            disabled={isReadOnly}
+                            checked={Boolean(
+                              !form.requiredStages ||
+                              form.requiredStages.length === 0 ||
+                              form.requiredStages.includes("all")
+                            )}
+                            onChange={(e) => {
+                              setForm((p) => ({
+                                ...p,
+                                requiredStages: e.target.checked ? ["all"] : [],
+                              }));
+                            }}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span>All Stages</span>
+                        </label>
 
                         <div className="space-y-2.5">
                           {targetProcessesForRequirement.map((proc) => {
@@ -5754,20 +5786,21 @@ export function AdminFieldDrawer({
                               { id: "initial", name: "Initial Contact" },
                               { id: "review", name: "Insurance Verify" },
                               { id: "schedule", name: "Schedule Appointment" },
-                              { id: "last", name: "last stage" },
+                              { id: "last", name: "Deal Closed" },
                             ];
-                            const selectedStagesInProc = procStages.filter((st) => form.requiredStages.includes(st.name));
+                            const isAll = !form.requiredStages || form.requiredStages.length === 0 || form.requiredStages.includes("all");
+                            const selectedStagesInProc = procStages.filter((st) => isAll || form.requiredStages.includes(st.name));
                             const allStagesSelected = selectedStagesInProc.length === procStages.length;
 
                             const toggleSelectAllStagesInProc = () => {
                               setForm((p) => {
-                                const currentStages = p.requiredStages || [];
+                                const currentStages = isAll ? procStages.map((s) => s.name) : (p.requiredStages || []);
                                 if (allStagesSelected) {
-                                  const remaining = currentStages.filter((st) => !procStages.some((s) => s.name === st));
+                                  const remaining = currentStages.filter((st) => !procStages.some((s) => s.name === st) && st !== "all");
                                   return { ...p, requiredStages: remaining };
                                 } else {
                                   const procStageNames = procStages.map((s) => s.name);
-                                  const otherStages = currentStages.filter((st) => !procStageNames.includes(st));
+                                  const otherStages = currentStages.filter((st) => !procStageNames.includes(st) && st !== "all");
                                   return { ...p, requiredStages: [...otherStages, ...procStageNames] };
                                 }
                               });
@@ -5775,12 +5808,14 @@ export function AdminFieldDrawer({
 
                             const toggleStage = (stageName: string) => {
                               setForm((p) => {
-                                const currentStages = p.requiredStages || [];
+                                let currentStages = isAll ? procStages.map((s) => s.name) : [...(p.requiredStages || [])];
+                                currentStages = currentStages.filter((s) => s !== "all");
                                 const exists = currentStages.includes(stageName);
                                 const next = exists
                                   ? currentStages.filter((s) => s !== stageName)
                                   : [...currentStages, stageName];
-                                return { ...p, requiredStages: next };
+                                const finalStages = next.length === procStages.length || next.length === 0 ? ["all"] : next;
+                                return { ...p, requiredStages: finalStages };
                               });
                             };
 
@@ -5806,12 +5841,12 @@ export function AdminFieldDrawer({
 
                                 <div className="space-y-1.5">
                                   <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                    Required at Stages ({selectedStagesInProc.length} of {procStages.length})
+                                    Stages ({selectedStagesInProc.length} of {procStages.length})
                                   </label>
-                                  
+
                                   <div className="space-y-1.5">
                                     {procStages.map((st, sIdx) => {
-                                      const isChecked = form.requiredStages.includes(st.name);
+                                      const isChecked = isAll || form.requiredStages.includes(st.name);
                                       return (
                                         <button
                                           key={st.id || st.name}
@@ -5878,178 +5913,223 @@ export function AdminFieldDrawer({
                     <InfoTooltip text="Display the field in the form even if it is not filled in." size="sm" />
                   </div>
 
-                  {/* User Visibility Toggle (Admin Mode) */}
-                  {isAdmin && (
-                    <div className="flex items-center">
-                      <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                        <input
-                          type="checkbox"
-                          checked={form.userVisibility !== false}
-                          disabled={isReadOnly}
-                          onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
-                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                        <span className="text-xs font-semibold text-slate-800">User Visibility</span>
-                      </label>
-                      <InfoTooltip text="Enable this to allow users in client records to restrict visibility of this field to specific team members." size="sm" />
-                    </div>
-                  )}
-
-                  {/* User Visibility & Team Members Selection (Client Mode) */}
-                  {!isAdmin && form.userVisibility !== false && (
-                    <div className="space-y-3 p-3.5 rounded-xl bg-slate-50/80 border border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 select-none">
-                          <div className="w-4 h-4 rounded bg-blue-600 text-white flex items-center justify-center shadow-2xs">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </div>
-                          <span className="text-xs font-semibold text-slate-800">User Visibility</span>
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Active
-                          </span>
-                        </div>
-                        <InfoTooltip text="Specify which team members are permitted to view and edit this field." size="sm" />
-                      </div>
-
-                      {/* Team Member Dropdown */}
-                      <div className="space-y-2">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                          Assigned Team Members ({form.visibleToUserIds.length > 0 ? form.visibleToUserIds.length : "All"})
-                        </label>
-
-                        <div className="relative" ref={teamPickerRef}>
-                          <button
-                            type="button"
+                  {/* User Visibility Section (Same Settings as Configure Popup) */}
+                  <div className="space-y-3 p-3.5 rounded-xl bg-slate-50/80 border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 select-none">
+                        <label className={`flex items-center gap-2 ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                          <input
+                            type="checkbox"
+                            checked={form.userVisibility !== false}
                             disabled={isReadOnly}
-                            onClick={() => setTeamPickerOpen((v) => !v)}
-                            className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 transition-all cursor-pointer shadow-2xs outline-none group text-left"
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
-                                {form.visibleToUserIds.length > 0 ? form.visibleToUserIds.length : "👥"}
-                              </div>
-                              <span className="truncate text-slate-700">
-                                {form.visibleToUserIds.length === 0
-                                  ? "Visible to all team members"
-                                  : `${form.visibleToUserIds.length} team ${form.visibleToUserIds.length === 1 ? "member" : "members"} selected`}
-                              </span>
-                            </div>
-                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ml-2 ${teamPickerOpen ? "rotate-180" : ""}`} />
-                          </button>
+                            onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-semibold text-slate-800">User Visibility</span>
+                        </label>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          form.userVisibility !== false
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-slate-100 text-slate-500 border border-slate-200"
+                        }`}>
+                          {form.userVisibility !== false ? "Active" : "Disabled"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-medium text-blue-600">
+                        {(() => {
+                          if (form.userVisibility === false) return "Disabled";
+                          const vType = form.visibilityType || ((form.visibleToDepartmentIds && form.visibleToDepartmentIds.length > 0) ? "department" : (form.visibleToUserIds && form.visibleToUserIds.length > 0) ? "user" : "all");
+                          if (vType === "department") {
+                            const len = form.visibleToDepartmentIds?.length || 0;
+                            return len === 0 ? "All depts" : `${len} depts`;
+                          }
+                          if (vType === "user") {
+                            const len = form.visibleToUserIds?.length || 0;
+                            return len === 0 ? "All users" : `${len} users`;
+                          }
+                          return "All Users";
+                        })()}
+                      </span>
+                    </div>
 
-                          {teamPickerOpen && (
-                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in-80 zoom-in-95">
-                              <div className="p-2.5 bg-slate-50 flex items-center justify-between">
-                                <span className="text-xs font-bold text-slate-700">Select Team Members</span>
-                                {form.visibleToUserIds.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setForm((p) => ({ ...p, visibleToUserIds: [] }))}
-                                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                                  >
-                                    Reset to All
-                                  </button>
-                                )}
-                              </div>
-                              <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
-                                {teamMembers.map((member) => {
-                                  const idStr = String(member.id);
-                                  const isAssigned = form.visibleToUserIds.includes(idStr);
-                                  return (
-                                    <button
-                                      key={member.id}
-                                      type="button"
-                                      onClick={() => {
-                                        if (isAssigned) {
-                                          setForm((p) => ({
-                                            ...p,
-                                            visibleToUserIds: p.visibleToUserIds.filter((id) => id !== idStr),
-                                          }));
-                                        } else {
-                                          setForm((p) => ({
-                                            ...p,
-                                            visibleToUserIds: [...p.visibleToUserIds, idStr],
-                                          }));
-                                        }
-                                      }}
-                                      className={`w-full px-2.5 py-2 rounded-lg text-left text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                                        isAssigned ? "bg-blue-50 text-blue-800 font-semibold" : "hover:bg-slate-50 text-slate-700"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
-                                          {member.name.charAt(0)}
-                                        </div>
-                                        <div className="truncate">
-                                          <span className="block truncate font-medium">{member.name}</span>
-                                          {member.role && (
-                                            <span className="text-[10px] text-slate-400 block truncate">
-                                              {member.role}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                        isAssigned ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
-                                      }`}>
-                                        {isAssigned && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
+                    {form.userVisibility !== false && (
+                      <div className="space-y-2.5 pt-1 border-t border-slate-200/80 animate-in fade-in duration-150">
+                        {/* Scope Selector */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                            Visibility Scope
+                          </label>
+                          <select
+                            disabled={isReadOnly}
+                            value={form.visibilityType || ((form.visibleToDepartmentIds && form.visibleToDepartmentIds.length > 0) ? "department" : (form.visibleToUserIds && form.visibleToUserIds.length > 0) ? "user" : "all")}
+                            onChange={(e) => {
+                              const newType = e.target.value as "all" | "department" | "user";
+                              setForm((p) => ({
+                                ...p,
+                                visibilityType: newType,
+                                visibleToDepartmentIds: newType === "department" ? (p.visibleToDepartmentIds || []) : [],
+                                visibleToUserIds: newType === "user" ? (p.visibleToUserIds || []) : [],
+                              }));
+                            }}
+                            className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="all">All Users</option>
+                            <option value="department">By Department (Department Level)</option>
+                            <option value="user">By User (Specific Users)</option>
+                          </select>
                         </div>
 
-                        {/* Selected Member Badges */}
-                        {form.visibleToUserIds.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                            {form.visibleToUserIds.map((userId) => {
-                              const member = teamMembers.find((m) => String(m.id) === String(userId));
-                              const memberName = member?.name || `User #${userId}`;
-                              return (
-                                <div
-                                  key={userId}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-lg shadow-2xs"
+                        {/* Department Multi-Select List */}
+                        {(form.visibilityType === "department" || (!form.visibilityType && form.visibleToDepartmentIds && form.visibleToDepartmentIds.length > 0)) && (
+                          <div className="pt-1 space-y-1.5 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-semibold text-slate-700">Select Departments:</span>
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  onClick={() => {
+                                    const depts = getStoredDepartments();
+                                    setForm((p) => ({ ...p, visibleToDepartmentIds: depts.map((d) => d.id) }));
+                                  }}
+                                  className="text-blue-600 hover:underline font-medium cursor-pointer"
                                 >
-                                  <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[9px]">
-                                    {memberName.charAt(0)}
-                                  </div>
-                                  <span className="truncate max-w-[140px]">{memberName}</span>
-                                  {!isReadOnly && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setForm((p) => ({
-                                          ...p,
-                                          visibleToUserIds: p.visibleToUserIds.filter((id) => id !== userId),
-                                        }))
-                                      }
-                                      className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer ml-0.5"
-                                      title="Remove team member"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                  Select all
+                                </button>
+                                <span className="text-slate-300">|</span>
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  onClick={() => {
+                                    setForm((p) => ({ ...p, visibleToDepartmentIds: [] }));
+                                  }}
+                                  className="text-slate-500 hover:underline font-medium cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="max-h-40 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 bg-white p-1 rounded-lg border border-slate-200/80 shadow-2xs">
+                              {getStoredDepartments().map((dept) => {
+                                const deptIds = form.visibleToDepartmentIds || [];
+                                const isChecked = deptIds.some(
+                                  (id) => id === dept.id || id.toLowerCase() === dept.name.toLowerCase()
+                                );
+                                return (
+                                  <label
+                                    key={dept.id}
+                                    className="flex items-center gap-2 pt-1 pb-1 px-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded cursor-pointer select-none"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={isReadOnly}
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        let nextIds: string[];
+                                        if (e.target.checked) {
+                                          nextIds = [...deptIds.filter((id) => id !== dept.id && id.toLowerCase() !== dept.name.toLowerCase()), dept.id];
+                                        } else {
+                                          nextIds = deptIds.filter((id) => id !== dept.id && id.toLowerCase() !== dept.name.toLowerCase());
+                                        }
+                                        setForm((p) => ({ ...p, visibleToDepartmentIds: nextIds }));
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                                    />
+                                    <span className="truncate" title={dept.description || dept.name}>
+                                      {dept.name}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[10px] text-slate-400 italic">
+                              All users in selected departments (any role) can see this field.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* User Multi-Select List */}
+                        {(form.visibilityType === "user" || (!form.visibilityType && form.visibleToUserIds && form.visibleToUserIds.length > 0)) && (
+                          <div className="pt-1 space-y-1.5 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-semibold text-slate-700">Select Users:</span>
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  onClick={() => {
+                                    const members = getStoredTeamMembers();
+                                    setForm((p) => ({ ...p, visibleToUserIds: members.map((m) => String(m.id)) }));
+                                  }}
+                                  className="text-blue-600 hover:underline font-medium cursor-pointer"
+                                >
+                                  Select all
+                                </button>
+                                <span className="text-slate-300">|</span>
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  onClick={() => {
+                                    setForm((p) => ({ ...p, visibleToUserIds: [] }));
+                                  }}
+                                  className="text-slate-500 hover:underline font-medium cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="max-h-40 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 bg-white p-1 rounded-lg border border-slate-200/80 shadow-2xs">
+                              {getStoredTeamMembers().map((member) => {
+                                const memberIdStr = String(member.id);
+                                const userIds = form.visibleToUserIds || [];
+                                const isChecked = userIds.some(
+                                  (id) => String(id) === memberIdStr || (member.email && String(id).toLowerCase() === member.email.toLowerCase())
+                                );
+                                return (
+                                  <label
+                                    key={memberIdStr}
+                                    className="flex items-center gap-2 pt-1 pb-1 px-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded cursor-pointer select-none"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={isReadOnly}
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        let nextIds: string[];
+                                        if (e.target.checked) {
+                                          nextIds = [...userIds.filter((id) => String(id) !== memberIdStr && (!member.email || String(id).toLowerCase() !== member.email.toLowerCase())), memberIdStr];
+                                        } else {
+                                          nextIds = userIds.filter((id) => String(id) !== memberIdStr && (!member.email || String(id).toLowerCase() !== member.email.toLowerCase()));
+                                        }
+                                        setForm((p) => ({ ...p, visibleToUserIds: nextIds }));
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                                    />
+                                    <div className="flex items-center justify-between w-full min-w-0 pr-1">
+                                      <span className="truncate font-medium">{member.name}</span>
+                                      {member.role && (
+                                        <span className="text-[10px] text-slate-400 truncate ml-1 shrink-0">
+                                          {member.role}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[10px] text-slate-400 italic">
+                              Only selected users and organization administrators can see this field.
+                            </p>
                           </div>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {!isAdmin && form.userVisibility === false && (
-                    <div className="p-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                      <span className="font-medium">User Visibility</span>
-                      <span className="text-[11px] text-slate-400 italic">Disabled by Administrator</span>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Admin Control (Scope Rules + Permissions) */}
-                  {isAdmin && (
+                  {isAdmin && !hideAdminControls && initialModule !== "client" && (
                     <div className="pt-3 border-t border-slate-100 space-y-2.5">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                         Admin Controls
