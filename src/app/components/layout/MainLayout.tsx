@@ -84,9 +84,12 @@ export default function MainLayout() {
         </div>
 
         {/* Top Bar Page Header Slot */}
-        <div className="flex-1 h-full px-10 sm:px-12 flex items-center justify-between gap-3 min-w-0">
+        <div className="flex-1 h-full px-6 sm:px-10 flex items-center justify-between gap-3 min-w-0">
           <div id="topbar-page-header" className="flex-1 flex items-center justify-between gap-3 min-w-0" />
-          <TopBarNotificationBell />
+          <div className="flex items-center gap-2.5 shrink-0">
+            <AIAssistantCapsule />
+            <TopBarNotificationBell />
+          </div>
         </div>
       </header>
 
@@ -95,7 +98,6 @@ export default function MainLayout() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto relative min-w-0 bg-[#fafafa]">
           <Outlet />
-          <AIAssistantCapsule />
         </main>
       </div>
 

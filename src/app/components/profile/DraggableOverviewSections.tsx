@@ -1529,25 +1529,14 @@ export default function DraggableOverviewSections({
             mode="runtime"
           />
         ) : key === "name" || key === "client_name" ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={rawVal || ""}
-              onChange={(e) => setVal(e.target.value)}
-              placeholder={mode === "service" ? (regField?.placeholder || "e.g. Initial Consultation") : "Enter full name"}
-              className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            />
-            {mode !== "service" && onNavigateToClient && client?.id && (
-              <button
-                type="button"
-                onClick={() => onNavigateToClient(client.id)}
-                className="text-[11px] text-blue-600 hover:underline shrink-0 font-medium whitespace-nowrap"
-              >
-                Profile →
-              </button>
-            )}
-          </div>
+          <input
+            type="text"
+            value={rawVal || ""}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder={mode === "service" ? (regField?.placeholder || "e.g. Initial Consultation") : "Enter full name"}
+            className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          />
         ) : key === "email" || key === "email_id" ? (
           <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-medium">
             <input
