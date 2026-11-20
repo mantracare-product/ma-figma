@@ -3,7 +3,8 @@ import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, Users, Shield, Layers, PhoneForwarded, Phone, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Workflow, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap, CornerDownRight
+  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Workflow, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap, CornerDownRight,
+  Building2, ChevronUp, CheckSquare, Square, Hash, ArrowUpDown
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ConditionCase, ConditionCaseRule } from "../../types/workflow";
@@ -25,6 +26,8 @@ import {
 } from "../../../lib/documentTemplatesStore";
 import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
 import { SelectFieldsModal } from "../help/FieldManager";
+import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
+import { getStoredDepartments } from "../../../lib/departmentStore";
 
 const STANDARD_CALL_FIELDS = [
   { key: "call_status", label: "Call Status", module: "call" },
@@ -136,6 +139,40 @@ export default function StepParametersFields({
     return allClientFields.filter((f) => isFieldMatchingOrg(f, scopeOrg));
   }, [allClientFields, scopingRules]);
   const customClientFields = scopedClientFields.filter((f) => f.source === "custom");
+
+  // Team members & departments for Assign Responsible parameters
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
+  useEffect(() => {
+    const handleUpdate = () => setTeamMembers(getStoredTeamMembers());
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+  }, []);
+
+  const availableDepartments = useMemo(() => {
+    const stored = getStoredDepartments().map((d) => d.name);
+    const fromMembers = teamMembers.map((m) => m.department).filter(Boolean) as string[];
+    const combined = Array.from(
+      new Set([...stored, ...fromMembers, "Clinical Operations", "Administration", "Customer Support", "Billing"])
+    );
+    return combined.filter(Boolean);
+  }, [teamMembers]);
+
+  const availableRoles = useMemo(() => {
+    const fromMembers = teamMembers.map((m) => m.role).filter(Boolean) as string[];
+    const standard = [
+      "Doctor / Physician",
+      "Ophthalmologist",
+      "Care Coordinator",
+      "Intake Specialist",
+      "Receptionist",
+      "Billing Specialist",
+      "Manager",
+      "Administration",
+      "Support Agent",
+      "Admin",
+    ];
+    return Array.from(new Set([...fromMembers, ...standard])).filter(Boolean);
+  }, [teamMembers]);
 
   // Local UI-only states
   const [conditionsSectionExpanded, setConditionsSectionExpanded] = useState(true);
@@ -2745,61 +2782,837 @@ export default function StepParametersFields({
               );
             })()}
 
-            {(stepKey === "assignhuman" || stepKey === "assign-responsible") && (
-              <div className="space-y-4 p-4 border border-slate-200 rounded-2xl bg-slate-50/50">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-                        Assign Responsible
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        Filter by Entity, Role, or distribute across All Users
-                      </span>
+            {(stepKey === "assignhuman" || stepKey === "assign-responsible") && (() => {
+              const currentScope: "department" | "role" | "user" =
+                params.assignScope ||
+                (params.assignmentFilter === "role" ? "role" : params.assignmentFilter === "entity" || params.assignmentFilter === "user" ? "user" : "department");
+
+              const selectedDepts: string[] = Array.isArray(params.selectedDepartments)
+                ? params.selectedDepartments
+                : params.assignedDepartment
+                ? [params.assignedDepartment]
+                : availableDepartments.length > 0
+                ? [availableDepartments[0]]
+                : [];
+
+              const selectedRoles: string[] = Array.isArray(params.selectedRoles)
+                ? params.selectedRoles
+                : params.assignedRole
+                ? [params.assignedRole]
+                : availableRoles.length > 0
+                ? [availableRoles[0]]
+                : [];
+
+              const selectedUsers: (string | number)[] = Array.isArray(params.selectedUsers)
+                ? params.selectedUsers
+                : params.assignedUser
+                ? [params.assignedUser]
+                : [];
+
+              const scopeUserSelections: Record<string, (string | number)[]> = params.scopeUserSelections || {};
+              const userSequences: Record<string, Record<string, number>> = params.userSequences || {};
+              const distributionPriority: "round_robin" | "strict_priority" | "random" =
+                params.distributionPriority || "round_robin";
+
+              // Helpers to get members for a department or role
+              const getDeptMembers = (deptName: string): TeamMember[] => {
+                const dLower = deptName.toLowerCase();
+                return teamMembers.filter((m) => {
+                  if (m.department && m.department.toLowerCase() === dLower) return true;
+                  if (m.departments && m.departments.some((d) => d.toLowerCase() === dLower)) return true;
+                  if (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.department?.toLowerCase() === dLower)) return true;
+                  return false;
+                });
+              };
+
+              const getRoleMembers = (roleName: string): TeamMember[] => {
+                const rLower = roleName.toLowerCase();
+                return teamMembers.filter((m) => {
+                  if (m.role && m.role.toLowerCase() === rLower) return true;
+                  if (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.role?.toLowerCase() === rLower)) return true;
+                  return false;
+                });
+              };
+
+              // Helper to toggle a selection in an array
+              const toggleItem = (list: string[], item: string) => {
+                return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+              };
+
+              // Helper to toggle user selection within a scopeKey
+              const toggleUserInScope = (scopeKey: string, userId: string | number, allMembers: TeamMember[]) => {
+                const currentSelected = scopeUserSelections[scopeKey];
+                let next: (string | number)[];
+                if (!currentSelected || currentSelected.length === 0) {
+                  // Was "all assigned", now deselect this one, keeping all others selected
+                  next = allMembers.map((m) => m.id).filter((id) => String(id) !== String(userId));
+                } else if (currentSelected.some((id) => String(id) === String(userId))) {
+                  next = currentSelected.filter((id) => String(id) !== String(userId));
+                } else {
+                  next = [...currentSelected, userId];
+                }
+                onChange({
+                  scopeUserSelections: {
+                    ...scopeUserSelections,
+                    [scopeKey]: next,
+                  },
+                });
+              };
+
+              // Helper to reset to all members assigned
+              const resetAllUsersInScope = (scopeKey: string) => {
+                const next = { ...scopeUserSelections };
+                delete next[scopeKey];
+                onChange({ scopeUserSelections: next });
+              };
+
+              // Helper to reorder sequence within a scope
+              const moveUserSequence = (
+                scopeKey: string,
+                sortedMembers: TeamMember[],
+                index: number,
+                direction: "up" | "down"
+              ) => {
+                const targetIndex = direction === "up" ? index - 1 : index + 1;
+                if (targetIndex < 0 || targetIndex >= sortedMembers.length) return;
+
+                const currentMap = { ...(userSequences[scopeKey] || {}) };
+                sortedMembers.forEach((m, idx) => {
+                  if (currentMap[String(m.id)] === undefined) {
+                    currentMap[String(m.id)] = idx + 1;
+                  }
+                });
+
+                const userA = sortedMembers[index];
+                const userB = sortedMembers[targetIndex];
+
+                const seqA = currentMap[String(userA.id)] ?? index + 1;
+                const seqB = currentMap[String(userB.id)] ?? targetIndex + 1;
+
+                currentMap[String(userA.id)] = seqB;
+                currentMap[String(userB.id)] = seqA;
+
+                onChange({
+                  userSequences: {
+                    ...userSequences,
+                    [scopeKey]: currentMap,
+                  },
+                });
+              };
+
+              const setUserSequenceNumber = (scopeKey: string, userId: string | number, newSeq: number) => {
+                const currentMap = { ...(userSequences[scopeKey] || {}) };
+                currentMap[String(userId)] = Math.max(1, newSeq);
+                onChange({
+                  userSequences: {
+                    ...userSequences,
+                    [scopeKey]: currentMap,
+                  },
+                });
+              };
+
+              return (
+                <div className="space-y-5 p-5 border border-slate-200 rounded-2xl bg-slate-50/50">
+                  {/* Header Title */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
+                          Assign Responsible
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Configure assignment scope by Department, Role, or specific User
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 1. Filter Mode Selector: Entity, Role, All Users */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Assignment Filter
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: "all_users", label: "All Users", icon: Users, desc: "Auto-distribution" },
-                      { id: "role", label: "By Role", icon: Shield, desc: "Filter by role" },
-                      { id: "entity", label: "By Entity", icon: Layers, desc: "Entity owner" },
-                    ].map((tab) => {
-                      const Icon = tab.icon;
-                      const isSelected = (params.assignmentFilter || "all_users") === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => onChange({ assignmentFilter: tab.id })}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                            isSelected
-                              ? "bg-blue-50/90 border-blue-500 text-blue-900 shadow-2xs ring-1 ring-blue-500/20"
-                              : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
-                            <span className="text-xs font-bold">{tab.label}</span>
+                  {/* 1. Choose Scope: Department | Role | User */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Choose Scope
+                    </label>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {[
+                        { id: "department", label: "Department", icon: Building2, desc: "Scope by department" },
+                        { id: "role", label: "Role", icon: Shield, desc: "Scope by role" },
+                        { id: "user", label: "User", icon: Users, desc: "Scope by specific users" },
+                      ].map((tab) => {
+                        const Icon = tab.icon;
+                        const isSelected = currentScope === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() =>
+                              onChange({
+                                assignScope: tab.id,
+                                assignmentFilter: tab.id,
+                              })
+                            }
+                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                              isSelected
+                                ? "bg-blue-50/90 border-blue-500 text-blue-900 shadow-2xs ring-1 ring-blue-500/20"
+                                : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Icon className={`w-4 h-4 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                              <span className="text-xs font-bold">{tab.label}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium">{tab.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── 2. SCOPE: DEPARTMENT ── */}
+                  {currentScope === "department" && (
+                    <div className="space-y-4">
+                      {/* Department Multi-Select Picker */}
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            Select Departments (Multi-Select)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedDepartments: [...availableDepartments] })}
+                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedDepartments: [] })}
+                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
+                            >
+                              Clear
+                            </button>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-medium">{tab.desc}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                        </div>
 
-                {/* 2. When ALL USERS is selected: show Priority (Round Robin, Random) */}
-                {(params.assignmentFilter || "all_users") === "all_users" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {availableDepartments.map((deptName) => {
+                            const isChecked = selectedDepts.includes(deptName);
+                            const membersCount = getDeptMembers(deptName).length;
+                            return (
+                              <button
+                                key={deptName}
+                                type="button"
+                                onClick={() =>
+                                  onChange({
+                                    selectedDepartments: toggleItem(selectedDepts, deptName),
+                                  })
+                                }
+                                className={`px-3 py-2 rounded-lg border text-left text-xs font-medium transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                  isChecked
+                                    ? "bg-blue-50/80 border-blue-400 text-blue-900 font-semibold"
+                                    : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <div
+                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                      isChecked
+                                        ? "bg-blue-600 border-blue-600 text-white"
+                                        : "border-slate-300 bg-white"
+                                    }`}
+                                  >
+                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="truncate">{deptName}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
+                                  {membersCount} {membersCount === 1 ? "member" : "members"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Department Users & Sequencing */}
+                      {selectedDepts.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                          Please select one or more departments above to configure user assignments.
+                        </div>
+                      ) : (
+                        selectedDepts.map((dept) => {
+                          const allMembers = getDeptMembers(dept);
+                          const customSelected = scopeUserSelections[dept];
+                          const isAllAssigned =
+                            !customSelected ||
+                            customSelected.length === 0 ||
+                            customSelected.length === allMembers.length;
+
+                          const sortedMembers = [...allMembers].sort((a, b) => {
+                            const seqA = userSequences[dept]?.[String(a.id)] ?? 999;
+                            const seqB = userSequences[dept]?.[String(b.id)] ?? 999;
+                            return seqA - seqB;
+                          });
+
+                          return (
+                            <div
+                              key={dept}
+                              className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs"
+                            >
+                              {/* Department Header */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                                  <span className="text-xs font-bold text-slate-900">{dept}</span>
+                                  <span className="text-[10px] text-slate-400">
+                                    ({allMembers.length} {allMembers.length === 1 ? "member" : "members"})
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {isAllAssigned ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <Check className="w-3 h-3 stroke-[2.5]" />
+                                      All Users Assigned
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                        Custom ({customSelected.length} of {allMembers.length})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => resetAllUsersInScope(dept)}
+                                        className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
+                                      >
+                                        Assign All
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-[11px] text-slate-500">
+                                {isAllAssigned
+                                  ? "All active members in this department are assigned by default. Check individual members below to restrict assignment, and use priority arrows to set the assignment sequence."
+                                  : "Only checked members in this department are assigned. Adjust the sequence order below."}
+                              </p>
+
+                              {/* Members List with Sequencing */}
+                              {allMembers.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic py-2">
+                                  No team members currently assigned to {dept}.
+                                </p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {sortedMembers.map((member, idx) => {
+                                    const isUserChecked =
+                                      isAllAssigned ||
+                                      (customSelected && customSelected.some((id) => String(id) === String(member.id)));
+                                    const seq = userSequences[dept]?.[String(member.id)] ?? idx + 1;
+
+                                    return (
+                                      <div
+                                        key={member.id}
+                                        className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+                                          isUserChecked
+                                            ? "bg-slate-50/70 border-slate-200"
+                                            : "bg-white border-slate-100 opacity-50"
+                                        }`}
+                                      >
+                                        {/* User Checkbox & Info */}
+                                        <div
+                                          onClick={() => toggleUserInScope(dept, member.id, allMembers)}
+                                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
+                                        >
+                                          <div
+                                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                              isUserChecked
+                                                ? "bg-blue-600 border-blue-600 text-white"
+                                                : "border-slate-300 bg-white"
+                                            }`}
+                                          >
+                                            {isUserChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                          </div>
+
+                                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                            {member.name
+                                              ? member.name
+                                                  .split(" ")
+                                                  .map((n) => n[0])
+                                                  .slice(0, 2)
+                                                  .join("")
+                                                  .toUpperCase()
+                                              : "U"}
+                                          </div>
+
+                                          <div className="min-w-0 flex-1">
+                                            <span className="text-xs font-semibold text-slate-800 block truncate">
+                                              {member.name}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 block truncate">
+                                              {member.role || "Team Member"} • {member.email}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* User Sequence / Priority Controls */}
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                              Seq
+                                            </span>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max="99"
+                                              value={seq}
+                                              onChange={(e) =>
+                                                setUserSequenceNumber(dept, member.id, parseInt(e.target.value) || 1)
+                                              }
+                                              className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
+                                            />
+                                          </div>
+
+                                          <div className="flex flex-col">
+                                            <button
+                                              type="button"
+                                              disabled={idx === 0}
+                                              onClick={() => moveUserSequence(dept, sortedMembers, idx, "up")}
+                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                              title="Move up priority"
+                                            >
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={idx === sortedMembers.length - 1}
+                                              onClick={() => moveUserSequence(dept, sortedMembers, idx, "down")}
+                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                              title="Move down priority"
+                                            >
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── 3. SCOPE: ROLE ── */}
+                  {currentScope === "role" && (
+                    <div className="space-y-4">
+                      {/* Role Multi-Select Picker */}
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            Select Roles (Multi-Select)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedRoles: [...availableRoles] })}
+                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedRoles: [] })}
+                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {availableRoles.map((roleName) => {
+                            const isChecked = selectedRoles.includes(roleName);
+                            const membersCount = getRoleMembers(roleName).length;
+                            return (
+                              <button
+                                key={roleName}
+                                type="button"
+                                onClick={() =>
+                                  onChange({
+                                    selectedRoles: toggleItem(selectedRoles, roleName),
+                                  })
+                                }
+                                className={`px-3 py-2 rounded-lg border text-left text-xs font-medium transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                  isChecked
+                                    ? "bg-blue-50/80 border-blue-400 text-blue-900 font-semibold"
+                                    : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <div
+                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                      isChecked
+                                        ? "bg-blue-600 border-blue-600 text-white"
+                                        : "border-slate-300 bg-white"
+                                    }`}
+                                  >
+                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="truncate">{roleName}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
+                                  {membersCount} {membersCount === 1 ? "member" : "members"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Role Users & Sequencing */}
+                      {selectedRoles.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                          Please select one or more roles above to configure user assignments.
+                        </div>
+                      ) : (
+                        selectedRoles.map((roleName) => {
+                          const allMembers = getRoleMembers(roleName);
+                          const customSelected = scopeUserSelections[roleName];
+                          const isAllAssigned =
+                            !customSelected ||
+                            customSelected.length === 0 ||
+                            customSelected.length === allMembers.length;
+
+                          const sortedMembers = [...allMembers].sort((a, b) => {
+                            const seqA = userSequences[roleName]?.[String(a.id)] ?? 999;
+                            const seqB = userSequences[roleName]?.[String(b.id)] ?? 999;
+                            return seqA - seqB;
+                          });
+
+                          return (
+                            <div
+                              key={roleName}
+                              className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs"
+                            >
+                              {/* Role Header */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="w-4 h-4 text-blue-600 shrink-0" />
+                                  <span className="text-xs font-bold text-slate-900">{roleName}</span>
+                                  <span className="text-[10px] text-slate-400">
+                                    ({allMembers.length} {allMembers.length === 1 ? "member" : "members"})
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {isAllAssigned ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <Check className="w-3 h-3 stroke-[2.5]" />
+                                      All Users Assigned
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                        Custom ({customSelected.length} of {allMembers.length})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => resetAllUsersInScope(roleName)}
+                                        className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
+                                      >
+                                        Assign All
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-[11px] text-slate-500">
+                                {isAllAssigned
+                                  ? "All active members with this role are assigned by default. Check individual members below to restrict assignment, and use priority arrows to set the assignment sequence."
+                                  : "Only checked members with this role are assigned. Adjust the sequence order below."}
+                              </p>
+
+                              {/* Members List with Sequencing */}
+                              {allMembers.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic py-2">
+                                  No team members currently have the role {roleName}.
+                                </p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {sortedMembers.map((member, idx) => {
+                                    const isUserChecked =
+                                      isAllAssigned ||
+                                      (customSelected && customSelected.some((id) => String(id) === String(member.id)));
+                                    const seq = userSequences[roleName]?.[String(member.id)] ?? idx + 1;
+
+                                    return (
+                                      <div
+                                        key={member.id}
+                                        className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+                                          isUserChecked
+                                            ? "bg-slate-50/70 border-slate-200"
+                                            : "bg-white border-slate-100 opacity-50"
+                                        }`}
+                                      >
+                                        {/* User Checkbox & Info */}
+                                        <div
+                                          onClick={() => toggleUserInScope(roleName, member.id, allMembers)}
+                                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
+                                        >
+                                          <div
+                                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                              isUserChecked
+                                                ? "bg-blue-600 border-blue-600 text-white"
+                                                : "border-slate-300 bg-white"
+                                            }`}
+                                          >
+                                            {isUserChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                          </div>
+
+                                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                            {member.name
+                                              ? member.name
+                                                  .split(" ")
+                                                  .map((n) => n[0])
+                                                  .slice(0, 2)
+                                                  .join("")
+                                                  .toUpperCase()
+                                              : "U"}
+                                          </div>
+
+                                          <div className="min-w-0 flex-1">
+                                            <span className="text-xs font-semibold text-slate-800 block truncate">
+                                              {member.name}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 block truncate">
+                                              {member.department || "General"} • {member.email}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* User Sequence / Priority Controls */}
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                              Seq
+                                            </span>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max="99"
+                                              value={seq}
+                                              onChange={(e) =>
+                                                setUserSequenceNumber(roleName, member.id, parseInt(e.target.value) || 1)
+                                              }
+                                              className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
+                                            />
+                                          </div>
+
+                                          <div className="flex flex-col">
+                                            <button
+                                              type="button"
+                                              disabled={idx === 0}
+                                              onClick={() => moveUserSequence(roleName, sortedMembers, idx, "up")}
+                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                              title="Move up priority"
+                                            >
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={idx === sortedMembers.length - 1}
+                                              onClick={() => moveUserSequence(roleName, sortedMembers, idx, "down")}
+                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                              title="Move down priority"
+                                            >
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── 4. SCOPE: USER ── */}
+                  {currentScope === "user" && (
+                    <div className="space-y-4">
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            Select Users (Multi-Select)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedUsers: teamMembers.map((m) => m.id) })}
+                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ selectedUsers: [] })}
+                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-500">
+                          {selectedUsers.length === 0
+                            ? "All active team members are assigned by default. Check specific members below to restrict assignment."
+                            : `${selectedUsers.length} of ${teamMembers.length} team members selected. Set priority/sequence for each user below.`}
+                        </p>
+
+                        {/* List of Users with Sequence Controls */}
+                        {(() => {
+                          const activeUsers =
+                            selectedUsers.length > 0
+                              ? teamMembers.filter((m) => selectedUsers.some((id) => String(id) === String(m.id)))
+                              : teamMembers;
+
+                          const sortedUsers = [...activeUsers].sort((a, b) => {
+                            const seqA = userSequences["user"]?.[String(a.id)] ?? 999;
+                            const seqB = userSequences["user"]?.[String(b.id)] ?? 999;
+                            return seqA - seqB;
+                          });
+
+                          return (
+                            <div className="space-y-1.5">
+                              {sortedUsers.map((member, idx) => {
+                                const isChecked =
+                                  selectedUsers.length === 0 ||
+                                  selectedUsers.some((id) => String(id) === String(member.id));
+                                const seq = userSequences["user"]?.[String(member.id)] ?? idx + 1;
+
+                                return (
+                                  <div
+                                    key={member.id}
+                                    className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+                                      isChecked
+                                        ? "bg-slate-50/70 border-slate-200"
+                                        : "bg-white border-slate-100 opacity-50"
+                                    }`}
+                                  >
+                                    <div
+                                      onClick={() => {
+                                        const current = selectedUsers;
+                                        let next: (string | number)[];
+                                        if (current.length === 0) {
+                                          next = teamMembers
+                                            .map((m) => m.id)
+                                            .filter((id) => String(id) !== String(member.id));
+                                        } else if (current.some((id) => String(id) === String(member.id))) {
+                                          next = current.filter((id) => String(id) !== String(member.id));
+                                        } else {
+                                          next = [...current, member.id];
+                                        }
+                                        onChange({ selectedUsers: next });
+                                      }}
+                                      className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
+                                    >
+                                      <div
+                                        className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                          isChecked
+                                            ? "bg-blue-600 border-blue-600 text-white"
+                                            : "border-slate-300 bg-white"
+                                        }`}
+                                      >
+                                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                      </div>
+
+                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                        {member.name
+                                          ? member.name
+                                              .split(" ")
+                                              .map((n) => n[0])
+                                              .slice(0, 2)
+                                              .join("")
+                                              .toUpperCase()
+                                          : "U"}
+                                      </div>
+
+                                      <div className="min-w-0 flex-1">
+                                        <span className="text-xs font-semibold text-slate-800 block truncate">
+                                          {member.name}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 block truncate">
+                                          {member.department || "Clinical"} • {member.role || "Member"} • {member.email}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Sequence control */}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                          Seq
+                                        </span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="99"
+                                          value={seq}
+                                          onChange={(e) =>
+                                            setUserSequenceNumber("user", member.id, parseInt(e.target.value) || 1)
+                                          }
+                                          className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
+                                        />
+                                      </div>
+
+                                      <div className="flex flex-col">
+                                        <button
+                                          type="button"
+                                          disabled={idx === 0}
+                                          onClick={() => moveUserSequence("user", sortedUsers, idx, "up")}
+                                          className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                          title="Move up priority"
+                                        >
+                                          <ChevronUp className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={idx === sortedUsers.length - 1}
+                                          onClick={() => moveUserSequence("user", sortedUsers, idx, "down")}
+                                          className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
+                                          title="Move down priority"
+                                        >
+                                          <ChevronDown className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── 5. DISTRIBUTION PRIORITY ── */}
                   <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
                     <div>
                       <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
@@ -2808,22 +3621,28 @@ export default function StepParametersFields({
                       <p className="text-[11px] text-slate-500 mb-2.5">
                         Choose how assignments are distributed across team members:
                       </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         {[
                           {
                             id: "round_robin",
                             label: "Round Robin",
                             badge: "Sequential",
-                            desc: "Cycles through team members in order for equal workload distribution.",
+                            desc: "Cycles through team members in priority order for equal workload distribution.",
+                          },
+                          {
+                            id: "strict_priority",
+                            label: "Strict Priority",
+                            badge: "Waterfall",
+                            desc: "Assigns to Priority 1 first; cascades to next priority members if busy or off-duty.",
                           },
                           {
                             id: "random",
                             label: "Random",
                             badge: "Balanced",
-                            desc: "Randomly distributes assignments among all active team members.",
+                            desc: "Randomly distributes assignments among all active assigned team members.",
                           },
                         ].map((prio) => {
-                          const isSelected = (params.distributionPriority || "round_robin") === prio.id;
+                          const isSelected = distributionPriority === prio.id;
                           return (
                             <label
                               key={prio.id}
@@ -2849,7 +3668,9 @@ export default function StepParametersFields({
                                     {prio.badge}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-500 leading-tight block mt-1">{prio.desc}</span>
+                                <span className="text-[10px] text-slate-500 leading-tight block mt-1">
+                                  {prio.desc}
+                                </span>
                               </div>
                             </label>
                           );
@@ -2857,104 +3678,9 @@ export default function StepParametersFields({
                       </div>
                     </div>
                   </div>
-                )}
-
-                {/* 3. When ROLE is selected */}
-                {params.assignmentFilter === "role" && (
-                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
-                        Select Target Role
-                      </label>
-                      <select
-                        value={params.assignedRole || "Care Coordinator"}
-                        onChange={(e) => onChange({ assignedRole: e.target.value })}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer font-medium"
-                      >
-                        {[
-                          "Doctor / Physician",
-                          "Care Coordinator",
-                          "Intake Specialist",
-                          "Receptionist",
-                          "Billing Specialist",
-                          "Manager",
-                          "Administration",
-                          "Support Agent",
-                        ].map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
-                        Role Distribution Priority
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: "round_robin", label: "Round Robin (Role)" },
-                          { id: "random", label: "Random (Role)" },
-                        ].map((opt) => {
-                          const isSelected = (params.distributionPriority || "round_robin") === opt.id;
-                          return (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => onChange({ distributionPriority: opt.id })}
-                              className={`py-2 px-3 text-xs font-semibold rounded-xl border text-center transition-all cursor-pointer ${
-                                isSelected
-                                  ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
-                                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. When ENTITY is selected */}
-                {params.assignmentFilter === "entity" && (
-                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
-                        Entity Responsible Source
-                      </label>
-                      <select
-                        value={params.entityAssignee || "process_owner"}
-                        onChange={(e) => onChange({ entityAssignee: e.target.value })}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer font-medium"
-                      >
-                        <option value="process_owner">Current Process / Workflow Owner</option>
-                        <option value="client_doctor">Client Primary Attending Doctor</option>
-                        <option value="client_manager">Client Relationship / Account Manager</option>
-                        <option value="appointment_host">Appointment Host Practitioner</option>
-                        <option value="call_agent">Call Handling Agent</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Fallback Team Member (if entity has no owner)
-                      </label>
-                      <select
-                        value={assignedUser}
-                        onChange={(e) => onChange({ assignedUser: e.target.value })}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 outline-none cursor-pointer"
-                      >
-                        <option value="">Unassigned</option>
-                        {availableEmployees.map((emp) => (
-                          <option key={emp.id} value={emp.id}>{emp.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {(stepKey === "callaction" || stepKey === "call-transfer" || stepKey === "call-transfer-human" || stepKey === "call-transfer-ai") && (
               <div className="space-y-4">

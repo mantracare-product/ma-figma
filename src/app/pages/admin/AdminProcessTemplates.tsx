@@ -1663,6 +1663,13 @@ export default function AdminProcessTemplates() {
 
   // Assign to Human / Call Action states
   const [assignedUser, setAssignedUser] = useState<string>("Select user...");
+  const [assignScope, setAssignScope] = useState<string>("department");
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
+  const [scopeUserSelections, setScopeUserSelections] = useState<Record<string, any>>({});
+  const [userSequences, setUserSequences] = useState<Record<string, any>>({});
+  const [distributionPriority, setDistributionPriority] = useState<string>("round_robin");
 
   // WhatsApp / SMS / Email states
   const [templateId, setTemplateId] = useState<string>("");
@@ -1844,7 +1851,11 @@ export default function AdminProcessTemplates() {
 
   const STEP_PARAM_FIELDS: Record<string, string[]> = {
     fieldupdate: ["fieldUpdateBlocks", ...CONDITION_FIELDS],
-    assignhuman: ["assignedUser", "assignmentFilter", "assignedRole", "entityAssignee", "distributionPriority", ...CONDITION_FIELDS],
+    assignhuman: [
+      "assignedUser", "assignmentFilter", "assignScope", "selectedDepartments", "selectedRoles",
+      "selectedUsers", "scopeUserSelections", "userSequences", "assignedRole", "entityAssignee",
+      "distributionPriority", ...CONDITION_FIELDS
+    ],
     callaction: [
       "callActionTransferType", "callActionCountryCode", "callActionPhoneNumber",
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
@@ -1886,6 +1897,13 @@ export default function AdminProcessTemplates() {
   const stateGetters: Record<string, () => any> = {
     fieldUpdateBlocks: () => fieldUpdateBlocks,
     assignedUser: () => assignedUser,
+    assignScope: () => assignScope,
+    selectedDepartments: () => selectedDepartments,
+    selectedRoles: () => selectedRoles,
+    selectedUsers: () => selectedUsers,
+    scopeUserSelections: () => scopeUserSelections,
+    userSequences: () => userSequences,
+    distributionPriority: () => distributionPriority,
     callActionTransferType: () => callActionTransferType,
     callActionCountryCode: () => callActionCountryCode,
     callActionPhoneNumber: () => callActionPhoneNumber,
@@ -1968,6 +1986,13 @@ export default function AdminProcessTemplates() {
   const stateSetters: Record<string, (v: any) => void> = {
     fieldUpdateBlocks: setFieldUpdateBlocks,
     assignedUser: setAssignedUser,
+    assignScope: setAssignScope,
+    selectedDepartments: setSelectedDepartments,
+    selectedRoles: setSelectedRoles,
+    selectedUsers: setSelectedUsers,
+    scopeUserSelections: setScopeUserSelections,
+    userSequences: setUserSequences,
+    distributionPriority: setDistributionPriority,
     callActionTransferType: setCallActionTransferType,
     callActionCountryCode: setCallActionCountryCode,
     callActionPhoneNumber: setCallActionPhoneNumber,
