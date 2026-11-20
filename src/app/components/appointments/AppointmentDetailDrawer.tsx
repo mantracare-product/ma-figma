@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   Calendar,
@@ -19,6 +20,7 @@ import {
   Trash2,
   ArrowRight,
   ChevronRight,
+  ChevronLeft,
   ExternalLink,
   Eye,
   Layers,
@@ -32,6 +34,8 @@ import {
   XCircle,
   Mic,
   UserX,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
@@ -186,6 +190,7 @@ export default function AppointmentDetailDrawer({
   }, [appointment?.id]);
 
   const effectiveAppt = liveAppointment || appointment;
+  const [isActivityCollapsed, setIsActivityCollapsed] = useState(false);
 
   // Dynamic appointment process and workflow stages
   const appointmentProcess: Process = useMemo(() => {
@@ -859,14 +864,17 @@ export default function AppointmentDetailDrawer({
         {/* ── Scrollable Tab Body ── */}
         <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
           {/* ─────────────────────────────────────────────────────────────
-              TAB 1: OVERVIEW (2-Column Split: Sections on Left, Activity on Right)
+              TAB 1: OVERVIEW (Animated Collapsible Activity Shutter)
              ───────────────────────────────────────────────────────────── */}
           {activeTab === "overview" && (
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="flex flex-col lg:flex-row gap-6 items-start relative">
                 {/* LEFT COLUMN: Draggable Sections & Custom Fields */}
-                <div className="lg:col-span-5 space-y-5">
-
+                <motion.div
+                  layout
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex-1 min-w-0 space-y-5 w-full"
+                >
                   <DraggableOverviewSections
                     mode="appointment"
                     customFieldsModule="appointment"
@@ -876,27 +884,71 @@ export default function AppointmentDetailDrawer({
                     onFieldValueChange={handleFieldValueChange}
                     client={{ id: effectiveClientId, name: appointment.clientName, phone: appointment.clientPhone, email: appointment.clientEmail }}
                     pipelineStages={stages.map((s) => s.name)}
+                    columns={isActivityCollapsed ? 2 : 1}
                   />
-                </div>
+                </motion.div>
 
-                {/* RIGHT COLUMN: Real-Time Activity Feed */}
-                <div className="lg:col-span-7">
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                    <ActivityTab
-                      activity={activities}
-                      clientId={effectiveClientId}
-                      clientName={appointment.clientName}
-                      clientEmail={appointment.clientEmail}
-                      clientPhone={appointment.clientPhone}
-                      appointmentId={String(effectiveAppt?.id || appointment?.id || "")}
-                      processId={appointmentProcess?.id}
-                      processName={appointmentProcess?.name}
-                      onFillWithAi={handleFillFromScribe}
-                      onCloseParentDrawer={onClose}
-                      emptyMessage="No activity logs yet for this appointment"
-                    />
-                  </div>
-                </div>
+                {/* RIGHT COLUMN: Animated Shutter Activity Section OR Collapsed Trigger Handle */}
+                <AnimatePresence mode="wait" initial={false}>
+                  {isActivityCollapsed ? (
+                    <motion.div
+                      key="collapsed-appointment-handle"
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.2 }}
+                      className="shrink-0 sticky top-6 z-20"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setIsActivityCollapsed(false)}
+                        className="w-6 h-8 bg-white border border-slate-200 border-r-0 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-l-md shadow-xs flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50"
+                        title="Expand Activity"
+                        aria-label="Expand Activity"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="appointment-activity-sidebar"
+                      initial={{ width: 0, opacity: 0, x: 20 }}
+                      animate={{ width: "58%", opacity: 1, x: 0 }}
+                      exit={{ width: 0, opacity: 0, x: 20 }}
+                      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      className="w-full lg:w-[58%] overflow-visible shrink-0 relative"
+                    >
+                      {/* Small button ON the left vertical border of the activity section */}
+                      <button
+                        type="button"
+                        onClick={() => setIsActivityCollapsed(true)}
+                        className="absolute -left-3.5 top-6 z-30 w-7 h-7 bg-white border border-slate-200 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-full shadow-md flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50 hover:scale-105 active:scale-95"
+                        title="Collapse Activity"
+                        aria-label="Collapse Activity"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      <div className="w-full overflow-hidden rounded-xl">
+                        <div className="w-full min-w-[360px] bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                          <ActivityTab
+                            activity={activities}
+                            clientId={effectiveClientId}
+                            clientName={appointment.clientName}
+                            clientEmail={appointment.clientEmail}
+                            clientPhone={appointment.clientPhone}
+                            appointmentId={String(effectiveAppt?.id || appointment?.id || "")}
+                            processId={appointmentProcess?.id}
+                            processName={appointmentProcess?.name}
+                            onFillWithAi={handleFillFromScribe}
+                            onCloseParentDrawer={onClose}
+                            emptyMessage="No activity logs yet for this appointment"
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}

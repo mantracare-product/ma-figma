@@ -105,6 +105,7 @@ export interface DraggableOverviewSectionsProps {
   renderCustomSection?: (section: OverviewSection) => React.ReactNode;
   contactCategory?: string;
   pipelineStages?: Array<{ id?: string; name?: string } | string>;
+  columns?: 1 | 2;
 }
 
 
@@ -257,8 +258,8 @@ function isFieldVisibleToCurrentUser(
     (field.visibleToDepartmentIds && field.visibleToDepartmentIds.length > 0
       ? "department"
       : field.visibleToUserIds && field.visibleToUserIds.length > 0
-      ? "user"
-      : "all");
+        ? "user"
+        : "all");
 
   if (mode === "all") return true;
 
@@ -358,6 +359,7 @@ export default function DraggableOverviewSections({
   renderCustomSection,
   contactCategory,
   pipelineStages,
+  columns = 1,
 }: DraggableOverviewSectionsProps) {
   const effectiveContactCategory =
     contactCategory ||
@@ -944,8 +946,8 @@ export default function DraggableOverviewSections({
     const effectiveVal = (rawVal !== undefined && !isTableWithEmptyVal)
       ? rawVal
       : (regField?.defaultValue && typeof regField.defaultValue === "object" && "mode" in regField.defaultValue && regField.defaultValue.mode === "today")
-      ? new Date().toISOString().split("T")[0]
-      : regField?.defaultValue;
+        ? new Date().toISOString().split("T")[0]
+        : regField?.defaultValue;
 
     const setVal = (newVal: any) => {
       if (fieldValues[scopedKey] !== undefined || key.startsWith("med_")) {
@@ -955,7 +957,7 @@ export default function DraggableOverviewSections({
       }
       try {
         window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
-      } catch {}
+      } catch { }
     };
 
     // If not a system field AND not in allRegistryFields (which is filtered by activeOrganization), do NOT render!
@@ -973,6 +975,21 @@ export default function DraggableOverviewSections({
     const isRequiredMissing = highlightRequiredKeys.includes(key);
     const isThisFieldMenuOpen = activeFieldMenu?.sectionId === sectionId && activeFieldMenu?.fieldKey === key;
 
+    const isFullWidthField =
+      regField?.inputType === "table" ||
+      regField?.inputType === "group" ||
+      regField?.inputType === "group_repeatable" ||
+      regField?.inputType === "drawing" ||
+      regField?.inputType === "signature" ||
+      regField?.inputType === "richtext" ||
+      regField?.inputType === "textarea" ||
+      (regField?.textConfig?.textMode === "paragraph") ||
+      key === "coverages" ||
+      key === "prescribed_medications" ||
+      key === "medications" ||
+      key === "patient_instructions" ||
+      key === "patient_precautions";
+
     return (
       <div
         key={`${sectionId}-${key}-${index}`}
@@ -980,15 +997,14 @@ export default function DraggableOverviewSections({
         onDragStart={(e) => handleFieldDragStart(e, sectionId, index)}
         onDragOver={(e) => handleFieldDragOver(e, sectionId, index)}
         onDrop={(e) => handleFieldDrop(e, sectionId, index)}
-        className={`group relative rounded-lg transition-all ${isThisFieldMenuOpen ? "relative z-40" : ""} ${
-          isFieldDragged
-            ? "opacity-30 border-2 border-dashed border-blue-400"
-            : isFieldDragOver
+        className={`group relative rounded-lg transition-all ${isThisFieldMenuOpen ? "relative z-40" : ""} ${isFieldDragged
+          ? "opacity-30 border-2 border-dashed border-blue-400"
+          : isFieldDragOver
             ? "bg-blue-50/70 border border-blue-300 ring-2 ring-blue-400/20"
             : isRequiredMissing
-            ? "bg-amber-50/40 border border-amber-300 shadow-2xs"
-            : "hover:bg-slate-50/70"
-        } p-2`}
+              ? "bg-amber-50/40 border border-amber-300 shadow-2xs"
+              : "hover:bg-slate-50/70"
+          } p-2 ${columns === 2 && isFullWidthField ? "md:col-span-2" : ""}`}
       >
         <div className="flex items-center justify-between gap-1.5 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -1066,9 +1082,8 @@ export default function DraggableOverviewSections({
                               <span>Configure</span>
                             </div>
                             <ChevronDown
-                              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${
-                                showConfigureSubmenu ? "rotate-180" : ""
-                              }`}
+                              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${showConfigureSubmenu ? "rotate-180" : ""
+                                }`}
                             />
                           </button>
 
@@ -1892,33 +1907,33 @@ export default function DraggableOverviewSections({
             recordData={fieldValues}
           />
         ) : regField?.inputType === "signature" ||
-            regField?.inputType === "drawing" ||
-            key.includes("signature") ||
-            key.includes("drawing") ||
-            (typeof rawVal === "string" && rawVal.startsWith("data:image")) ? (
+          regField?.inputType === "drawing" ||
+          key.includes("signature") ||
+          key.includes("drawing") ||
+          (typeof rawVal === "string" && rawVal.startsWith("data:image")) ? (
           <SignatureDrawingPad
             label={label}
             value={typeof rawVal === "string" ? rawVal : ""}
             onChange={(val) => setVal(val)}
           />
         ) : key === "symptoms" ||
-            key === "patient_instructions" ||
-            key === "patient_precautions" ||
-            regField?.key === "symptoms" ||
-            regField?.key === "patient_instructions" ||
-            regField?.key === "patient_precautions" ||
-            (Array.isArray(rawVal) && (rawVal.length === 0 || typeof rawVal[0] === "string")) ? (
+          key === "patient_instructions" ||
+          key === "patient_precautions" ||
+          regField?.key === "symptoms" ||
+          regField?.key === "patient_instructions" ||
+          regField?.key === "patient_precautions" ||
+          (Array.isArray(rawVal) && (rawVal.length === 0 || typeof rawVal[0] === "string")) ? (
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 min-h-[30px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
               {(() => {
                 const currentArr: string[] = Array.isArray(rawVal)
                   ? (rawVal as string[])
                   : typeof rawVal === "string" && rawVal.trim()
-                  ? rawVal
+                    ? rawVal
                       .split(/[\n;]+/)
                       .map((s: string) => s.replace(/^[•\-\s]+/, "").trim())
                       .filter(Boolean)
-                  : [];
+                    : [];
 
                 if (currentArr.length === 0) {
                   return (
@@ -1964,8 +1979,8 @@ export default function DraggableOverviewSections({
                     const arr: string[] = Array.isArray(rawVal)
                       ? [...rawVal]
                       : typeof rawVal === "string" && rawVal
-                      ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
-                      : [];
+                        ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
+                        : [];
                     if (!arr.includes(val)) {
                       setVal([...arr, val]);
                     }
@@ -1985,8 +2000,8 @@ export default function DraggableOverviewSections({
                     const arr: string[] = Array.isArray(rawVal)
                       ? [...rawVal]
                       : typeof rawVal === "string" && rawVal
-                      ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
-                      : [];
+                        ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
+                        : [];
                     if (!arr.includes(val)) {
                       setVal([...arr, val]);
                     }
@@ -2021,13 +2036,12 @@ export default function DraggableOverviewSections({
             <button
               type="button"
               onClick={() => setVal(rawVal === "Yes" ? "No" : "Yes")}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                rawVal === "Yes"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : rawVal === "No"
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${rawVal === "Yes"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : rawVal === "No"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+                }`}
             >
               {rawVal || "Select (Yes / No)"}
             </button>
@@ -2120,11 +2134,10 @@ export default function DraggableOverviewSections({
                     <DropdownMenuItem
                       key={opt.id}
                       onClick={() => setVal(opt.value)}
-                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
-                        isSelected
-                          ? "bg-blue-50 text-blue-700 font-semibold"
-                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
+                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${isSelected
+                        ? "bg-blue-50 text-blue-700 font-semibold"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                        }`}
                     >
                       <span className="truncate">{opt.label}</span>
                       {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
@@ -2138,11 +2151,10 @@ export default function DraggableOverviewSections({
                     <DropdownMenuItem
                       key={optVal}
                       onClick={() => setVal(optVal)}
-                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
-                        isSelected
-                          ? "bg-blue-50 text-blue-700 font-semibold"
-                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
+                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${isSelected
+                        ? "bg-blue-50 text-blue-700 font-semibold"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                        }`}
                     >
                       <span className="truncate">{optVal}</span>
                       {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
@@ -2209,12 +2221,12 @@ export default function DraggableOverviewSections({
               regField?.inputType === "email"
                 ? "email"
                 : regField?.inputType === "tel"
-                ? "tel"
-                : regField?.inputType === "date"
-                ? "date"
-                : regField?.inputType === "number"
-                ? "number"
-                : "text"
+                  ? "tel"
+                  : regField?.inputType === "date"
+                    ? "date"
+                    : regField?.inputType === "number"
+                      ? "number"
+                      : "text"
             }
             value={effectiveVal ?? ""}
             onChange={(e) => setVal(e.target.value)}
@@ -2250,15 +2262,13 @@ export default function DraggableOverviewSections({
               onDragStart={(e) => handleSectionDragStart(e, sIdx)}
               onDragOver={(e) => handleSectionDragOver(e, sIdx)}
               onDrop={(e) => handleSectionDrop(e, sIdx)}
-              className={`bg-white rounded-xl border transition-all shadow-xs ${
-                isThisSectionActive ? "overflow-visible relative z-30" : "overflow-hidden relative z-0"
-              } ${
-                isSectionDragged
+              className={`bg-white rounded-xl border transition-all shadow-xs ${isThisSectionActive ? "overflow-visible relative z-30" : "overflow-hidden relative z-0"
+                } ${isSectionDragged
                   ? "opacity-30 border-2 border-dashed border-blue-500"
                   : isSectionDragOver
-                  ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/30"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
+                    ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/30"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
             >
               {/* Section Header */}
               <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-white">
@@ -2352,7 +2362,8 @@ export default function DraggableOverviewSections({
 
               {/* Section Fields Area (Draggable & Droppable) */}
               <div
-                className="p-3 space-y-1 bg-white min-h-[50px]"
+                className={`p-3 bg-white min-h-[50px] ${columns === 2 ? "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 items-start" : "space-y-1"
+                  }`}
                 onDragOver={(e) => {
                   e.preventDefault();
                   if (draggedField && section.fieldKeys.length === 0) {
@@ -2366,9 +2377,11 @@ export default function DraggableOverviewSections({
                 }}
               >
                 {renderCustomSection && renderCustomSection(section) ? (
-                  renderCustomSection(section)
+                  <div className={columns === 2 ? "md:col-span-2" : ""}>
+                    {renderCustomSection(section)}
+                  </div>
                 ) : section.fieldKeys.length === 0 ? (
-                  <div className="py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                  <div className={`py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50 ${columns === 2 ? "md:col-span-2" : ""}`}>
                     <p className="text-xs text-slate-400 font-medium">
                       No fields in this section yet
                     </p>
@@ -2387,7 +2400,7 @@ export default function DraggableOverviewSections({
                   <>
                     {section.fieldKeys.map((key, fIdx) => renderFieldInput(key, section.id, fIdx))}
                     {canAddFields && (
-                      <div className="flex justify-end pt-2 pb-0.5 px-1">
+                      <div className={`flex justify-end pt-2 pb-0.5 px-1 ${columns === 2 ? "md:col-span-2" : ""}`}>
                         <button
                           type="button"
                           onClick={() => handleOpenSelectFieldForSection(section.id)}

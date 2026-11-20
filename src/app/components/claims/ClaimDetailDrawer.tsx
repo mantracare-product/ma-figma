@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   Shield,
@@ -23,6 +24,10 @@ import {
   HelpCircle,
   Edit,
   Trash2,
+  PanelRightClose,
+  PanelRightOpen,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import {
   Claim,
@@ -190,6 +195,7 @@ export default function ClaimDetailDrawer({
   const [activeTab, setActiveTab] = useState<"overview" | "documents" | "billing">("overview");
   const [copiedId, setCopiedId] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isActivityCollapsed, setIsActivityCollapsed] = useState(false);
 
   // Field Management Modals
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
@@ -872,13 +878,17 @@ export default function ClaimDetailDrawer({
         {/* ── Scrollable Body Area ── */}
         <div className="flex-1 overflow-y-auto bg-slate-50/50">
           {/* ─────────────────────────────────────────────────────────────
-              TAB 1: OVERVIEW (Draggable Sections Left + Activity Feed Right)
+              TAB 1: OVERVIEW (Animated Collapsible Activity Shutter)
              ───────────────────────────────────────────────────────────── */}
           {activeTab === "overview" && (
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="flex flex-col lg:flex-row gap-6 items-start relative">
                 {/* LEFT COLUMN: Draggable Overview Sections & Custom Fields */}
-                <div className="lg:col-span-5 space-y-5">
+                <motion.div
+                  layout
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex-1 min-w-0 space-y-5 w-full"
+                >
                   <DraggableOverviewSections
                     mode="claim"
                     customFieldsModule="claim"
@@ -893,25 +903,69 @@ export default function ClaimDetailDrawer({
                       phone: liveClaim.patientPhone || "",
                       email: fieldValues.client_email || "",
                     }}
+                    columns={isActivityCollapsed ? 2 : 1}
                   />
-                </div>
+                </motion.div>
 
-                {/* RIGHT COLUMN: Real-Time Activity Feed & Drawers */}
-                <div className="lg:col-span-7">
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                    <ActivityTab
-                      activity={activities}
-                      clientId={effectiveClientId}
-                      clientName={liveClaim.patientName || "Client"}
-                      clientPhone={liveClaim.patientPhone}
-                      claimId={liveClaim.id}
-                      processId={insuranceProcess.id}
-                      processName="Insurance and Claims"
-                      onCloseParentDrawer={onClose}
-                      emptyMessage={isCreateMode ? "No activity logs yet for this new claim. Save the claim to start tracking workflow history." : "No activity logs yet for this claim"}
-                    />
-                  </div>
-                </div>
+                {/* RIGHT COLUMN: Animated Shutter Activity Section OR Collapsed Trigger Handle */}
+                <AnimatePresence mode="wait" initial={false}>
+                  {isActivityCollapsed ? (
+                    <motion.div
+                      key="collapsed-claim-handle"
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.2 }}
+                      className="shrink-0 sticky top-6 z-20"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setIsActivityCollapsed(false)}
+                        className="w-6 h-8 bg-white border border-slate-200 border-r-0 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-l-md shadow-xs flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50"
+                        title="Expand Activity"
+                        aria-label="Expand Activity"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="claim-activity-sidebar"
+                      initial={{ width: 0, opacity: 0, x: 20 }}
+                      animate={{ width: "58%", opacity: 1, x: 0 }}
+                      exit={{ width: 0, opacity: 0, x: 20 }}
+                      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      className="w-full lg:w-[58%] overflow-visible shrink-0 relative"
+                    >
+                      {/* Small button ON the left vertical border of the activity section */}
+                      <button
+                        type="button"
+                        onClick={() => setIsActivityCollapsed(true)}
+                        className="absolute -left-3.5 top-6 z-30 w-7 h-7 bg-white border border-slate-200 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-full shadow-md flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50 hover:scale-105 active:scale-95"
+                        title="Collapse Activity"
+                        aria-label="Collapse Activity"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      <div className="w-full overflow-hidden rounded-xl">
+                        <div className="w-full min-w-[360px] bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                          <ActivityTab
+                            activity={activities}
+                            clientId={effectiveClientId}
+                            clientName={liveClaim.patientName || "Client"}
+                            clientPhone={liveClaim.patientPhone}
+                            claimId={liveClaim.id}
+                            processId={insuranceProcess.id}
+                            processName="Insurance and Claims"
+                            onCloseParentDrawer={onClose}
+                            emptyMessage={isCreateMode ? "No activity logs yet for this new claim. Save the claim to start tracking workflow history." : "No activity logs yet for this claim"}
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}

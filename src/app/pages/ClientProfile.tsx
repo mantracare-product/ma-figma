@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import {
-  Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
+  Search, Plus, X, FileText, Calendar, ChevronLeft, ChevronRight, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Wallet, CreditCard, AlertTriangle, Pencil, LayoutGrid, List, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
-  Tag, ShieldCheck, UserPlus, Info, UserX,
+  Tag, ShieldCheck, UserPlus, Info, UserX, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -931,6 +932,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
+  const [isActivityCollapsed, setIsActivityCollapsed] = useState(false);
 
   // Assign Process Multi-select & Stage state
   const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
@@ -2377,84 +2379,130 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         {/* Tab Content */}
         <div className="p-6 relative flex-1 overflow-y-auto bg-[#F8FAFC]">
 
-          {/* ── Overview Tab (2-Column Split View) ── */}
+          {/* ── Overview Tab (Animated Collapsible Activity Shutter) ── */}
           {activeProfileTab === "overview" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* LEFT COLUMN: Draggable Structured Information Sections */}
-                <div className="lg:col-span-5 space-y-5">
-                  <DraggableOverviewSections
-                    mode="client"
-                    client={client}
-                    sections={clientSections}
-                    contactCategory={clientContactType}
-                    onSectionsChange={handleSectionsChange}
-                    fieldValues={fieldValues}
-                    onFieldValueChange={handleFieldValueChange}
-                    selectedProcesses={selectedProcesses}
-                    onSelectedProcessesChange={(procs) => {
-                      setSelectedProcesses(procs);
-                      const clientIdStr = String(client.id);
-                      const stored = getStoredClients();
-                      const nextClients = stored.map((c) => {
-                        if (String(c.id).toLowerCase() !== clientIdStr.toLowerCase()) return c;
-                        return { ...c, processes: procs };
-                      });
-                      saveStoredClients(nextClients);
-                      setClients(nextClients);
-                      try {
-                        window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: nextClients }));
-                        window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
-                        window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientIdStr }));
-                      } catch {}
-                    }}
-                    availableProcesses={availableProcesses}
-                    customFieldsModule="client"
-                  />
-                </div>
+            <div className="flex flex-col lg:flex-row gap-6 items-start relative">
+              {/* LEFT COLUMN: Draggable Structured Information Sections */}
+              <motion.div
+                layout
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="flex-1 min-w-0 space-y-5 w-full"
+              >
+                <DraggableOverviewSections
+                  mode="client"
+                  client={client}
+                  sections={clientSections}
+                  contactCategory={clientContactType}
+                  onSectionsChange={handleSectionsChange}
+                  fieldValues={fieldValues}
+                  onFieldValueChange={handleFieldValueChange}
+                  selectedProcesses={selectedProcesses}
+                  onSelectedProcessesChange={(procs) => {
+                    setSelectedProcesses(procs);
+                    const clientIdStr = String(client.id);
+                    const stored = getStoredClients();
+                    const nextClients = stored.map((c) => {
+                      if (String(c.id).toLowerCase() !== clientIdStr.toLowerCase()) return c;
+                      return { ...c, processes: procs };
+                    });
+                    saveStoredClients(nextClients);
+                    setClients(nextClients);
+                    try {
+                      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: nextClients }));
+                      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+                      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientIdStr }));
+                    } catch {}
+                  }}
+                  availableProcesses={availableProcesses}
+                  customFieldsModule="client"
+                  columns={isActivityCollapsed ? 2 : 1}
+                />
+              </motion.div>
 
-                {/* RIGHT COLUMN: Full-Featured Activity Tab */}
-                <div className="lg:col-span-7">
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                    <ActivityTab
-                      activity={filteredDrawerActivities as any}
-                      processTabs={[
-                        { id: "all", name: "All" },
-                        ...drawerClientProcesses.map((p) => ({ id: p.id, name: p.name })),
-                      ]}
-                      activeProcessTab={activeProcessTabDrawer}
-                      onProcessTabChange={(tabId) => {
-                        setActiveProcessTabDrawer(tabId);
-                        setShowCallDetailsFromProfile(false);
-                      }}
-                      onOpenCallDetail={(callId) => {
-                        setSelectedCallId(callId);
-                        setShowCallDetailsFromProfile(true);
-                      }}
-                      clientId={client?.id ? String(client.id) : "CL-001"}
-                      clientName={client.name}
-                      clientEmail={client.email}
-                      clientPhone={client.phone}
-                      processId={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
-                      processName={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
-                      onFillWithAi={handleFillFromScribe}
-                      emptyMessage="No activity for this client yet"
-                      onOpenScheduleAppointment={() => {
-                        setActivityBookingValues((prev) => ({
-                          ...prev,
-                          client: {
-                            id: 0,
-                            name: client.name,
-                            email: client.email,
-                            phone: client.phone,
-                          },
-                        }));
-                        setShowScheduleApptFromActivity(true);
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
+              {/* RIGHT COLUMN: Animated Shutter Activity Section OR Collapsed Trigger Handle */}
+              <AnimatePresence mode="wait" initial={false}>
+                {isActivityCollapsed ? (
+                  <motion.div
+                    key="collapsed-client-handle"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    transition={{ duration: 0.2 }}
+                    className="shrink-0 sticky top-6 z-20"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsActivityCollapsed(false)}
+                      className="w-6 h-8 bg-white border border-slate-200 border-r-0 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-l-md shadow-xs flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50"
+                      title="Expand Activity"
+                      aria-label="Expand Activity"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="client-activity-sidebar"
+                    initial={{ width: 0, opacity: 0, x: 20 }}
+                    animate={{ width: "58%", opacity: 1, x: 0 }}
+                    exit={{ width: 0, opacity: 0, x: 20 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="w-full lg:w-[58%] overflow-visible shrink-0 relative"
+                  >
+                    {/* Small button ON the left vertical border of the activity section */}
+                    <button
+                      type="button"
+                      onClick={() => setIsActivityCollapsed(true)}
+                      className="absolute -left-3.5 top-6 z-30 w-7 h-7 bg-white border border-slate-200 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-full shadow-md flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50 hover:scale-105 active:scale-95"
+                      title="Collapse Activity"
+                      aria-label="Collapse Activity"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="w-full overflow-hidden rounded-xl">
+                      <div className="w-full min-w-[360px] bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                        <ActivityTab
+                          activity={filteredDrawerActivities as any}
+                          processTabs={[
+                            { id: "all", name: "All" },
+                            ...drawerClientProcesses.map((p) => ({ id: p.id, name: p.name })),
+                          ]}
+                          activeProcessTab={activeProcessTabDrawer}
+                          onProcessTabChange={(tabId) => {
+                            setActiveProcessTabDrawer(tabId);
+                            setShowCallDetailsFromProfile(false);
+                          }}
+                          onOpenCallDetail={(callId) => {
+                            setSelectedCallId(callId);
+                            setShowCallDetailsFromProfile(true);
+                          }}
+                          clientId={client?.id ? String(client.id) : "CL-001"}
+                          clientName={client.name}
+                          clientEmail={client.email}
+                          clientPhone={client.phone}
+                          processId={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
+                          processName={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
+                          onFillWithAi={handleFillFromScribe}
+                          emptyMessage="No activity for this client yet"
+                          onOpenScheduleAppointment={() => {
+                            setActivityBookingValues((prev) => ({
+                              ...prev,
+                              client: {
+                                id: 0,
+                                name: client.name,
+                                email: client.email,
+                                phone: client.phone,
+                              },
+                            }));
+                            setShowScheduleApptFromActivity(true);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 

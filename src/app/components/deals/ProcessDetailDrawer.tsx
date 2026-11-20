@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   ChevronDown,
@@ -16,6 +17,7 @@ import {
   Calendar,
   Pencil,
   ChevronRight,
+  ChevronLeft,
   LogIn,
   ArrowRightCircle,
   CheckCircle2,
@@ -48,6 +50,8 @@ import {
   AlertTriangle,
   Activity,
   Mic,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
@@ -270,6 +274,7 @@ export default function ProcessDetailDrawer({
   const navigate = useNavigate();
   const [draftText, setDraftText] = useState("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isActivityCollapsed, setIsActivityCollapsed] = useState(false);
 
   const clientId = client?.id || log?.clientId || "";
   const clientName = client?.name || log?.client || "—";
@@ -1157,13 +1162,17 @@ export default function ProcessDetailDrawer({
           {/* 5. Scrollable Tab Content */}
           <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
             {/* ─────────────────────────────────────────────────────────────
-                TAB 1: GENERAL (2-Column Split View)
+                TAB 1: GENERAL (Animated Collapsible Activity Shutter)
                ───────────────────────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="flex flex-col lg:flex-row gap-6 items-start relative">
                   {/* LEFT COLUMN: Draggable Contact Details & Process Information Sections */}
-                  <div className="lg:col-span-5 space-y-5">
+                  <motion.div
+                    layout
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="flex-1 min-w-0 space-y-5 w-full"
+                  >
                     <DraggableOverviewSections
                       mode="process"
                       client={client}
@@ -1179,45 +1188,89 @@ export default function ProcessDetailDrawer({
                       customFieldsModule="process"
                       highlightRequiredKeys={missingFieldKeys}
                       pipelineStages={activeStageList}
+                      columns={isActivityCollapsed ? 2 : 1}
                     />
-                  </div>
+                  </motion.div>
 
-                  {/* RIGHT COLUMN: Activity Tab or Admin Disclaimer */}
-                  <div className="lg:col-span-7">
-                    {isAdminPreview ? (
-                      <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center shadow-xs">
-                        <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
-                          <Activity className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Client Activity & Timeline
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
-                          Respective activity and timeline data of the client will be shown here.
-                        </p>
-                      </div>
+                  {/* RIGHT COLUMN: Animated Shutter Activity Section OR Collapsed Trigger Handle */}
+                  <AnimatePresence mode="wait" initial={false}>
+                    {isActivityCollapsed ? (
+                      <motion.div
+                        key="collapsed-process-handle"
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.2 }}
+                        className="shrink-0 sticky top-6 z-20"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setIsActivityCollapsed(false)}
+                          className="w-6 h-8 bg-white border border-slate-200 border-r-0 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-l-md shadow-xs flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50"
+                          title="Expand Activity"
+                          aria-label="Expand Activity"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                      </motion.div>
                     ) : (
-                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                        <ActivityTab
-                          activity={activity}
-                          onOpenActivity={onOpenActivity}
-                          onOpenCallDetail={(callId, entry) => {
-                            if (onOpenActivity && entry) onOpenActivity(entry);
-                          }}
-                          clientId={clientId}
-                          clientName={clientName}
-                          clientEmail={client?.email}
-                          clientPhone={client?.phone}
-                          processId={(log as any)?.processId || log?.process}
-                          processName={log?.process}
-                          onFillWithAi={handleFillFromScribe}
-                          onCloseParentDrawer={onClose}
-                          emptyMessage="No activity yet for this process"
-                          onOpenScheduleAppointment={onOpenScheduleAppointment}
-                        />
-                      </div>
+                      <motion.div
+                        key="process-activity-sidebar"
+                        initial={{ width: 0, opacity: 0, x: 20 }}
+                        animate={{ width: "58%", opacity: 1, x: 0 }}
+                        exit={{ width: 0, opacity: 0, x: 20 }}
+                        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                        className="w-full lg:w-[58%] overflow-visible shrink-0 relative"
+                      >
+                        {/* Small button ON the left vertical border of the activity section */}
+                        <button
+                          type="button"
+                          onClick={() => setIsActivityCollapsed(true)}
+                          className="absolute -left-3.5 top-6 z-30 w-7 h-7 bg-white border border-slate-200 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-full shadow-md flex items-center justify-center transition-all cursor-pointer hover:bg-slate-50 hover:scale-105 active:scale-95"
+                          title="Collapse Activity"
+                          aria-label="Collapse Activity"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+
+                        <div className="w-full overflow-hidden rounded-xl">
+                          {isAdminPreview ? (
+                            <div className="w-full min-w-[360px] bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center shadow-xs">
+                              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                                <Activity className="w-6 h-6" />
+                              </div>
+                              <h3 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Client Activity & Timeline
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                                Respective activity and timeline data of the client will be shown here.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="w-full min-w-[360px] bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                              <ActivityTab
+                                activity={activity}
+                                onOpenActivity={onOpenActivity}
+                                onOpenCallDetail={(callId, entry) => {
+                                  if (onOpenActivity && entry) onOpenActivity(entry);
+                                }}
+                                clientId={clientId}
+                                clientName={clientName}
+                                clientEmail={client?.email}
+                                clientPhone={client?.phone}
+                                processId={(log as any)?.processId || log?.process}
+                                processName={log?.process}
+                                onFillWithAi={handleFillFromScribe}
+                                onCloseParentDrawer={onClose}
+                                emptyMessage="No activity yet for this process"
+                                onOpenScheduleAppointment={onOpenScheduleAppointment}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
                     )}
-                  </div>
+                  </AnimatePresence>
                 </div>
 
                 {/* Modals for Field Manager */}
