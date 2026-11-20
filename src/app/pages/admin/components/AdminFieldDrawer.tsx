@@ -1061,6 +1061,8 @@ interface FieldFormState {
   showAlways: boolean;
   userVisibility: boolean;
   visibleToUserIds: string[];
+  visibleToDepartmentIds: string[];
+  visibilityType?: "all" | "department" | "user";
   sectionId: string;
   scopingRules: ScopingRule[];
   contactCategories: string[];
@@ -1197,6 +1199,8 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     showAlways: true,
     userVisibility: true,
     visibleToUserIds: [],
+    visibleToDepartmentIds: [],
+    visibilityType: "all",
     sectionId: "",
     scopingRules: [],
     contactCategories: [],
@@ -1336,6 +1340,8 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     showAlways: f.showAlways !== false,
     userVisibility: f.userVisibility !== false,
     visibleToUserIds: f.visibleToUserIds ? f.visibleToUserIds.map(String) : [],
+    visibleToDepartmentIds: f.visibleToDepartmentIds ? f.visibleToDepartmentIds.map(String) : [],
+    visibilityType: f.visibilityType || "all",
     sectionId: f.sectionId ?? "",
     scopingRules: rules,
     contactCategories: f.contactCategories ? [...f.contactCategories] : [],
@@ -2119,7 +2125,9 @@ export function AdminFieldDrawer({
       requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
-      visibleToUserIds: !isAdmin && form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
+      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : (field?.visibleToUserIds || undefined),
+      visibleToDepartmentIds: form.userVisibility !== false && (form.visibleToDepartmentIds?.length || 0) > 0 ? form.visibleToDepartmentIds : (field?.visibleToDepartmentIds || undefined),
+      visibilityType: form.visibilityType || field?.visibilityType,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       contactCategories: (form.selectedModules.includes("client") || form.module === "client") && form.contactCategories.length > 0

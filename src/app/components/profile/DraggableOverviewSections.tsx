@@ -37,12 +37,17 @@ import {
   Eraser,
   Eye,
   EyeOff,
+  Sliders,
+  Building2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS, FIELD_REGISTRY_EVENT, SECTION_REGISTRY_EVENT } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
+import { getStoredDepartments } from "../../../lib/departmentStore";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
@@ -238,6 +243,85 @@ const SignatureDrawingPad: React.FC<{
     </div>
   );
 };
+
+function isFieldVisibleToCurrentUser(
+  field: FieldDefinition,
+  user: any,
+  isAdmin: boolean
+): boolean {
+  if (isAdmin) return true;
+  if (!user) return true;
+
+  const mode =
+    field.visibilityType ||
+    (field.visibleToDepartmentIds && field.visibleToDepartmentIds.length > 0
+      ? "department"
+      : field.visibleToUserIds && field.visibleToUserIds.length > 0
+      ? "user"
+      : "all");
+
+  if (mode === "all") return true;
+
+  if (mode === "department") {
+    const deptIds = field.visibleToDepartmentIds;
+    if (!deptIds || deptIds.length === 0) return true;
+
+    const userDept = user.department?.toLowerCase();
+    const members = getStoredTeamMembers();
+    const currentMember = members.find(
+      (m) =>
+        (user.id && String(m.id) === String(user.id)) ||
+        (user.email && m.email?.toLowerCase() === user.email.toLowerCase())
+    );
+
+    const memberDepts = [
+      userDept,
+      currentMember?.department?.toLowerCase(),
+      ...(currentMember?.departments || []).map((d) => d.toLowerCase()),
+      ...(currentMember?.assignedDepartments || []).map((ad) => ad.department?.toLowerCase()),
+    ].filter(Boolean) as string[];
+
+    const allDepartments = getStoredDepartments();
+
+    return deptIds.some((allowedDeptIdOrName) => {
+      const allowedLower = allowedDeptIdOrName.toLowerCase();
+      const matchedDept = allDepartments.find(
+        (d) => d.id.toLowerCase() === allowedLower || d.name.toLowerCase() === allowedLower
+      );
+      const targetId = matchedDept ? matchedDept.id.toLowerCase() : allowedLower;
+      const targetName = matchedDept ? matchedDept.name.toLowerCase() : allowedLower;
+
+      return memberDepts.some((ud) => ud === targetId || ud === targetName);
+    });
+  }
+
+  if (mode === "user") {
+    const userIds = field.visibleToUserIds;
+    if (!userIds || userIds.length === 0) return true;
+
+    const currentUserId = user.id ? String(user.id) : "";
+    const currentUserEmail = user.email ? user.email.toLowerCase() : "";
+
+    const members = getStoredTeamMembers();
+    const currentMember = members.find(
+      (m) =>
+        (currentUserId && String(m.id) === currentUserId) ||
+        (currentUserEmail && m.email?.toLowerCase() === currentUserEmail)
+    );
+    const memberId = currentMember ? String(currentMember.id) : currentUserId;
+    const memberEmail = currentMember?.email?.toLowerCase() || currentUserEmail;
+
+    return userIds.some((idOrEmail) => {
+      const target = String(idOrEmail).toLowerCase();
+      return (
+        (memberId && target === memberId.toLowerCase()) ||
+        (memberEmail && target === memberEmail)
+      );
+    });
+  }
+
+  return true;
+}
 
 export default function DraggableOverviewSections({
   mode,
@@ -875,9 +959,15 @@ export default function DraggableOverviewSections({
       return null;
     }
 
+    // Respect field visibility for current user (organization administrators always see all fields)
+    if (regField && !isFieldVisibleToCurrentUser(regField, user, isUserAdmin)) {
+      return null;
+    }
+
     const label = regField?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
     const isRequiredMissing = highlightRequiredKeys.includes(key);
+    const isThisFieldMenuOpen = activeFieldMenu?.sectionId === sectionId && activeFieldMenu?.fieldKey === key;
 
     return (
       <div
@@ -886,7 +976,7 @@ export default function DraggableOverviewSections({
         onDragStart={(e) => handleFieldDragStart(e, sectionId, index)}
         onDragOver={(e) => handleFieldDragOver(e, sectionId, index)}
         onDrop={(e) => handleFieldDrop(e, sectionId, index)}
-        className={`group relative rounded-lg transition-all ${
+        className={`group relative rounded-lg transition-all ${isThisFieldMenuOpen ? "relative z-40" : ""} ${
           isFieldDragged
             ? "opacity-30 border-2 border-dashed border-blue-400"
             : isFieldDragOver
@@ -955,7 +1045,7 @@ export default function DraggableOverviewSections({
                       }}
                     />
                     <div
-                      className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-50 text-left animate-in fade-in zoom-in-95 duration-100"
+                      className="absolute right-0 top-full mt-1.5 w-72 max-w-[90vw] max-h-[min(520px,80vh)] overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-2xl py-1 z-50 text-left animate-in fade-in zoom-in-95 duration-100"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -1114,30 +1204,248 @@ export default function DraggableOverviewSections({
                                 />
                               </label>
 
-                              {/* User Visibility */}
-                              <div className="pt-2 border-t border-slate-200/80">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                                  User Visibility
-                                </label>
+                              {/* User Visibility Section */}
+                              <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                                    User Visibility
+                                  </label>
+                                  <span className="text-[10px] font-medium text-blue-600">
+                                    {(() => {
+                                      const vType = regField?.visibilityType || ((regField?.visibleToDepartmentIds && regField.visibleToDepartmentIds.length > 0) ? "department" : (regField?.visibleToUserIds && regField.visibleToUserIds.length > 0) ? "user" : "all");
+                                      if (vType === "department") {
+                                        const len = (regField?.visibleToDepartmentIds || []).length;
+                                        return len === 0 ? "All depts" : `${len} depts`;
+                                      }
+                                      if (vType === "user") {
+                                        const len = (regField?.visibleToUserIds || []).length;
+                                        return len === 0 ? "All users" : `${len} users`;
+                                      }
+                                      return "All Users";
+                                    })()}
+                                  </span>
+                                </div>
+
+                                {/* Scope selector */}
                                 <select
-                                  value={(regField as any)?.visibility || "all"}
+                                  value={regField?.visibilityType || ((regField?.visibleToDepartmentIds && regField.visibleToDepartmentIds.length > 0) ? "department" : (regField?.visibleToUserIds && regField.visibleToUserIds.length > 0) ? "user" : "all")}
                                   onChange={(e) => {
+                                    const newType = e.target.value as "all" | "department" | "user";
                                     if (regField) {
-                                      updateCustomField(regField.module || customFieldsModule, regField.id, { key: regField.key, visibility: e.target.value } as any);
-                                      toast.success(`Field visibility updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                      updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                        key: regField.key,
+                                        visibilityType: newType,
+                                        visibleToDepartmentIds: newType === "department" ? (regField.visibleToDepartmentIds || []) : undefined,
+                                        visibleToUserIds: newType === "user" ? (regField.visibleToUserIds || []) : undefined,
+                                      } as any);
+                                      toast.success(`Field visibility: ${newType === "all" ? "All Users" : newType === "department" ? "By Department" : "By User"}`);
                                     }
                                   }}
                                   className="w-full h-7 px-2 bg-white border border-slate-200 rounded text-[11px] font-medium text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
                                 >
                                   <option value="all">All Users</option>
-                                  <option value="admin">Admins Only</option>
-                                  <option value="specialist">Clinical Staff & Admins</option>
-                                  <option value="custom">Restricted Roles</option>
+                                  <option value="department">By Department (Department Level)</option>
+                                  <option value="user">By User (Specific Users)</option>
                                 </select>
+
+                                {/* Department Multi-select list */}
+                                {(regField?.visibilityType === "department" || (!regField?.visibilityType && regField?.visibleToDepartmentIds && regField.visibleToDepartmentIds.length > 0)) && (
+                                  <div className="pt-1.5 space-y-1.5 animate-in fade-in duration-150">
+                                    <div className="flex items-center justify-between text-[10px]">
+                                      <span className="font-semibold text-slate-600">Select Departments:</span>
+                                      <div className="flex items-center gap-1.5 text-[10px]">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (regField) {
+                                              const depts = getStoredDepartments();
+                                              updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                key: regField.key,
+                                                visibilityType: "department",
+                                                visibleToDepartmentIds: depts.map((d) => d.id),
+                                              } as any);
+                                            }
+                                          }}
+                                          className="text-blue-600 hover:underline font-medium cursor-pointer"
+                                        >
+                                          Select all
+                                        </button>
+                                        <span className="text-slate-300">|</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (regField) {
+                                              updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                key: regField.key,
+                                                visibilityType: "department",
+                                                visibleToDepartmentIds: [],
+                                              } as any);
+                                            }
+                                          }}
+                                          className="text-slate-500 hover:underline font-medium cursor-pointer"
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 bg-white p-1 rounded-lg border border-slate-200/60">
+                                      {getStoredDepartments().map((dept) => {
+                                        const deptIds = regField?.visibleToDepartmentIds || [];
+                                        const isChecked = deptIds.some(
+                                          (id) => id === dept.id || id.toLowerCase() === dept.name.toLowerCase()
+                                        );
+                                        return (
+                                          <label
+                                            key={dept.id}
+                                            className="flex items-center gap-2 pt-1 pb-0.5 px-1 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded cursor-pointer select-none"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => {
+                                                if (regField) {
+                                                  let nextIds: string[];
+                                                  if (e.target.checked) {
+                                                    nextIds = [...deptIds.filter((id) => id !== dept.id && id.toLowerCase() !== dept.name.toLowerCase()), dept.id];
+                                                  } else {
+                                                    nextIds = deptIds.filter((id) => id !== dept.id && id.toLowerCase() !== dept.name.toLowerCase());
+                                                  }
+                                                  updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                    key: regField.key,
+                                                    visibilityType: "department",
+                                                    visibleToDepartmentIds: nextIds,
+                                                  } as any);
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            />
+                                            <span className="truncate" title={dept.description || dept.name}>
+                                              {dept.name}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 italic">
+                                      All users in selected departments (any role) can see this field.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* User Multi-select list */}
+                                {(regField?.visibilityType === "user" || (!regField?.visibilityType && regField?.visibleToUserIds && regField.visibleToUserIds.length > 0)) && (
+                                  <div className="pt-1.5 space-y-1.5 animate-in fade-in duration-150">
+                                    <div className="flex items-center justify-between text-[10px]">
+                                      <span className="font-semibold text-slate-600">Select Users:</span>
+                                      <div className="flex items-center gap-1.5 text-[10px]">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (regField) {
+                                              const members = getStoredTeamMembers();
+                                              updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                key: regField.key,
+                                                visibilityType: "user",
+                                                visibleToUserIds: members.map((m) => String(m.id)),
+                                              } as any);
+                                            }
+                                          }}
+                                          className="text-blue-600 hover:underline font-medium cursor-pointer"
+                                        >
+                                          Select all
+                                        </button>
+                                        <span className="text-slate-300">|</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (regField) {
+                                              updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                key: regField.key,
+                                                visibilityType: "user",
+                                                visibleToUserIds: [],
+                                              } as any);
+                                            }
+                                          }}
+                                          className="text-slate-500 hover:underline font-medium cursor-pointer"
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 bg-white p-1 rounded-lg border border-slate-200/60">
+                                      {getStoredTeamMembers().map((member) => {
+                                        const memberIdStr = String(member.id);
+                                        const userIds = regField?.visibleToUserIds || [];
+                                        const isChecked = userIds.some(
+                                          (id) => String(id) === memberIdStr || (member.email && String(id).toLowerCase() === member.email.toLowerCase())
+                                        );
+                                        return (
+                                          <label
+                                            key={memberIdStr}
+                                            className="flex items-center gap-2 pt-1 pb-0.5 px-1 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded cursor-pointer select-none"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => {
+                                                if (regField) {
+                                                  let nextIds: string[];
+                                                  if (e.target.checked) {
+                                                    nextIds = [...userIds.filter((id) => String(id) !== memberIdStr && (!member.email || String(id).toLowerCase() !== member.email.toLowerCase())), memberIdStr];
+                                                  } else {
+                                                    nextIds = userIds.filter((id) => String(id) !== memberIdStr && (!member.email || String(id).toLowerCase() !== member.email.toLowerCase()));
+                                                  }
+                                                  updateCustomField(regField.module || customFieldsModule, regField.id, {
+                                                    key: regField.key,
+                                                    visibilityType: "user",
+                                                    visibleToUserIds: nextIds,
+                                                  } as any);
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            />
+                                            <div className="flex items-center justify-between w-full min-w-0 pr-1">
+                                              <span className="truncate font-medium">{member.name}</span>
+                                              {member.role && (
+                                                <span className="text-[10px] text-slate-400 truncate ml-1 shrink-0">
+                                                  {member.role}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 italic">
+                                      Only selected users and organization administrators can see this field.
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
                         </div>
+                      )}
+
+                      {/* Advanced Settings (Admin Only) */}
+                      {isUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveFieldMenu(null);
+                            setShowConfigureSubmenu(false);
+                            setEditingFieldDef(regField);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100 pb-1 mb-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Advanced Settings</span>
+                          </div>
+                          <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
                       )}
 
                       {/* 2. Hide (Available to all users) */}
@@ -1929,6 +2237,7 @@ export default function DraggableOverviewSections({
           const canAddFields = sectionPerms ? sectionPerms.canAddFields !== false : true;
           const canEditSection = sectionPerms ? sectionPerms.canEdit !== false : true;
           const canHideSection = sectionPerms ? sectionPerms.canHide !== false : true;
+          const isThisSectionActive = activeFieldMenu?.sectionId === section.id;
 
           return (
             <div
@@ -1937,7 +2246,9 @@ export default function DraggableOverviewSections({
               onDragStart={(e) => handleSectionDragStart(e, sIdx)}
               onDragOver={(e) => handleSectionDragOver(e, sIdx)}
               onDrop={(e) => handleSectionDrop(e, sIdx)}
-              className={`bg-white rounded-xl border transition-all shadow-xs overflow-hidden ${
+              className={`bg-white rounded-xl border transition-all shadow-xs ${
+                isThisSectionActive ? "overflow-visible relative z-30" : "overflow-hidden relative z-0"
+              } ${
                 isSectionDragged
                   ? "opacity-30 border-2 border-dashed border-blue-500"
                   : isSectionDragOver
@@ -2150,7 +2461,7 @@ export default function DraggableOverviewSections({
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
-          isAdmin={false}
+          isAdmin={isUserAdmin}
           onClose={() => setAddSectionModalOpen(false)}
           onSaved={(savedSection) => {
             const newSection: OverviewSection & Partial<SectionDefinition> = {
@@ -2181,7 +2492,7 @@ export default function DraggableOverviewSections({
           activeProcessId={activeProcessObj?.id}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
-          isAdmin={false}
+          isAdmin={isUserAdmin}
           onClose={() => setEditingFieldDef(null)}
           onHide={(f) => {
             const targetSec = sections.find((s) => s.fieldKeys?.includes(f.key));

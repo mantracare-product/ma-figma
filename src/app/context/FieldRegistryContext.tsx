@@ -530,6 +530,8 @@ export interface FieldDefinition {
   required?: boolean;
   userVisibility?: boolean;   // Setting for user visibility
   visibleToUserIds?: string[]; // Specific user/team member IDs permitted to view/edit this field
+  visibleToDepartmentIds?: string[]; // Specific department IDs or names permitted to view/edit this field
+  visibilityType?: "all" | "department" | "user"; // Visibility scope: all users, by department, or by specific users
   showAlways?: boolean;       // legacy — kept for backward compat, do not write for new fields
   /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
   visibleToRecordIds?: string[];
@@ -2581,7 +2583,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   return "client";
 }
 
-function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "deal">): FieldDefinition {
+export function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "deal"> = "client"): FieldDefinition {
   const targetModule = f.module ? normalizeModuleKey(f.module) : fallbackModule;
   const rawType = f.inputType;
   let normalizedType: FieldInputType = rawType || "text";
@@ -2648,6 +2650,8 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     requiredStages: Array.isArray(f.requiredStages) && f.requiredStages.length > 0 ? f.requiredStages : undefined,
     userVisibility: f.userVisibility !== false,
     visibleToUserIds: Array.isArray(f.visibleToUserIds) ? f.visibleToUserIds : undefined,
+    visibleToDepartmentIds: Array.isArray(f.visibleToDepartmentIds) ? f.visibleToDepartmentIds : undefined,
+    visibilityType: f.visibilityType || (Array.isArray(f.visibleToDepartmentIds) && f.visibleToDepartmentIds.length > 0 ? "department" : Array.isArray(f.visibleToUserIds) && f.visibleToUserIds.length > 0 ? "user" : "all"),
     showAlways: f.showAlways !== false,
     visibleToRecordIds: f.visibleToRecordIds,
     sourceFormId: f.sourceFormId,
