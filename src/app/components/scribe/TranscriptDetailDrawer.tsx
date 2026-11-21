@@ -11,7 +11,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ScribeSession } from "../../../lib/scribeSessionStore";
+import { ScribeSession, generateClinicalSummary } from "../../../lib/scribeSessionStore";
 
 export interface TranscriptDetailDrawerProps {
   isOpen: boolean;
@@ -363,13 +363,14 @@ export default function TranscriptDetailDrawer({
 
   // Generate a clean narrative summary from extractedData
   const getClinicalSummary = () => {
-    const d: any = session.extractedData || {};
-    const medsText =
-      d.medications && d.medications.length > 0
-        ? d.medications.map((m: any) => `${m.drugName} (${m.dosage}, ${m.frequency})`).join(", ")
-        : "Standard supportive care";
-
-    return `${resolvedClientName}, a ${resolvedAge}-year-old ${resolvedGender}, had a clinical consultation with ${session.doctorName || "Dr. Priya Sharma"}. Chief complaint presented was "${d.chiefComplaint || "Visual & clinical checkup"}". Following examination and dialogue evaluation, the primary diagnosis was established as ${d.diagnosis || "Clinical Review"}. The prescribed treatment plan includes ${medsText}. Additional investigations: ${d.investigations?.join(", ") || "Visual Acuity & Routine Labs"}. Follow-up review is scheduled for ${d.followUpDate || "7–14 days"}.`;
+    if (session?.clinicalSummary) return session.clinicalSummary;
+    if (session?.extractedData?.clinicalSummary) return session.extractedData.clinicalSummary;
+    return generateClinicalSummary(
+      session,
+      resolvedClientName,
+      resolvedAge,
+      resolvedGender
+    );
   };
 
   return (

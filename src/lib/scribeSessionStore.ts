@@ -43,6 +43,7 @@ export interface ExtractedClinicalData {
   followUpDays?: number;
   dietaryAdvice?: string;
   doctorNotes?: string;
+  clinicalSummary?: string;
 }
 
 export interface QueuePatient {
@@ -91,6 +92,48 @@ export interface ScribeSession {
   status: "recording" | "transcribed" | "extracted" | "completed" | "discarded";
   filledWithAi?: boolean;
   createdAt: number;
+  clinicalSummary?: string;
+}
+
+/**
+ * Generates the standardized narrative clinical summary matching the detail drawer.
+ * Dynamically resolves patient name, age, gender, doctor, medications, investigations, and follow-up.
+ */
+export function generateClinicalSummary(
+  session?: Partial<ScribeSession> | null,
+  overrideClientName?: string,
+  overrideAge?: number,
+  overrideGender?: string
+): string {
+  if (!session) return "";
+
+  const resolvedName = overrideClientName || session.clientName || "Patient";
+  const resolvedGender =
+    overrideGender ||
+    session.patientGender ||
+    (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(
+      resolvedName
+    )
+      ? "Female"
+      : "Male");
+  const resolvedAge = overrideAge || session.patientAge || (resolvedGender === "Female" ? 42 : 45);
+  const doctor = session.doctorName || "Dr. Priya Sharma";
+  const d: any = session.extractedData || {};
+
+  const medsText =
+    d.medications && d.medications.length > 0
+      ? d.medications.map((m: any) => `${m.drugName} (${m.dosage}, ${m.frequency})`).join(", ")
+      : "Standard supportive care";
+
+  const complaint = d.chiefComplaint || "Visual & clinical checkup";
+  const diagnosis = d.diagnosis || "Clinical Review";
+  const investigations =
+    d.investigations && d.investigations.length > 0
+      ? d.investigations.join(", ")
+      : "Visual Acuity & Routine Labs";
+  const followUp = d.followUpDate || "7–14 days";
+
+  return `${resolvedName}, a ${resolvedAge}-year-old ${resolvedGender}, had a clinical consultation with ${doctor}. Chief complaint presented was "${complaint}". Following examination and dialogue evaluation, the primary diagnosis was established as ${diagnosis}. The prescribed treatment plan includes ${medsText}. Additional investigations: ${investigations}. Follow-up review is scheduled for ${followUp}.`;
 }
 
 export interface PresetScenario {
@@ -410,7 +453,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     clientId: "CL-001",
     clientName: "Sarah Johnson",
     title: "Sarah Johnson_Appointment_2026-08-24",
-    patientAge: 34,
+    patientAge: 42,
     patientGender: "Female",
     appointmentId: "apt-101",
     sessionName: "Session #1 (Cataract & Vision)",

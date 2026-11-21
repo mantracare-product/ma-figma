@@ -44,6 +44,7 @@ import {
   SCRIBE_EVENT,
   markScribeSessionFilledWithAi,
   issuePrescriptionDocument,
+  generateClinicalSummary,
 } from "../../../lib/scribeSessionStore";
 import {
   markActivityFilledWithAi,
@@ -328,7 +329,7 @@ export default function AIScribePopup({
     isDraggingRef.current = false;
     try {
       (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-    } catch {}
+    } catch { }
   };
 
   const formatTime = (seconds: number) => {
@@ -375,14 +376,42 @@ export default function AIScribePopup({
   };
 
   const scenario = PRESET_SCENARIOS[0];
-  const previewData = useMemo(() => {
-    return {
-      chiefComplaint: scenario.extractedData.chiefComplaint || "Progressive blurriness and glare while driving at night for 3 months.",
-      diagnosis: scenario.extractedData.diagnosis || "Nuclear Cataract Grade II (Right Eye)",
-      notes: scenario.extractedData.doctorNotes || "Advised routine lifestyle adjustments, low sodium diet, and follow-up in 7 days.",
-      medications: scenario.extractedData.medications || [],
-    };
-  }, [scenario]);
+
+  const resolvedPatientName = useMemo(() => {
+    if (isNewPatient) {
+      return customPatientName.trim() || "Walk-in Patient";
+    }
+    const found = liveClients.find((c) => c.id === selectedClientId);
+    if (found) return found.name;
+    return initialClientName || "Patient";
+  }, [isNewPatient, customPatientName, liveClients, selectedClientId, initialClientName]);
+
+  const currentAssignedClient = useMemo(() => {
+    if (isNewPatient) return null;
+    return liveClients.find((c) => c.id === selectedClientId) || null;
+  }, [isNewPatient, liveClients, selectedClientId]);
+
+  const assignedAge = currentAssignedClient?.age || (resolvedPatientName.toLowerCase().includes("sarah") ? 42 : 34);
+  const assignedGender = currentAssignedClient?.gender || (
+    /sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(resolvedPatientName)
+      ? "Female"
+      : "Male"
+  );
+  const attendingDoctor = selectedAttendeeName || user?.name || "Dr. Priya Sharma";
+
+  const finalStepClinicalSummary = useMemo(() => {
+    return generateClinicalSummary(
+      {
+        doctorName: attendingDoctor,
+        extractedData: scenario.extractedData,
+        patientAge: assignedAge,
+        patientGender: assignedGender as any,
+      },
+      resolvedPatientName,
+      assignedAge,
+      assignedGender
+    );
+  }, [scenario, attendingDoctor, resolvedPatientName, assignedAge, assignedGender]);
 
   const handleFillFromSession = (session: ScribeSession) => {
     if (onFillWithAi) {
@@ -404,6 +433,9 @@ export default function AIScribePopup({
     setSelectedClientId(client.id);
     setIsNewPatient(false);
     setIsClientDropdownOpen(false);
+    if (!sessionName || sessionName.includes("Consultation")) {
+      setSessionName(`${client.name} Consultation`);
+    }
   };
 
   const handleAppointmentChange = (apptId: string) => {
@@ -476,7 +508,7 @@ export default function AIScribePopup({
     const doctorName = selectedAttendeeName || user?.name || "Dr. Priya Sharma";
     const doctorId = selectedAttendeeId || "member-1";
     const formattedDate = sessionDate || new Date().toISOString().slice(0, 10);
-    const finalTitle = sessionName.trim() || `${patientName}_Consultation_${formattedDate}`;
+    const finalTitle = sessionName.trim() || `${patientName} Consultation`;
 
     const linkedApptId = selectedAppointmentId !== "none" ? selectedAppointmentId : undefined;
     const finalEntity: EntityType = linkedApptId ? "appointment" : (initialEntityType || "client");
@@ -487,7 +519,7 @@ export default function AIScribePopup({
       clientName: patientName,
       title: finalTitle,
       sessionName: finalTitle,
-      patientAge: currentClient?.age || 42,
+      patientAge: assignedAge,
       patientGender: resolvedGender,
       entityType: finalEntity,
       workflow: "Clinical Consultation",
@@ -509,14 +541,16 @@ export default function AIScribePopup({
       extractedData: {
         ...scenario.extractedData,
         chiefComplaint: scenario.extractedData.chiefComplaint,
+        clinicalSummary: finalStepClinicalSummary,
         doctorNotes: `Attending Team Member: ${doctorName}. ${scenario.extractedData.doctorNotes || "Follow-up advised in 7 days."}`,
       },
+      clinicalSummary: finalStepClinicalSummary,
     };
 
     saveScribeSession(newSession);
     try {
       issuePrescriptionDocument(newSession);
-    } catch {}
+    } catch { }
 
     if (fillWithAi) {
       toast.success(`Transcript saved & fields filled with AI for ${patientName}!`);
@@ -683,20 +717,16 @@ export default function AIScribePopup({
                       </span>
                     </div>
 
-                    {/* Card Body: Summary preview */}
-                    <div className="space-y-1 bg-slate-50 dark:bg-zinc-900/60 p-2 rounded-xl border border-slate-100 dark:border-zinc-800 text-[11px]">
-                      {session.extractedData?.chiefComplaint && (
-                        <p className="text-slate-700 dark:text-zinc-300 line-clamp-1">
-                          <span className="font-semibold text-slate-900 dark:text-zinc-100">Complaint:</span>{" "}
-                          {session.extractedData.chiefComplaint}
-                        </p>
-                      )}
-                      {session.extractedData?.diagnosis && (
-                        <p className="text-slate-700 dark:text-zinc-300 line-clamp-1">
-                          <span className="font-semibold text-slate-900 dark:text-zinc-100">Diagnosis:</span>{" "}
-                          {session.extractedData.diagnosis}
-                        </p>
-                      )}
+                    {/* Card Body: Clean Clinical Summary narrative */}
+                    <div className="bg-slate-50/80 dark:bg-zinc-900/50 p-2.5 rounded-xl border border-slate-100/80 dark:border-zinc-800/80">
+                      <p className="text-[11px] text-slate-600 dark:text-zinc-300 leading-relaxed line-clamp-3">
+                        {session.clinicalSummary ||
+                          session.extractedData?.clinicalSummary ||
+                          generateClinicalSummary(
+                            session,
+                            session.clientName || initialClientName || selectedClient?.name
+                          )}
+                      </p>
                     </div>
 
                     {/* Card Actions: View Scribe & Fill with AI */}
@@ -710,16 +740,14 @@ export default function AIScribePopup({
                         <span>View Scribe</span>
                       </button>
 
-                      {!session.filledWithAi && onFillWithAi && (
-                        <button
-                          type="button"
-                          onClick={() => handleFillFromSession(session)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer"
-                        >
-                          <Sparkles className="w-3 h-3 text-blue-400" />
-                          <span>Fill with AI</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleFillFromSession(session)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3 text-blue-400" />
+                        <span>Fill with AI</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -734,7 +762,7 @@ export default function AIScribePopup({
                 className="w-full py-2.5 px-4 bg-[#1456f0] hover:bg-[#0f46c7] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer group"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Add New Scribe</span>
+                <span>Add New Scribe</span>
               </button>
             </div>
           </div>
@@ -783,11 +811,10 @@ export default function AIScribePopup({
                     <button
                       type="button"
                       onClick={() => setAudioInputMode("live")}
-                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        audioInputMode === "live"
-                          ? "bg-[#1456f0] text-white shadow-xs"
-                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
-                      }`}
+                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${audioInputMode === "live"
+                        ? "bg-[#1456f0] text-white shadow-xs"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                        }`}
                     >
                       <Mic className="w-3.5 h-3.5" />
                       Live Ambient
@@ -795,11 +822,10 @@ export default function AIScribePopup({
                     <button
                       type="button"
                       onClick={() => setAudioInputMode("upload")}
-                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        audioInputMode === "upload"
-                          ? "bg-[#1456f0] text-white shadow-xs"
-                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
-                      }`}
+                      className={`flex-1 py-1.5 text-[11px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${audioInputMode === "upload"
+                        ? "bg-[#1456f0] text-white shadow-xs"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                        }`}
                     >
                       <UploadCloud className="w-3.5 h-3.5" />
                       Upload Audio
@@ -864,11 +890,10 @@ export default function AIScribePopup({
                 <div className="flex flex-col items-center w-full my-auto py-3">
                   {/* Live Pulsing Microphone Centerpiece */}
                   <div className="relative mb-3 flex items-center justify-center">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-                      isPaused
-                        ? "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
-                        : "bg-blue-600 text-white shadow-[0_0_30px_rgba(20,86,240,0.4)] animate-pulse"
-                    }`}>
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${isPaused
+                      ? "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
+                      : "bg-blue-600 text-white shadow-[0_0_30px_rgba(20,86,240,0.4)] animate-pulse"
+                      }`}>
                       <Mic className="w-9 h-9" />
                     </div>
                     {!isPaused && (
@@ -900,11 +925,10 @@ export default function AIScribePopup({
                               height: isPaused ? "6px" : `${Math.max(6, (h * ((i % 4) + 1)) % 38)}px`,
                               transition: "height 180ms ease-in-out",
                             }}
-                            className={`w-1 rounded-full ${
-                              isPaused
-                                ? "bg-slate-300 dark:bg-zinc-700"
-                                : "bg-gradient-to-t from-blue-600 to-indigo-400"
-                            }`}
+                            className={`w-1 rounded-full ${isPaused
+                              ? "bg-slate-300 dark:bg-zinc-700"
+                              : "bg-gradient-to-t from-blue-600 to-indigo-400"
+                              }`}
                           />
                         )
                       )}
@@ -1059,11 +1083,10 @@ export default function AIScribePopup({
                               key={c.id}
                               type="button"
                               onClick={() => handleSelectClient(c)}
-                              className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                                selectedClientId === c.id
-                                  ? "bg-blue-50 text-blue-700 font-semibold"
-                                  : "hover:bg-slate-50 text-slate-700 dark:text-zinc-200"
-                              }`}
+                              className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${selectedClientId === c.id
+                                ? "bg-blue-50 text-blue-700 font-semibold"
+                                : "hover:bg-slate-50 text-slate-700 dark:text-zinc-200"
+                                }`}
                             >
                               <div>
                                 <p className="font-medium">{c.name}</p>
@@ -1079,22 +1102,27 @@ export default function AIScribePopup({
                 )}
               </div>
 
-              {/* 2. Scribe Name Input Card (Replacing appointment & attendee) */}
+              {/* 2. Scribe Title Input Card (Optional) */}
               <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  Scribe Name
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    Scribe Title
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 lowercase">
+                    (optional)
+                  </span>
+                </div>
                 <input
                   type="text"
                   value={sessionName}
                   onChange={(e) => setSessionName(e.target.value)}
-                  placeholder="e.g. Ophthalmology — Nuclear Cataract Consultation"
-                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder={`e.g. ${resolvedPatientName} Consultation (optional)`}
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-normal"
                 />
               </div>
 
-              {/* 3. Summary of the Scribe Card (Replacing session date & attendee) */}
+              {/* 3. Summary of the Scribe Card */}
               <div className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
@@ -1106,34 +1134,11 @@ export default function AIScribePopup({
                   </span>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-zinc-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 space-y-1">
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                    Chief Complaint
-                  </p>
-                  <p className="text-xs text-slate-800 dark:text-zinc-200 font-medium leading-relaxed">
-                    {previewData.chiefComplaint}
+                <div className="bg-slate-50 dark:bg-zinc-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800">
+                  <p className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed font-normal">
+                    {finalStepClinicalSummary}
                   </p>
                 </div>
-
-                <div className="bg-slate-50 dark:bg-zinc-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 space-y-1">
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                    Diagnosis & Assessment
-                  </p>
-                  <p className="text-xs text-slate-800 dark:text-zinc-200 font-medium leading-relaxed">
-                    {previewData.diagnosis}
-                  </p>
-                </div>
-
-                {previewData.notes && (
-                  <div className="bg-slate-50 dark:bg-zinc-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                      Clinical Advice & Plan
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
-                      {previewData.notes}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
 

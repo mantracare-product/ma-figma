@@ -689,7 +689,7 @@ function ScribeBlock({
       )}
 
       <div className="flex items-center gap-2">
-        {!isAlreadyFilled && onFillWithAi && (
+        {onFillWithAi && (
           <button
             type="button"
             onClick={handleFill}
