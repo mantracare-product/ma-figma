@@ -31,6 +31,7 @@ export interface ActivityBase {
   clientName?: string;
   title?: string;
   audioInputMode?: "live" | "upload";
+  filledWithAi?: boolean;
   /** Backward-compat fallback rendered when no type-specific block applies */
   details?: { primary: string; secondary?: string };
 }
@@ -117,6 +118,7 @@ export interface ScribeActivityEntry extends ActivityBase {
   diagnosis?: string;
   transcriptPreview?: string;
   extractedData?: any;
+  filledWithAi?: boolean;
 }
 
 export interface SystemActivityEntry extends ActivityBase {
@@ -381,4 +383,19 @@ export function formatTimestamp(ts: string): string {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+export function markActivityFilledWithAi(scribeSessionId: string): void {
+  const all = readAll();
+  let changed = false;
+  const updated = all.map((entry) => {
+    if ((entry as any).scribeSessionId === scribeSessionId) {
+      changed = true;
+      return { ...entry, filledWithAi: true };
+    }
+    return entry;
+  });
+  if (changed) {
+    writeAll(updated);
+  }
 }

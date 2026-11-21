@@ -4384,10 +4384,19 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             initialClientName={client.name}
             initialEntityType="client"
             zIndex={700}
-            onSessionCreated={(session) => {
+            onFillWithAi={handleFillFromScribe}
+            onSessionCreated={(session, fillWithAi) => {
               setShowScribeModal(false);
               setScribeSessions(getScribeSessions());
-              toast.success(`AI Scribe consultation recorded for ${session.clientName}!`);
+              if (fillWithAi) {
+                handleFillFromScribe({
+                  transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+                  diagnosis: session.extractedData?.diagnosis,
+                  chiefComplaint: session.extractedData?.chiefComplaint,
+                  extractedData: session.extractedData,
+                  scribeSessionId: session.id,
+                });
+              }
             }}
             onViewTranscript={(newSession) => {
               setShowScribeModal(false);

@@ -1377,16 +1377,18 @@ export default function AppointmentDetailDrawer({
         initialProcessId={appointmentProcess.id}
         initialProcessName={appointmentProcess.name}
         zIndex={600}
-        onSessionCreated={(session) => {
+        onFillWithAi={handleFillFromScribe}
+        onSessionCreated={(session, fillWithAi) => {
           setShowScribeModal(false);
-          toast.success(`AI Scribe consultation recorded for ${session.clientName || effectiveAppt.clientName}!`);
-          handleFillFromScribe({
-            transcriptPreview: session.transcript?.fullText?.slice(0, 300),
-            diagnosis: session.extractedData?.diagnosis,
-            chiefComplaint: session.extractedData?.chiefComplaint,
-            extractedData: session.extractedData,
-            scribeSessionId: session.id,
-          });
+          if (fillWithAi) {
+            handleFillFromScribe({
+              transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+              diagnosis: session.extractedData?.diagnosis,
+              chiefComplaint: session.extractedData?.chiefComplaint,
+              extractedData: session.extractedData,
+              scribeSessionId: session.id,
+            });
+          }
         }}
       />
 

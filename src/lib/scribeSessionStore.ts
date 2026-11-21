@@ -89,6 +89,7 @@ export interface ScribeSession {
   generatedDocumentId?: string;
   audioInputMode?: "live" | "upload";
   status: "recording" | "transcribed" | "extracted" | "completed" | "discarded";
+  filledWithAi?: boolean;
   createdAt: number;
 }
 
@@ -648,6 +649,7 @@ export function saveScribeSession(session: ScribeSession): void {
     diagnosis: session.extractedData?.diagnosis,
     transcriptPreview: session.transcript?.fullText?.slice(0, 320),
     extractedData: session.extractedData,
+    filledWithAi: session.filledWithAi || false,
     createdBy: "ai",
     sourceStepName: "AI Scribe",
     clientName: session.clientName,
@@ -674,6 +676,13 @@ export function saveScribeSession(session: ScribeSession): void {
 export function deleteScribeSession(sessionId: string): void {
   const current = getScribeSessions();
   const updated = current.filter(s => s.id !== sessionId);
+  sessionStorage.setItem("scribeSessionsData", JSON.stringify(updated));
+  window.dispatchEvent(new Event(SCRIBE_EVENT));
+}
+
+export function markScribeSessionFilledWithAi(sessionId: string): void {
+  const current = getScribeSessions();
+  const updated = current.map(s => s.id === sessionId ? { ...s, filledWithAi: true } : s);
   sessionStorage.setItem("scribeSessionsData", JSON.stringify(updated));
   window.dispatchEvent(new Event(SCRIBE_EVENT));
 }

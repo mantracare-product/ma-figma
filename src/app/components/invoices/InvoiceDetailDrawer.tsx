@@ -1263,16 +1263,18 @@ export default function InvoiceDetailDrawer({
         initialEntityType="invoice"
         initialRecordId={liveInvoice?.id}
         zIndex={600}
-        onSessionCreated={(session) => {
+        onFillWithAi={handleFillFromScribe}
+        onSessionCreated={(session, fillWithAi) => {
           setShowScribeModal(false);
-          toast.success(`AI Scribe consultation recorded for ${session.clientName || liveInvoice?.clientName}!`);
-          handleFillFromScribe({
-            transcriptPreview: session.transcript?.fullText?.slice(0, 300),
-            diagnosis: session.extractedData?.diagnosis,
-            chiefComplaint: session.extractedData?.chiefComplaint,
-            extractedData: session.extractedData,
-            scribeSessionId: session.id,
-          });
+          if (fillWithAi) {
+            handleFillFromScribe({
+              transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+              diagnosis: session.extractedData?.diagnosis,
+              chiefComplaint: session.extractedData?.chiefComplaint,
+              extractedData: session.extractedData,
+              scribeSessionId: session.id,
+            });
+          }
         }}
       />
 

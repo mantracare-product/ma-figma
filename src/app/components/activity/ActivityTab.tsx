@@ -10,12 +10,13 @@ import {
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import { EntityType, getStoredProcesses } from "../../../lib/useProcessStore";
 import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
-import { getScribeSessionById, ScribeSession } from "../../../lib/scribeSessionStore";
+import { getScribeSessionById, ScribeSession, markScribeSessionFilledWithAi } from "../../../lib/scribeSessionStore";
 import {
   appendActivity,
   subscribeToActivity,
   formatDuration,
   formatTimestamp,
+  markActivityFilledWithAi,
 } from "../../../lib/activityEngine";
 import { useConversations } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
@@ -73,6 +74,7 @@ export interface ActivityLogEntry {
   appointmentId?: string;
   invoiceId?: string;
   claimId?: string;
+  filledWithAi?: boolean;
   extractedData?: {
     chiefComplaint?: string;
     symptoms?: string[];
@@ -655,6 +657,8 @@ function ScribeBlock({
     ? formatDuration(session.durationSeconds)
     : "";
 
+  const isAlreadyFilled = entry.filledWithAi === true || session?.filledWithAi === true || isFilled;
+
   const handleFill = () => {
     if (!onFillWithAi) return;
     setIsFilling(true);
@@ -665,6 +669,10 @@ function ScribeBlock({
       extractedData: entry.extractedData || session?.extractedData,
       scribeSessionId: entry.scribeSessionId,
     });
+    if (entry.scribeSessionId) {
+      markScribeSessionFilledWithAi(entry.scribeSessionId);
+      markActivityFilledWithAi(entry.scribeSessionId);
+    }
     setTimeout(() => {
       setIsFilling(false);
       setIsFilled(true);
@@ -681,15 +689,16 @@ function ScribeBlock({
       )}
 
       <div className="flex items-center gap-2">
-        {onFillWithAi && (
+        {!isAlreadyFilled && onFillWithAi && (
           <button
             type="button"
             onClick={handleFill}
             disabled={isFilling}
-            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer active:scale-95"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer active:scale-95"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            <span>{isFilling ? "Filling Fields..." : isFilled ? "Filled with AI" : "Fill with AI"}</span>
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span>{isFilling ? "Filling Fields..." : "Fill with AI"}</span>
           </button>
         )}
 
@@ -2336,10 +2345,10 @@ export default function ActivityTab({
         initialProcessName={processName}
         initialRecordId={appointmentId || invoiceId || (processId ? `REC-${processId}` : undefined)}
         zIndex={700}
-        onSessionCreated={(session) => {
+        onFillWithAi={onFillWithAi}
+        onSessionCreated={(session, fillWithAi) => {
           setShowScribeModal(false);
-          toast.success(`AI Scribe consultation recorded for ${session.clientName}!`);
-          if (onFillWithAi) {
+          if (fillWithAi && onFillWithAi) {
             onFillWithAi({
               transcriptPreview: session.transcript?.fullText?.slice(0, 300),
               diagnosis: session.extractedData?.diagnosis,
