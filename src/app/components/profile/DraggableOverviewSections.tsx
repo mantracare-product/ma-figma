@@ -33,11 +33,17 @@ import {
   Table as TableIcon,
   PanelRight,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   PenTool,
   Eraser,
   Eye,
   EyeOff,
   Sliders,
+  SlidersHorizontal,
+  RotateCcw,
+  Grid2X2,
+  Grid3X3,
   Building2,
   Users,
 } from "lucide-react";
@@ -68,6 +74,10 @@ export interface OverviewSection {
   iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   isCustom?: boolean;
   fieldKeys: string[];
+  hiddenFieldKeys?: string[];
+  fieldWidths?: Record<string, "full" | "half">;
+  requiredFieldKeys?: string[];
+  gridColumns?: number;
   permissions?: SectionPermissions;
   processIds?: string[];
   scopingRules?: ScopingRule[];
@@ -645,6 +655,15 @@ export default function DraggableOverviewSections({
     });
   }, [fieldValues, allRegistryFields, onFieldValueChange]);
 
+  // Helper to load user-saved layout preference for a section
+  const getStoredLayout = (sectionId: string) => {
+    try {
+      const raw = localStorage.getItem(`overview_section_layout_${sectionId}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  };
+
   // Sections and their fields filtered strictly according to activeOrganization scope
   const visibleSections = useMemo(() => {
     const procId = activeProcessId || activeProcessName;
@@ -654,14 +673,26 @@ export default function DraggableOverviewSections({
         if (procId && sec.processIds && isProcessMatchingAssignment(sec.processIds, procId)) return true;
         return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization, procId);
       })
-      .map((sec) => ({
-        ...sec,
-        fieldKeys: (sec.fieldKeys || []).filter((k) => {
-          if (SYSTEM_FIELD_KEYS.has(k)) return true;
-          // Retain fields assigned to this section so newly added fields never vanish on drawer reopening
-          return true;
-        }),
-      }));
+      .map((sec) => {
+        const storedLayout = getStoredLayout(sec.id);
+        const effectiveFieldKeys = storedLayout?.fieldKeys && Array.isArray(storedLayout.fieldKeys) && storedLayout.fieldKeys.length > 0
+          ? [
+              ...storedLayout.fieldKeys.filter((k: string) => (sec.fieldKeys || []).includes(k)),
+              ...(sec.fieldKeys || []).filter((k: string) => !storedLayout.fieldKeys.includes(k)),
+            ]
+          : sec.fieldKeys || [];
+
+        return {
+          ...sec,
+          fieldKeys: effectiveFieldKeys,
+          hiddenFieldKeys: storedLayout?.hiddenFieldKeys || sec.hiddenFieldKeys || [],
+          fieldWidths: storedLayout?.fieldWidths || sec.fieldWidths || {},
+          requiredFieldKeys: storedLayout?.requiredFieldKeys || sec.requiredFieldKeys || [],
+          gridColumns: (storedLayout?.gridColumns && typeof storedLayout.gridColumns === "number" && storedLayout.gridColumns > 0)
+            ? storedLayout.gridColumns
+            : (sec.gridColumns || 2),
+        };
+      });
   }, [sections, matchingCustomSecIds, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName]);
 
   // User custom option additions per field
@@ -693,6 +724,9 @@ export default function DraggableOverviewSections({
   // Field Drag & Drop state
   const [draggedField, setDraggedField] = useState<{ sectionId: string; index: number } | null>(null);
   const [dragOverField, setDragOverField] = useState<{ sectionId: string; index: number } | null>(null);
+
+  // Customize layout modal state for a section
+  const [customizeSection, setCustomizeSection] = useState<OverviewSection | null>(null);
 
   // Editing section title state
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
@@ -928,10 +962,75 @@ export default function DraggableOverviewSections({
     setFieldModalOpen(true);
   };
 
+  // ── Section Layout Customization Handlers ──────────────────────────────────
+  const handleSaveSectionLayout = (
+    sectionId: string,
+    newFieldKeys: string[],
+    newHiddenFieldKeys: string[],
+    newFieldWidths: Record<string, "full" | "half">,
+    newRequiredFieldKeys: string[],
+    newGridColumns: number = 2
+  ) => {
+    try {
+      localStorage.setItem(
+        `overview_section_layout_${sectionId}`,
+        JSON.stringify({
+          fieldKeys: newFieldKeys,
+          hiddenFieldKeys: newHiddenFieldKeys,
+          fieldWidths: newFieldWidths,
+          requiredFieldKeys: newRequiredFieldKeys,
+          gridColumns: newGridColumns,
+        })
+      );
+    } catch (e) {
+      console.error("Failed to save layout to localStorage", e);
+    }
+
+    const updated = sections.map((sec) => {
+      if (sec.id === sectionId) {
+        return {
+          ...sec,
+          fieldKeys: newFieldKeys,
+          hiddenFieldKeys: newHiddenFieldKeys,
+          fieldWidths: newFieldWidths,
+          requiredFieldKeys: newRequiredFieldKeys,
+          gridColumns: newGridColumns,
+        };
+      }
+      return sec;
+    });
+    onSectionsChange(updated);
+    setCustomizeSection(null);
+    toast.success("Layout saved successfully");
+  };
+
+  const handleResetSectionLayout = (sectionId: string) => {
+    try {
+      localStorage.removeItem(`overview_section_layout_${sectionId}`);
+    } catch {}
+
+    const updated = sections.map((sec) => {
+      if (sec.id === sectionId) {
+        return {
+          ...sec,
+          hiddenFieldKeys: [],
+          fieldWidths: {},
+          requiredFieldKeys: [],
+          gridColumns: 2,
+        };
+      }
+      return sec;
+    });
+    onSectionsChange(updated);
+    setCustomizeSection(null);
+    toast.success("Layout reset to default");
+  };
+
   // ── Render Individual Field Row ────────────────────────────────────────────
-  const renderFieldInput = (key: string, sectionId: string, index: number) => {
-    const isFieldDragged = draggedField?.sectionId === sectionId && draggedField?.index === index;
-    const isFieldDragOver = dragOverField?.sectionId === sectionId && dragOverField?.index === index;
+  const renderFieldInput = (key: string, sectionId: string, index: number, section?: OverviewSection) => {
+    const trueIndex = section ? section.fieldKeys.indexOf(key) : index;
+    const isFieldDragged = draggedField?.sectionId === sectionId && draggedField?.index === trueIndex;
+    const isFieldDragOver = dragOverField?.sectionId === sectionId && dragOverField?.index === trueIndex;
 
     // Support section-scoped field values (e.g. sec-medication-1_med_name)
     const scopedKey = `${sectionId}_${key}`;
@@ -976,27 +1075,37 @@ export default function DraggableOverviewSections({
     const isThisFieldMenuOpen = activeFieldMenu?.sectionId === sectionId && activeFieldMenu?.fieldKey === key;
 
     const isFullWidthField =
-      regField?.inputType === "table" ||
-      regField?.inputType === "group" ||
-      regField?.inputType === "group_repeatable" ||
-      regField?.inputType === "drawing" ||
-      regField?.inputType === "signature" ||
-      regField?.inputType === "richtext" ||
-      regField?.inputType === "textarea" ||
-      (regField?.textConfig?.textMode === "paragraph") ||
-      key === "coverages" ||
-      key === "prescribed_medications" ||
-      key === "medications" ||
-      key === "patient_instructions" ||
-      key === "patient_precautions";
+      section?.fieldWidths?.[key] === "full" ||
+      (!section?.fieldWidths?.[key] && (
+        regField?.inputType === "table" ||
+        regField?.inputType === "group" ||
+        regField?.inputType === "group_repeatable" ||
+        regField?.inputType === "drawing" ||
+        regField?.inputType === "signature" ||
+        regField?.inputType === "richtext" ||
+        regField?.inputType === "textarea" ||
+        (regField?.textConfig?.textMode === "paragraph") ||
+        key === "coverages" ||
+        key === "prescribed_medications" ||
+        key === "medications" ||
+        key === "patient_instructions" ||
+        key === "patient_precautions"
+      ));
+
+    const isExplicitHalf = section?.fieldWidths?.[key] === "half";
+    const fieldColSpan =
+      columns === 2 && isFullWidthField && !isExplicitHalf
+        ? "md:col-span-full"
+        : "";
 
     return (
       <div
         key={`${sectionId}-${key}-${index}`}
         draggable
-        onDragStart={(e) => handleFieldDragStart(e, sectionId, index)}
-        onDragOver={(e) => handleFieldDragOver(e, sectionId, index)}
-        onDrop={(e) => handleFieldDrop(e, sectionId, index)}
+        onDragStart={(e) => handleFieldDragStart(e, sectionId, trueIndex)}
+        onDragOver={(e) => handleFieldDragOver(e, sectionId, trueIndex)}
+        onDrop={(e) => handleFieldDrop(e, sectionId, trueIndex)}
+        style={columns === 2 && isFullWidthField && !isExplicitHalf ? { gridColumn: "1 / -1" } : undefined}
         className={`group relative rounded-lg transition-all ${isThisFieldMenuOpen ? "relative z-40" : ""} ${isFieldDragged
           ? "opacity-30 border-2 border-dashed border-blue-400"
           : isFieldDragOver
@@ -1004,7 +1113,7 @@ export default function DraggableOverviewSections({
             : isRequiredMissing
               ? "bg-amber-50/40 border border-amber-300 shadow-2xs"
               : "hover:bg-slate-50/70"
-          } p-2 ${columns === 2 && isFullWidthField ? "md:col-span-2" : ""}`}
+          } p-2 ${fieldColSpan}`}
       >
         <div className="flex items-center justify-between gap-1.5 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -1024,7 +1133,7 @@ export default function DraggableOverviewSections({
               {regField?.tooltip && (
                 <InfoTooltip text={regField.tooltip} size="sm" />
               )}
-              {regField?.required && <span className="text-red-500 font-bold">*</span>}
+              {(regField?.required || section?.requiredFieldKeys?.includes(key)) && <span className="text-red-500 font-bold">*</span>}
               {isRequiredMissing && (
                 <span className="text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs tracking-normal">
                   Required
@@ -2334,7 +2443,17 @@ export default function DraggableOverviewSections({
                 </div>
 
                 {/* Section Action Controls */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Configure Gear Button */}
+                  <button
+                    type="button"
+                    onClick={() => setCustomizeSection(section)}
+                    className="p-1 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    title="Customize layout & fields"
+                  >
+                    <SettingsIcon className="w-3.5 h-3.5" />
+                  </button>
+
                   {/* Delete Section Button */}
                   {canHideSection && (section.isCustom || sections.length > 1) && (
                     <button
@@ -2350,60 +2469,107 @@ export default function DraggableOverviewSections({
               </div>
 
               {/* Section Fields Area (Draggable & Droppable) */}
-              <div
-                className={`p-3 bg-white min-h-[50px] ${columns === 2 ? "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 items-start" : "space-y-1"
-                  }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (draggedField && section.fieldKeys.length === 0) {
-                    setDragOverField({ sectionId: section.id, index: 0 });
-                  }
-                }}
-                onDrop={(e) => {
-                  if (draggedField && section.fieldKeys.length === 0) {
-                    handleFieldDrop(e, section.id, 0);
-                  }
-                }}
-              >
-                {renderCustomSection && renderCustomSection(section) ? (
-                  <div className={columns === 2 ? "md:col-span-2" : ""}>
-                    {renderCustomSection(section)}
-                  </div>
-                ) : section.fieldKeys.length === 0 ? (
-                  <div className={`py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50 ${columns === 2 ? "md:col-span-2" : ""}`}>
-                    <p className="text-xs text-slate-400 font-medium">
-                      No fields in this section yet
-                    </p>
-                    {canAddFields && (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSelectFieldForSection(section.id)}
-                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        <Plus className="w-3 h-3" /> Add Field
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {section.fieldKeys.map((key, fIdx) => renderFieldInput(key, section.id, fIdx))}
-                    {canAddFields && (
-                      <div className={`flex justify-end pt-2 pb-0.5 px-1 ${columns === 2 ? "md:col-span-2" : ""}`}>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSelectFieldForSection(section.id)}
-                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add Field</span>
-                        </button>
+              {(() => {
+                const sectionGridCols = section.gridColumns && section.gridColumns > 0 ? section.gridColumns : 2;
+                const isMultiCol = columns === 2;
+                const gridContainerClass = isMultiCol
+                  ? sectionGridCols === 1
+                    ? "space-y-1"
+                    : "grid grid-cols-1 gap-x-4 gap-y-2.5 items-start"
+                  : "space-y-1";
+                const spanAllClass = isMultiCol ? "md:col-span-full" : "";
+
+                return (
+                  <div
+                    className={`p-3 bg-white min-h-[50px] ${gridContainerClass}`}
+                    style={
+                      isMultiCol && sectionGridCols > 1
+                        ? {
+                            display: "grid",
+                            gridTemplateColumns: `repeat(${sectionGridCols}, minmax(0, 1fr))`,
+                          }
+                        : undefined
+                    }
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (draggedField && section.fieldKeys.length === 0) {
+                        setDragOverField({ sectionId: section.id, index: 0 });
+                      }
+                    }}
+                    onDrop={(e) => {
+                      if (draggedField && section.fieldKeys.length === 0) {
+                        handleFieldDrop(e, section.id, 0);
+                      }
+                    }}
+                  >
+                    {renderCustomSection && renderCustomSection(section) ? (
+                      <div className={spanAllClass} style={isMultiCol ? { gridColumn: "1 / -1" } : undefined}>
+                        {renderCustomSection(section)}
                       </div>
+                    ) : section.fieldKeys.length === 0 ? (
+                      <div
+                        className={`py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50 ${spanAllClass}`}
+                        style={isMultiCol ? { gridColumn: "1 / -1" } : undefined}
+                      >
+                        <p className="text-xs text-slate-400 font-medium">
+                          No fields in this section yet
+                        </p>
+                        {canAddFields && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSelectFieldForSection(section.id)}
+                            className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <Plus className="w-3 h-3" /> Add Field
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {(() => {
+                          const visibleKeys = (section.fieldKeys || []).filter(
+                            (key) => !(section.hiddenFieldKeys || []).includes(key)
+                          );
+                          if (visibleKeys.length === 0) {
+                            return (
+                              <div
+                                className={`py-4 px-3 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50/50 ${spanAllClass}`}
+                                style={isMultiCol ? { gridColumn: "1 / -1" } : undefined}
+                              >
+                                <p className="text-xs text-slate-400 font-medium">
+                                  All fields in this section are currently hidden
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomizeSection(section)}
+                                  className="mt-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                >
+                                  <SettingsIcon className="w-3 h-3" /> Customize Layout
+                                </button>
+                              </div>
+                            );
+                          }
+                          return visibleKeys.map((key, fIdx) => renderFieldInput(key, section.id, fIdx, section));
+                        })()}
+                        {canAddFields && (
+                          <div className={`flex justify-end pt-2 pb-0.5 px-1 ${spanAllClass}`} style={isMultiCol ? { gridColumn: "1 / -1" } : undefined}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSelectFieldForSection(section.id)}
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Field</span>
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
@@ -2514,6 +2680,333 @@ export default function DraggableOverviewSections({
           }}
         />
       )}
+
+      {/* ── Customize Layout Modal ────────────────────────────────────────── */}
+      {customizeSection && (
+        <CustomizeLayoutModal
+          isOpen={true}
+          section={customizeSection}
+          allRegistryFields={allRegistryFields}
+          onClose={() => setCustomizeSection(null)}
+          onSave={(newKeys, hiddenKeys, widths, reqKeys, gridCols) => {
+            handleSaveSectionLayout(
+              customizeSection.id,
+              newKeys,
+              hiddenKeys,
+              widths,
+              reqKeys,
+              gridCols
+            );
+          }}
+          onReset={() => {
+            handleResetSectionLayout(customizeSection.id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Customize Layout Modal ───────────────────────────────────────────────────
+interface CustomizeLayoutModalProps {
+  isOpen: boolean;
+  section: OverviewSection;
+  allRegistryFields: FieldDefinition[];
+  onClose: () => void;
+  onSave: (
+    fieldKeys: string[],
+    hiddenFieldKeys: string[],
+    fieldWidths: Record<string, "full" | "half">,
+    requiredFieldKeys: string[],
+    gridColumns: number
+  ) => void;
+  onReset: () => void;
+}
+
+function CustomizeLayoutModal({
+  isOpen,
+  section,
+  allRegistryFields,
+  onClose,
+  onSave,
+  onReset,
+}: CustomizeLayoutModalProps) {
+  const [orderedKeys, setOrderedKeys] = useState<string[]>(() => section.fieldKeys || []);
+  const [hiddenKeys, setHiddenKeys] = useState<string[]>(() => section.hiddenFieldKeys || []);
+  const [fieldWidths, setFieldWidths] = useState<Record<string, "full" | "half">>(() => section.fieldWidths || {});
+  const [requiredKeys, setRequiredKeys] = useState<string[]>(() => section.requiredFieldKeys || []);
+  const [gridColumns, setGridColumns] = useState<number>(() => section.gridColumns || 2);
+
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    setOrderedKeys(section.fieldKeys || []);
+    setHiddenKeys(section.hiddenFieldKeys || []);
+    setFieldWidths(section.fieldWidths || {});
+    setRequiredKeys(section.requiredFieldKeys || []);
+    setGridColumns(section.gridColumns || 2);
+  }, [section]);
+
+  if (!isOpen) return null;
+
+  const toggleVisibility = (key: string) => {
+    setHiddenKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const toggleWidth = (key: string) => {
+    setFieldWidths((prev) => {
+      const current = prev[key];
+      const next = current === "full" ? "half" : "full";
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    e.dataTransfer.setData("text/plain", String(idx));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIdx !== idx) {
+      setDragOverIdx(idx);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIdx) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    const next = [...orderedKeys];
+    const [moved] = next.splice(draggedIdx, 1);
+    next.splice(dropIdx, 0, moved);
+    setOrderedKeys(next);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const getBadgeType = (key: string, regField?: FieldDefinition) => {
+    if (regField?.inputType) {
+      if (regField.inputType === "crm_bind" || (regField.inputType as string) === "relationship") return "BIND";
+      if (regField.inputType === "group" || regField.inputType === "group_repeatable") return "GROUP";
+      if (regField.inputType === "list_select" || regField.inputType === "list_open" || regField.inputType === "new_list" || regField.inputType === "multiselect") return "SELECT";
+      return regField.inputType.toUpperCase();
+    }
+    if (key.includes("phone")) return "PHONE";
+    if (key.includes("email")) return "EMAIL";
+    if (key.includes("date") || key.includes("dob") || key.includes("time")) return "DATE";
+    if (key.includes("source") || key.includes("type") || key.includes("status") || key.includes("gender")) return "SELECT";
+    if (key.includes("partner") || key.includes("employee") || key.includes("referred")) return "BIND";
+    return "TEXT";
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+      <div
+        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header matching screenshot */}
+        <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3 border-b border-slate-100/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 leading-snug">
+                Customize Layout
+              </h3>
+              <p className="text-xs text-slate-500 leading-tight">
+                {section.title} <span className="text-slate-400">(only visible to you)</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Instruction text matching screenshot */}
+        <div className="px-5 py-2.5 text-xs text-slate-500 leading-relaxed bg-slate-50/50 border-b border-slate-100">
+          Drag items to reorder how fields appear for you, or click the eye icon to hide/show fields.
+        </div>
+
+        {/* Section Grid Selection for Expanded View */}
+        <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <span className="text-xs font-semibold text-slate-800 block">
+              Number of Columns
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Columns layout in expanded view
+            </span>
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={gridColumns}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (!isNaN(val) && val >= 1) {
+                  setGridColumns(val);
+                }
+              }}
+              className="w-12 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 py-1 border border-slate-200"
+              title="Number of columns"
+            />
+            <span className="text-xs font-medium text-slate-500">
+              {gridColumns === 1 ? "column" : "columns"}
+            </span>
+          </div>
+        </div>
+
+        {/* List of field cards */}
+        <div className="p-4 space-y-2.5 overflow-y-auto flex-1 custom-scrollbar">
+          {orderedKeys.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+              No fields in this section to customize.
+            </div>
+          ) : (
+            orderedKeys.map((key, idx) => {
+              const regField = allRegistryFields.find((f) => f.key === key);
+              const label =
+                regField?.label ||
+                key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+              const badgeType = getBadgeType(key, regField);
+              const isHidden = hiddenKeys.includes(key);
+              const isFull = fieldWidths[key] === "full";
+              const isDragging = draggedIdx === idx;
+              const isOver = dragOverIdx === idx;
+
+              return (
+                <div
+                  key={key}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={`group rounded-2xl border px-3.5 py-2.5 flex items-center justify-between gap-2.5 transition-all select-none ${
+                    isDragging
+                      ? "opacity-30 border-dashed border-blue-400 bg-blue-50/40"
+                      : isOver
+                      ? "border-blue-400 bg-blue-50/30 ring-2 ring-blue-300/40"
+                      : isHidden
+                      ? "border-slate-200 bg-slate-50/60 opacity-60"
+                      : "border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
+                  }`}
+                >
+                  {/* Left: Drag grip, label, type badge */}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span
+                      className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-0.5 shrink-0"
+                      title="Drag to reorder"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm font-semibold truncate ${
+                        isHidden ? "text-slate-400 line-through" : "text-slate-800"
+                      }`}
+                      title={label}
+                    >
+                      {label}
+                    </span>
+                    <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
+                      {badgeType}
+                    </span>
+                  </div>
+
+                  {/* Right: Width toggle (Full vs 1/2) and Eye Visibility toggle */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Width toggle: Full vs 1/2 */}
+                    <button
+                      type="button"
+                      onClick={() => toggleWidth(key)}
+                      className={`text-xs font-medium px-3 py-1 rounded-full border transition-all cursor-pointer ${
+                        isFull
+                          ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
+                          : "bg-white border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                      }`}
+                      title="Toggle field width: Full row vs 1/2 row"
+                    >
+                      {isFull ? "Full" : "1/2"}
+                    </button>
+
+                    {/* Visibility Eye button (as shown in screenshot) */}
+                    <button
+                      type="button"
+                      onClick={() => toggleVisibility(key)}
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isHidden
+                          ? "text-slate-300 hover:text-slate-500 hover:bg-slate-100"
+                          : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      }`}
+                      title={isHidden ? "Click to show field" : "Click to hide field"}
+                    >
+                      {isHidden ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer matching screenshot */}
+        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 px-2 rounded-lg hover:bg-slate-200/50"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+            <span>Reset to default</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/50 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(orderedKeys, hiddenKeys, fieldWidths, requiredKeys, gridColumns)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+              <span>Save Layout</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
