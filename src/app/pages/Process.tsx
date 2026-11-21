@@ -1904,7 +1904,7 @@ export default function Process() {
     fieldupdate: ["fieldUpdateBlocks", ...CONDITION_FIELDS],
     assignhuman: [
       "assignedUser", "assignmentFilter", "assignScope", "selectedDepartments", "selectedRoles",
-      "selectedUsers", "scopeUserSelections", "userSequences", "assignedRole", "entityAssignee",
+      "selectedUsers", "scopeRoleSelections", "roleSequences", "scopeUserSelections", "userSequences", "assignedRole", "entityAssignee",
       "distributionPriority", ...CONDITION_FIELDS
     ],
     callaction: [

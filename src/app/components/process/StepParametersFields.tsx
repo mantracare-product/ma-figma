@@ -2783,9 +2783,12 @@ export default function StepParametersFields({
             })()}
 
             {(stepKey === "assignhuman" || stepKey === "assign-responsible") && (() => {
-              const currentScope: "department" | "role" | "user" =
-                params.assignScope ||
-                (params.assignmentFilter === "role" ? "role" : params.assignmentFilter === "entity" || params.assignmentFilter === "user" ? "user" : "department");
+              const currentScope: "department" | "user" =
+                params.assignScope === "user" ||
+                params.assignmentFilter === "user" ||
+                params.assignmentFilter === "entity"
+                  ? "user"
+                  : "department";
 
               const selectedDepts: string[] = Array.isArray(params.selectedDepartments)
                 ? params.selectedDepartments
@@ -2799,8 +2802,6 @@ export default function StepParametersFields({
                 ? params.selectedRoles
                 : params.assignedRole
                 ? [params.assignedRole]
-                : availableRoles.length > 0
-                ? [availableRoles[0]]
                 : [];
 
               const selectedUsers: (string | number)[] = Array.isArray(params.selectedUsers)
@@ -2809,12 +2810,13 @@ export default function StepParametersFields({
                 ? [params.assignedUser]
                 : [];
 
-              const scopeUserSelections: Record<string, (string | number)[]> = params.scopeUserSelections || {};
+              const scopeRoleSelections: Record<string, string[]> = params.scopeRoleSelections || {};
+              const roleSequences: Record<string, Record<string, number>> = params.roleSequences || {};
               const userSequences: Record<string, Record<string, number>> = params.userSequences || {};
               const distributionPriority: "round_robin" | "strict_priority" | "random" =
                 params.distributionPriority || "round_robin";
 
-              // Helpers to get members for a department or role
+              // Helpers to get members for a department
               const getDeptMembers = (deptName: string): TeamMember[] => {
                 const dLower = deptName.toLowerCase();
                 return teamMembers.filter((m) => {
@@ -2825,13 +2827,85 @@ export default function StepParametersFields({
                 });
               };
 
-              const getRoleMembers = (roleName: string): TeamMember[] => {
+              // Helper to get roles for a department
+              const getDeptRoles = (deptName: string): string[] => {
+                const dLower = deptName.toLowerCase();
+                const fromMembers = teamMembers.flatMap((m) => {
+                  const roles: string[] = [];
+                  if (m.department && m.department.toLowerCase() === dLower && m.role) {
+                    roles.push(m.role);
+                  }
+                  if (m.assignedDepartments) {
+                    m.assignedDepartments.forEach((ad) => {
+                      if (ad.department && ad.department.toLowerCase() === dLower && ad.role) {
+                        roles.push(ad.role);
+                      }
+                    });
+                  }
+                  return roles;
+                });
+
+                const standardDeptRoles: Record<string, string[]> = {
+                  clinical: [
+                    "Doctor / Physician",
+                    "Ophthalmologist",
+                    "Senior Surgeon",
+                    "Care Coordinator",
+                    "Intake Specialist",
+                    "Nurse Practitioner",
+                  ],
+                  admin: [
+                    "Administration",
+                    "Administrator",
+                    "Clinic Manager",
+                    "Operations Lead",
+                    "Executive Assistant",
+                  ],
+                  support: [
+                    "Support Agent",
+                    "Receptionist",
+                    "Front Desk Coordinator",
+                    "Patient Concierge",
+                  ],
+                  billing: [
+                    "Billing Specialist",
+                    "Coding Specialist",
+                    "Financial Counselor",
+                    "Claims Reviewer",
+                  ],
+                };
+
+                let defaults: string[] = [];
+                if (dLower.includes("clinic") || dLower.includes("care") || dLower.includes("med")) {
+                  defaults = standardDeptRoles.clinical;
+                } else if (dLower.includes("admin") || dLower.includes("exec") || dLower.includes("manage")) {
+                  defaults = standardDeptRoles.admin;
+                } else if (dLower.includes("support") || dLower.includes("service") || dLower.includes("front") || dLower.includes("desk")) {
+                  defaults = standardDeptRoles.support;
+                } else if (dLower.includes("bill") || dLower.includes("finance") || dLower.includes("claim")) {
+                  defaults = standardDeptRoles.billing;
+                } else {
+                  defaults = ["Team Lead", "Specialist", "Coordinator", "Associate"];
+                }
+
+                return Array.from(new Set([...fromMembers, ...defaults])).filter(Boolean);
+              };
+
+              // Helper to count members with a role in a department
+              const getMembersWithRoleInDept = (deptName: string, roleName: string): number => {
+                const dLower = deptName.toLowerCase();
                 const rLower = roleName.toLowerCase();
                 return teamMembers.filter((m) => {
-                  if (m.role && m.role.toLowerCase() === rLower) return true;
-                  if (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.role?.toLowerCase() === rLower)) return true;
-                  return false;
-                });
+                  const isDept =
+                    (m.department && m.department.toLowerCase() === dLower) ||
+                    (m.departments && m.departments.some((d) => d.toLowerCase() === dLower)) ||
+                    (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.department?.toLowerCase() === dLower));
+                  if (!isDept) return false;
+                  const isRole =
+                    (m.role && m.role.toLowerCase() === rLower) ||
+                    (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.role?.toLowerCase() === rLower));
+                  return isRole;
+                }).length;
               };
 
               // Helper to toggle a selection in an array
@@ -2839,34 +2913,102 @@ export default function StepParametersFields({
                 return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
               };
 
-              // Helper to toggle user selection within a scopeKey
-              const toggleUserInScope = (scopeKey: string, userId: string | number, allMembers: TeamMember[]) => {
-                const currentSelected = scopeUserSelections[scopeKey];
-                let next: (string | number)[];
+              // Helper to toggle role within a department
+              const toggleRoleInDept = (deptName: string, roleName: string, allRoles: string[]) => {
+                const currentSelected = scopeRoleSelections[deptName];
+                let next: string[];
                 if (!currentSelected || currentSelected.length === 0) {
-                  // Was "all assigned", now deselect this one, keeping all others selected
-                  next = allMembers.map((m) => m.id).filter((id) => String(id) !== String(userId));
-                } else if (currentSelected.some((id) => String(id) === String(userId))) {
-                  next = currentSelected.filter((id) => String(id) !== String(userId));
+                  // Was "all roles assigned", now deselect this one
+                  next = allRoles.filter((r) => r !== roleName);
+                } else if (currentSelected.includes(roleName)) {
+                  next = currentSelected.filter((r) => r !== roleName);
                 } else {
-                  next = [...currentSelected, userId];
+                  next = [...currentSelected, roleName];
                 }
+                const updatedScopeRoles = {
+                  ...scopeRoleSelections,
+                  [deptName]: next,
+                };
+                const aggregatedRoles = Array.from(
+                  new Set(
+                    selectedDepts.flatMap((d) => {
+                      const roles = updatedScopeRoles[d];
+                      return roles && roles.length > 0 ? roles : getDeptRoles(d);
+                    })
+                  )
+                );
                 onChange({
-                  scopeUserSelections: {
-                    ...scopeUserSelections,
-                    [scopeKey]: next,
+                  scopeRoleSelections: updatedScopeRoles,
+                  selectedRoles: aggregatedRoles,
+                  assignedRole: aggregatedRoles[0] || "",
+                });
+              };
+
+              // Helper to reset all roles assigned for a department
+              const resetAllRolesInDept = (deptName: string) => {
+                const next = { ...scopeRoleSelections };
+                delete next[deptName];
+                const aggregatedRoles = Array.from(
+                  new Set(
+                    selectedDepts.flatMap((d) => {
+                      const roles = next[d];
+                      return roles && roles.length > 0 ? roles : getDeptRoles(d);
+                    })
+                  )
+                );
+                onChange({
+                  scopeRoleSelections: next,
+                  selectedRoles: aggregatedRoles,
+                  assignedRole: aggregatedRoles[0] || "",
+                });
+              };
+
+              // Helper to reorder role sequence within a department
+              const moveRoleSequence = (
+                deptName: string,
+                sortedRoles: string[],
+                index: number,
+                direction: "up" | "down"
+              ) => {
+                const targetIndex = direction === "up" ? index - 1 : index + 1;
+                if (targetIndex < 0 || targetIndex >= sortedRoles.length) return;
+
+                const currentMap = { ...(roleSequences[deptName] || {}) };
+                sortedRoles.forEach((r, idx) => {
+                  if (currentMap[r] === undefined) {
+                    currentMap[r] = idx + 1;
+                  }
+                });
+
+                const roleA = sortedRoles[index];
+                const roleB = sortedRoles[targetIndex];
+
+                const seqA = currentMap[roleA] ?? index + 1;
+                const seqB = currentMap[roleB] ?? targetIndex + 1;
+
+                currentMap[roleA] = seqB;
+                currentMap[roleB] = seqA;
+
+                onChange({
+                  roleSequences: {
+                    ...roleSequences,
+                    [deptName]: currentMap,
                   },
                 });
               };
 
-              // Helper to reset to all members assigned
-              const resetAllUsersInScope = (scopeKey: string) => {
-                const next = { ...scopeUserSelections };
-                delete next[scopeKey];
-                onChange({ scopeUserSelections: next });
+              const setRoleSequenceNumber = (deptName: string, roleName: string, newSeq: number) => {
+                const currentMap = { ...(roleSequences[deptName] || {}) };
+                currentMap[roleName] = Math.max(1, newSeq);
+                onChange({
+                  roleSequences: {
+                    ...roleSequences,
+                    [deptName]: currentMap,
+                  },
+                });
               };
 
-              // Helper to reorder sequence within a scope
+              // Helper to reorder sequence within user scope
               const moveUserSequence = (
                 scopeKey: string,
                 sortedMembers: TeamMember[],
@@ -2924,22 +3066,21 @@ export default function StepParametersFields({
                           Assign Responsible
                         </span>
                         <span className="text-[11px] text-slate-500">
-                          Configure assignment scope by Department, Role, or specific User
+                          Configure assignment scope by Department & Roles, or specific Users
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 1. Choose Scope: Department | Role | User */}
+                  {/* 1. Choose Scope: Department | User */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                       Choose Scope
                     </label>
-                    <div className="grid grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-2 gap-2.5">
                       {[
-                        { id: "department", label: "Department", icon: Building2, desc: "Scope by department" },
-                        { id: "role", label: "Role", icon: Shield, desc: "Scope by role" },
-                        { id: "user", label: "User", icon: Users, desc: "Scope by specific users" },
+                        { id: "department", label: "Department", icon: Building2, desc: "Assign roles by department" },
+                        { id: "user", label: "User", icon: Users, desc: "Assign specific users" },
                       ].map((tab) => {
                         const Icon = tab.icon;
                         const isSelected = currentScope === tab.id;
@@ -2970,7 +3111,7 @@ export default function StepParametersFields({
                     </div>
                   </div>
 
-                  {/* ── 2. SCOPE: DEPARTMENT ── */}
+                  {/* ── 2. SCOPE: DEPARTMENT (Assign Roles & Sequencing) ── */}
                   {currentScope === "department" && (
                     <div className="space-y-4">
                       {/* Department Multi-Select Picker */}
@@ -3001,7 +3142,7 @@ export default function StepParametersFields({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {availableDepartments.map((deptName) => {
                             const isChecked = selectedDepts.includes(deptName);
-                            const membersCount = getDeptMembers(deptName).length;
+                            const deptRolesCount = getDeptRoles(deptName).length;
                             return (
                               <button
                                 key={deptName}
@@ -3030,7 +3171,7 @@ export default function StepParametersFields({
                                   <span className="truncate">{deptName}</span>
                                 </div>
                                 <span className="text-[10px] text-slate-400 shrink-0 font-normal">
-                                  {membersCount} {membersCount === 1 ? "member" : "members"}
+                                  {deptRolesCount} {deptRolesCount === 1 ? "role" : "roles"}
                                 </span>
                               </button>
                             );
@@ -3038,23 +3179,23 @@ export default function StepParametersFields({
                         </div>
                       </div>
 
-                      {/* Department Users & Sequencing */}
+                      {/* Department Roles & Sequencing */}
                       {selectedDepts.length === 0 ? (
                         <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500">
-                          Please select one or more departments above to configure user assignments.
+                          Please select one or more departments above to configure role assignments.
                         </div>
                       ) : (
                         selectedDepts.map((dept) => {
-                          const allMembers = getDeptMembers(dept);
-                          const customSelected = scopeUserSelections[dept];
+                          const allDeptRoles = getDeptRoles(dept);
+                          const customSelected = scopeRoleSelections[dept];
                           const isAllAssigned =
                             !customSelected ||
                             customSelected.length === 0 ||
-                            customSelected.length === allMembers.length;
+                            customSelected.length === allDeptRoles.length;
 
-                          const sortedMembers = [...allMembers].sort((a, b) => {
-                            const seqA = userSequences[dept]?.[String(a.id)] ?? 999;
-                            const seqB = userSequences[dept]?.[String(b.id)] ?? 999;
+                          const sortedRoles = [...allDeptRoles].sort((a, b) => {
+                            const seqA = roleSequences[dept]?.[a] ?? 999;
+                            const seqB = roleSequences[dept]?.[b] ?? 999;
                             return seqA - seqB;
                           });
 
@@ -3069,7 +3210,7 @@ export default function StepParametersFields({
                                   <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
                                   <span className="text-xs font-bold text-slate-900">{dept}</span>
                                   <span className="text-[10px] text-slate-400">
-                                    ({allMembers.length} {allMembers.length === 1 ? "member" : "members"})
+                                    ({allDeptRoles.length} {allDeptRoles.length === 1 ? "role" : "roles"})
                                   </span>
                                 </div>
 
@@ -3077,19 +3218,19 @@ export default function StepParametersFields({
                                   {isAllAssigned ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                       <Check className="w-3 h-3 stroke-[2.5]" />
-                                      All Users Assigned
+                                      All Roles Assigned
                                     </span>
                                   ) : (
                                     <div className="flex items-center gap-2">
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                        Custom ({customSelected.length} of {allMembers.length})
+                                        Custom ({customSelected.length} of {allDeptRoles.length} roles)
                                       </span>
                                       <button
                                         type="button"
-                                        onClick={() => resetAllUsersInScope(dept)}
+                                        onClick={() => resetAllRolesInDept(dept)}
                                         className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
                                       >
-                                        Assign All
+                                        Assign All Roles
                                       </button>
                                     </div>
                                   )}
@@ -3098,69 +3239,63 @@ export default function StepParametersFields({
 
                               <p className="text-[11px] text-slate-500">
                                 {isAllAssigned
-                                  ? "All active members in this department are assigned by default. Check individual members below to restrict assignment, and use priority arrows to set the assignment sequence."
-                                  : "Only checked members in this department are assigned. Adjust the sequence order below."}
+                                  ? "All active roles in this department are assigned by default. Check specific roles below to restrict assignment, and set the sequence / priority for routing."
+                                  : "Only checked roles in this department are assigned. Adjust the sequence order below."}
                               </p>
 
-                              {/* Members List with Sequencing */}
-                              {allMembers.length === 0 ? (
+                              {/* Roles List with Sequencing */}
+                              {allDeptRoles.length === 0 ? (
                                 <p className="text-xs text-slate-400 italic py-2">
-                                  No team members currently assigned to {dept}.
+                                  No roles currently defined for {dept}.
                                 </p>
                               ) : (
                                 <div className="space-y-1.5">
-                                  {sortedMembers.map((member, idx) => {
-                                    const isUserChecked =
+                                  {sortedRoles.map((roleName, idx) => {
+                                    const isRoleChecked =
                                       isAllAssigned ||
-                                      (customSelected && customSelected.some((id) => String(id) === String(member.id)));
-                                    const seq = userSequences[dept]?.[String(member.id)] ?? idx + 1;
+                                      (customSelected && customSelected.includes(roleName));
+                                    const seq = roleSequences[dept]?.[roleName] ?? idx + 1;
+                                    const membersCount = getMembersWithRoleInDept(dept, roleName);
 
                                     return (
                                       <div
-                                        key={member.id}
+                                        key={roleName}
                                         className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                                          isUserChecked
+                                          isRoleChecked
                                             ? "bg-slate-50/70 border-slate-200"
                                             : "bg-white border-slate-100 opacity-50"
                                         }`}
                                       >
-                                        {/* User Checkbox & Info */}
+                                        {/* Role Checkbox & Info */}
                                         <div
-                                          onClick={() => toggleUserInScope(dept, member.id, allMembers)}
+                                          onClick={() => toggleRoleInDept(dept, roleName, allDeptRoles)}
                                           className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
                                         >
                                           <div
                                             className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                              isUserChecked
+                                              isRoleChecked
                                                 ? "bg-blue-600 border-blue-600 text-white"
                                                 : "border-slate-300 bg-white"
                                             }`}
                                           >
-                                            {isUserChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                            {isRoleChecked && <Check className="w-3 h-3 stroke-[3]" />}
                                           </div>
 
-                                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                            {member.name
-                                              ? member.name
-                                                  .split(" ")
-                                                  .map((n) => n[0])
-                                                  .slice(0, 2)
-                                                  .join("")
-                                                  .toUpperCase()
-                                              : "U"}
+                                          <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0 border border-blue-200/60">
+                                            <Shield className="w-3 h-3" />
                                           </div>
 
                                           <div className="min-w-0 flex-1">
                                             <span className="text-xs font-semibold text-slate-800 block truncate">
-                                              {member.name}
+                                              {roleName}
                                             </span>
                                             <span className="text-[10px] text-slate-400 block truncate">
-                                              {member.role || "Team Member"} • {member.email}
+                                              {dept} • {membersCount} {membersCount === 1 ? "team member" : "team members"}
                                             </span>
                                           </div>
                                         </div>
 
-                                        {/* User Sequence / Priority Controls */}
+                                        {/* Role Sequence / Priority Controls */}
                                         <div className="flex items-center gap-1.5 shrink-0">
                                           <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
                                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -3172,7 +3307,7 @@ export default function StepParametersFields({
                                               max="99"
                                               value={seq}
                                               onChange={(e) =>
-                                                setUserSequenceNumber(dept, member.id, parseInt(e.target.value) || 1)
+                                                setRoleSequenceNumber(dept, roleName, parseInt(e.target.value) || 1)
                                               }
                                               className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
                                             />
@@ -3182,7 +3317,7 @@ export default function StepParametersFields({
                                             <button
                                               type="button"
                                               disabled={idx === 0}
-                                              onClick={() => moveUserSequence(dept, sortedMembers, idx, "up")}
+                                              onClick={() => moveRoleSequence(dept, sortedRoles, idx, "up")}
                                               className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
                                               title="Move up priority"
                                             >
@@ -3190,8 +3325,8 @@ export default function StepParametersFields({
                                             </button>
                                             <button
                                               type="button"
-                                              disabled={idx === sortedMembers.length - 1}
-                                              onClick={() => moveUserSequence(dept, sortedMembers, idx, "down")}
+                                              disabled={idx === sortedRoles.length - 1}
+                                              onClick={() => moveRoleSequence(dept, sortedRoles, idx, "down")}
                                               className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
                                               title="Move down priority"
                                             >
@@ -3211,248 +3346,7 @@ export default function StepParametersFields({
                     </div>
                   )}
 
-                  {/* ── 3. SCOPE: ROLE ── */}
-                  {currentScope === "role" && (
-                    <div className="space-y-4">
-                      {/* Role Multi-Select Picker */}
-                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Select Roles (Multi-Select)
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedRoles: [...availableRoles] })}
-                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-slate-300">•</span>
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedRoles: [] })}
-                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {availableRoles.map((roleName) => {
-                            const isChecked = selectedRoles.includes(roleName);
-                            const membersCount = getRoleMembers(roleName).length;
-                            return (
-                              <button
-                                key={roleName}
-                                type="button"
-                                onClick={() =>
-                                  onChange({
-                                    selectedRoles: toggleItem(selectedRoles, roleName),
-                                  })
-                                }
-                                className={`px-3 py-2 rounded-lg border text-left text-xs font-medium transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                                  isChecked
-                                    ? "bg-blue-50/80 border-blue-400 text-blue-900 font-semibold"
-                                    : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <div
-                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                      isChecked
-                                        ? "bg-blue-600 border-blue-600 text-white"
-                                        : "border-slate-300 bg-white"
-                                    }`}
-                                  >
-                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                  <span className="truncate">{roleName}</span>
-                                </div>
-                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
-                                  {membersCount} {membersCount === 1 ? "member" : "members"}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Role Users & Sequencing */}
-                      {selectedRoles.length === 0 ? (
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500">
-                          Please select one or more roles above to configure user assignments.
-                        </div>
-                      ) : (
-                        selectedRoles.map((roleName) => {
-                          const allMembers = getRoleMembers(roleName);
-                          const customSelected = scopeUserSelections[roleName];
-                          const isAllAssigned =
-                            !customSelected ||
-                            customSelected.length === 0 ||
-                            customSelected.length === allMembers.length;
-
-                          const sortedMembers = [...allMembers].sort((a, b) => {
-                            const seqA = userSequences[roleName]?.[String(a.id)] ?? 999;
-                            const seqB = userSequences[roleName]?.[String(b.id)] ?? 999;
-                            return seqA - seqB;
-                          });
-
-                          return (
-                            <div
-                              key={roleName}
-                              className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs"
-                            >
-                              {/* Role Header */}
-                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                  <Shield className="w-4 h-4 text-blue-600 shrink-0" />
-                                  <span className="text-xs font-bold text-slate-900">{roleName}</span>
-                                  <span className="text-[10px] text-slate-400">
-                                    ({allMembers.length} {allMembers.length === 1 ? "member" : "members"})
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {isAllAssigned ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      <Check className="w-3 h-3 stroke-[2.5]" />
-                                      All Users Assigned
-                                    </span>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                        Custom ({customSelected.length} of {allMembers.length})
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => resetAllUsersInScope(roleName)}
-                                        className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
-                                      >
-                                        Assign All
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <p className="text-[11px] text-slate-500">
-                                {isAllAssigned
-                                  ? "All active members with this role are assigned by default. Check individual members below to restrict assignment, and use priority arrows to set the assignment sequence."
-                                  : "Only checked members with this role are assigned. Adjust the sequence order below."}
-                              </p>
-
-                              {/* Members List with Sequencing */}
-                              {allMembers.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic py-2">
-                                  No team members currently have the role {roleName}.
-                                </p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {sortedMembers.map((member, idx) => {
-                                    const isUserChecked =
-                                      isAllAssigned ||
-                                      (customSelected && customSelected.some((id) => String(id) === String(member.id)));
-                                    const seq = userSequences[roleName]?.[String(member.id)] ?? idx + 1;
-
-                                    return (
-                                      <div
-                                        key={member.id}
-                                        className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                                          isUserChecked
-                                            ? "bg-slate-50/70 border-slate-200"
-                                            : "bg-white border-slate-100 opacity-50"
-                                        }`}
-                                      >
-                                        {/* User Checkbox & Info */}
-                                        <div
-                                          onClick={() => toggleUserInScope(roleName, member.id, allMembers)}
-                                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
-                                        >
-                                          <div
-                                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                              isUserChecked
-                                                ? "bg-blue-600 border-blue-600 text-white"
-                                                : "border-slate-300 bg-white"
-                                            }`}
-                                          >
-                                            {isUserChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                                          </div>
-
-                                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                            {member.name
-                                              ? member.name
-                                                  .split(" ")
-                                                  .map((n) => n[0])
-                                                  .slice(0, 2)
-                                                  .join("")
-                                                  .toUpperCase()
-                                              : "U"}
-                                          </div>
-
-                                          <div className="min-w-0 flex-1">
-                                            <span className="text-xs font-semibold text-slate-800 block truncate">
-                                              {member.name}
-                                            </span>
-                                            <span className="text-[10px] text-slate-400 block truncate">
-                                              {member.department || "General"} • {member.email}
-                                            </span>
-                                          </div>
-                                        </div>
-
-                                        {/* User Sequence / Priority Controls */}
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                              Seq
-                                            </span>
-                                            <input
-                                              type="number"
-                                              min="1"
-                                              max="99"
-                                              value={seq}
-                                              onChange={(e) =>
-                                                setUserSequenceNumber(roleName, member.id, parseInt(e.target.value) || 1)
-                                              }
-                                              className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
-                                            />
-                                          </div>
-
-                                          <div className="flex flex-col">
-                                            <button
-                                              type="button"
-                                              disabled={idx === 0}
-                                              onClick={() => moveUserSequence(roleName, sortedMembers, idx, "up")}
-                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                              title="Move up priority"
-                                            >
-                                              <ChevronUp className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={idx === sortedMembers.length - 1}
-                                              onClick={() => moveUserSequence(roleName, sortedMembers, idx, "down")}
-                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                              title="Move down priority"
-                                            >
-                                              <ChevronDown className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── 4. SCOPE: USER ── */}
+                  {/* ── 3. SCOPE: USER ── */}
                   {currentScope === "user" && (
                     <div className="space-y-4">
                       <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
@@ -3612,7 +3506,7 @@ export default function StepParametersFields({
                     </div>
                   )}
 
-                  {/* ── 5. DISTRIBUTION PRIORITY ── */}
+                  {/* ── 4. DISTRIBUTION PRIORITY ── */}
                   <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
                     <div>
                       <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
