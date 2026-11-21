@@ -2844,11 +2844,6 @@ function CustomizeLayoutModal({
           </button>
         </div>
 
-        {/* Instruction text matching screenshot */}
-        <div className="px-5 py-2.5 text-xs text-slate-500 leading-relaxed bg-slate-50/50 border-b border-slate-100">
-          Drag items to reorder how fields appear for you, or click the eye icon to hide/show fields.
-        </div>
-
         {/* Section Grid Selection for Expanded View */}
         <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-3">
           <div>
@@ -2880,6 +2875,11 @@ function CustomizeLayoutModal({
           </div>
         </div>
 
+        {/* Instruction text */}
+        <div className="px-5 py-2.5 text-xs text-slate-500 leading-relaxed bg-slate-50/50 border-b border-slate-100">
+          Drag items to reorder how fields appear for you.
+        </div>
+
         {/* List of field cards */}
         <div className="p-4 space-y-2.5 overflow-y-auto flex-1 custom-scrollbar">
           {orderedKeys.length === 0 ? (
@@ -2893,8 +2893,6 @@ function CustomizeLayoutModal({
                 regField?.label ||
                 key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
               const badgeType = getBadgeType(key, regField);
-              const isHidden = hiddenKeys.includes(key);
-              const isFull = fieldWidths[key] === "full";
               const isDragging = draggedIdx === idx;
               const isOver = dragOverIdx === idx;
 
@@ -2911,12 +2909,10 @@ function CustomizeLayoutModal({
                       ? "opacity-30 border-dashed border-blue-400 bg-blue-50/40"
                       : isOver
                       ? "border-blue-400 bg-blue-50/30 ring-2 ring-blue-300/40"
-                      : isHidden
-                      ? "border-slate-200 bg-slate-50/60 opacity-60"
                       : "border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
                   }`}
                 >
-                  {/* Left: Drag grip, label, type badge */}
+                  {/* Left: Drag grip, label */}
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <span
                       className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-0.5 shrink-0"
@@ -2925,52 +2921,17 @@ function CustomizeLayoutModal({
                       <GripVertical className="w-4 h-4" />
                     </span>
                     <span
-                      className={`text-xs sm:text-sm font-semibold truncate ${
-                        isHidden ? "text-slate-400 line-through" : "text-slate-800"
-                      }`}
+                      className="text-xs sm:text-sm font-semibold truncate text-slate-800"
                       title={label}
                     >
                       {label}
                     </span>
-                    <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
-                      {badgeType}
-                    </span>
                   </div>
 
-                  {/* Right: Width toggle (Full vs 1/2) and Eye Visibility toggle */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Width toggle: Full vs 1/2 */}
-                    <button
-                      type="button"
-                      onClick={() => toggleWidth(key)}
-                      className={`text-xs font-medium px-3 py-1 rounded-full border transition-all cursor-pointer ${
-                        isFull
-                          ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
-                          : "bg-white border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-                      }`}
-                      title="Toggle field width: Full row vs 1/2 row"
-                    >
-                      {isFull ? "Full" : "1/2"}
-                    </button>
-
-                    {/* Visibility Eye button (as shown in screenshot) */}
-                    <button
-                      type="button"
-                      onClick={() => toggleVisibility(key)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                        isHidden
-                          ? "text-slate-300 hover:text-slate-500 hover:bg-slate-100"
-                          : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                      }`}
-                      title={isHidden ? "Click to show field" : "Click to hide field"}
-                    >
-                      {isHidden ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
+                  {/* Right: Field type badge */}
+                  <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
+                    {badgeType}
+                  </span>
                 </div>
               );
             })
