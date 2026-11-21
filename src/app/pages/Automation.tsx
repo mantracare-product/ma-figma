@@ -12,6 +12,7 @@ import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AddAutomationDrawer, { STEP_ALLOWED_TRIGGERS } from "../components/process/AddAutomationDrawer";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import type { WorkflowStep } from "../types/workflow";
 import type { EventTriggerType } from "../types/automation";
 import { GLOBAL_TRIGGER_CATALOG } from "../types/automation";
@@ -37,6 +38,7 @@ export default function Automation() {
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Scoped client processes
   const clientProcesses = useMemo(() => {
@@ -272,6 +274,12 @@ export default function Automation() {
         <PageHeader
           title="Automations"
           subtitle="Visual rule engine connecting lifecycle events directly to pipeline actions."
+          actions={
+            <HowItWorksButton
+              label="How Automations Work"
+              onClick={() => setShowHelp(true)}
+            />
+          }
         />
 
         {/* Stats Cards — thin capsule style matching WebForms */}
@@ -617,6 +625,21 @@ export default function Automation() {
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
       )}
+
+      {/* Page-level How It Works Modal */}
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Automations Work"
+        summary="Automations connect lifecycle events — like stage changes, form submissions, and incoming calls — directly to automated actions and human workflows."
+        bullets={[
+          "Create trigger-based rules to automate routine business and clinical workflows",
+          "Route records to specific departments, roles, or individual team members with configurable priority",
+          "Configure sequential round robin, strict priority waterfall, or balanced distribution algorithms",
+          "Monitor live execution logs, delivery status, and trigger performance",
+        ]}
+        guideUrl="/guide/automations"
+      />
     </div>
   );
 }

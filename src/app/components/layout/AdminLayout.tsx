@@ -19,17 +19,37 @@ import { Menu, X } from "lucide-react";
 import TeamMemberDrawer, { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
 import { useAuth } from "../../context/AuthContext";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
+import { HowItWorksModal } from "../help/HowItWorksModal";
+import { OPEN_HOW_IT_WORKS_EVENT } from "./PageHeader";
 
 export default function AdminLayout() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [globalHelpInfo, setGlobalHelpInfo] = useState<{ isOpen: boolean; title: string; subtitle?: string }>({
+    isOpen: false,
+    title: "",
+    subtitle: "",
+  });
 
   useEffect(() => {
     const handleOpen = () => setIsProfileOpen(true);
     window.addEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
     return () => window.removeEventListener(OPEN_USER_PROFILE_DRAWER_EVENT, handleOpen);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalHelp = (e: any) => {
+      const detail = e.detail || {};
+      setGlobalHelpInfo({
+        isOpen: true,
+        title: detail.title ? `How ${detail.title} Works` : "How It Works",
+        subtitle: detail.subtitle || "Learn how this section of MantraAssist works and how to get the most out of your clinical automation workflow.",
+      });
+    };
+    window.addEventListener(OPEN_HOW_IT_WORKS_EVENT, handleGlobalHelp);
+    return () => window.removeEventListener(OPEN_HOW_IT_WORKS_EVENT, handleGlobalHelp);
   }, []);
 
   const profileMember = useMemo(() => {
@@ -140,6 +160,20 @@ export default function AdminLayout() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         member={profileMember}
+      />
+
+      {/* Global How It Works Modal Fallback */}
+      <HowItWorksModal
+        isOpen={globalHelpInfo.isOpen}
+        onClose={() => setGlobalHelpInfo((prev) => ({ ...prev, isOpen: false }))}
+        title={globalHelpInfo.title}
+        summary={globalHelpInfo.subtitle || "Learn how this section of MantraAssist works and how to get the most out of your clinical automation workflow."}
+        bullets={[
+          "View real-time clinical and administrative data synchronized across all devices",
+          "Automate recurring communications, appointments, and pipeline handoffs",
+          "Collaborate with your team using AI-assisted clinical documentation and note generation",
+          "Customize visibility, field requirements, and departmental workflows in settings",
+        ]}
       />
     </div>
   );

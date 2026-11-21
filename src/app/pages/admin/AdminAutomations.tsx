@@ -12,6 +12,7 @@ import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import AddAutomationDrawer, { STEP_ALLOWED_TRIGGERS } from "../../components/process/AddAutomationDrawer";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
 import type { WorkflowStep } from "../../types/workflow";
 import type { EventTriggerType } from "../../types/automation";
 import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
@@ -43,6 +44,7 @@ export default function AdminAutomations() {
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Admin Scope filters
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
@@ -414,6 +416,12 @@ export default function AdminAutomations() {
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Admin Global Rules
             </span>
+          }
+          actions={
+            <HowItWorksButton
+              label="How Automations Work"
+              onClick={() => setShowHelp(true)}
+            />
           }
         />
 
@@ -887,6 +895,21 @@ export default function AdminAutomations() {
           </div>
         </div>
       )}
+
+      {/* Page-level How It Works Modal */}
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Automations Work"
+        summary="Automations connect lifecycle events — like stage changes, form submissions, and incoming calls — directly to automated actions and human workflows across tenant organizations."
+        bullets={[
+          "Define global rules with industry and category scoping across multiple clinics",
+          "Route records to specific departments, roles, or individual team members with configurable priority",
+          "Configure sequential round robin, strict priority waterfall, or balanced distribution algorithms",
+          "Enforce uniform business logic and automation standards across all sub-accounts",
+        ]}
+        guideUrl="/guide/automations"
+      />
     </div>
   );
 }

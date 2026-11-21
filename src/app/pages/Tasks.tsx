@@ -8,6 +8,7 @@ import {
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { Tooltip } from "../components/ui/Tooltip";
 import { useTasks, getPersonTaskProgress, getTaskOverallProgress } from "../../lib/tasksStore";
 import { TaskEntity } from "../../types/task";
@@ -57,6 +58,7 @@ export default function Tasks() {
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
+  const [showHelp, setShowHelp] = useState(false);
 
   // Keep selectedWorkflowId pointing to a valid specific workflow
   useEffect(() => {
@@ -599,6 +601,12 @@ export default function Tasks() {
               ? "Corporate operational assignments, cross-organization delegation, and checklists"
               : "Clinical tasks, operational assignments, checklists, and deadline tracking"
           }
+          actions={
+            <HowItWorksButton
+              label="How Tasks Works"
+              onClick={() => setShowHelp(true)}
+            />
+          }
         />
 
         {/* ── PageTopBar with Tabs (My Tasks vs Tasks by me), Workflow Switcher, Search, and New Task ── */}
@@ -703,6 +711,21 @@ export default function Tasks() {
         taskStages={taskStages}
         defaultWorkflowName={activeTaskWorkflow.name}
         defaultWorkflowId={activeTaskWorkflow.id}
+      />
+
+      {/* Page-level How It Works Modal */}
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Tasks Works"
+        summary="Tasks help you delegate operational assignments, track clinical checklists, and coordinate with team members across workflow stages."
+        bullets={[
+          "Track personal assignments in 'My Tasks' and delegated assignments in 'Tasks by me'",
+          "Move tasks through customizable pipeline stages with visual progress tracking",
+          "Attach interactive checklists and assign items to specific team members",
+          "Filter and search tasks by workflow, urgency, priority, and assignees",
+        ]}
+        guideUrl="/guide/tasks"
       />
     </div>
   );

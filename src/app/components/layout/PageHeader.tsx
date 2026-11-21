@@ -1,6 +1,9 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { HowItWorksButton } from "../help/HowItWorksModal";
+
+export const OPEN_HOW_IT_WORKS_EVENT = "open-how-it-works";
 
 interface PageHeaderProps {
   title: string;
@@ -8,6 +11,9 @@ interface PageHeaderProps {
   children?: ReactNode;
   actions?: ReactNode;
   badge?: ReactNode;
+  onHowItWorks?: () => void;
+  howItWorksLabel?: string;
+  hideHowItWorks?: boolean;
 }
 
 export default function PageHeader({
@@ -15,6 +21,9 @@ export default function PageHeader({
   subtitle,
   children,
   actions,
+  onHowItWorks,
+  howItWorksLabel,
+  hideHowItWorks = false,
   // badge is intentionally omitted to remove "Directory" and category capsules from the UI
 }: PageHeaderProps) {
   const [mounted, setMounted] = useState(false);
@@ -31,6 +40,21 @@ export default function PageHeader({
   if (!container) {
     return null;
   }
+
+  const hasCustomActions = Boolean(actions || children);
+  const showDefaultHowItWorks = !hasCustomActions && !hideHowItWorks;
+
+  const handleHowItWorksClick = () => {
+    if (onHowItWorks) {
+      onHowItWorks();
+    } else {
+      window.dispatchEvent(
+        new CustomEvent(OPEN_HOW_IT_WORKS_EVENT, {
+          detail: { title, subtitle },
+        })
+      );
+    }
+  };
 
   const content = (
     <div className="flex items-center justify-between w-full gap-3 min-w-0">
@@ -52,6 +76,12 @@ export default function PageHeader({
       <div className="flex items-center gap-2 shrink-0">
         {actions}
         {children}
+        {showDefaultHowItWorks && (
+          <HowItWorksButton
+            label={howItWorksLabel || "How it works"}
+            onClick={handleHowItWorksClick}
+          />
+        )}
       </div>
     </div>
   );
