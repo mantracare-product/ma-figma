@@ -181,5 +181,6 @@ export interface ReportDefinition {
   xAxisLabel?: string;
   yAxisLabel?: string;
   yAxisMode?: "count" | "field";
+  isPinnedToOverview?: boolean;
 }
 

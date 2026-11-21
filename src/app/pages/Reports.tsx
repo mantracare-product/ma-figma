@@ -9,6 +9,12 @@ import CustomReportBuilderModal from "../components/reports/CustomReportBuilderM
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { toast } from "sonner";
 import {
+  getPinnedReportIds,
+  isReportPinned,
+  togglePinReport,
+  PINNED_REPORTS_EVENT,
+} from "../../lib/pinnedReportsStore";
+import {
   BarChart3,
   Plus,
   Eye,
@@ -24,6 +30,7 @@ import {
   FileSpreadsheet,
   Check,
   ChevronRight,
+  Pin,
 } from "lucide-react";
 
 export default function Reports() {
@@ -35,6 +42,19 @@ export default function Reports() {
   const [builderInitialReport, setBuilderInitialReport] = useState<ReportDefinition | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [pinnedReportIds, setPinnedReportIds] = useState<string[]>(() => getPinnedReportIds());
+
+  React.useEffect(() => {
+    const handlePinnedChange = () => {
+      setPinnedReportIds(getPinnedReportIds());
+    };
+    window.addEventListener(PINNED_REPORTS_EVENT, handlePinnedChange);
+    window.addEventListener("storage", handlePinnedChange);
+    return () => {
+      window.removeEventListener(PINNED_REPORTS_EVENT, handlePinnedChange);
+      window.removeEventListener("storage", handlePinnedChange);
+    };
+  }, []);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -235,22 +255,34 @@ export default function Reports() {
               id: "name",
               header: "REPORT NAME",
               align: "left",
-              render: (report) => (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleViewReport(report)}
-                    className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {report.name}
-                  </button>
-                  {report.sharedWith && report.sharedWith.length > 0 && (
-                    <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
-                      Shared
-                    </span>
-                  )}
-                </div>
-              ),
+              render: (report) => {
+                const isPinned = pinnedReportIds.includes(report.id);
+                return (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleViewReport(report)}
+                      className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {report.name}
+                    </button>
+                    {isPinned && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#1456f0] border border-blue-200/80 shrink-0"
+                        title="Pinned to Overview dashboard"
+                      >
+                        <Pin className="w-2.5 h-2.5 fill-[#1456f0]" />
+                        <span>Pinned</span>
+                      </span>
+                    )}
+                    {report.sharedWith && report.sharedWith.length > 0 && (
+                      <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
+                        Shared
+                      </span>
+                    )}
+                  </div>
+                );
+              },
             },
             {
               id: "type",
@@ -295,31 +327,55 @@ export default function Reports() {
             },
           ];
 
-          const reportRowActions: TableRowAction<ReportDefinition>[] = [
-            {
-              label: "View Report",
-              icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
-              onClick: (report) => handleViewReport(report),
-            },
-            {
-              label: "Edit Custom Report",
-              icon: <Pencil className="w-3.5 h-3.5 text-slate-600" />,
-              hidden: (report) => report.type !== "custom",
-              onClick: (report) => handleEditReport(report),
-            },
-            {
-              label: "Duplicate Report",
-              icon: <Copy className="w-3.5 h-3.5 text-slate-600" />,
-              onClick: (report) => handleDuplicateReport(report),
-            },
-            {
-              label: "Delete",
-              icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
-              isDanger: true,
-              hidden: (report) => report.type !== "custom",
-              onClick: (report) => handleDelete(report.id, report.name),
-            },
-          ];
+          const getReportRowActions = (report: ReportDefinition): TableRowAction<ReportDefinition>[] => {
+            const isPinned = pinnedReportIds.includes(report.id);
+            return [
+              {
+                label: "View Report",
+                icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
+                onClick: (r) => handleViewReport(r),
+              },
+              {
+                label: isPinned ? "Unpin from Overview" : "Pin to Overview",
+                icon: (
+                  <Pin
+                    className={`w-3.5 h-3.5 ${
+                      isPinned ? "text-[#1456f0] fill-[#1456f0]" : "text-slate-600"
+                    }`}
+                  />
+                ),
+                onClick: (r) => {
+                  const nextPinned = togglePinReport(r.id);
+                  setPinnedReportIds(getPinnedReportIds());
+                  if (nextPinned) {
+                    toast.success(`Pinned "${r.name}" to Overview`, {
+                      description: "The live interactive graph is now available on your Overview dashboard.",
+                    });
+                  } else {
+                    toast.success(`Unpinned "${r.name}" from Overview`);
+                  }
+                },
+              },
+              {
+                label: "Edit Custom Report",
+                icon: <Pencil className="w-3.5 h-3.5 text-slate-600" />,
+                hidden: (r) => r.type !== "custom",
+                onClick: (r) => handleEditReport(r),
+              },
+              {
+                label: "Duplicate Report",
+                icon: <Copy className="w-3.5 h-3.5 text-slate-600" />,
+                onClick: (r) => handleDuplicateReport(r),
+              },
+              {
+                label: "Delete",
+                icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+                isDanger: true,
+                hidden: (r) => r.type !== "custom",
+                onClick: (r) => handleDelete(r.id, r.name),
+              },
+            ];
+          };
 
           const reportBulkActions: TableBulkAction[] = [
             {
@@ -344,7 +400,7 @@ export default function Reports() {
               data={filteredReports}
               columns={reportColumns}
               getRowId={(report) => report.id}
-              rowActions={reportRowActions}
+              rowActions={getReportRowActions}
               bulkActions={reportBulkActions}
               selectedIds={selectedRows}
               onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}

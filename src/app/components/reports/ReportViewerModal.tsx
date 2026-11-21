@@ -23,7 +23,13 @@ import {
   Trash2,
   RefreshCw,
   SlidersHorizontal,
+  Pin,
 } from "lucide-react";
+import {
+  isReportPinned,
+  togglePinReport,
+  PINNED_REPORTS_EVENT,
+} from "../../../lib/pinnedReportsStore";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
 import {
   ResponsiveContainer,
@@ -72,6 +78,42 @@ export default function ReportViewerModal({
 
   // Collapsible right-side filter panel toggle
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+
+  // Pinned to Overview state
+  const [isPinned, setIsPinned] = useState(() => (report ? isReportPinned(report.id) : false));
+
+  React.useEffect(() => {
+    if (report) {
+      setIsPinned(isReportPinned(report.id));
+    }
+  }, [report?.id]);
+
+  React.useEffect(() => {
+    const handlePinnedChange = () => {
+      if (report) {
+        setIsPinned(isReportPinned(report.id));
+      }
+    };
+    window.addEventListener(PINNED_REPORTS_EVENT, handlePinnedChange);
+    window.addEventListener("storage", handlePinnedChange);
+    return () => {
+      window.removeEventListener(PINNED_REPORTS_EVENT, handlePinnedChange);
+      window.removeEventListener("storage", handlePinnedChange);
+    };
+  }, [report?.id]);
+
+  const handleTogglePin = () => {
+    if (!report) return;
+    const next = togglePinReport(report.id);
+    setIsPinned(next);
+    if (next) {
+      toast.success(`Pinned "${report.name}" to Overview`, {
+        description: "This visual graph is now displayed on your Overview analytics dashboard.",
+      });
+    } else {
+      toast.success(`Unpinned "${report.name}" from Overview`);
+    }
+  };
 
   // Active filter state (initialized from report)
   const [activeDateRange, setActiveDateRange] = useState("all");
@@ -537,29 +579,55 @@ export default function ReportViewerModal({
                   </span>
                 </div>
 
-                {/* Graph Axis & Series Keys Bar */}
-                <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
-                  <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-md font-bold">
-                    X: {chartAggregation.xAxisLabel}
-                  </span>
-                  <span className="text-slate-300">vs</span>
-                  <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md font-bold">
-                    Y: {chartAggregation.yAxisLabel}
-                  </span>
-                  {report.breakdownBy && report.breakdownBy !== "none" && (
-                    <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md font-bold">
-                      Series: {getFieldLabel(report.breakdownBy)}
+                {/* Actions & Axis Indicators */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Graph Axis & Series Keys Bar */}
+                  <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                    <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-md font-bold">
+                      X: {chartAggregation.xAxisLabel}
                     </span>
-                  )}
-                  {drillDownCategory && (
-                    <button
-                      type="button"
-                      onClick={() => setDrillDownCategory(null)}
-                      className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-md font-bold hover:bg-rose-100 cursor-pointer flex items-center gap-1"
-                    >
-                      Filtered: "{drillDownCategory}" ×
-                    </button>
-                  )}
+                    <span className="text-slate-300">vs</span>
+                    <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md font-bold">
+                      Y: {chartAggregation.yAxisLabel}
+                    </span>
+                    {report.breakdownBy && report.breakdownBy !== "none" && (
+                      <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md font-bold">
+                        Series: {getFieldLabel(report.breakdownBy)}
+                      </span>
+                    )}
+                    {drillDownCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setDrillDownCategory(null)}
+                        className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-md font-bold hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                      >
+                        Filtered: "{drillDownCategory}" ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Pin to Overview Button */}
+                  <button
+                    type="button"
+                    onClick={handleTogglePin}
+                    title={
+                      isPinned
+                        ? "Unpin this graph from your Overview dashboard"
+                        : "Pin this graph to your Overview dashboard"
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                      isPinned
+                        ? "bg-blue-50 hover:bg-blue-100 text-[#1456f0] border-blue-200 font-bold"
+                        : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <Pin
+                      className={`w-3.5 h-3.5 ${
+                        isPinned ? "text-[#1456f0] fill-[#1456f0]" : "text-slate-500"
+                      }`}
+                    />
+                    <span>{isPinned ? "Pinned to Overview" : "Pin to Overview"}</span>
+                  </button>
                 </div>
               </div>
 
