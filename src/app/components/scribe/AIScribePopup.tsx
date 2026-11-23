@@ -28,6 +28,7 @@ import {
   Users,
   Link2,
   Plus,
+  List,
 } from "lucide-react";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { toast } from "sonner";
@@ -74,6 +75,7 @@ export interface AIScribePopupProps {
   initialAppointmentDate?: string;
   initialAttendeeId?: string;
   initialAttendeeName?: string;
+  initialStep?: "list" | "record";
   zIndex?: number;
 }
 
@@ -101,6 +103,7 @@ export default function AIScribePopup({
   initialAppointmentDate,
   initialAttendeeId,
   initialAttendeeName,
+  initialStep,
   zIndex = 2147483645,
 }: AIScribePopupProps) {
   const { clients: liveClients } = useClients();
@@ -112,7 +115,7 @@ export default function AIScribePopup({
   // 1. "list"   — Client has existing scribe sessions -> list cards + "+ Add New"
   // 2. "record" — Immediate ambient recording or audio upload
   // 3. "assign" — Name & Scribe summary, then Save transcript / Save and fill with AI
-  const [step, setStep] = useState<"list" | "record" | "assign">("record");
+  const [step, setStep] = useState<"list" | "record" | "assign">(() => initialStep || "list");
   const [sessionName, setSessionName] = useState<string>("");
   const [scribeStoreTick, setScribeStoreTick] = useState(0);
 
@@ -168,36 +171,35 @@ export default function AIScribePopup({
     return () => window.removeEventListener(SCRIBE_EVENT, handler);
   }, []);
 
+  // All available scribe sessions across the practice
+  const allScribeSessions = useMemo(() => {
+    return getScribeSessions();
+  }, [scribeStoreTick]);
+
   // Scribe sessions specifically for the current client (if opened for one)
   const clientSessions = useMemo(() => {
-    const all = getScribeSessions();
     const cId = initialClientId ? String(initialClientId).toLowerCase().trim() : undefined;
     const cName = initialClientName?.toLowerCase().trim();
-    if (!cId && !cName) return [];
-    return all.filter((s) => {
+    if (!cId && !cName) return allScribeSessions;
+    return allScribeSessions.filter((s) => {
       if (cId && String(s.clientId).toLowerCase().trim() === cId) return true;
       if (cName && s.clientName?.toLowerCase().trim() === cName) return true;
       return false;
     });
-  }, [initialClientId, initialClientName, scribeStoreTick]);
+  }, [allScribeSessions, initialClientId, initialClientName]);
+
+  // Displayed sessions in the Scribes step: ALWAYS for this contact only when opened for a contact
+  const displayedSessions = useMemo(() => {
+    if (initialClientId || initialClientName) {
+      return clientSessions;
+    }
+    return allScribeSessions;
+  }, [initialClientId, initialClientName, clientSessions, allScribeSessions]);
 
   // Reset or initialize state when opened/closed
   useEffect(() => {
     if (isOpen) {
-      const all = getScribeSessions();
-      const cId = initialClientId ? String(initialClientId).toLowerCase().trim() : undefined;
-      const cName = initialClientName?.toLowerCase().trim();
-      const existing = all.filter((s) => {
-        if (cId && String(s.clientId).toLowerCase().trim() === cId) return true;
-        if (cName && s.clientName?.toLowerCase().trim() === cName) return true;
-        return false;
-      });
-
-      if (existing.length > 0) {
-        setStep("list");
-      } else {
-        setStep("record");
-      }
+      setStep(initialStep || "list");
       setIsRecording(false);
       setIsPaused(false);
       setRecordingSec(0);
@@ -645,6 +647,19 @@ export default function AIScribePopup({
         <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
           <button
             type="button"
+            onClick={() => setStep("list")}
+            className={`p-1 rounded-lg transition-colors cursor-pointer ${
+              step === "list"
+                ? "text-blue-600 bg-blue-50 dark:bg-blue-950/40"
+                : "text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:bg-zinc-800"
+            }`}
+            title="Available Scribes"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
             onClick={handleReset}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors"
             title="Reset scribe session"
@@ -675,82 +690,80 @@ export default function AIScribePopup({
       {/* ── Dynamic Content Body ── */}
       <div className="flex-1 overflow-y-auto px-4 py-2 flex flex-col justify-between no-scrollbar">
         {/* ══════════════════════════════════════════════════════
-            STEP 0: AVAILABLE SCRIBES FOR THIS CLIENT
+            STEP 0: AVAILABLE SCRIBES FOR THIS CLIENT / PRACTICE
            ══════════════════════════════════════════════════════ */}
         {step === "list" && (
-          <div className="flex-1 flex flex-col justify-between h-full">
+          <div className="flex-1 flex flex-col justify-between h-full pt-1">
             <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Header inside list */}
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/80 dark:border-zinc-700/80">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-                    Client Consultations
-                  </h3>
-                  <p className="text-[11px] text-slate-400 dark:text-zinc-500">
-                    {initialClientName || selectedClient?.name || "Client"} • {clientSessions.length} recorded
-                  </p>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                  AI Scribe
-                </span>
-              </div>
-
               {/* Scrollable list of cards */}
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 no-scrollbar max-h-[420px]">
-                {clientSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs space-y-2 hover:border-blue-400/50 transition-all"
-                  >
-                    {/* Card Top: Title, Date & Duration */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 dark:text-zinc-100 truncate">
-                          {session.sessionName || session.title || "Clinical Consultation"}
-                        </p>
-                        <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
-                          {formatTimestamp(session.sessionDate || new Date(session.createdAt).toISOString())}
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 no-scrollbar max-h-[460px]">
+                {displayedSessions.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-500">
+                    <FileText className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-600 dark:text-zinc-400">No Scribes Available</p>
+                    <p className="text-[11px] mt-0.5">Click below to record your first consultation.</p>
+                  </div>
+                ) : (
+                  displayedSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="bg-white dark:bg-zinc-800/95 rounded-2xl p-3 border border-slate-200/90 dark:border-zinc-700/80 shadow-2xs space-y-2 hover:border-blue-400/50 transition-all"
+                    >
+                      {/* Card Top: Title, Date & Duration */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 dark:text-zinc-100 truncate">
+                            {session.sessionName || session.title || "Clinical Consultation"}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded">
+                              {session.clientName || "Patient"}
+                            </span>
+                            <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+                              {formatTimestamp(session.sessionDate || new Date(session.createdAt).toISOString())}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
+                          {formatDuration(session.durationSeconds || 60)}
+                        </span>
+                      </div>
+
+                      {/* Card Body: Clean Clinical Summary narrative */}
+                      <div className="bg-slate-50/80 dark:bg-zinc-900/50 p-2.5 rounded-xl border border-slate-100/80 dark:border-zinc-800/80">
+                        <p className="text-[11px] text-slate-600 dark:text-zinc-300 leading-relaxed line-clamp-3">
+                          {session.clinicalSummary ||
+                            session.extractedData?.clinicalSummary ||
+                            generateClinicalSummary(
+                              session,
+                              session.clientName || initialClientName || selectedClient?.name
+                            )}
                         </p>
                       </div>
-                      <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
-                        {formatDuration(session.durationSeconds || 60)}
-                      </span>
-                    </div>
 
-                    {/* Card Body: Clean Clinical Summary narrative */}
-                    <div className="bg-slate-50/80 dark:bg-zinc-900/50 p-2.5 rounded-xl border border-slate-100/80 dark:border-zinc-800/80">
-                      <p className="text-[11px] text-slate-600 dark:text-zinc-300 leading-relaxed line-clamp-3">
-                        {session.clinicalSummary ||
-                          session.extractedData?.clinicalSummary ||
-                          generateClinicalSummary(
-                            session,
-                            session.clientName || initialClientName || selectedClient?.name
-                          )}
-                      </p>
-                    </div>
+                      {/* Card Actions: View Scribe & Fill with AI */}
+                      <div className="flex items-center justify-start pt-1 gap-2 border-t border-slate-100 dark:border-zinc-700/60">
+                        <button
+                          type="button"
+                          onClick={() => onViewTranscript?.(session)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
+                        >
+                          <FileText className="w-3 h-3 text-slate-500" />
+                          <span>View Scribe</span>
+                        </button>
 
-                    {/* Card Actions: View Scribe & Fill with AI */}
-                    <div className="flex items-center justify-between pt-1 gap-2 border-t border-slate-100 dark:border-zinc-700/60">
-                      <button
-                        type="button"
-                        onClick={() => onViewTranscript?.(session)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
-                      >
-                        <FileText className="w-3 h-3 text-slate-500" />
-                        <span>View Scribe</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleFillFromSession(session)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer"
-                      >
-                        <Sparkles className="w-3 h-3 text-blue-400" />
-                        <span>Fill with AI</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleFillFromSession(session)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3 text-blue-400" />
+                          <span>Fill with AI</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -773,18 +786,16 @@ export default function AIScribePopup({
            ══════════════════════════════════════════════════════ */}
         {step === "record" && (
           <div className="flex-1 flex flex-col justify-between h-full">
-            {clientSessions.length > 0 && (
-              <div className="w-full flex items-center justify-start pb-1">
-                <button
-                  type="button"
-                  onClick={() => setStep("list")}
-                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Consultations ({clientSessions.length})
-                </button>
-              </div>
-            )}
+            <div className="w-full flex items-center justify-start pb-1">
+              <button
+                type="button"
+                onClick={() => setStep("list")}
+                className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Available Scribes ({displayedSessions.length})</span>
+              </button>
+            </div>
             <div className="flex flex-col items-center my-auto w-full">
               {!isRecording ? (
                 /* ── Idle State (Ready to Record / Upload) ── */

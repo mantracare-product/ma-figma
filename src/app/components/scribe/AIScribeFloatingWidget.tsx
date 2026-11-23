@@ -51,6 +51,7 @@ export default function AIScribeFloatingWidget() {
       <NewConsultationDrawer
         isOpen={isNewConsultationOpen}
         onClose={() => setIsNewConsultationOpen(false)}
+        initialStep="record"
         zIndex={2147483640}
         onSessionCreated={() => {
           window.dispatchEvent(new Event("scribe-store-updated"));

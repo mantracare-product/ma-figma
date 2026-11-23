@@ -928,6 +928,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [appointmentWorkflowFilter, setAppointmentWorkflowFilter] = useState("all");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>("all");
   const [showScribeModal, setShowScribeModal] = useState(false);
+  const [scribeInitialStep, setScribeInitialStep] = useState<"list" | "record">("record");
 
 
   // All state variables verbatim from Clients.tsx drawer
@@ -2319,20 +2320,36 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 </button>
               )}
               {!isNewClient && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const origin = typeof window !== "undefined" ? window.location.origin : "";
-                    const portalUrl = `${origin}/patient/login?clientId=${encodeURIComponent(client.id)}`;
-                    window.open(portalUrl, "_blank");
-                    toast.success(`Opening patient portal login for ${client.name}...`);
-                  }}
-                  className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Send className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Send Invite</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScribeInitialStep("record");
+                      setShowScribeModal(true);
+                    }}
+                    className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title="Record New AI Scribe"
+                  >
+                    <Mic className="w-3.5 h-3.5 text-purple-600" />
+                    <span>AI Scribe</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const origin = typeof window !== "undefined" ? window.location.origin : "";
+                      const portalUrl = `${origin}/patient/login?clientId=${encodeURIComponent(client.id)}`;
+                      window.open(portalUrl, "_blank");
+                      toast.success(`Opening patient portal login for ${client.name}...`);
+                    }}
+                    className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Send className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Send Invite</span>
+                  </button>
+                </>
               )}
               <button
                 onClick={handleClose}
@@ -4383,6 +4400,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             initialClientId={String(client.id)}
             initialClientName={client.name}
             initialEntityType="client"
+            initialStep={scribeInitialStep}
             zIndex={700}
             onFillWithAi={handleFillFromScribe}
             onSessionCreated={(session, fillWithAi) => {

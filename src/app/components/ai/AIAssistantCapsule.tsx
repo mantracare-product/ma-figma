@@ -81,6 +81,7 @@ export default function AIAssistantCapsule() {
       <AIScribePopup
         isOpen={isNewConsultationOpen}
         onClose={() => setIsNewConsultationOpen(false)}
+        initialStep="record"
         zIndex={2147483645}
         onSessionCreated={() => {
           window.dispatchEvent(new Event("scribe-store-updated"));

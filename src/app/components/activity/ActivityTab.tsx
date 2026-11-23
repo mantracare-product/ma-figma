@@ -2334,6 +2334,7 @@ export default function ActivityTab({
         onClose={() => setShowScribeModal(false)}
         initialClientId={normalizedClientId}
         initialClientName={clientName}
+        initialStep="list"
         initialEntityType={
           appointmentId
             ? "appointment"
