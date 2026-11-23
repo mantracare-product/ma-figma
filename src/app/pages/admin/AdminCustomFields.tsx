@@ -12,7 +12,7 @@
  * - Centered "Create/Edit Custom Field" modal with "FIELD CONFIGURATION" divider
  */
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import {
   Search,
@@ -46,6 +46,7 @@ import {
   Clock,
   Send,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 
 import type {
@@ -67,9 +68,10 @@ import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import { AdminSectionDrawer } from "./components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "./components/AdminFieldDrawer";
-import AdminSidebarConfig from "./AdminSidebarConfig";
+import AdminSidebarConfig, { AdminSidebarConfigRef } from "./AdminSidebarConfig";
 import { toast } from "sonner";
 import {
+  INITIAL_CATEGORIES,
   INITIAL_INDUSTRIES,
   STANDARD_LOCATIONS,
   getIndustriesForCategory,
@@ -282,11 +284,25 @@ export function AdminCustomFields() {
   const [layoutEntity, setLayoutEntity] = useState<string>(() => {
     return searchParams.get("entity") || "sidebar";
   });
-  const [selectedService, setSelectedService] = useState<string>("Automobile");
   const [searchQuery, setSearchQuery] = useState("");
   const [activePreviewTab, setActivePreviewTab] = useState<string>("overview");
   const [previewNote, setPreviewNote] = useState<string>("");
   const [previewNotesList, setPreviewNotesList] = useState<Array<{ text: string; date: string }>>([]);
+
+  // Sidebar Scope filters (used when activeTab === "layouts" and layoutEntity === "sidebar")
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
+  const [sidebarCategoryFilter, setSidebarCategoryFilter] = useState("All");
+  const [sidebarIndustryFilter, setSidebarIndustryFilter] = useState("All");
+  const [sidebarLocationFilter, setSidebarLocationFilter] = useState("All");
+  const [sidebarOrgFilter, setSidebarOrgFilter] = useState("All");
+  const sidebarConfigRef = useRef<AdminSidebarConfigRef>(null);
+
+  const availableIndustriesForFilter = useMemo(() => {
+    if (sidebarCategoryFilter === "All") {
+      return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
+    }
+    return getIndustriesForCategory(sidebarCategoryFilter);
+  }, [sidebarCategoryFilter]);
 
   // Keep activeTab and layoutEntity in sync with URL searchParams
   useEffect(() => {
@@ -417,63 +433,208 @@ export function AdminCustomFields() {
 
         {/* ── UNIFIED TOOLBAR powered by PageTopBar ── */}
       <PageTopBar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        searchQuery={
+          activeTab === "layouts" && layoutEntity === "sidebar"
+            ? sidebarSearchQuery
+            : searchQuery
+        }
+        onSearchChange={
+          activeTab === "layouts" && layoutEntity === "sidebar"
+            ? setSidebarSearchQuery
+            : setSearchQuery
+        }
         searchPlaceholder={
           activeTab === "fields"
             ? `Search ${currentModLabel.toLowerCase()} fields...`
             : activeTab === "sections"
             ? `Search ${currentModLabel.toLowerCase()} sections...`
-            : `Search sections...`
+            : layoutEntity === "sidebar"
+            ? `Search template names, pinned workflows, scopes...`
+            : `Search layouts...`
         }
         leftElement={
-          <div className="flex items-center gap-1.5 mr-1">
-            <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center">
-              <select
-                value={activeTab === "layouts" ? "all-sections" : activeModule}
-                onChange={(e) => {
-                  if (activeTab !== "layouts") {
-                    setActiveModule(e.target.value as any);
-                  }
-                }}
-                className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {activeTab === "layouts" ? (
-                  <option value="all-sections">All Sections</option>
-                ) : (
-                  MODULE_TABS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))
-                )}
-              </select>
-              <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* 1. Fields | Sections | Layouts at the left side corner */}
+            <div className="inline-flex items-center p-0.5 bg-gray-100/80 border border-gray-200/80 rounded-xl gap-0.5">
+              {[
+                { id: "fields", label: "Fields" },
+                { id: "sections", label: "Sections" },
+                { id: "layouts", label: "Layouts" },
+              ].map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      const nextTab = tab.id as "fields" | "sections" | "layouts";
+                      setActiveTab(nextTab);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("tab", nextTab);
+                        if (nextTab === "layouts" && !next.get("entity")) {
+                          next.set("entity", layoutEntity || "sidebar");
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-white text-gray-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {activeTab !== "layouts" && activeModule === "client" && (
-              <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2.5 py-1 flex items-center">
+            {/* 2. When activeTab === "layouts": show Layout Type in the topbar */}
+            {activeTab === "layouts" ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-gray-700 whitespace-nowrap ml-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Layout Type:
+                </span>
+                <div className="relative">
+                  <select
+                    value={layoutEntity}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setLayoutEntity(next);
+                      setSearchParams((prev) => {
+                        const nextParams = new URLSearchParams(prev);
+                        nextParams.set("tab", "layouts");
+                        nextParams.set("entity", next);
+                        return nextParams;
+                      });
+                    }}
+                    className="appearance-none h-[36px] pl-3 pr-7 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="sidebar">Side bar</option>
+                    <option value="client">Client</option>
+                    <option value="appointment">Appointment</option>
+                    <option value="invoice">Invoice</option>
+                    <option value="claim">Insurance & Claims</option>
+                    <option value="task">Tasks</option>
+                    <option value="service">Services</option>
+                    <option value="process">Processes</option>
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+            ) : (
+              /* When in Fields or Sections: Module & Category selectors */
+              <>
+                <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center">
+                  <select
+                    value={activeModule}
+                    onChange={(e) => setActiveModule(e.target.value as any)}
+                    className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {MODULE_TABS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {activeModule === "client" && (
+                  <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2.5 py-1 flex items-center">
+                    <select
+                      value={contactCategoryFilter}
+                      onChange={(e) => {
+                        if (e.target.value === "__add_category__") {
+                          setIsAddCategoryModalOpen(true);
+                        } else {
+                          setContactCategoryFilter(e.target.value);
+                        }
+                      }}
+                      className="bg-transparent text-xs font-semibold text-blue-700 pr-4 outline-none cursor-pointer appearance-none"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {contactCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__add_category__">+ Add Category</option>
+                    </select>
+                    <ChevronDown className="w-3 h-3 text-blue-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* 3. When activeTab === "layouts" and layoutEntity === "sidebar": Admin Scope filters */}
+            {activeTab === "layouts" && layoutEntity === "sidebar" && (
+              <div className="flex items-center gap-1.5 flex-wrap ml-1 pl-2 border-l border-gray-200">
+                {/* Category Filter */}
                 <select
-                  value={contactCategoryFilter}
+                  value={sidebarCategoryFilter}
                   onChange={(e) => {
-                    if (e.target.value === "__add_category__") {
-                      setIsAddCategoryModalOpen(true);
-                    } else {
-                      setContactCategoryFilter(e.target.value);
-                    }
+                    setSidebarCategoryFilter(e.target.value);
+                    setSidebarIndustryFilter("All");
                   }}
-                  className="bg-transparent text-xs font-semibold text-blue-700 pr-4 outline-none cursor-pointer appearance-none"
+                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  {contactCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                  <option value="All">All Categories</option>
+                  {INITIAL_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
                     </option>
                   ))}
-                  <option value="__add_category__">+ Add Category</option>
                 </select>
-                <ChevronDown className="w-3 h-3 text-blue-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+
+                {/* Industry Filter */}
+                <select
+                  value={sidebarIndustryFilter}
+                  onChange={(e) => setSidebarIndustryFilter(e.target.value)}
+                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Industries</option>
+                  {availableIndustriesForFilter.map((ind) => (
+                    <option key={ind} value={ind}>
+                      {ind}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Location Filter */}
+                <select
+                  value={sidebarLocationFilter}
+                  onChange={(e) => setSidebarLocationFilter(e.target.value)}
+                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Locations</option>
+                  {STANDARD_LOCATIONS.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Target Organization Filter in Admin Scope */}
+                <select
+                  value={sidebarOrgFilter}
+                  onChange={(e) => setSidebarOrgFilter(e.target.value)}
+                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Organizations</option>
+                  <option value="org-mantracare">MantraCare Health</option>
+                  <option value="org-apollo">Apollo Practice</option>
+                  <option value="org-carefirst">CareFirst Clinic</option>
+                  <option value="org-metrolabs">Metro Diagnostics</option>
+                </select>
               </div>
             )}
           </div>
@@ -545,73 +706,51 @@ export function AdminCustomFields() {
             : undefined
         }
         secondaryActions={
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs font-medium text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {activeTab === "layouts"
-                ? "0 layout"
-                : activeTab === "sections"
-                ? `${filteredSections.length} sections`
-                : `${filteredFields.length} fields`}
-            </span>
-
-            {/* Segmented Modes Tabs: Fields | Sections | Layouts */}
-            <div className="inline-flex items-center p-0.5 bg-gray-100/80 border border-gray-200/80 rounded-xl gap-0.5">
-              {[
-                { id: "fields", label: "Fields" },
-                { id: "sections", label: "Sections" },
-                { id: "layouts", label: "Layouts" },
-              ].map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      const nextTab = tab.id as "fields" | "sections" | "layouts";
-                      setActiveTab(nextTab);
-                      setSearchParams((prev) => {
-                        const next = new URLSearchParams(prev);
-                        next.set("tab", nextTab);
-                        if (nextTab === "layouts" && !next.get("entity")) {
-                          next.set("entity", layoutEntity || "sidebar");
-                        }
-                        return next;
-                      });
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-white text-gray-900 shadow-2xs font-bold"
-                        : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        }
-        onExport={() => toast.info("Exporting configuration...")}
-        primaryAction={{
-          label: "",
-          icon: <Plus className="w-4 h-4" />,
-          onClick: () => {
-            if (activeTab === "fields") {
-              handleOpenCreateField();
-            } else if (activeTab === "sections") {
-              setEditingSection(null);
-              setSectionDrawerOpen(true);
-            } else {
-              if (layoutEntity === "sidebar") {
-                toast.info("Add a new template using 'Add Sidebar Template' below");
-              } else {
-                toast.info("Create new section for layout");
+          activeTab === "layouts" && layoutEntity === "sidebar" ? (
+            <button
+              type="button"
+              onClick={() =>
+                toast.success(
+                  `Sidebar layout synchronized across ${sidebarOrgFilter === "All" ? "all organizations" : sidebarOrgFilter} ✓`
+                )
               }
-            }
-          },
-          className: "!w-[36px] !h-[36px] !p-0 !rounded-full flex items-center justify-center !bg-black hover:!bg-gray-800 text-white shrink-0 cursor-pointer shadow-xs",
-        }}
+              className="h-[36px] px-3.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-full text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs hover:border-gray-300 transition-all shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+              title="Sync sidebar layout across target organizations"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-gray-600" />
+              <span>Sync Org</span>
+            </button>
+          ) : undefined
+        }
+        primaryAction={
+          activeTab === "fields"
+            ? {
+                label: "Add Field",
+                icon: <Plus className="w-4 h-4" />,
+                onClick: handleOpenCreateField,
+              }
+            : activeTab === "sections"
+            ? {
+                label: "Add Section",
+                icon: <Plus className="w-4 h-4" />,
+                onClick: () => {
+                  setEditingSection(null);
+                  setSectionDrawerOpen(true);
+                },
+              }
+            : layoutEntity === "sidebar"
+            ? {
+                label: "Add Sidebar Template",
+                icon: <Plus className="w-4 h-4" />,
+                onClick: () => sidebarConfigRef.current?.openCreateDrawer(),
+              }
+            : {
+                label: "Add Layout",
+                icon: <Plus className="w-4 h-4" />,
+                onClick: () => toast.info("New layout section added"),
+              }
+        }
       />
 
         {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
@@ -877,96 +1016,21 @@ export function AdminCustomFields() {
 
         {/* TAB 3: LAYOUTS VIEW */}
         {activeTab === "layouts" && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Layout Controls Bar (Matching Reference Screenshot) */}
-            <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-2xs space-y-4">
-              {/* Top Row: Layout Type & Service */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Layout Type:
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={layoutEntity}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setLayoutEntity(next);
-                        setSearchParams({ tab: "layouts", entity: next });
-                      }}
-                      className="appearance-none h-9 pl-3.5 pr-8 bg-white border border-gray-200 rounded-full text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs min-w-[140px]"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="sidebar">Side bar</option>
-                      <option value="client">Client</option>
-                      <option value="appointment">Appointment</option>
-                      <option value="invoice">Invoice</option>
-                      <option value="claim">Insurance & Claims</option>
-                      <option value="task">Tasks</option>
-                      <option value="service">Services</option>
-                      <option value="process">Processes</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Service:
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={selectedService}
-                      onChange={(e) => setSelectedService(e.target.value)}
-                      className="appearance-none h-9 pl-3.5 pr-8 bg-white border border-gray-200 rounded-full text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs min-w-[140px]"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="Automobile">Automobile</option>
-                      <option value="Healthcare">Healthcare</option>
-                      <option value="Dental">Dental</option>
-                      <option value="Legal">Legal</option>
-                      <option value="Financial">Financial</option>
-                      <option value="General Practice">General Practice</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Row: Target Organizations & Sync Layout */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-gray-100">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Target Organizations:
-                  </label>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50/70 border border-blue-200/80 text-blue-700 text-xs font-semibold">
-                    <span>All Organizations</span>
-                    <button
-                      type="button"
-                      onClick={() => toast.info("Organization filter toggled")}
-                      className="hover:text-blue-900 transition-colors cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => toast.success(`Layout synchronized for ${selectedService} across all organizations ✓`)}
-                  className="bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold px-5 py-2.5 rounded-full transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer ml-auto"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Sync Layout
-                </button>
-              </div>
-            </div>
-
+          <div className="space-y-4 animate-in fade-in duration-200">
             {/* Entity View Condition */}
             {layoutEntity === "sidebar" ? (
-              /* ── SIDE BAR ENTITY: Embed full Sidebar Navigation Template flow ── */
+              /* ── SIDE BAR ENTITY: Embed full Sidebar Navigation Template flow with Unified Topbar ── */
               <div className="space-y-4">
-                <AdminSidebarConfig embedded={true} />
+                <AdminSidebarConfig
+                  ref={sidebarConfigRef}
+                  embedded={true}
+                  hideTopBar={true}
+                  searchQuery={sidebarSearchQuery}
+                  selectedCategory={sidebarCategoryFilter}
+                  selectedIndustry={sidebarIndustryFilter}
+                  selectedLocation={sidebarLocationFilter}
+                  selectedOrg={sidebarOrgFilter}
+                />
               </div>
             ) : (
               /* ── CLIENT & OTHER ENTITIES: Layout Builder & Preview (Matching Screenshot) ── */
@@ -1096,7 +1160,7 @@ export function AdminCustomFields() {
                       </label>
                       <input
                         type="text"
-                        defaultValue={`${selectedService} Consultation`}
+                        defaultValue="Client Consultation"
                         className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       />

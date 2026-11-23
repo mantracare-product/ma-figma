@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
 import {
   Plus,
   Trash2,
@@ -111,74 +111,109 @@ function renderScopeCell(item: {
   );
 }
 
-export interface AdminSidebarConfigProps {
-  embedded?: boolean;
+export interface AdminSidebarConfigRef {
+  openCreateDrawer: () => void;
 }
 
-export default function AdminSidebarConfig({ embedded = false }: AdminSidebarConfigProps = {}) {
-  const [templates, setTemplates] = useState<AdminSidebarTemplate[]>(getStoredSidebarTemplates);
+export interface AdminSidebarConfigProps {
+  embedded?: boolean;
+  hideTopBar?: boolean;
+  searchQuery?: string;
+  selectedCategory?: string;
+  selectedIndustry?: string;
+  selectedLocation?: string;
+  selectedOrg?: string;
+}
 
-  // Filter state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
-  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
-  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
+export const AdminSidebarConfig = forwardRef<AdminSidebarConfigRef, AdminSidebarConfigProps>(
+  function AdminSidebarConfig(
+    {
+      embedded = false,
+      hideTopBar = false,
+      searchQuery: externalSearchQuery,
+      selectedCategory: externalCategory,
+      selectedIndustry: externalIndustry,
+      selectedLocation: externalLocation,
+      selectedOrg: externalOrg,
+    },
+    ref
+  ) {
+    const [templates, setTemplates] = useState<AdminSidebarTemplate[]>(getStoredSidebarTemplates);
 
-  // Drawer state
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<AdminSidebarTemplate | null>(null);
+    // Filter state (used when standalone)
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
+    const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
+    const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
 
-  // Quick Scope Modal state
-  const [showScopeModal, setShowScopeModal] = useState(false);
-  const [scopingTargetTemplate, setScopingTargetTemplate] = useState<AdminSidebarTemplate | null>(null);
-  const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
+    // Drawer state
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<AdminSidebarTemplate | null>(null);
 
-  // Sync with store events
-  useEffect(() => {
-    const handleUpdate = () => {
-      setTemplates(getStoredSidebarTemplates());
-    };
-    window.addEventListener(SIDEBAR_TEMPLATES_EVENT, handleUpdate);
-    window.addEventListener("storage", handleUpdate);
-    return () => {
-      window.removeEventListener(SIDEBAR_TEMPLATES_EVENT, handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
-    };
-  }, []);
+    // Quick Scope Modal state
+    const [showScopeModal, setShowScopeModal] = useState(false);
+    const [scopingTargetTemplate, setScopingTargetTemplate] = useState<AdminSidebarTemplate | null>(null);
+    const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
 
-  // Dynamic industry list based on category filter
-  const availableIndustriesForFilter = useMemo(() => {
-    if (selectedCategoryFilter === "All") {
-      return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
-    }
-    return getIndustriesForCategory(selectedCategoryFilter);
-  }, [selectedCategoryFilter]);
+    // Expose drawer trigger to parent
+    useImperativeHandle(ref, () => ({
+      openCreateDrawer: handleCreateNew,
+    }));
 
-  // Filter templates
-  const filteredTemplates = useMemo(() => {
-    return templates.filter((template) => {
-      // 1. Admin Scope Match
-      const matchesScope = isSidebarTemplateMatchingScope(template, {
-        category: selectedCategoryFilter,
-        industry: selectedIndustryFilter,
-        location: selectedLocationFilter,
-      });
-      if (!matchesScope) return false;
-
-      // 2. Search query match
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const nameMatch = template.name.toLowerCase().includes(q);
-        const descMatch = (template.description || "").toLowerCase().includes(q);
-        const hasMatchingWorkflow = template.sections.some((s) =>
-          s.items.some((i) => i.isWorkflow && i.label.toLowerCase().includes(q))
-        );
-        if (!nameMatch && !descMatch && !hasMatchingWorkflow) return false;
+    // Dynamic industry list based on category filter
+    const availableIndustriesForFilter = useMemo(() => {
+      if (selectedCategoryFilter === "All") {
+        return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
       }
+      return getIndustriesForCategory(selectedCategoryFilter);
+    }, [selectedCategoryFilter]);
 
-      return true;
-    });
-  }, [templates, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
+    // Active filters
+    const activeSearch = hideTopBar ? (externalSearchQuery ?? "") : searchQuery;
+    const activeCategory = hideTopBar ? (externalCategory ?? "All") : selectedCategoryFilter;
+    const activeIndustry = hideTopBar ? (externalIndustry ?? "All") : selectedIndustryFilter;
+    const activeLocation = hideTopBar ? (externalLocation ?? "All") : selectedLocationFilter;
+    const activeOrg = hideTopBar ? (externalOrg ?? "All") : "All";
+
+    // Filter templates
+    const filteredTemplates = useMemo(() => {
+      return templates.filter((template) => {
+        // 1. Admin Scope Match
+        const matchesScope = isSidebarTemplateMatchingScope(template, {
+          category: activeCategory,
+          industry: activeIndustry,
+          location: activeLocation,
+        });
+        if (!matchesScope) return false;
+
+        // 2. Target Org match
+        if (activeOrg !== "All") {
+          const orgMatches =
+            !template.scopingRules?.length ||
+            template.scopingRules.some(
+              (r) =>
+                !r.locations?.length ||
+                r.locations.includes("All") ||
+                (r as any).organization === activeOrg ||
+                (r as any).organizations?.includes(activeOrg)
+            );
+          if (!orgMatches) return false;
+        }
+
+        // 3. Search query match
+        if (activeSearch.trim()) {
+          const q = activeSearch.toLowerCase();
+          const nameMatch = template.name.toLowerCase().includes(q);
+          const descMatch = (template.description || "").toLowerCase().includes(q);
+          const hasMatchingWorkflow = template.sections.some((s) =>
+            s.items.some((i) => i.isWorkflow && i.label.toLowerCase().includes(q))
+          );
+          if (!nameMatch && !descMatch && !hasMatchingWorkflow) return false;
+        }
+
+        return true;
+      });
+    }, [templates, activeCategory, activeIndustry, activeLocation, activeOrg, activeSearch]);
 
   // Handlers
   const handleCreateNew = () => {
@@ -357,8 +392,8 @@ export default function AdminSidebarConfig({ embedded = false }: AdminSidebarCon
   ];
 
   return (
-    <div className={embedded ? "space-y-5" : "min-h-screen bg-[#fafafa]"}>
-      <div className={embedded ? "w-full space-y-5" : "px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7"}>
+    <div className={embedded ? "space-y-4" : "min-h-screen bg-[#fafafa]"}>
+      <div className={embedded ? "w-full" : "px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7"}>
         {/* Top Header Portaled into Admin Header - only if standalone */}
         {!embedded && (
           <PageHeader
@@ -368,73 +403,75 @@ export default function AdminSidebarConfig({ embedded = false }: AdminSidebarCon
         )}
 
         {/* Unified Action Bar powered by PageTopBar with Integrated Admin Scope Filters & Add Button */}
-        <PageTopBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Search template names, pinned workflows, scopes..."
-          leftElement={
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Category Filter */}
-              <select
-                value={selectedCategoryFilter}
-                onChange={(e) => {
-                  setSelectedCategoryFilter(e.target.value);
-                  setSelectedIndustryFilter("All");
-                }}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Categories</option>
-                {INITIAL_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+        {!hideTopBar && (
+          <PageTopBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search template names, pinned workflows, scopes..."
+            leftElement={
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Category Filter */}
+                <select
+                  value={selectedCategoryFilter}
+                  onChange={(e) => {
+                    setSelectedCategoryFilter(e.target.value);
+                    setSelectedIndustryFilter("All");
+                  }}
+                  className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Categories</option>
+                  {INITIAL_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
 
-              {/* Industry Filter */}
-              <select
-                value={selectedIndustryFilter}
-                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Industries</option>
-                {availableIndustriesForFilter.map((ind) => (
-                  <option key={ind} value={ind}>
-                    {ind}
-                  </option>
-                ))}
-              </select>
+                {/* Industry Filter */}
+                <select
+                  value={selectedIndustryFilter}
+                  onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                  className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Industries</option>
+                  {availableIndustriesForFilter.map((ind) => (
+                    <option key={ind} value={ind}>
+                      {ind}
+                    </option>
+                  ))}
+                </select>
 
-              {/* Location Filter */}
-              <select
-                value={selectedLocationFilter}
-                onChange={(e) => setSelectedLocationFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="All">All Locations</option>
-                {STANDARD_LOCATIONS.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
-          }
-          onClearAllFilters={() => {
-            setSelectedCategoryFilter("All");
-            setSelectedIndustryFilter("All");
-            setSelectedLocationFilter("All");
-            setSearchQuery("");
-          }}
-          primaryAction={{
-            label: "Add Sidebar Template",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: handleCreateNew,
-          }}
-        />
+                {/* Location Filter */}
+                <select
+                  value={selectedLocationFilter}
+                  onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                  className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="All">All Locations</option>
+                  {STANDARD_LOCATIONS.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            }
+            onClearAllFilters={() => {
+              setSelectedCategoryFilter("All");
+              setSelectedIndustryFilter("All");
+              setSelectedLocationFilter("All");
+              setSearchQuery("");
+            }}
+            primaryAction={{
+              label: "Add Sidebar Template",
+              icon: <Plus className="w-3.5 h-3.5" />,
+              onClick: handleCreateNew,
+            }}
+          />
+        )}
 
         {/* Clean Standard Table Component View */}
         <TableComponent
@@ -496,4 +533,6 @@ export default function AdminSidebarConfig({ embedded = false }: AdminSidebarCon
       </Modal>
     </div>
   );
-}
+});
+
+export default AdminSidebarConfig;
