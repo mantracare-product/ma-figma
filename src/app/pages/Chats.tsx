@@ -84,6 +84,9 @@ import MailboxIntegrationDrawer from "../components/chats/MailboxIntegrationDraw
 import EmailAgentDrawer from "../components/chats/EmailAgentDrawer";
 import EmailAgentRulesView from "../components/chats/EmailAgentRulesView";
 import { useEmailAgentStore } from "../../lib/emailAgentStore";
+import WhatsAppAgentRulesView from "../components/chats/WhatsAppAgentRulesView";
+import WhatsAppAgentDrawer from "../components/chats/WhatsAppAgentDrawer";
+import { useWhatsappAgentStore, WhatsAppAgentRule } from "../../lib/whatsappAgentStore";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -1026,6 +1029,41 @@ export default function Chats() {
     }
   }, [emailAgentFilter, emailAgentCounts]);
 
+  // WhatsApp Agent states
+  const {
+    rules: whatsappRules,
+    saveRule: saveWhatsAppRule,
+    deleteRule: deleteWhatsAppRule,
+  } = useWhatsappAgentStore();
+  const [whatsappSubMode, setWhatsappSubMode] = useState<"inbox" | "agent" | "templates">("inbox");
+  const [showWhatsAppAgentDrawer, setShowWhatsAppAgentDrawer] = useState(false);
+  const [selectedWhatsAppRule, setSelectedWhatsAppRule] = useState<WhatsAppAgentRule | null>(null);
+  const [whatsappAgentFilter, setWhatsappAgentFilter] = useState<"all" | "active" | "inbound" | "outbound">("all");
+  const [whatsappAgentSearch, setWhatsappAgentSearch] = useState("");
+  const [showWhatsAppAgentFilterDropdown, setShowWhatsAppAgentFilterDropdown] = useState(false);
+  const whatsappAgentFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const whatsappAgentCounts = useMemo(() => {
+    const all = whatsappRules.length;
+    const active = whatsappRules.filter((r) => r.enabled).length;
+    const inbound = whatsappRules.filter((r) => r.direction === "inbound" || r.direction === "both").length;
+    const outbound = whatsappRules.filter((r) => r.direction === "outbound" || r.direction === "both").length;
+    return { all, active, inbound, outbound };
+  }, [whatsappRules]);
+
+  const whatsappAgentFilterLabel = useMemo(() => {
+    switch (whatsappAgentFilter) {
+      case "active":
+        return `Active (${whatsappAgentCounts.active})`;
+      case "inbound":
+        return `Inbound (${whatsappAgentCounts.inbound})`;
+      case "outbound":
+        return `Outbound (${whatsappAgentCounts.outbound})`;
+      default:
+        return `All Rules (${whatsappAgentCounts.all})`;
+    }
+  }, [whatsappAgentFilter, whatsappAgentCounts]);
+
   useEffect(() => {
     const handleOpenMailbox = () => setShowMailboxIntegrationDrawer(true);
     const handleOpenBlacklist = () => setShowBlacklistDrawer(true);
@@ -1272,6 +1310,15 @@ export default function Chats() {
       }
       return;
     }
+    if (channelFilter === "whatsapp") {
+      setWhatsappSubMode(mode);
+      if (mode === "templates") {
+        setActiveTab("templates");
+      } else {
+        setActiveTab("chats");
+      }
+      return;
+    }
     if (mode === "inbox") {
       setActiveTab("chats");
     } else if (mode === "templates") {
@@ -1284,9 +1331,12 @@ export default function Chats() {
       if (activeTab === "templates") return "templates";
       return emailSubMode;
     }
-    if (channelFilter === "whatsapp" && activeTab === "templates") return "templates";
+    if (channelFilter === "whatsapp") {
+      if (activeTab === "templates") return "templates";
+      return whatsappSubMode;
+    }
     return "inbox";
-  }, [channelFilter, activeTab, emailSubMode]);
+  }, [channelFilter, activeTab, emailSubMode, whatsappSubMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1300,6 +1350,7 @@ export default function Chats() {
         setShowEmailGearMenu(false);
         setShowEmailFolderDropdown(false);
         setShowAgentFilterDropdown(false);
+        setShowWhatsAppAgentFilterDropdown(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
@@ -2434,34 +2485,136 @@ export default function Chats() {
                 )}
               </div>
 
-              {/* Sub-modes: Inbox vs Templates for WhatsApp only */}
+              {/* Sub-modes: Inbox | Agent | Templates for WhatsApp only */}
               {channelFilter === "whatsapp" && (
-                <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("inbox")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "inbox"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Inbox</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("templates")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "templates"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Templates</span>
-                  </button>
-                </div>
+                <>
+                  <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("inbox")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "inbox"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Inbox</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("agent")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "agent"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Agent</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("templates")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "templates"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Templates</span>
+                    </button>
+                  </div>
+
+                  {/* WhatsApp Agent Filter Dropdown in Topbar */}
+                  {subMode === "agent" && (
+                    <div className="relative shrink-0" ref={whatsappAgentFilterDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWhatsAppAgentFilterDropdown((prev) => !prev);
+                          setShowAgentFilterDropdown(false);
+                          setShowNumberFilterDropdown(false);
+                          setShowEmailFolderDropdown(false);
+                          setShowViewFilterDropdown(false);
+                          setShowChannelDropdown(false);
+                        }}
+                        className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                        title="Filter WhatsApp Rules"
+                      >
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{whatsappAgentFilterLabel}</span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                            showWhatsAppAgentFilterDropdown ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {showWhatsAppAgentFilterDropdown && (
+                        <div
+                          className="absolute left-0 mt-1 w-48 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappAgentFilter("all");
+                              setShowWhatsAppAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              whatsappAgentFilter === "all" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>All Rules</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.all})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappAgentFilter("active");
+                              setShowWhatsAppAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              whatsappAgentFilter === "active" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Active</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.active})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappAgentFilter("inbound");
+                              setShowWhatsAppAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              whatsappAgentFilter === "inbound" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Inbound</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.inbound})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappAgentFilter("outbound");
+                              setShowWhatsAppAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              whatsappAgentFilter === "outbound" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Outbound</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.outbound})</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Phone Number Selector: For WhatsApp and SMS */}
@@ -2814,6 +2967,8 @@ export default function Chats() {
                 : subMode === "agent"
                 ? emailAgentSearch
                 : emailSearch
+              : channelFilter === "whatsapp" && subMode === "agent"
+              ? whatsappAgentSearch
               : subMode === "templates"
               ? templateSearch
               : chatSearch
@@ -2827,6 +2982,8 @@ export default function Chats() {
                 : subMode === "agent"
                 ? setEmailAgentSearch
                 : setEmailSearch
+              : channelFilter === "whatsapp" && subMode === "agent"
+              ? setWhatsappAgentSearch
               : subMode === "templates"
               ? setTemplateSearch
               : setChatSearch
@@ -2840,6 +2997,8 @@ export default function Chats() {
                 : subMode === "agent"
                 ? "Search rules, drafting prompt, email..."
                 : "Search emails (from, subject, body)..."
+              : channelFilter === "whatsapp" && subMode === "agent"
+              ? "Search WhatsApp rules, templates, prompts, entities..."
               : subMode === "templates"
               ? "Search templates..."
               : channelFilter === "website"
@@ -2901,6 +3060,15 @@ export default function Chats() {
                   icon: <Plus className="w-4 h-4" />,
                   onClick: () => {
                     handleCreateNewTemplate();
+                  },
+                }
+              : channelFilter === "whatsapp" && subMode === "agent"
+              ? {
+                  label: "New Rule",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => {
+                    setSelectedWhatsAppRule(null);
+                    setShowWhatsAppAgentDrawer(true);
                   },
                 }
               : undefined
@@ -3040,6 +3208,19 @@ export default function Chats() {
                 onOpenCrmSettings={() => handleSubModeChange("agent")}
               />
             )
+          ) : chatAudience === "contact" && channelFilter === "whatsapp" && subMode === "agent" ? (
+            <WhatsAppAgentRulesView
+              searchQuery={whatsappAgentSearch}
+              filterType={whatsappAgentFilter}
+              onOpenAddRule={() => {
+                setSelectedWhatsAppRule(null);
+                setShowWhatsAppAgentDrawer(true);
+              }}
+              onEditRule={(rule) => {
+                setSelectedWhatsAppRule(rule);
+                setShowWhatsAppAgentDrawer(true);
+              }}
+            />
           ) : (
           <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
             {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}
@@ -4065,6 +4246,22 @@ export default function Chats() {
           setShowEmailAgentDrawer(false);
           handleSubModeChange("inbox");
           window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+        }}
+      />
+
+      {/* ── Side Drawer: WhatsApp Agent Rule Drawer ── */}
+      <WhatsAppAgentDrawer
+        isOpen={showWhatsAppAgentDrawer}
+        onClose={() => {
+          setShowWhatsAppAgentDrawer(false);
+          setSelectedWhatsAppRule(null);
+        }}
+        rule={selectedWhatsAppRule}
+        onSave={(saved) => {
+          saveWhatsAppRule(saved);
+        }}
+        onDelete={(ruleId) => {
+          deleteWhatsAppRule(ruleId);
         }}
       />
 
