@@ -471,13 +471,13 @@ export default function ConfigureMenuModal() {
                             </select>
                           </div>
 
-                          {/* Star / Feature Toggle */}
+                          {/* Show while collapsed Toggle */}
                           <button
                             type="button"
                             onClick={() => {
                               toggleItemFeatured(section.id, item.id);
                               toast.success(
-                                `${item.label} ${!item.isFeatured ? "marked as featured" : "unfeatured"}`
+                                `${item.label} ${!item.isFeatured ? "set to show while collapsed" : "hidden while collapsed"}`
                               );
                             }}
                             className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
@@ -485,7 +485,7 @@ export default function ConfigureMenuModal() {
                                 ? "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
                                 : "bg-white border-gray-200 text-gray-400 hover:text-amber-500 hover:bg-gray-50"
                             }`}
-                            title={item.isFeatured ? "Unfeature this page" : "Feature this page (appears in collapsed sidebar)"}
+                            title={item.isFeatured ? "Hide while collapsed" : "Show while collapsed"}
                           >
                             <Star
                               className={`w-3.5 h-3.5 ${

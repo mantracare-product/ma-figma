@@ -14,11 +14,15 @@ import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   ChevronLeft,
   ChevronsUpDown,
   Check,
   Plus,
+  Pencil,
+  Trash2,
+  X,
   User,
   SlidersHorizontal,
   LogOut,
@@ -393,7 +397,47 @@ export default function Sidebar() {
     reorderSectionItems,
     moveItem,
     resetToDefault,
+    addSection,
+    renameSection,
+    renameItem,
+    reorderSections,
+    deleteSection,
   } = useSidebarMenu();
+
+  const [isAddingSection, setIsAddingSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionTitle, setEditingSectionTitle] = useState("");
+  const [editingItemId, setEditingItemId] = useState<{ sectionId: string; itemId: string } | null>(null);
+  const [editingItemLabel, setEditingItemLabel] = useState("");
+
+  const handleConfirmAddSection = () => {
+    if (!newSectionTitle.trim()) return;
+    addSection(newSectionTitle.trim());
+    toast.success(`Section "${newSectionTitle.trim().toUpperCase()}" created`);
+    setNewSectionTitle("");
+    setIsAddingSection(false);
+  };
+
+  const handleSaveSectionTitle = (sectionId: string) => {
+    if (!editingSectionTitle.trim()) {
+      setEditingSectionId(null);
+      return;
+    }
+    renameSection(sectionId, editingSectionTitle.trim());
+    toast.success(`Section renamed to "${editingSectionTitle.trim().toUpperCase()}"`);
+    setEditingSectionId(null);
+  };
+
+  const handleSaveItemLabel = (sectionId: string, itemId: string) => {
+    if (!editingItemLabel.trim()) {
+      setEditingItemId(null);
+      return;
+    }
+    renameItem(sectionId, itemId, editingItemLabel.trim());
+    toast.success(`Page renamed to "${editingItemLabel.trim()}"`);
+    setEditingItemId(null);
+  };
 
   const [draggedItem, setDraggedItem] = useState<{ sectionId: string; index: number } | null>(null);
   const [dragOverItem, setDragOverItem] = useState<{ sectionId: string; index: number } | null>(null);
@@ -431,7 +475,7 @@ export default function Sidebar() {
         }
         return {
           id: sec.id,
-          title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.id === "automation" ? "CUSTOMIZATIONS" : sec.title,
+          title: sec.title || (sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.id === "automation" ? "CUSTOMIZATIONS" : sec.id.toUpperCase()),
           items: rawItems.map((item) => ({
             id: item.id,
             label: item.label,
@@ -701,123 +745,311 @@ export default function Sidebar() {
         {isConfiguring ? (
           /* Configuring Body List */
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 min-h-0">
-            {config.sections.map((section) => (
-              <div key={section.id} className="space-y-1.5">
-                <div className="px-1 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                  <span>{section.id === "billing" ? "REVENUE & INSIGHTS" : section.id === "automation" ? "CUSTOMIZATIONS" : section.title}</span>
+            {/* Top Add Section Header / Button */}
+            {isAddingSection ? (
+              <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-blue-800">
+                  <span>Create New Section</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingSection(false);
+                      setNewSectionTitle("");
+                    }}
+                    className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-
-                <div className="space-y-1">
-                  {section.items.map((item, idx) => {
-                    const Icon = getSidebarIcon(item.iconName);
-                    const isDragging = draggedItem?.sectionId === section.id && draggedItem?.index === idx;
-                    const isOver = dragOverItem?.sectionId === section.id && dragOverItem?.index === idx;
-                    const isGearOpen = openGearItem?.item.id === item.id;
-
-                    return (
-                      <div
-                        key={item.id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = "move";
-                          setDraggedItem({ sectionId: section.id, index: idx });
-                        }}
-                        onDragEnd={() => {
-                          setDraggedItem(null);
-                          setDragOverItem(null);
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
-                          if (!dragOverItem || dragOverItem.sectionId !== section.id || dragOverItem.index !== idx) {
-                            setDragOverItem({ sectionId: section.id, index: idx });
-                          }
-                        }}
-                        onDragLeave={() => {
-                          if (dragOverItem?.sectionId === section.id && dragOverItem?.index === idx) {
-                            setDragOverItem(null);
-                          }
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (draggedItem) {
-                            moveItem(draggedItem.sectionId, section.id, draggedItem.index, idx);
-                            setDraggedItem(null);
-                            setDragOverItem(null);
-                          }
-                        }}
-                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl text-xs transition-all border select-none ${
-                          isDragging
-                            ? "opacity-30 border-blue-400 bg-blue-50/30 scale-98"
-                            : isOver
-                            ? "border-blue-500 bg-blue-50/60 shadow-xs ring-1 ring-blue-500/20"
-                            : item.visible
-                            ? "bg-white border-gray-200 text-gray-800 shadow-2xs hover:border-gray-300"
-                            : "bg-gray-50/70 border-dashed border-gray-200 text-gray-400 opacity-60"
-                        }`}
-                      >
-                        {/* Drag Handle + Icon + Title */}
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <div
-                            className="p-1 -ml-0.5 text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
-                            title="Drag to reorder"
-                          >
-                            <GripVertical className="w-3.5 h-3.5" />
-                          </div>
-
-                          <div
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                              item.visible ? "bg-blue-50 text-[#1456f0]" : "bg-gray-100 text-gray-400"
-                            }`}
-                          >
-                            <Icon className="w-3.5 h-3.5" />
-                          </div>
-
-                          <span
-                            className={`truncate text-xs font-medium ${
-                              item.visible ? "text-gray-800" : "text-gray-400 line-through"
-                            }`}
-                          >
-                            {item.label}
-                          </span>
-                        </div>
-
-                        {/* Action: Gear Settings Button */}
-                        <div className="flex items-center shrink-0 ml-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              if (isGearOpen) {
-                                setOpenGearItem(null);
-                              } else {
-                                setOpenGearItem({
-                                  sectionId: section.id,
-                                  item,
-                                  coords: {
-                                    top: rect.top,
-                                    left: rect.right + 10,
-                                  },
-                                });
-                              }
-                            }}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                              isGearOpen
-                                ? "bg-gray-200 text-gray-900 shadow-2xs"
-                                : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                            }`}
-                            title="Menu options"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={newSectionTitle}
+                    onChange={(e) => setNewSectionTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleConfirmAddSection();
+                      if (e.key === "Escape") {
+                        setIsAddingSection(false);
+                        setNewSectionTitle("");
+                      }
+                    }}
+                    placeholder="e.g. OPERATIONS"
+                    autoFocus
+                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-semibold text-gray-800 placeholder:normal-case placeholder:font-normal"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConfirmAddSection}
+                    disabled={!newSectionTitle.trim()}
+                    className="px-2.5 py-1 text-xs font-semibold bg-[#1456f0] hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Add</span>
+                  </button>
                 </div>
               </div>
-            ))}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAddingSection(true)}
+                className="w-full py-1.5 px-2.5 border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/40 rounded-xl text-xs font-semibold text-gray-600 hover:text-blue-600 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Section</span>
+              </button>
+            )}
+
+            {config.sections.map((section, secIdx) => {
+              const isEditingThisSection = editingSectionId === section.id;
+              const isFirstSec = secIdx === 0;
+              const isLastSec = secIdx === config.sections.length - 1;
+
+              return (
+                <div key={section.id} className="space-y-1.5 group/sec">
+                  {/* Section Title Row (Interactive: Rename + Reposition) */}
+                  <div className="px-1 flex items-center justify-between text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                    {isEditingThisSection ? (
+                      <div className="flex items-center gap-1 flex-1 mr-1">
+                        <input
+                          type="text"
+                          value={editingSectionTitle}
+                          onChange={(e) => setEditingSectionTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveSectionTitle(section.id);
+                            if (e.key === "Escape") setEditingSectionId(null);
+                          }}
+                          autoFocus
+                          className="flex-1 px-1.5 py-0.5 text-xs bg-white border border-blue-400 rounded focus:outline-none uppercase font-bold text-gray-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSectionTitle(section.id)}
+                          className="p-1 text-emerald-600 hover:bg-emerald-50 rounded cursor-pointer"
+                          title="Save section title"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSectionId(null)}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded cursor-pointer"
+                          title="Cancel"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{section.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSectionId(section.id);
+                            setEditingSectionTitle(section.title);
+                          }}
+                          className="opacity-0 group-hover/sec:opacity-100 p-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-opacity cursor-pointer"
+                          title="Rename section"
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Section Action Controls: Move Up, Move Down, Delete (if custom or empty) */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => reorderSections(secIdx, secIdx - 1)}
+                        disabled={isFirstSec}
+                        className={`p-1 rounded transition-colors ${
+                          isFirstSec
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+                        }`}
+                        title="Move section up"
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reorderSections(secIdx, secIdx + 1)}
+                        disabled={isLastSec}
+                        className={`p-1 rounded transition-colors ${
+                          isLastSec
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+                        }`}
+                        title="Move section down"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {(section.id.startsWith("section-") || section.items.length === 0) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            deleteSection(section.id);
+                            toast.success(`Section "${section.title}" deleted`);
+                          }}
+                          className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                          title="Delete section"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {section.items.length === 0 ? (
+                      <div className="p-3 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-400 bg-gray-50/50">
+                        Drag items here
+                      </div>
+                    ) : (
+                      section.items.map((item, idx) => {
+                        const Icon = getSidebarIcon(item.iconName);
+                        const isDragging = draggedItem?.sectionId === section.id && draggedItem?.index === idx;
+                        const isOver = dragOverItem?.sectionId === section.id && dragOverItem?.index === idx;
+                        const isGearOpen = openGearItem?.item.id === item.id;
+                        const isEditingThisItem = editingItemId?.sectionId === section.id && editingItemId?.itemId === item.id;
+
+                        return (
+                          <div
+                            key={item.id}
+                            draggable={!isEditingThisItem}
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              setDraggedItem({ sectionId: section.id, index: idx });
+                            }}
+                            onDragEnd={() => {
+                              setDraggedItem(null);
+                              setDragOverItem(null);
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
+                              if (!dragOverItem || dragOverItem.sectionId !== section.id || dragOverItem.index !== idx) {
+                                setDragOverItem({ sectionId: section.id, index: idx });
+                              }
+                            }}
+                            onDragLeave={() => {
+                              if (dragOverItem?.sectionId === section.id && dragOverItem?.index === idx) {
+                                setDragOverItem(null);
+                              }
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (draggedItem) {
+                                moveItem(draggedItem.sectionId, section.id, draggedItem.index, idx);
+                                setDraggedItem(null);
+                                setDragOverItem(null);
+                              }
+                            }}
+                            className={`flex items-center justify-between p-1.5 px-2 rounded-xl text-xs transition-all border select-none ${
+                              isDragging
+                                ? "opacity-30 border-blue-400 bg-blue-50/30 scale-98"
+                                : isOver
+                                ? "border-blue-500 bg-blue-50/60 shadow-xs ring-1 ring-blue-500/20"
+                                : item.visible
+                                ? "bg-white border-gray-200 text-gray-800 shadow-2xs hover:border-gray-300"
+                                : "bg-gray-50/70 border-dashed border-gray-200 text-gray-400 opacity-60"
+                            }`}
+                          >
+                            {/* Drag Handle + Icon + Title (or Edit input) */}
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <div
+                                className="p-1 -ml-0.5 text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                                title="Drag to reorder"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
+
+                              <div
+                                className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                                  item.visible ? "bg-blue-50 text-[#1456f0]" : "bg-gray-100 text-gray-400"
+                                }`}
+                              >
+                                <Icon className="w-3.5 h-3.5" />
+                              </div>
+
+                              {isEditingThisItem ? (
+                                <div className="flex items-center gap-1 flex-1 mr-1">
+                                  <input
+                                    type="text"
+                                    value={editingItemLabel}
+                                    onChange={(e) => setEditingItemLabel(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveItemLabel(section.id, item.id);
+                                      if (e.key === "Escape") setEditingItemId(null);
+                                    }}
+                                    autoFocus
+                                    className="flex-1 px-1.5 py-0.5 text-xs bg-white border border-blue-400 rounded focus:outline-none text-gray-900 font-medium"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveItemLabel(section.id, item.id)}
+                                    className="p-1 text-emerald-600 hover:bg-emerald-50 rounded cursor-pointer"
+                                    title="Save page name"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingItemId(null)}
+                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={`truncate text-xs font-medium ${
+                                    item.visible ? "text-gray-800" : "text-gray-400 line-through"
+                                  }`}
+                                >
+                                  {item.label}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Action: Gear Settings Button */}
+                            <div className="flex items-center shrink-0 ml-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  if (isGearOpen) {
+                                    setOpenGearItem(null);
+                                  } else {
+                                    setOpenGearItem({
+                                      sectionId: section.id,
+                                      item,
+                                      coords: {
+                                        top: rect.top,
+                                        left: rect.right + 10,
+                                      },
+                                    });
+                                  }
+                                }}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  isGearOpen
+                                    ? "bg-gray-200 text-gray-900 shadow-2xs"
+                                    : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                                }`}
+                                title="Menu options"
+                              >
+                                <Settings className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : collapsed ? (
           /* Collapsed Icon-Only Navigation: Workspace items + Featured items + "v" Expand button */
@@ -922,7 +1154,7 @@ export default function Sidebar() {
               ref={gearMenuRef}
               className="fixed w-56 bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/90 p-1.5 z-[999999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-gray-800"
               style={{
-                top: `${Math.min(openGearItem.coords.top, window.innerHeight - 140)}px`,
+                top: `${Math.min(openGearItem.coords.top, window.innerHeight - 175)}px`,
                 left: `${Math.min(openGearItem.coords.left, window.innerWidth - 240)}px`,
               }}
             >
@@ -946,21 +1178,21 @@ export default function Sidebar() {
                 )}
               </button>
 
-              {/* Feature / Unfeature this page (Featured pages appear in Collapsed Sidebar) */}
+              {/* Show while collapsed */}
               <button
                 type="button"
                 onClick={() => {
                   toggleItemFeatured(openGearItem.sectionId, openGearItem.item.id);
                   toast.success(
                     `${openGearItem.item.label} ${
-                      openGearItem.item.isFeatured ? "removed from featured pages" : "marked as featured"
+                      openGearItem.item.isFeatured ? "hidden when collapsed" : "set to show while collapsed"
                     }`
                   );
                   setOpenGearItem(null);
                 }}
                 className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer flex items-center justify-between"
               >
-                <span>{openGearItem.item.isFeatured ? "Unfeature this page" : "Feature this page"}</span>
+                <span>{openGearItem.item.isFeatured ? "Hide while collapsed" : "Show while collapsed"}</span>
                 <Star
                   className={`w-3.5 h-3.5 ${
                     openGearItem.item.isFeatured
@@ -968,6 +1200,23 @@ export default function Sidebar() {
                       : "text-gray-400"
                   }`}
                 />
+              </button>
+
+              {/* Rename page */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingItemId({
+                    sectionId: openGearItem.sectionId,
+                    itemId: openGearItem.item.id,
+                  });
+                  setEditingItemLabel(openGearItem.item.label);
+                  setOpenGearItem(null);
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer flex items-center justify-between"
+              >
+                <span>Rename page</span>
+                <Pencil className="w-3.5 h-3.5 text-gray-400" />
               </button>
             </div>,
             document.body

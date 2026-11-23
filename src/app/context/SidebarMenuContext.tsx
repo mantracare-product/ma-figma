@@ -110,6 +110,14 @@ interface SidebarMenuContextType {
   moveItem: (fromSectionId: string, toSectionId: string, fromIndex: number, toIndex: number) => void;
   reorderSectionItems: (sectionId: string, fromIndex: number, toIndex: number) => void;
   toggleSectionDefaultExpanded: (sectionId: string) => void;
+  addSection: (title: string) => void;
+  renameSection: (sectionId: string, newTitle: string) => void;
+  renameItem: (sectionId: string, itemId: string, newLabel: string) => void;
+  reorderSections: (fromIndex: number, toIndex: number) => void;
+  deleteSection: (sectionId: string) => void;
+  addToSidebar: (sectionId: string, item: { id: string; label: string; iconName: string; path: string }) => void;
+  removeFromSidebar: (pathOrId: string) => void;
+  isInSidebar: (pathOrId: string) => boolean;
   addToWorkspace: (item: { id: string; label: string; iconName: string; path: string }) => void;
   removeFromWorkspace: (pathOrId: string) => void;
   isInWorkspace: (pathOrId: string) => boolean;
@@ -200,14 +208,16 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
           return migrated;
         }
 
-        // Always ensure billing and automation sections have correct titles and items, and billing is above automation
+        // Always ensure billing and automation sections have correct titles and items
         if (parsed.sections) {
-          const sectionOrder = ["workspace", "billing", "automation", "settings"];
-          parsed.sections.sort((a: NavSectionConfig, b: NavSectionConfig) => {
-            const ai = sectionOrder.indexOf(a.id);
-            const bi = sectionOrder.indexOf(b.id);
-            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-          });
+          if (!parsed.isCustomizedByUser) {
+            const sectionOrder = ["workspace", "billing", "automation", "settings"];
+            parsed.sections.sort((a: NavSectionConfig, b: NavSectionConfig) => {
+              const ai = sectionOrder.indexOf(a.id);
+              const bi = sectionOrder.indexOf(b.id);
+              return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+            });
+          }
           parsed.sections = parsed.sections.map((sec: NavSectionConfig) => {
             if (sec.id === "workspace") {
               let items = [...sec.items];
@@ -242,7 +252,7 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
               });
               return { ...sec, items };
             }
-            if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };
+            if (sec.id === "billing") return { ...sec, title: sec.title || "REVENUE & INSIGHTS" };
             if (sec.id === "automation") {
               const hasAuto = sec.items.some((it) => it.id === "global-automation");
               if (!hasAuto) {
@@ -260,9 +270,9 @@ function loadAndMigrateConfig(storageKey: string, org?: Organization | null): Si
                 } else {
                   newItems.unshift(autoItem);
                 }
-                return { ...sec, title: "CUSTOMIZATIONS", items: newItems };
+                return { ...sec, title: sec.title || "CUSTOMIZATIONS", items: newItems };
               }
-              return { ...sec, title: "CUSTOMIZATIONS" };
+              return { ...sec, title: sec.title || "CUSTOMIZATIONS" };
             }
             if (sec.id === "settings") {
               return {
@@ -726,6 +736,160 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
     saveConfig(updated);
   };
 
+  const addSection = (title: string) => {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+    const newSec: NavSectionConfig = {
+      id: `section-${Date.now()}`,
+      title: cleanTitle.toUpperCase(),
+      defaultExpanded: true,
+      items: [],
+    };
+    const settingsIdx = config.sections.findIndex((s) => s.id === "settings");
+    const newSections = [...config.sections];
+    if (settingsIdx !== -1) {
+      newSections.splice(settingsIdx, 0, newSec);
+    } else {
+      newSections.push(newSec);
+    }
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const renameSection = (sectionId: string, newTitle: string) => {
+    const cleanTitle = newTitle.trim();
+    if (!cleanTitle) return;
+    const newSections = config.sections.map((sec) =>
+      sec.id === sectionId ? { ...sec, title: cleanTitle.toUpperCase() } : sec
+    );
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const renameItem = (sectionId: string, itemId: string, newLabel: string) => {
+    const cleanLabel = newLabel.trim();
+    if (!cleanLabel) return;
+    const newSections = config.sections.map((sec) => {
+      if (sec.id !== sectionId) return sec;
+      return {
+        ...sec,
+        items: sec.items.map((item) =>
+          item.id === itemId ? { ...item, label: cleanLabel } : item
+        ),
+      };
+    });
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const reorderSections = (fromIndex: number, toIndex: number) => {
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= config.sections.length ||
+      toIndex >= config.sections.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const newSections = [...config.sections];
+    const [moved] = newSections.splice(fromIndex, 1);
+    newSections.splice(toIndex, 0, moved);
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const deleteSection = (sectionId: string) => {
+    const secToDelete = config.sections.find((s) => s.id === sectionId);
+    if (!secToDelete) return;
+    let newSections = config.sections.filter((s) => s.id !== sectionId);
+    if (secToDelete.items.length > 0 && newSections.length > 0) {
+      const targetSec = newSections.find((s) => s.id === "workspace") || newSections[0];
+      newSections = newSections.map((s) =>
+        s.id === targetSec.id ? { ...s, items: [...s.items, ...secToDelete.items] } : s
+      );
+    }
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const addToSidebar = (
+    sectionId: string,
+    item: { id: string; label: string; iconName: string; path: string }
+  ) => {
+    const targetSection = config.sections.find((s) => s.id === sectionId) || config.sections[0];
+    if (!targetSection) return;
+
+    const normPath = decodeURIComponent(item.path).toLowerCase();
+    const itemIdLower = item.id.toLowerCase();
+
+    // Remove from other sections if present
+    const cleanedSections = config.sections.map((sec) => ({
+      ...sec,
+      items: sec.items.filter((i) => {
+        const iId = i.id.toLowerCase();
+        const iPath = decodeURIComponent(i.path).toLowerCase();
+        return iId !== itemIdLower && iPath !== normPath;
+      }),
+    }));
+
+    const newItem: NavItemConfig = {
+      id: item.id,
+      label: item.label,
+      iconName: item.iconName,
+      path: item.path,
+      visible: true,
+      isFeatured: true,
+    };
+
+    const finalSections = cleanedSections.map((sec) => {
+      if (sec.id !== targetSection.id) return sec;
+      return {
+        ...sec,
+        items: [...sec.items, newItem],
+      };
+    });
+
+    saveConfig({ ...config, sections: finalSections, isCustomizedByUser: true });
+  };
+
+  const removeFromSidebar = (pathOrId: string) => {
+    const cleanTarget = decodeURIComponent(pathOrId).toLowerCase().trim();
+    const newSections = config.sections.map((sec) => ({
+      ...sec,
+      items: sec.items.filter((i) => {
+        const iId = i.id.toLowerCase();
+        const iPath = decodeURIComponent(i.path).toLowerCase();
+        const iLabel = i.label.toLowerCase();
+        if (iId === cleanTarget || iPath === cleanTarget) return false;
+        if (!cleanTarget.startsWith("/") && iLabel === cleanTarget) return false;
+        return true;
+      }),
+    }));
+    saveConfig({ ...config, sections: newSections, isCustomizedByUser: true });
+  };
+
+  const isInSidebar = (pathOrId: string): boolean => {
+    const cleanTarget = decodeURIComponent(pathOrId).toLowerCase().trim();
+    return config.sections.some((sec) =>
+      sec.items.some((i) => {
+        if (!i.visible) return false;
+        const iId = i.id.toLowerCase();
+        const iPath = decodeURIComponent(i.path).toLowerCase();
+        const iLabel = i.label.toLowerCase();
+        if (iId === cleanTarget || iPath === cleanTarget) return true;
+        if (!cleanTarget.startsWith("/") && iLabel === cleanTarget) return true;
+        if (cleanTarget.includes("?") && iPath.includes("?")) {
+          const [targetBase, targetQuery] = cleanTarget.split("?");
+          const [itemBase, itemQuery] = iPath.split("?");
+          if (targetBase === itemBase) {
+            const targetParams = new URLSearchParams(targetQuery);
+            const itemParams = new URLSearchParams(itemQuery);
+            const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
+            const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+            if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+          }
+        }
+        return false;
+      })
+    );
+  };
+
   return (
     <SidebarMenuContext.Provider
       value={{
@@ -743,6 +907,14 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         moveItem,
         reorderSectionItems,
         toggleSectionDefaultExpanded,
+        addSection,
+        renameSection,
+        renameItem,
+        reorderSections,
+        deleteSection,
+        addToSidebar,
+        removeFromSidebar,
+        isInSidebar,
         addToWorkspace,
         removeFromWorkspace,
         isInWorkspace,
@@ -771,6 +943,14 @@ export function useSidebarMenu(): SidebarMenuContextType {
       moveItem: () => {},
       reorderSectionItems: () => {},
       toggleSectionDefaultExpanded: () => {},
+      addSection: () => {},
+      renameSection: () => {},
+      renameItem: () => {},
+      reorderSections: () => {},
+      deleteSection: () => {},
+      addToSidebar: () => {},
+      removeFromSidebar: () => {},
+      isInSidebar: () => false,
       addToWorkspace: () => {},
       removeFromWorkspace: () => {},
       isInWorkspace: () => false,
