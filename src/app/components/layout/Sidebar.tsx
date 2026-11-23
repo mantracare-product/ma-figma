@@ -575,32 +575,69 @@ export default function Sidebar() {
       const itemParams = new URLSearchParams(itemQueryStr);
       const currentParams = new URLSearchParams(currentSearch);
 
-      // Check if item process matches current URL process
-      const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
-      const currentProc = currentParams.get("process") || currentParams.get("processName") || currentParams.get("processId");
+      // Check if item process or workflow matches current URL process or workflow
+      const itemProc =
+        itemParams.get("process") ||
+        itemParams.get("processName") ||
+        itemParams.get("processId") ||
+        itemParams.get("workflow") ||
+        itemParams.get("workflowId") ||
+        itemParams.get("workflowName");
+      const currentProc =
+        currentParams.get("process") ||
+        currentParams.get("processName") ||
+        currentParams.get("processId") ||
+        currentParams.get("workflow") ||
+        currentParams.get("workflowId") ||
+        currentParams.get("workflowName");
       if (itemProc && currentProc && decodeURIComponent(itemProc).toLowerCase() === decodeURIComponent(currentProc).toLowerCase()) {
         return true;
       }
       return false;
     }
 
-    // If itemPath has NO query params (e.g. generic /deals, /appointments, /claims):
-    // If the current URL HAS a specific process query param, check if any other item specifically matches that query.
+    // If itemPath has NO query params (e.g. generic /deals, /appointments, /claims, /tasks):
+    // If the current URL HAS a specific process/workflow query param, check if any other item specifically matches that query.
     // If another item matches, this generic item should NOT be highlighted!
     const curParams = new URLSearchParams(currentSearch);
     const hasCurProcessParam = Boolean(
-      curParams.get("process") || curParams.get("processName") || curParams.get("processId")
+      curParams.get("process") ||
+      curParams.get("processName") ||
+      curParams.get("processId") ||
+      curParams.get("workflow") ||
+      curParams.get("workflowId") ||
+      curParams.get("workflowName")
     );
 
-    if (hasCurProcessParam && (itemId === "processes" || itemId === "deals" || itemId === "appointments" || itemId === "invoices" || itemId === "insurance-claims")) {
-      const curProcVal = curParams.get("process") || curParams.get("processName") || curParams.get("processId");
+    if (
+      hasCurProcessParam &&
+      (itemId === "processes" ||
+        itemId === "deals" ||
+        itemId === "appointments" ||
+        itemId === "invoices" ||
+        itemId === "insurance-claims" ||
+        itemId === "tasks")
+    ) {
+      const curProcVal =
+        curParams.get("process") ||
+        curParams.get("processName") ||
+        curParams.get("processId") ||
+        curParams.get("workflow") ||
+        curParams.get("workflowId") ||
+        curParams.get("workflowName");
       const hasSpecificMatchingItem = sections.some((sec) =>
         sec.items.some((it) => {
           if (!it.path || !it.path.includes("?")) return false;
           const [b, q] = it.path.split("?");
           if (b !== currentPath) return false;
           const itP = new URLSearchParams(q);
-          const itProcVal = itP.get("process") || itP.get("processName") || itP.get("processId");
+          const itProcVal =
+            itP.get("process") ||
+            itP.get("processName") ||
+            itP.get("processId") ||
+            itP.get("workflow") ||
+            itP.get("workflowId") ||
+            itP.get("workflowName");
           return itProcVal && curProcVal && decodeURIComponent(itProcVal).toLowerCase() === decodeURIComponent(curProcVal).toLowerCase();
         })
       );
@@ -775,16 +812,17 @@ export default function Sidebar() {
                     }}
                     placeholder="e.g. OPERATIONS"
                     autoFocus
-                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-semibold text-gray-800 placeholder:normal-case placeholder:font-normal"
+                    className="flex-1 min-w-0 px-2.5 py-1 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-semibold text-gray-800 placeholder:normal-case placeholder:font-normal"
                   />
                   <button
                     type="button"
                     onClick={handleConfirmAddSection}
                     disabled={!newSectionTitle.trim()}
-                    className="px-2.5 py-1 text-xs font-semibold bg-[#1456f0] hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                    className="w-7 h-7 flex items-center justify-center bg-[#1456f0] hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    title="Add section"
+                    aria-label="Add section"
                   >
-                    <Check className="w-3 h-3" />
-                    <span>Add</span>
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               </div>

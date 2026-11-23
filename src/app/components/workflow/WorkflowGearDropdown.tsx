@@ -16,10 +16,32 @@ import {
   DropdownMenuItem,
 } from "../ui/dropdown-menu";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
+import { getSidebarIcon } from "../layout/ConfigureMenuModal";
 import { toast } from "sonner";
 
+export const AVAILABLE_SIDEBAR_ICONS = [
+  { name: "CheckSquare", label: "Checklist / Tasks" },
+  { name: "RefreshCw", label: "Process / Flow" },
+  { name: "Calendar", label: "Calendar" },
+  { name: "Receipt", label: "Receipt / Invoice" },
+  { name: "ShieldCheck", label: "Shield / Claims" },
+  { name: "Package", label: "Package / Services" },
+  { name: "FileText", label: "Document / Form" },
+  { name: "BarChart3", label: "Reports / Metrics" },
+  { name: "Users", label: "Contacts / Patients" },
+  { name: "Phone", label: "Calls / Logs" },
+  { name: "MessageCircle", label: "Chats / Messages" },
+  { name: "Stethoscope", label: "Clinical / Scribe" },
+  { name: "Zap", label: "Automation" },
+  { name: "Folder", label: "Folder" },
+  { name: "Bookmark", label: "Bookmark" },
+  { name: "Star", label: "Starred" },
+  { name: "SlidersHorizontal", label: "Workflows" },
+  { name: "Database", label: "Knowledge Base" },
+];
+
 export interface WorkflowGearDropdownProps {
-  entityType: "process" | "appointment" | "invoice" | "insurance";
+  entityType: "process" | "appointment" | "invoice" | "insurance" | "task";
   processId?: string;
   processName?: string;
   className?: string;
@@ -48,6 +70,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [customItemName, setCustomItemName] = useState("");
   const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [selectedIconName, setSelectedIconName] = useState("");
 
   // Resolve target details based on entityType
   const getEntityConfig = () => {
@@ -188,6 +211,30 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
           workflowState: { processId: pId, processName: pName },
         };
       }
+      case "task": {
+        const pName = (processName || "").trim();
+        const pId = processId || "";
+        const isSpecific = Boolean(
+          pName &&
+          pName.toLowerCase() !== "task" &&
+          pName.toLowerCase() !== "all tasks" &&
+          pName.toLowerCase() !== "general tasks"
+        );
+        const slug = pName
+          ? pName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+          : "";
+
+        return {
+          id: isSpecific ? `task-wf-${slug || pId}` : "tasks",
+          label: isSpecific ? pName : "Tasks",
+          iconName: "CheckSquare",
+          path: isSpecific ? `/tasks?workflow=${encodeURIComponent(pId || pName)}` : "/tasks",
+          workflowPath: pId
+            ? `/process?entity=task&processId=${encodeURIComponent(pId)}&processName=${encodeURIComponent(pName)}`
+            : "/process?entity=task",
+          workflowState: { processId: pId, processName: pName, entityType: "task" },
+        };
+      }
     }
   };
 
@@ -216,6 +263,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
     setCustomItemName(target.label);
     const defaultSec = config.sections.find((s) => s.id === "workspace") || config.sections[0];
     setSelectedSectionId(defaultSec?.id || "");
+    setSelectedIconName(target.iconName || "LayoutDashboard");
     setIsAddModalOpen(true);
   };
 
@@ -229,7 +277,7 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
     addToSidebar(secId, {
       id: target.id,
       label: finalLabel,
-      iconName: target.iconName,
+      iconName: selectedIconName || target.iconName || "LayoutDashboard",
       path: target.path,
     });
     toast.success(`"${finalLabel}" added to ${targetSec?.title || "sidebar"}`);
@@ -353,6 +401,36 @@ export const WorkflowGearDropdown: React.FC<WorkflowGearDropdownProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Icon</span>
+                    <span className="text-[11px] font-normal text-slate-400">
+                      {AVAILABLE_SIDEBAR_ICONS.find((i) => i.name === selectedIconName)?.label || selectedIconName}
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-6 gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl max-h-36 overflow-y-auto no-scrollbar">
+                    {AVAILABLE_SIDEBAR_ICONS.map((iconItem) => {
+                      const IconComp = getSidebarIcon(iconItem.name);
+                      const isSelected = selectedIconName === iconItem.name;
+                      return (
+                        <button
+                          key={iconItem.name}
+                          type="button"
+                          onClick={() => setSelectedIconName(iconItem.name)}
+                          className={`h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-white border-2 border-blue-600 text-blue-600 shadow-xs scale-105"
+                              : "bg-white/80 hover:bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+                          }`}
+                          title={iconItem.label}
+                        >
+                          <IconComp className="w-4 h-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Footer Buttons */}

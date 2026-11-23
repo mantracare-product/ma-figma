@@ -553,8 +553,20 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
           if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
         }
       }
@@ -584,8 +596,20 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
           if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
         }
       }
@@ -684,8 +708,20 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
           if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
         }
       }

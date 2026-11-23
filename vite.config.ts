@@ -36,6 +36,45 @@ function apiServerPlugin() {
           }
           return;
         }
+        if (req.url === '/api/tts' || req.url?.startsWith('/api/tts?')) {
+          if (req.method === 'GET') {
+            try {
+              const { getTtsStatus } = await server.ssrLoadModule('./api/tts.ts');
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(getTtsStatus()));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'TTS status check failed', detail: String(err?.message || err) }));
+            }
+            return;
+          }
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', (chunk: any) => { body += chunk; });
+            req.on('end', async () => {
+              try {
+                const reqBody = JSON.parse(body);
+                const { handleTtsRequest } = await server.ssrLoadModule('./api/tts.ts');
+                const result = await handleTtsRequest(reqBody);
+                if (result.error) {
+                  res.statusCode = result.upstreamStatus || 500;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify(result));
+                } else {
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', result.contentType || 'audio/mpeg');
+                  res.end(result.audioBuffer);
+                }
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'TTS failed', detail: String(err?.message || err) }));
+              }
+            });
+            return;
+          }
+        }
         if (req.url === '/api/stt/transcribe') {
           if (req.method === 'GET') {
             res.setHeader('Content-Type', 'application/json');
@@ -116,6 +155,24 @@ export default defineConfig(({ mode }) => {
   if (env.GROQ_API_KEY && !process.env.GROQ_API_KEY) {
     process.env.GROQ_API_KEY = env.GROQ_API_KEY;
   }
+  if (env.ELEVENLABS_API_KEY && !process.env.ELEVENLABS_API_KEY) {
+    process.env.ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY;
+  }
+  if (env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY) {
+    process.env.OPENAI_API_KEY = env.OPENAI_API_KEY;
+  }
+  if (env.TTS_API_KEY && !process.env.TTS_API_KEY) {
+    process.env.TTS_API_KEY = env.TTS_API_KEY;
+  }
+  if (env.TTS_PROVIDER && !process.env.TTS_PROVIDER) {
+    process.env.TTS_PROVIDER = env.TTS_PROVIDER;
+  }
+  if (env.ELEVENLABS_VOICE_ID && !process.env.ELEVENLABS_VOICE_ID) {
+    process.env.ELEVENLABS_VOICE_ID = env.ELEVENLABS_VOICE_ID;
+  }
+  if (env.OPENAI_TTS_VOICE && !process.env.OPENAI_TTS_VOICE) {
+    process.env.OPENAI_TTS_VOICE = env.OPENAI_TTS_VOICE;
+  }
 
   return {
     plugins: [
@@ -134,7 +191,7 @@ export default defineConfig(({ mode }) => {
     },
 
     // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
-    assetsInclude: ['**/*.svg', '**/*.csv'],
+    assetsInclude: ['**/*.svg', '**/*.csv', '**/*.glb', '**/*.vrm'],
     build: {
       chunkSizeWarningLimit: 1200,
       rollupOptions: {
