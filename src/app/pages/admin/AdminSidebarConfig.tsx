@@ -111,7 +111,11 @@ function renderScopeCell(item: {
   );
 }
 
-export default function AdminSidebarConfig() {
+export interface AdminSidebarConfigProps {
+  embedded?: boolean;
+}
+
+export default function AdminSidebarConfig({ embedded = false }: AdminSidebarConfigProps = {}) {
   const [templates, setTemplates] = useState<AdminSidebarTemplate[]>(getStoredSidebarTemplates);
 
   // Filter state
@@ -353,13 +357,15 @@ export default function AdminSidebarConfig() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
-        {/* Top Header Portaled into Admin Header */}
-        <PageHeader
-          title="Sidebar Navigation Templates"
-          subtitle="Configure default client sidebar layouts, section order, visibility, and pinned workflows based on admin scope."
-        />
+    <div className={embedded ? "space-y-5" : "min-h-screen bg-[#fafafa]"}>
+      <div className={embedded ? "w-full space-y-5" : "px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7"}>
+        {/* Top Header Portaled into Admin Header - only if standalone */}
+        {!embedded && (
+          <PageHeader
+            title="Sidebar Navigation Templates"
+            subtitle="Configure default client sidebar layouts, section order, visibility, and pinned workflows based on admin scope."
+          />
+        )}
 
         {/* Unified Action Bar powered by PageTopBar with Integrated Admin Scope Filters & Add Button */}
         <PageTopBar

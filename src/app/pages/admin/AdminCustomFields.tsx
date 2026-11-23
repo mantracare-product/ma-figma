@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import {
   Search,
   Plus,
@@ -40,6 +41,11 @@ import {
   Globe,
   Layers,
   GitBranch,
+  Mail,
+  Phone,
+  Clock,
+  Send,
+  Upload,
 } from "lucide-react";
 
 import type {
@@ -61,6 +67,8 @@ import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import { AdminSectionDrawer } from "./components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "./components/AdminFieldDrawer";
+import AdminSidebarConfig from "./AdminSidebarConfig";
+import { toast } from "sonner";
 import {
   INITIAL_INDUSTRIES,
   STANDARD_LOCATIONS,
@@ -263,9 +271,34 @@ export function AdminCustomFields() {
   } = useFieldRegistry();
 
   // State
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Exclude<FieldModule, "deal">>("client");
-  const [activeTab, setActiveTab] = useState<"fields" | "sections">("fields");
+  const [activeTab, setActiveTab] = useState<"fields" | "sections" | "layouts">(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "layouts") return "layouts";
+    if (tab === "sections") return "sections";
+    return "fields";
+  });
+  const [layoutEntity, setLayoutEntity] = useState<string>(() => {
+    return searchParams.get("entity") || "sidebar";
+  });
+  const [selectedService, setSelectedService] = useState<string>("Automobile");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activePreviewTab, setActivePreviewTab] = useState<string>("overview");
+  const [previewNote, setPreviewNote] = useState<string>("");
+  const [previewNotesList, setPreviewNotesList] = useState<Array<{ text: string; date: string }>>([]);
+
+  // Keep activeTab and layoutEntity in sync with URL searchParams
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "layouts" || tab === "sections" || tab === "fields") {
+      setActiveTab(tab);
+    }
+    const entity = searchParams.get("entity");
+    if (entity) {
+      setLayoutEntity(entity);
+    }
+  }, [searchParams]);
 
   // Modal / Drawer states
   const [fieldModalOpen, setFieldModalOpen] = useState(false);
@@ -378,44 +411,48 @@ export function AdminCustomFields() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7 animate-in fade-in duration-200">
         <PageHeader
-          title="Sections & Fields"
-          subtitle="Configure system and custom fields, layout sections, validation rules, and scoping across modules"
+          title="Custom Fields & Sections"
+          subtitle="Define and manage prebuilt custom fields, sections, and metadata across all platform entities."
         />
 
         {/* ── UNIFIED TOOLBAR powered by PageTopBar ── */}
       <PageTopBar
-        modes={[
-          { id: "fields", label: "Fields" },
-          { id: "sections", label: "Sections" },
-        ]}
-        activeMode={activeTab}
-        onModeChange={(m) => setActiveTab(m as typeof activeTab)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={
           activeTab === "fields"
             ? `Search ${currentModLabel.toLowerCase()} fields...`
-            : `Search ${currentModLabel.toLowerCase()} sections...`
+            : activeTab === "sections"
+            ? `Search ${currentModLabel.toLowerCase()} sections...`
+            : `Search sections...`
         }
         leftElement={
           <div className="flex items-center gap-1.5 mr-1">
             <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center">
               <select
-                value={activeModule}
-                onChange={(e) => setActiveModule(e.target.value as any)}
+                value={activeTab === "layouts" ? "all-sections" : activeModule}
+                onChange={(e) => {
+                  if (activeTab !== "layouts") {
+                    setActiveModule(e.target.value as any);
+                  }
+                }}
                 className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                {MODULE_TABS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
+                {activeTab === "layouts" ? (
+                  <option value="all-sections">All Sections</option>
+                ) : (
+                  MODULE_TABS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))
+                )}
               </select>
               <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {activeModule === "client" && (
+            {activeTab !== "layouts" && activeModule === "client" && (
               <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2.5 py-1 flex items-center">
                 <select
                   value={contactCategoryFilter}
@@ -463,7 +500,8 @@ export function AdminCustomFields() {
                   onClick: () => setSearchQuery("text"),
                 },
               ]
-            : [
+            : activeTab === "sections"
+            ? [
                 {
                   id: "all",
                   label: "All Sections",
@@ -471,6 +509,7 @@ export function AdminCustomFields() {
                   onClick: () => setSearchQuery(""),
                 },
               ]
+            : undefined
         }
         filterFields={
           activeTab === "fields"
@@ -492,7 +531,8 @@ export function AdminCustomFields() {
                   options: MODULE_TABS.map((m) => ({ label: m.label, value: m.value })),
                 },
               ]
-            : [
+            : activeTab === "sections"
+            ? [
                 {
                   id: "title",
                   label: "Section Title",
@@ -502,18 +542,75 @@ export function AdminCustomFields() {
                   onChange: (val) => setSearchQuery(val || ""),
                 },
               ]
+            : undefined
         }
+        secondaryActions={
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-medium text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+              {activeTab === "layouts"
+                ? "0 layout"
+                : activeTab === "sections"
+                ? `${filteredSections.length} sections`
+                : `${filteredFields.length} fields`}
+            </span>
+
+            {/* Segmented Modes Tabs: Fields | Sections | Layouts */}
+            <div className="inline-flex items-center p-0.5 bg-gray-100/80 border border-gray-200/80 rounded-xl gap-0.5">
+              {[
+                { id: "fields", label: "Fields" },
+                { id: "sections", label: "Sections" },
+                { id: "layouts", label: "Layouts" },
+              ].map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      const nextTab = tab.id as "fields" | "sections" | "layouts";
+                      setActiveTab(nextTab);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("tab", nextTab);
+                        if (nextTab === "layouts" && !next.get("entity")) {
+                          next.set("entity", layoutEntity || "sidebar");
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-white text-gray-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        }
+        onExport={() => toast.info("Exporting configuration...")}
         primaryAction={{
-          label: activeTab === "fields" ? "Add Field" : "Add Section",
+          label: "",
           icon: <Plus className="w-4 h-4" />,
           onClick: () => {
             if (activeTab === "fields") {
               handleOpenCreateField();
-            } else {
+            } else if (activeTab === "sections") {
               setEditingSection(null);
               setSectionDrawerOpen(true);
+            } else {
+              if (layoutEntity === "sidebar") {
+                toast.info("Add a new template using 'Add Sidebar Template' below");
+              } else {
+                toast.info("Create new section for layout");
+              }
             }
           },
+          className: "!w-[36px] !h-[36px] !p-0 !rounded-full flex items-center justify-center !bg-black hover:!bg-gray-800 text-white shrink-0 cursor-pointer shadow-xs",
         }}
       />
 
@@ -777,6 +874,398 @@ export function AdminCustomFields() {
             />
           );
         })()}
+
+        {/* TAB 3: LAYOUTS VIEW */}
+        {activeTab === "layouts" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Layout Controls Bar (Matching Reference Screenshot) */}
+            <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-2xs space-y-4">
+              {/* Top Row: Layout Type & Service */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Layout Type:
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={layoutEntity}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setLayoutEntity(next);
+                        setSearchParams({ tab: "layouts", entity: next });
+                      }}
+                      className="appearance-none h-9 pl-3.5 pr-8 bg-white border border-gray-200 rounded-full text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs min-w-[140px]"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="sidebar">Side bar</option>
+                      <option value="client">Client</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="invoice">Invoice</option>
+                      <option value="claim">Insurance & Claims</option>
+                      <option value="task">Tasks</option>
+                      <option value="service">Services</option>
+                      <option value="process">Processes</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Service:
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={selectedService}
+                      onChange={(e) => setSelectedService(e.target.value)}
+                      className="appearance-none h-9 pl-3.5 pr-8 bg-white border border-gray-200 rounded-full text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs min-w-[140px]"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="Automobile">Automobile</option>
+                      <option value="Healthcare">Healthcare</option>
+                      <option value="Dental">Dental</option>
+                      <option value="Legal">Legal</option>
+                      <option value="Financial">Financial</option>
+                      <option value="General Practice">General Practice</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Row: Target Organizations & Sync Layout */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="text-xs font-bold text-gray-700 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Target Organizations:
+                  </label>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50/70 border border-blue-200/80 text-blue-700 text-xs font-semibold">
+                    <span>All Organizations</span>
+                    <button
+                      type="button"
+                      onClick={() => toast.info("Organization filter toggled")}
+                      className="hover:text-blue-900 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toast.success(`Layout synchronized for ${selectedService} across all organizations ✓`)}
+                  className="bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold px-5 py-2.5 rounded-full transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer ml-auto"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Sync Layout
+                </button>
+              </div>
+            </div>
+
+            {/* Entity View Condition */}
+            {layoutEntity === "sidebar" ? (
+              /* ── SIDE BAR ENTITY: Embed full Sidebar Navigation Template flow ── */
+              <div className="space-y-4">
+                <AdminSidebarConfig embedded={true} />
+              </div>
+            ) : (
+              /* ── CLIENT & OTHER ENTITIES: Layout Builder & Preview (Matching Screenshot) ── */
+              <div className="bg-white border border-gray-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                {/* Top Profile Banner */}
+                <div className="p-6 pb-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    KP
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Kanak B Pandey
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">
+                      +1 1234567890
+                    </p>
+                  </div>
+                </div>
+
+                {/* Navigation Tabs */}
+                <div className="flex items-center gap-7 px-6 border-b border-gray-100 text-xs font-semibold overflow-x-auto scrollbar-none" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {[
+                    { id: "overview", label: "Overview" },
+                    { id: "processes", label: "Processes" },
+                    { id: "calls", label: "Calls" },
+                    { id: "invoices", label: "Invoices" },
+                    { id: "documents", label: "Documents" },
+                    { id: "notes", label: "Notes" },
+                  ].map((tab) => {
+                    const isActive = activePreviewTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActivePreviewTab(tab.id)}
+                        className={`pb-3 transition-colors cursor-pointer border-b-2 whitespace-nowrap ${
+                          isActive
+                            ? "border-blue-600 text-blue-600 font-bold"
+                            : "border-transparent text-gray-500 hover:text-gray-900"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 2-Column Content Grid */}
+                <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Left Column: Form Fields */}
+                  <div className="lg:col-span-6 space-y-4">
+                    {/* NAME */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <User className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Name</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue="Kanak B Pandey"
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* EMAIL */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Mail className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Email</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue="kanak@mantracare.org"
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* PHONE */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Phone className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Phone</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue="+11234567890"
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* TIMEZONE */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Globe className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Timezone</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue="Asia/Kolkata"
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* SOURCE */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Layers className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Source</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue="Admin Layout Builder"
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* INQUIRY TYPE */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Tag className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Inquiry Type</span>
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={`${selectedService} Consultation`}
+                        className="w-full px-3.5 py-2.5 border border-gray-200/90 rounded-xl text-xs font-medium text-gray-800 bg-white shadow-2xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right Column: Activity & Timeline */}
+                  <div className="lg:col-span-6 space-y-6">
+                    {/* Note Input Box */}
+                    <div className="border border-gray-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-3">
+                      <textarea
+                        rows={3}
+                        value={previewNote}
+                        onChange={(e) => setPreviewNote(e.target.value)}
+                        placeholder="Record new client activity or note..."
+                        className="w-full text-xs font-medium text-gray-800 placeholder-gray-400 outline-none resize-none bg-transparent"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <span className="text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-200/60" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Activity
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!previewNote.trim()) return;
+                            setPreviewNotesList((prev) => [
+                              { text: previewNote.trim(), date: "Just now" },
+                              ...prev,
+                            ]);
+                            setPreviewNote("");
+                            toast.success("Activity note posted");
+                          }}
+                          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>Post</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Activity Timeline */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Activity Timeline ({3 + previewNotesList.length})
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <select
+                            className="text-xs font-semibold text-gray-500 bg-transparent pr-4 outline-none cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <option value="all">All Events</option>
+                            <option value="stages">Stages</option>
+                            <option value="calls">Calls</option>
+                            <option value="notes">Notes</option>
+                          </select>
+                          <ChevronDown className="w-3 h-3 text-gray-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Timeline Items */}
+                      <div className="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                        {/* Dynamically added notes */}
+                        {previewNotesList.map((n, idx) => (
+                          <div key={idx} className="relative flex items-start gap-3">
+                            <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center ring-4 ring-white shadow-2xs">
+                              <FileText className="w-2.5 h-2.5" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Internal Note
+                                </span>
+                                <span className="text-[11px] text-gray-400 font-medium">
+                                  {n.date}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5 font-medium">{n.text}</p>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Timeline Item 1: Stage Updated */}
+                        <div className="relative flex items-start gap-3">
+                          <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center ring-4 ring-white shadow-2xs">
+                            <Layers className="w-2.5 h-2.5" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Stage Updated
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  In Progress
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-gray-400 font-medium">
+                                Sep 22, 2026, 1:59 PM
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-0.5 font-medium">
+                              via Pipeline Automation • EM new leads
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Timeline Item 2: Outbound Call */}
+                        <div className="relative flex items-start gap-3">
+                          <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center ring-4 ring-white shadow-2xs">
+                            <Phone className="w-2.5 h-2.5" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Outbound Call Completed
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200/60" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Scheduled
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-gray-400 font-medium">
+                                Sep 22, 2026, 1:59 PM
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-0.5 font-medium">
+                              via Voice Assistant
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Timeline Item 3: Appointment Booked */}
+                        <div className="relative flex items-start gap-3">
+                          <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center ring-4 ring-white shadow-2xs">
+                            <Calendar className="w-2.5 h-2.5" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Appointment Booked
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Confirmed
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-gray-400 font-medium">
+                                Sep 21, 2026, 11:30 AM
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-0.5 font-medium">
+                              via Calendar Integration
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* ── Field Drawer (Right Side) ── */}
       {fieldModalOpen && (
