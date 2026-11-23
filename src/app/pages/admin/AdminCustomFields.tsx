@@ -449,13 +449,13 @@ export function AdminCustomFields() {
             : activeTab === "sections"
             ? `Search ${currentModLabel.toLowerCase()} sections...`
             : layoutEntity === "sidebar"
-            ? `Search template names, pinned workflows, scopes...`
+            ? `Search templates...`
             : `Search layouts...`
         }
         leftElement={
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
             {/* 1. Fields | Sections | Layouts at the left side corner */}
-            <div className="inline-flex items-center p-0.5 bg-gray-100/80 border border-gray-200/80 rounded-xl gap-0.5">
+            <div className="inline-flex items-center p-0.5 bg-gray-100/80 border border-gray-200/80 rounded-xl gap-0.5 shrink-0">
               {[
                 { id: "fields", label: "Fields" },
                 { id: "sections", label: "Sections" },
@@ -478,7 +478,7 @@ export function AdminCustomFields() {
                         return next;
                       });
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isActive
                         ? "bg-white text-gray-900 shadow-2xs font-bold"
                         : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
@@ -493,9 +493,9 @@ export function AdminCustomFields() {
 
             {/* 2. When activeTab === "layouts": show Layout Type in the topbar */}
             {activeTab === "layouts" ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-gray-700 whitespace-nowrap ml-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Layout Type:
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-xs font-bold text-gray-500 whitespace-nowrap ml-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Layout:
                 </span>
                 <div className="relative">
                   <select
@@ -510,29 +510,30 @@ export function AdminCustomFields() {
                         return nextParams;
                       });
                     }}
-                    className="appearance-none h-[36px] pl-3 pr-7 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                    className="appearance-none h-[34px] pl-2.5 pr-6 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs max-w-[95px] truncate"
                     style={{ fontFamily: "Outfit, sans-serif" }}
+                    title="Layout Type"
                   >
                     <option value="sidebar">Side bar</option>
                     <option value="client">Client</option>
                     <option value="appointment">Appointment</option>
                     <option value="invoice">Invoice</option>
-                    <option value="claim">Insurance & Claims</option>
+                    <option value="claim">Claims</option>
                     <option value="task">Tasks</option>
                     <option value="service">Services</option>
                     <option value="process">Processes</option>
                   </select>
-                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
             ) : (
               /* When in Fields or Sections: Module & Category selectors */
               <>
-                <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center">
+                <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2 py-1 flex items-center shrink-0">
                   <select
                     value={activeModule}
                     onChange={(e) => setActiveModule(e.target.value as any)}
-                    className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
+                    className="bg-transparent text-xs font-bold text-gray-800 pr-3.5 outline-none cursor-pointer appearance-none max-w-[105px] truncate"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     {MODULE_TABS.map((m) => (
@@ -541,11 +542,11 @@ export function AdminCustomFields() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
                 {activeModule === "client" && (
-                  <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2.5 py-1 flex items-center">
+                  <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2 py-1 flex items-center shrink-0">
                     <select
                       value={contactCategoryFilter}
                       onChange={(e) => {
@@ -555,7 +556,7 @@ export function AdminCustomFields() {
                           setContactCategoryFilter(e.target.value);
                         }
                       }}
-                      className="bg-transparent text-xs font-semibold text-blue-700 pr-4 outline-none cursor-pointer appearance-none"
+                      className="bg-transparent text-xs font-semibold text-blue-700 pr-3.5 outline-none cursor-pointer appearance-none max-w-[90px] truncate"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       {contactCategories.map((cat) => (
@@ -565,7 +566,7 @@ export function AdminCustomFields() {
                       ))}
                       <option value="__add_category__">+ Add Category</option>
                     </select>
-                    <ChevronDown className="w-3 h-3 text-blue-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <ChevronDown className="w-3 h-3 text-blue-500 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 )}
               </>
@@ -573,7 +574,7 @@ export function AdminCustomFields() {
 
             {/* 3. When activeTab === "layouts" and layoutEntity === "sidebar": Admin Scope filters */}
             {activeTab === "layouts" && layoutEntity === "sidebar" && (
-              <div className="flex items-center gap-1.5 flex-wrap ml-1 pl-2 border-l border-gray-200">
+              <div className="flex items-center gap-1 flex-nowrap shrink-0 pl-1.5 border-l border-gray-200">
                 {/* Category Filter */}
                 <select
                   value={sidebarCategoryFilter}
@@ -581,8 +582,9 @@ export function AdminCustomFields() {
                     setSidebarCategoryFilter(e.target.value);
                     setSidebarIndustryFilter("All");
                   }}
-                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  className="h-[34px] px-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 max-w-[100px] truncate"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={`Category: ${sidebarCategoryFilter}`}
                 >
                   <option value="All">All Categories</option>
                   {INITIAL_CATEGORIES.map((cat) => (
@@ -596,8 +598,9 @@ export function AdminCustomFields() {
                 <select
                   value={sidebarIndustryFilter}
                   onChange={(e) => setSidebarIndustryFilter(e.target.value)}
-                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  className="h-[34px] px-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 max-w-[98px] truncate"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={`Industry: ${sidebarIndustryFilter}`}
                 >
                   <option value="All">All Industries</option>
                   {availableIndustriesForFilter.map((ind) => (
@@ -611,8 +614,9 @@ export function AdminCustomFields() {
                 <select
                   value={sidebarLocationFilter}
                   onChange={(e) => setSidebarLocationFilter(e.target.value)}
-                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  className="h-[34px] px-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 max-w-[95px] truncate"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={`Location: ${sidebarLocationFilter}`}
                 >
                   <option value="All">All Locations</option>
                   {STANDARD_LOCATIONS.map((loc) => (
@@ -626,8 +630,9 @@ export function AdminCustomFields() {
                 <select
                   value={sidebarOrgFilter}
                   onChange={(e) => setSidebarOrgFilter(e.target.value)}
-                  className="h-[36px] px-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                  className="h-[34px] px-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300 max-w-[115px] truncate"
                   style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={`Target Organization: ${sidebarOrgFilter}`}
                 >
                   <option value="All">All Organizations</option>
                   <option value="org-mantracare">MantraCare Health</option>
@@ -714,42 +719,60 @@ export function AdminCustomFields() {
                   `Sidebar layout synchronized across ${sidebarOrgFilter === "All" ? "all organizations" : sidebarOrgFilter} ✓`
                 )
               }
-              className="h-[36px] px-3.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-full text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs hover:border-gray-300 transition-all shrink-0"
+              className="w-[34px] h-[34px] bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-full flex items-center justify-center cursor-pointer shadow-2xs hover:border-gray-300 transition-all shrink-0"
               style={{ fontFamily: "Outfit, sans-serif" }}
-              title="Sync sidebar layout across target organizations"
+              title="Sync Org Layout"
+              aria-label="Sync Org Layout"
             >
               <RefreshCw className="w-3.5 h-3.5 text-gray-600" />
-              <span>Sync Org</span>
             </button>
           ) : undefined
         }
         primaryAction={
-          activeTab === "fields"
-            ? {
-                label: "Add Field",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: handleOpenCreateField,
-              }
-            : activeTab === "sections"
-            ? {
-                label: "Add Section",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: () => {
-                  setEditingSection(null);
-                  setSectionDrawerOpen(true);
-                },
-              }
-            : layoutEntity === "sidebar"
-            ? {
-                label: "Add Sidebar Template",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: () => sidebarConfigRef.current?.openCreateDrawer(),
-              }
-            : {
-                label: "Add Layout",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: () => toast.info("New layout section added"),
-              }
+          activeTab === "fields" ? (
+            <button
+              type="button"
+              onClick={handleOpenCreateField}
+              className="h-[34px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Field</span>
+            </button>
+          ) : activeTab === "sections" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingSection(null);
+                setSectionDrawerOpen(true);
+              }}
+              className="h-[34px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Section</span>
+            </button>
+          ) : layoutEntity === "sidebar" ? (
+            <button
+              type="button"
+              onClick={() => sidebarConfigRef.current?.openCreateDrawer()}
+              className="w-[34px] h-[34px] bg-[#111827] hover:bg-black text-white rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+              title="Add Sidebar Template"
+              aria-label="Add Sidebar Template"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => toast.info("New layout section added")}
+              className="w-[34px] h-[34px] bg-[#111827] hover:bg-black text-white rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+              title="Add Layout"
+              aria-label="Add Layout"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )
         }
       />
 
