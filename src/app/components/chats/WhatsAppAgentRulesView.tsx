@@ -9,7 +9,6 @@
 
 import React, { useState, useMemo } from "react";
 import {
-  Plus,
   Pencil,
   Copy,
   Trash2,
@@ -23,7 +22,6 @@ import {
   Clock,
   Filter,
   Check,
-  Zap,
 } from "lucide-react";
 import TableComponent, { TableColumn, TableRowAction } from "../ui/TableComponent";
 import {
@@ -80,15 +78,6 @@ export default function WhatsAppAgentRulesView({
       return matchName || matchDesc || matchTpl || matchPrompt || matchClass || matchEntity;
     });
   }, [rules, filterType, searchQuery]);
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = rules.length;
-    const active = rules.filter((r) => r.enabled).length;
-    const inbound = rules.filter((r) => r.direction === "inbound" || r.direction === "both").length;
-    const outbound = rules.filter((r) => r.direction === "outbound" || r.direction === "both").length;
-    return { total, active, inbound, outbound };
-  }, [rules]);
 
   // Table Columns
   const columns: TableColumn<WhatsAppAgentRule>[] = [
@@ -316,49 +305,6 @@ export default function WhatsAppAgentRulesView({
 
   return (
     <div className="space-y-4" style={{ fontFamily: "Outfit, sans-serif" }}>
-      {/* Quick KPI Stats Summary Cards */}
-      <div className="grid grid-cols-4 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Total Rules</span>
-            <h4 className="text-lg font-black text-gray-900 mt-0.5">{stats.total}</h4>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-700">
-            <Zap className="w-4 h-4" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Active Rules</span>
-            <h4 className="text-lg font-black text-gray-900 mt-0.5">{stats.active}</h4>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-4 h-4" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Inbound Rules</span>
-            <h4 className="text-lg font-black text-gray-900 mt-0.5">{stats.inbound}</h4>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-            <ArrowDownLeft className="w-4 h-4" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600">Outbound Rules</span>
-            <h4 className="text-lg font-black text-gray-900 mt-0.5">{stats.outbound}</h4>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-            <ArrowUpRight className="w-4 h-4" />
-          </div>
-        </div>
-      </div>
-
       {/* Main Table */}
       <TableComponent<WhatsAppAgentRule>
         data={filteredRules}
