@@ -46,8 +46,9 @@ import {
   Clock,
   Send,
   Upload,
-  RefreshCw,
 } from "lucide-react";
+
+import { TENANT_ORGANIZATIONS } from "../../../data/tenantOrganizations";
 
 import type {
   FieldDefinition,
@@ -635,10 +636,11 @@ export function AdminCustomFields() {
                   title={`Target Organization: ${sidebarOrgFilter}`}
                 >
                   <option value="All">All Organizations</option>
-                  <option value="org-mantracare">MantraCare Health</option>
-                  <option value="org-apollo">Apollo Practice</option>
-                  <option value="org-carefirst">CareFirst Clinic</option>
-                  <option value="org-metrolabs">Metro Diagnostics</option>
+                  {TENANT_ORGANIZATIONS.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -709,24 +711,6 @@ export function AdminCustomFields() {
                 },
               ]
             : undefined
-        }
-        secondaryActions={
-          activeTab === "layouts" && layoutEntity === "sidebar" ? (
-            <button
-              type="button"
-              onClick={() =>
-                toast.success(
-                  `Sidebar layout synchronized across ${sidebarOrgFilter === "All" ? "all organizations" : sidebarOrgFilter} ✓`
-                )
-              }
-              className="w-[34px] h-[34px] bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-full flex items-center justify-center cursor-pointer shadow-2xs hover:border-gray-300 transition-all shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-              title="Sync Org Layout"
-              aria-label="Sync Org Layout"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-gray-600" />
-            </button>
-          ) : undefined
         }
         primaryAction={
           activeTab === "fields" ? (

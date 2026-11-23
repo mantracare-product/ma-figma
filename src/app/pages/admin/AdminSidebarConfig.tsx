@@ -11,6 +11,10 @@ import {
   LayoutTemplate,
   Stethoscope,
   GitBranch,
+  RefreshCw,
+  Building2,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
@@ -32,6 +36,7 @@ import {
   STANDARD_LOCATIONS,
   getIndustriesForCategory,
 } from "../../../data/industryReferenceData";
+import { TENANT_ORGANIZATIONS, TenantOrganization } from "../../../data/tenantOrganizations";
 import { ScopingRule } from "../../../lib/useProcessStore";
 import { toast } from "sonner";
 
@@ -150,7 +155,13 @@ export const AdminSidebarConfig = forwardRef<AdminSidebarConfigRef, AdminSidebar
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState<AdminSidebarTemplate | null>(null);
 
-    // Quick Scope Modal state
+    // Sync Modal state
+    const [showSyncModal, setShowSyncModal] = useState(false);
+    const [syncTargetTemplate, setSyncTargetTemplate] = useState<AdminSidebarTemplate | null>(null);
+    const [selectedSyncOrgIds, setSelectedSyncOrgIds] = useState<string[]>([]);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Quick Scope Modal state (legacy fallback)
     const [showScopeModal, setShowScopeModal] = useState(false);
     const [scopingTargetTemplate, setScopingTargetTemplate] = useState<AdminSidebarTemplate | null>(null);
     const [pendingScopingRules, setPendingScopingRules] = useState<ScopingRule[]>([]);
@@ -253,6 +264,50 @@ export const AdminSidebarConfig = forwardRef<AdminSidebarConfigRef, AdminSidebar
       toast.error("Failed to delete template");
     }
   };
+
+  const handleOpenSyncModal = (tpl: AdminSidebarTemplate) => {
+    setSyncTargetTemplate(tpl);
+    const matching = TENANT_ORGANIZATIONS.filter((org) => {
+      if (!tpl.scopingRules || tpl.scopingRules.length === 0) return true;
+      return isSidebarTemplateMatchingScope(tpl, {
+        category: org.category,
+        industry: org.industry,
+        location: org.location,
+      });
+    });
+    setSelectedSyncOrgIds(matching.map((o) => o.id));
+    setShowSyncModal(true);
+  };
+
+  const handleConfirmSync = () => {
+    if (!syncTargetTemplate) return;
+    if (selectedSyncOrgIds.length === 0) {
+      toast.error("Please select at least one organization to synchronize");
+      return;
+    }
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setShowSyncModal(false);
+      toast.success(
+        `Template "${syncTargetTemplate.name}" synchronized across ${selectedSyncOrgIds.length} organization(s) ✓`
+      );
+    }, 400);
+  };
+
+  const matchingOrganizations = useMemo(() => {
+    if (!syncTargetTemplate) return [];
+    return TENANT_ORGANIZATIONS.filter((org) => {
+      if (!syncTargetTemplate.scopingRules || syncTargetTemplate.scopingRules.length === 0) {
+        return true;
+      }
+      return isSidebarTemplateMatchingScope(syncTargetTemplate, {
+        category: org.category,
+        industry: org.industry,
+        location: org.location,
+      });
+    });
+  }, [syncTargetTemplate]);
 
   const handleOpenQuickScope = (tpl: AdminSidebarTemplate) => {
     setScopingTargetTemplate(tpl);
@@ -373,9 +428,9 @@ export const AdminSidebarConfig = forwardRef<AdminSidebarConfigRef, AdminSidebar
       onClick: handleEdit,
     },
     {
-      label: "Configure Scope Rules",
-      icon: <Globe className="w-3.5 h-3.5" />,
-      onClick: handleOpenQuickScope,
+      label: "Sync Template",
+      icon: <RefreshCw className="w-3.5 h-3.5" />,
+      onClick: handleOpenSyncModal,
     },
     {
       label: "Duplicate Template",
@@ -493,6 +548,184 @@ export const AdminSidebarConfig = forwardRef<AdminSidebarConfigRef, AdminSidebar
         template={editingTemplate}
         onSaveSuccess={() => setTemplates(getStoredSidebarTemplates())}
       />
+
+      {/* SYNC TEMPLATE TO ORGANIZATIONS MODAL */}
+      <Modal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        title="Sync Template to Organizations"
+        maxWidth="lg"
+      >
+        {syncTargetTemplate && (() => {
+          const scoping = getScopingTags(syncTargetTemplate);
+          const isGlobal = !syncTargetTemplate.scopingRules || syncTargetTemplate.scopingRules.length === 0;
+
+          return (
+            <div className="space-y-4" style={{ fontFamily: "Outfit, sans-serif" }}>
+              {/* Header explanation callout */}
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 text-blue-600 mt-0.5">
+                  <RefreshCw className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-blue-950">
+                    Synchronizing "{syncTargetTemplate.name}"
+                  </h4>
+                  <p className="text-[12px] text-blue-900/80 leading-relaxed">
+                    This template will be synchronized across tenant organizations matching the defined scope rules.
+                    Navigation items, section hierarchy, and visibility settings will take effect immediately.
+                  </p>
+                </div>
+              </div>
+
+              {/* Scope Rules Summary */}
+              <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    Template Scope Rules
+                  </span>
+                  <span className="text-[11px] font-medium text-gray-500">
+                    {isGlobal ? "Global Scope (All Organizations)" : "Scoped by Rules"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-gray-200 text-gray-700 shadow-2xs">
+                    <span className="text-gray-400 font-normal">Category:</span> {scoping.categories.join(", ")}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-gray-200 text-gray-700 shadow-2xs">
+                    <span className="text-gray-400 font-normal">Industry:</span> {scoping.industries.join(", ")}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-gray-200 text-gray-700 shadow-2xs">
+                    <span className="text-gray-400 font-normal">Location:</span> {scoping.locations.join(", ")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Matching Organizations List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-800">
+                      Matching Organizations
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-100/80 text-blue-800">
+                      {selectedSyncOrgIds.length} of {matchingOrganizations.length} selected
+                    </span>
+                  </div>
+
+                  {matchingOrganizations.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSyncOrgIds(matchingOrganizations.map((o) => o.id))}
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSyncOrgIds([])}
+                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 cursor-pointer"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {matchingOrganizations.length === 0 ? (
+                  <div className="py-8 text-center bg-gray-50 border border-dashed border-gray-200 rounded-xl">
+                    <AlertCircle className="w-6 h-6 text-gray-400 mx-auto mb-1.5" />
+                    <p className="text-xs font-semibold text-gray-700">No organizations match this template's scope rules</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Edit this template in the builder to adjust scoping rules.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1 border border-gray-100 rounded-xl p-1 bg-white">
+                    {matchingOrganizations.map((org) => {
+                      const isSelected = selectedSyncOrgIds.includes(org.id);
+                      return (
+                        <div
+                          key={org.id}
+                          onClick={() => {
+                            setSelectedSyncOrgIds((prev) =>
+                              isSelected ? prev.filter((id) => id !== org.id) : [...prev, org.id]
+                            );
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50/50 border-blue-200 text-gray-900"
+                              : "bg-white border-gray-100 hover:border-gray-200 text-gray-600"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <div className="w-7 h-7 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
+                              <Building2 className="w-3.5 h-3.5 text-gray-600" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-gray-900">{org.name}</span>
+                                {org.tier && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-gray-100 text-gray-600">
+                                    {org.tier}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-gray-500">
+                                {org.category} • {org.industry}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-gray-500 font-medium bg-gray-50 border border-gray-100 px-2 py-0.5 rounded">
+                              {org.location}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                              <Check className="w-3 h-3 text-emerald-600" /> Matches Scope
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-[11px] text-gray-500">
+                  {selectedSyncOrgIds.length} organization(s) selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedSyncOrgIds.length === 0 || isSyncing}
+                    onClick={handleConfirmSync}
+                    className="px-4 py-1.5 text-xs font-bold rounded-lg bg-[#1456f0] text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+                    <span>{isSyncing ? "Syncing..." : `Sync to ${selectedSyncOrgIds.length} Organizations`}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
 
       {/* QUICK SCOPE RULES MODAL */}
       <Modal

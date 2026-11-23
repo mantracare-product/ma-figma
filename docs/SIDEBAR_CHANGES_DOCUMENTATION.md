@@ -13,7 +13,8 @@ Today's work consolidated and modernized the **Sidebar Navigation** system acros
 1. **Client Workspace Customization:** Users can fully organize their workspace sidebar—creating custom sections, reordering and renaming sections and pages, choosing custom Lucide icons, and toggling visibility when collapsed.
 2. **Dedicated Workflow Isolation in Tasks:** Workflows pinned from the Tasks topbar (available only on "Tasks by me") render as dedicated workspace pages displaying strictly that workflow's tasks without tabs or other workflows.
 3. **Admin Consolidation:** The administrative "Sidebar Navigation" was shifted into **"Sections/Fields"** under a new **"Layouts"** tab, retiring the redundant sidebar menu item.
-4. **Single Unified Topbar:** Replaced multi-tiered toolbars and separate floating cards with a single-line, compact topbar containing scope filters, an in-bar entity switcher, and icon-only action buttons.
+4. **Single Unified Topbar:** Replaced multi-tiered toolbars and separate floating cards with a single-line, compact topbar containing scope filters, an in-bar entity switcher, and an icon-only add button.
+5. **Template-Level Organization Sync Modal:** Moved synchronization from the topbar into the template row actions menu (`Sync Template`). Clicking it opens a dedicated modal that computes and displays tenant organizations matching the template's scope rules with multi-select checkboxes and instant sync.
 
 ```mermaid
 graph TD
@@ -89,9 +90,9 @@ In [routes.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src
 To eliminate clutter and visual redundancy, the administration interface was streamlined from two stacked toolbars and an intermediate control card into **one single unified topbar**:
 
 ```
-+----------------------------------------------------------------------------------------------------------------------------------------------------------+
-| [ Fields | Sections | Layouts ]  Layout: [ Side bar v ] | [ Categories v ] [ Industries v ] [ Locations v ] [ Organizations v ]  [ Search templates... ]  (Sync) (+) |
-+----------------------------------------------------------------------------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------------------------------------------------------------------+
+| [ Fields | Sections | Layouts ]  Layout: [ Side bar v ] | [ Categories v ] [ Industries v ] [ Locations v ] [ Organizations v ]  [ Search templates... ]  (+) |
++----------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
 ### 4.1 Key Architecture Points
@@ -101,29 +102,53 @@ To eliminate clutter and visual redundancy, the administration interface was str
    - Filters for `Category`, `Industry`, `Location`, and `Target Organization` are embedded inline.
    - Selects have compact heights (`34px`), smaller padding, and explicit truncation (`max-w-[95px]` to `max-w-[115px]`).
 4. **Service Option Removed:** The redundant `Service: Automobile` dropdown was completely removed.
-5. **Target Org & Sync Org in Scope:**
-   - Target Organization is integrated into the admin scope filter (`[ All Organizations ▾ ]`).
-   - `Sync Org` is an icon-only button (`<RefreshCw />`) with tooltip.
+5. **Target Organization Scoping:**
+   - Target Organization is integrated directly into the admin scope filter (`[ All Organizations ▾ ]`), sourcing from centralized tenant organization data (`src/data/tenantOrganizations.ts`).
 6. **Icon-Only Add Template Action:** The primary `+ Add Sidebar Template` button is an icon-only capsule (`<Plus />`), matching the circular action buttons across the app.
 7. **Single Line Alignment:** Enabled `flex-nowrap shrink-0` across the control cluster, preventing any row wrapping.
 8. **Inner Topbar Suppression:** When `AdminSidebarConfig` is rendered with `hideTopBar={true}`, its internal `PageTopBar` is omitted, and search/filters are passed via props while actions are triggered via `forwardRef` (`sidebarConfigRef.current.openCreateDrawer()`).
 
 ---
 
-## 5. Affected Files & Changelog
+## 5. Template Row Actions & Organization Sync Modal
+
+### 5.1 Row Actions Popup Menu Refactor
+In the sidebar template table's row actions menu (the 3-dots/hamburger menu next to each template name):
+- **Removed:** `Configure Scope Rules` (now cleanly handled within the full studio drawer).
+- **Added:** `Sync Template` (`<RefreshCw />`).
+- **Retained:** `Edit Layout & Items`, `Duplicate Template`, and `Delete Template`.
+
+### 5.2 Scope-Rule-Based Organization Sync Modal
+When an administrator clicks **"Sync Template"**:
+1. **Informational Banner:** A clear callout explains:
+   *"This template will be synchronized across tenant organizations matching the defined scope rules. Navigation items, section hierarchy, and visibility settings will take effect immediately."*
+2. **Template Scope Rule Summary:** Displays tag chips showing the active scope rules for the template:
+   - Category (e.g. `Healthcare` or `All`)
+   - Industry (e.g. `Medical Practice` or `All`)
+   - Location (e.g. `United States` or `All`)
+3. **Matching Organizations List:**
+   - Dynamically evaluates all tenant organizations (`TENANT_ORGANIZATIONS`) against the template's scoping rules using `isSidebarTemplateMatchingScope`.
+   - Each matching organization is listed with its name, tier, industry/category chip, location, and a green `✓ Matches Scope` indicator.
+   - Provides individual checkboxes for selective sync, plus quick `Select All` / `Deselect All` toggles.
+4. **Instant Synchronization:** Clicking `Sync to X Organizations` triggers the update and displays a toast notification confirming successful synchronization.
+
+---
+
+## 6. Affected Files & Changelog
 
 | File | Changes Made |
 | :--- | :--- |
+| [tenantOrganizations.ts](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/data/tenantOrganizations.ts) | Created centralized tenant organization catalog with categories, industries, locations, and tiers for scope matching. |
+| [AdminCustomFields.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/pages/admin/AdminCustomFields.tsx) | Removed topbar sync button; integrated `TENANT_ORGANIZATIONS` into scope filters; retained compact unified single-line topbar. |
+| [AdminSidebarConfig.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/pages/admin/AdminSidebarConfig.tsx) | Replaced `Configure Scope Rules` with `Sync Template` in row actions; implemented `Sync Template to Organizations` modal with dynamic scope matching, checkboxes, and toast feedback. |
 | [AdminSidebar.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/layout/AdminSidebar.tsx) | Removed standalone `Sidebar Navigation` navigation item from `TEMPLATES`. |
-| [AdminCustomFields.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/pages/admin/AdminCustomFields.tsx) | Added `Layouts` tab, compact topbar with in-bar layout entity, admin scope filters, icon-only buttons, and embedded `AdminSidebarConfig`. Removed redundant middle card. |
-| [AdminSidebarConfig.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/pages/admin/AdminSidebarConfig.tsx) | Wrapped with `forwardRef`, exposed `AdminSidebarConfigRef`, added `hideTopBar` support, and accepted external scope/search props. |
 | [routes.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/routes.tsx) | Added backward-compatible redirects from legacy `/admin/sidebar-config` and `/admin/sidebar` routes. |
 | [SidebarMenuContext.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/context/SidebarMenuContext.tsx) | Supported section renaming, repositioning, creation with `+` icon, icon picker, and isolated workflow matching. |
 | [Tasks.tsx](file:///c:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/pages/Tasks.tsx) | Added settings gear icon only on "Tasks by me", workflow pin modal, and isolated workflow view mode. |
 
 ---
 
-## 6. Verification & Build Confirmation
+## 7. Verification & Build Confirmation
 
-- **Vite Production Build:** Verified with `npm run build` (`✓ built in 21.27s`, 0 errors).
-- **Git Status:** Clean, pushed to `origin/main` (latest commits `2f66734`, `52d0459`, and `5965f16`).
+- **Vite Production Build:** Verified with `npm run build` (`✓ built in 27.14s`, 0 errors).
+- **Git Status:** Clean, pushed to `origin/main`.
