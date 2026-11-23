@@ -1038,7 +1038,7 @@ export default function Chats() {
   const [whatsappSubMode, setWhatsappSubMode] = useState<"inbox" | "agent" | "templates">("inbox");
   const [showWhatsAppAgentDrawer, setShowWhatsAppAgentDrawer] = useState(false);
   const [selectedWhatsAppRule, setSelectedWhatsAppRule] = useState<WhatsAppAgentRule | null>(null);
-  const [whatsappAgentFilter, setWhatsappAgentFilter] = useState<"all" | "active" | "inbound" | "outbound">("all");
+  const [whatsappAgentFilter, setWhatsappAgentFilter] = useState<"all" | "active" | "template" | "new_message">("all");
   const [whatsappAgentSearch, setWhatsappAgentSearch] = useState("");
   const [showWhatsAppAgentFilterDropdown, setShowWhatsAppAgentFilterDropdown] = useState(false);
   const whatsappAgentFilterDropdownRef = useRef<HTMLDivElement>(null);
@@ -1046,19 +1046,19 @@ export default function Chats() {
   const whatsappAgentCounts = useMemo(() => {
     const all = whatsappRules.length;
     const active = whatsappRules.filter((r) => r.enabled).length;
-    const inbound = whatsappRules.filter((r) => r.direction === "inbound" || r.direction === "both").length;
-    const outbound = whatsappRules.filter((r) => r.direction === "outbound" || r.direction === "both").length;
-    return { all, active, inbound, outbound };
+    const template = whatsappRules.filter((r) => r.trigger_type === "template_reply").length;
+    const newMessage = whatsappRules.filter((r) => r.trigger_type === "new_message").length;
+    return { all, active, template, newMessage };
   }, [whatsappRules]);
 
   const whatsappAgentFilterLabel = useMemo(() => {
     switch (whatsappAgentFilter) {
       case "active":
         return `Active (${whatsappAgentCounts.active})`;
-      case "inbound":
-        return `Inbound (${whatsappAgentCounts.inbound})`;
-      case "outbound":
-        return `Outbound (${whatsappAgentCounts.outbound})`;
+      case "template":
+        return `Templates (${whatsappAgentCounts.template})`;
+      case "new_message":
+        return `New Messages (${whatsappAgentCounts.newMessage})`;
       default:
         return `All Rules (${whatsappAgentCounts.all})`;
     }
@@ -2555,7 +2555,7 @@ export default function Chats() {
 
                       {showWhatsAppAgentFilterDropdown && (
                         <div
-                          className="absolute left-0 mt-1 w-48 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                          className="absolute left-0 mt-1 w-64 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           <button
@@ -2587,28 +2587,28 @@ export default function Chats() {
                           <button
                             type="button"
                             onClick={() => {
-                              setWhatsappAgentFilter("inbound");
+                              setWhatsappAgentFilter("template");
                               setShowWhatsAppAgentFilterDropdown(false);
                             }}
                             className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
-                              whatsappAgentFilter === "inbound" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                              whatsappAgentFilter === "template" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
                             }`}
                           >
-                            <span>Inbound</span>
-                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.inbound})</span>
+                            <span>Template Replies</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.template})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
-                              setWhatsappAgentFilter("outbound");
+                              setWhatsappAgentFilter("new_message");
                               setShowWhatsAppAgentFilterDropdown(false);
                             }}
                             className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
-                              whatsappAgentFilter === "outbound" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                              whatsappAgentFilter === "new_message" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
                             }`}
                           >
-                            <span>Outbound</span>
-                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.outbound})</span>
+                            <span>New Messages</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({whatsappAgentCounts.newMessage})</span>
                           </button>
                         </div>
                       )}

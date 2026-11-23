@@ -790,7 +790,7 @@ export default function Overview() {
       addMetricToDashboard(currentTab.id, {
         title: metricTitle.trim() || rep.name,
         type: "chart",
-        chartType: rep.chartType,
+        chartType: rep.chartType as any,
         chartData: agg.chartData,
         reportId: rep.id,
         xAxisLabel: agg.xAxisLabel,

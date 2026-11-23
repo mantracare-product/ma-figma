@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
@@ -85,12 +86,15 @@ export interface StageChannelSource {
   source: string;
 }
 
+export type StagePhase = "eligibility" | "prior_auth" | "charge_capture" | "claim" | "none";
+
 export interface Stage {
   id: string;
   name: string;
   description: string;
   status: string;
   color?: string;
+  phase?: StagePhase;
   systemCategory?: string;
   isSystemCategoryRequired?: boolean;
   isPredefined?: boolean;
@@ -390,9 +394,8 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
   return (
     <div
       ref={ref}
-      className={`relative group flex items-center ${
-        isFlexible ? "flex-1 min-w-0" : "flex-shrink-0"
-      } ${isFirst ? "" : "-ml-3.5"}`}
+      className={`relative group flex items-center ${isFlexible ? "flex-1 min-w-0" : "flex-shrink-0"
+        } ${isFirst ? "" : "-ml-3.5"}`}
       onMouseEnter={(e) => {
         if (onHoverStage) {
           const rect = e.currentTarget.getBoundingClientRect();
@@ -409,21 +412,19 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
       <div
         onClick={() => onSelect(stage)}
         onDoubleClick={() => onEdit(stage)}
-        className={`relative flex items-center h-10 select-none cursor-pointer transition-all ${
-          isFlexible ? "w-full min-w-0" : "flex-shrink-0"
-        } ${isFirst ? "rounded-l-lg" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
-          isOver ? "ring-2 ring-white scale-105 z-20" : ""
-        } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
+        className={`relative flex items-center h-10 select-none cursor-pointer transition-all ${isFlexible ? "w-full min-w-0" : "flex-shrink-0"
+          } ${isFirst ? "rounded-l-lg" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${isOver ? "ring-2 ring-white scale-105 z-20" : ""
+          } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
         style={{
           backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
           clipPath: chevronClip,
           ...(isCompact
             ? { width: "38px", minWidth: "38px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "6px" }
             : isLostStage
-            ? { minWidth: isFirst ? "52px" : "62px", maxWidth: "80px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "14px" }
-            : isFlexible
-            ? { minWidth: "125px", width: "100%", paddingLeft: isFirst ? "14px" : "20px", paddingRight: "20px" }
-            : { minWidth: "130px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
+              ? { minWidth: isFirst ? "52px" : "62px", maxWidth: "80px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "14px" }
+              : isFlexible
+                ? { minWidth: "125px", width: "100%", paddingLeft: isFirst ? "14px" : "20px", paddingRight: "20px" }
+                : { minWidth: "130px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
         }}
         title={`Stage: ${stage.name} (Click to view, double click to edit)`}
       >
@@ -590,13 +591,12 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
         e.stopPropagation();
         onSelect();
       }}
-      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${
-        isOver
-          ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
-          : isSelected
+      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${isOver
+        ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
+        : isSelected
           ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-xs"
           : "text-gray-700 hover:bg-gray-50 border border-transparent"
-      } ${isDragging ? "opacity-30 scale-95" : ""}`}
+        } ${isDragging ? "opacity-30 scale-95" : ""}`}
       title="Drag to reorder stage or click to view details"
     >
       <GripVertical className="w-3.5 h-3.5 text-gray-400 group-hover/stage:text-gray-600 transition-colors shrink-0 cursor-grab" />
@@ -887,6 +887,22 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "sms": ["stage", "incall", "inchat", "postcall"],
   "email": ["stage", "incall", "inchat", "postcall"],
   "generate_invoice": ["stage", "postcall"],
+  "start_process": ["stage", "inchat", "postcall"],
+  "update_fields": ["stage", "inchat", "postcall"],
+  "create_task": ["stage", "inchat", "postcall"],
+  "run_eligibility": ["stage", "inchat", "postcall"],
+  "check_auth_required": ["stage", "inchat", "postcall"],
+  "send_message": ["stage", "incall", "inchat", "postcall"],
+  "move_to_workflow": ["stage", "postcall"],
+  "create_claim": ["stage", "postcall"],
+  "post_remittance": ["stage", "postcall"],
+  "update_invoice_from_claim": ["stage", "postcall"],
+  "check_claim_status": ["stage", "postcall"],
+  "draft_appeal": ["stage", "postcall"],
+  "scrub_claim": ["stage", "postcall"],
+  "submit_claim": ["stage", "postcall"],
+  "notify": ["stage", "incall", "inchat", "postcall"],
+  "request_prior_auth": ["stage", "inchat", "postcall"],
   "send_payment": ["stage", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
@@ -1483,18 +1499,18 @@ export default function AdminProcessTemplates() {
       status: editingAutomationRule.enabled ? ("active" as const) : ("draft" as const),
       trigger: isStageTrigger
         ? {
-            type: "stage" as const,
-            when: isExit ? ("exit" as const) : ("entry" as const),
-            category: "stage",
-            event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
-            params: editingAutomationRule.trigger?.params || {},
-          }
+          type: "stage" as const,
+          when: isExit ? ("exit" as const) : ("entry" as const),
+          category: "stage",
+          event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
+          params: editingAutomationRule.trigger?.params || {},
+        }
         : {
-            type: (editingAutomationRule.entityType || "client") as any,
-            event: editingAutomationRule.trigger?.event || "appointment.booked",
-            label: editingAutomationRule.trigger?.label,
-            params: editingAutomationRule.trigger?.params || {},
-          },
+          type: (editingAutomationRule.entityType || "client") as any,
+          event: editingAutomationRule.trigger?.event || "appointment.booked",
+          label: editingAutomationRule.trigger?.label,
+          params: editingAutomationRule.trigger?.params || {},
+        },
       steps: (editingAutomationRule.actions || []).map((s: any) => ({
         ...s,
         id: s.id,
@@ -1663,13 +1679,6 @@ export default function AdminProcessTemplates() {
 
   // Assign to Human / Call Action states
   const [assignedUser, setAssignedUser] = useState<string>("Select user...");
-  const [assignScope, setAssignScope] = useState<string>("department");
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
-  const [scopeUserSelections, setScopeUserSelections] = useState<Record<string, any>>({});
-  const [userSequences, setUserSequences] = useState<Record<string, any>>({});
-  const [distributionPriority, setDistributionPriority] = useState<string>("round_robin");
 
   // WhatsApp / SMS / Email states
   const [templateId, setTemplateId] = useState<string>("");
@@ -1851,11 +1860,7 @@ export default function AdminProcessTemplates() {
 
   const STEP_PARAM_FIELDS: Record<string, string[]> = {
     fieldupdate: ["fieldUpdateBlocks", ...CONDITION_FIELDS],
-    assignhuman: [
-      "assignedUser", "assignmentFilter", "assignScope", "selectedDepartments", "selectedRoles",
-      "selectedUsers", "scopeRoleSelections", "roleSequences", "scopeUserSelections", "userSequences", "assignedRole", "entityAssignee",
-      "distributionPriority", ...CONDITION_FIELDS
-    ],
+    assignhuman: ["assignedUser", "assignmentFilter", "assignedRole", "entityAssignee", "distributionPriority", ...CONDITION_FIELDS],
     callaction: [
       "callActionTransferType", "callActionCountryCode", "callActionPhoneNumber",
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
@@ -1897,13 +1902,6 @@ export default function AdminProcessTemplates() {
   const stateGetters: Record<string, () => any> = {
     fieldUpdateBlocks: () => fieldUpdateBlocks,
     assignedUser: () => assignedUser,
-    assignScope: () => assignScope,
-    selectedDepartments: () => selectedDepartments,
-    selectedRoles: () => selectedRoles,
-    selectedUsers: () => selectedUsers,
-    scopeUserSelections: () => scopeUserSelections,
-    userSequences: () => userSequences,
-    distributionPriority: () => distributionPriority,
     callActionTransferType: () => callActionTransferType,
     callActionCountryCode: () => callActionCountryCode,
     callActionPhoneNumber: () => callActionPhoneNumber,
@@ -1986,13 +1984,6 @@ export default function AdminProcessTemplates() {
   const stateSetters: Record<string, (v: any) => void> = {
     fieldUpdateBlocks: setFieldUpdateBlocks,
     assignedUser: setAssignedUser,
-    assignScope: setAssignScope,
-    selectedDepartments: setSelectedDepartments,
-    selectedRoles: setSelectedRoles,
-    selectedUsers: setSelectedUsers,
-    scopeUserSelections: setScopeUserSelections,
-    userSequences: setUserSequences,
-    distributionPriority: setDistributionPriority,
     callActionTransferType: setCallActionTransferType,
     callActionCountryCode: setCallActionCountryCode,
     callActionPhoneNumber: setCallActionPhoneNumber,
@@ -2536,6 +2527,7 @@ export default function AdminProcessTemplates() {
     id: string;
     name: string;
     color: string;
+    phase?: StagePhase;
     isFinalStage?: boolean;
     nextProcessTransitions?: ProcessTransitionTarget[];
   } | null>(null);
@@ -2766,7 +2758,7 @@ export default function AdminProcessTemplates() {
       if (updatedStepsFlag) {
         saveStoredWorkflowSteps(storedSteps);
       }
-    } catch {}
+    } catch { }
 
     const process: Process = {
       id: processId,
@@ -2879,6 +2871,7 @@ export default function AdminProcessTemplates() {
       id: stage.id,
       name: stage.name,
       color: stage.color || "#22D3EE",
+      phase: stage.phase,
       isFinalStage: stage.isFinalStage || stage.isFinal || false,
       nextProcessTransitions: stage.nextProcessTransitions ? [...stage.nextProcessTransitions] : [],
     });
@@ -2896,14 +2889,15 @@ export default function AdminProcessTemplates() {
             stages: p.stages.map((s) =>
               s.id === editingStage.id
                 ? {
-                    ...s,
-                    name: editingStage.name,
-                    color: editingStage.color,
-                    isFinalStage: editingStage.isFinalStage,
-                    isFinal: editingStage.isFinalStage,
-                    stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
-                    nextProcessTransitions: editingStage.nextProcessTransitions || [],
-                  }
+                  ...s,
+                  name: editingStage.name,
+                  color: editingStage.color,
+                  phase: editingStage.phase,
+                  isFinalStage: editingStage.isFinalStage,
+                  isFinal: editingStage.isFinalStage,
+                  stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
+                  nextProcessTransitions: editingStage.nextProcessTransitions || [],
+                }
                 : s
             ),
           }
@@ -2969,18 +2963,18 @@ export default function AdminProcessTemplates() {
       prev.map((p) =>
         p.id === selectedProcess
           ? {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id === transitionSourceStageId
-                  ? {
-                      ...s,
-                      isFinalStage: true,
-                      isFinal: true,
-                      nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
-                    }
-                  : s
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === transitionSourceStageId
+                ? {
+                  ...s,
+                  isFinalStage: true,
+                  isFinal: true,
+                  nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
+                }
+                : s
+            ),
+          }
           : p
       )
     );
@@ -2995,16 +2989,16 @@ export default function AdminProcessTemplates() {
       prev.map((p) =>
         p.id === selectedProcess
           ? {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id === sourceStageId
-                  ? {
-                      ...s,
-                      nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
-                    }
-                  : s
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === sourceStageId
+                ? {
+                  ...s,
+                  nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
+                }
+                : s
+            ),
+          }
           : p
       )
     );
@@ -3287,15 +3281,15 @@ export default function AdminProcessTemplates() {
             selectedEntityFilter === "task"
               ? undefined
               : {
-                  label: "Add Workflow",
-                  icon: <Plus className="w-3.5 h-3.5" />,
-                  onClick: () => {
-                    setModalScopingRules([]);
-                    setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
-                    setNewProcessEntityType((selectedEntityFilter === "process" ? "client" : selectedEntityFilter) as EntityType);
-                    setShowAddProcessModal(true);
-                  },
-                }
+                label: "Add Workflow",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  setModalScopingRules([]);
+                  setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
+                  setNewProcessEntityType((selectedEntityFilter === "process" ? "client" : selectedEntityFilter) as EntityType);
+                  setShowAddProcessModal(true);
+                },
+              }
           }
         />
 
@@ -3334,13 +3328,12 @@ export default function AdminProcessTemplates() {
                         setExpandedProcesses((prev) => [...prev, process.id]);
                       }
                     }}
-                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${
-                      isProcessSelected && viewMode === "process"
-                        ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
-                        : isProcessSelected
+                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${isProcessSelected && viewMode === "process"
+                      ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
+                      : isProcessSelected
                         ? "border-blue-200 bg-blue-50/20 shadow-sm"
                         : "border-gray-200/80 hover:border-gray-300"
-                    }`}
+                      }`}
                   >
                     {/* Process Header Row */}
                     <div className="flex items-center justify-between gap-2.5">
@@ -3359,9 +3352,8 @@ export default function AdminProcessTemplates() {
                           aria-label="Toggle stages"
                         >
                           <ChevronRight
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isExpanded ? "rotate-90" : ""
-                            }`}
+                            className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+                              }`}
                           />
                         </button>
                         <span
@@ -4121,22 +4113,20 @@ export default function AdminProcessTemplates() {
                           <button
                             type="button"
                             onClick={() => setStageConfigTab("general")}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                              stageConfigTab === "general"
-                                ? "bg-white text-gray-900 shadow-2xs"
-                                : "text-gray-500 hover:text-gray-900"
-                            }`}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${stageConfigTab === "general"
+                              ? "bg-white text-gray-900 shadow-2xs"
+                              : "text-gray-500 hover:text-gray-900"
+                              }`}
                           >
                             General
                           </button>
                           <button
                             type="button"
                             onClick={() => setStageConfigTab("automations")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                              stageConfigTab === "automations"
-                                ? "bg-white text-gray-900 shadow-2xs"
-                                : "text-gray-500 hover:text-gray-900"
-                            }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${stageConfigTab === "automations"
+                              ? "bg-white text-gray-900 shadow-2xs"
+                              : "text-gray-500 hover:text-gray-900"
+                              }`}
                           >
                             <Zap className="w-3.5 h-3.5 text-blue-600" />
                             <span>Automations</span>
@@ -4233,7 +4223,7 @@ export default function AdminProcessTemplates() {
                           }}
                         />
                       ) : (
-                      <div className="space-y-6">
+                        <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
                             {/* Type and Right Column Field Row */}
@@ -4525,7 +4515,7 @@ export default function AdminProcessTemplates() {
                               </div>
                             )}
 
-                            </div>
+                          </div>
 
                           {/* AI Prompt Card */}
                           <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
@@ -5057,11 +5047,11 @@ export default function AdminProcessTemplates() {
                         }}
                         scope={
                           editingAutomationRule &&
-                          !(
-                            (editingAutomationRule.trigger?.event || "").startsWith("stage.") ||
-                            (editingAutomationRule.trigger?.event || "").includes("stage") ||
-                            editingAutomationRule.trigger?.params?.category === "stage"
-                          )
+                            !(
+                              (editingAutomationRule.trigger?.event || "").startsWith("stage.") ||
+                              (editingAutomationRule.trigger?.event || "").includes("stage") ||
+                              editingAutomationRule.trigger?.params?.category === "stage"
+                            )
                             ? "global"
                             : "stage"
                         }
@@ -5076,11 +5066,11 @@ export default function AdminProcessTemplates() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage ? s : { ...s, scopingRules: newRules }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage ? s : { ...s, scopingRules: newRules }
+                                    ),
+                                  }
                               )
                             );
                           }
@@ -5106,11 +5096,11 @@ export default function AdminProcessTemplates() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
+                                    ),
+                                  }
                               )
                             );
                           }
@@ -5138,17 +5128,17 @@ export default function AdminProcessTemplates() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage
-                                          ? s
-                                          : {
-                                              ...s,
-                                              workflowSteps: updated,
-                                              scopingRules: (savedAuto as any).scopingRules || s.scopingRules || stageScopeRules,
-                                            }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage
+                                        ? s
+                                        : {
+                                          ...s,
+                                          workflowSteps: updated,
+                                          scopingRules: (savedAuto as any).scopingRules || s.scopingRules || stageScopeRules,
+                                        }
+                                    ),
+                                  }
                               )
                             );
                           }
@@ -5551,9 +5541,8 @@ export default function AdminProcessTemplates() {
                       key={color}
                       type="button"
                       onClick={() => setNewStage({ ...newStage, color })}
-                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${
-                        isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
-                      }`}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
+                        }`}
                       style={{ backgroundColor: color }}
                       title={color}
                     >
@@ -5643,23 +5632,23 @@ export default function AdminProcessTemplates() {
                 </div>
               </div>
 
-            {/* Warning Details */}
-            <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
-              <div className="flex gap-3">
-                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                    This action cannot be undone
-                  </p>
-                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Deleting this stage will permanently remove it from the process. All associated configurations, webhooks, and settings will be lost.
-                  </p>
+              {/* Warning Details */}
+              <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                      This action cannot be undone
+                    </p>
+                    <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                      Deleting this stage will permanently remove it from the process. All associated configurations, webhooks, and settings will be lost.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </Modal>
+          )}
+        </Modal>
 
         {/* How Process Works Modal — shared component */}
         <HowItWorksModal
@@ -5746,6 +5735,29 @@ export default function AdminProcessTemplates() {
                 placeholder="Enter stage name"
               />
             </div>
+
+            {selectedProcessData?.entityType === "claim" && (
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Stage Phase
+                </label>
+                <select
+                  value={editingStage?.phase || "claim"}
+                  onChange={(e) => setEditingStage(editingStage ? { ...editingStage, phase: e.target.value as any } : null)}
+                  className="w-full px-4 py-2 bg-white border border-border rounded-lg text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  <option value="eligibility">Eligibility</option>
+                  <option value="prior_auth">Prior auth</option>
+                  <option value="charge_capture">Charge capture</option>
+                  <option value="claim">Claim</option>
+                  <option value="none">None (Closed / Other)</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Determines whether records in this stage count as pre-claim (Eligibility / Prior auth) or active claims.
+                </p>
+              </div>
+            )}
 
 
             <div>
@@ -7271,12 +7283,12 @@ export default function AdminProcessTemplates() {
                       prev.map((p) =>
                         p.id === targetProcessForScope.id
                           ? {
-                              ...p,
-                              scopingRules: editProcessScopingRules,
-                              industryCategory: firstRule?.industryCategory || "All",
-                              industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : "All",
-                              locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : ["All"],
-                            }
+                            ...p,
+                            scopingRules: editProcessScopingRules,
+                            industryCategory: firstRule?.industryCategory || "All",
+                            industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : "All",
+                            locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : ["All"],
+                          }
                           : p
                       )
                     );
@@ -7292,31 +7304,31 @@ export default function AdminProcessTemplates() {
           </div>
         )}
 
-      {pitchFieldPickerTarget && (
-        <SelectFieldsModal
-          initiallySelected={[]}
-          activeProcessId={selectedProcess || undefined}
-          activeProcessName={selectedProcessData?.name}
-          processStages={selectedProcessData?.stages?.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
-          onClose={() => setPitchFieldPickerTarget(null)}
-          onApply={handleInsertPitchFields}
-          isAdmin={true}
-        />
-      )}
+        {pitchFieldPickerTarget && (
+          <SelectFieldsModal
+            initiallySelected={[]}
+            activeProcessId={selectedProcess || undefined}
+            activeProcessName={selectedProcessData?.name}
+            processStages={selectedProcessData?.stages?.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+            onClose={() => setPitchFieldPickerTarget(null)}
+            onApply={handleInsertPitchFields}
+            isAdmin={true}
+          />
+        )}
 
-      {/* Page-relative Stage Hover Tooltip */}
-      {hoveredStageTooltip && (
-        <div
-          className="fixed z-[9999] pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 px-2.5 py-1 text-xs font-semibold text-white bg-gray-900 rounded-md shadow-lg whitespace-nowrap"
-          style={{
-            left: `${hoveredStageTooltip.x}px`,
-            top: `${hoveredStageTooltip.y - 8}px`,
-          }}
-        >
-          {hoveredStageTooltip.name}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
-        </div>
-      )}
+        {/* Page-relative Stage Hover Tooltip */}
+        {hoveredStageTooltip && (
+          <div
+            className="fixed z-[9999] pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 px-2.5 py-1 text-xs font-semibold text-white bg-gray-900 rounded-md shadow-lg whitespace-nowrap"
+            style={{
+              left: `${hoveredStageTooltip.x}px`,
+              top: `${hoveredStageTooltip.y - 8}px`,
+            }}
+          >
+            {hoveredStageTooltip.name}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+          </div>
+        )}
 
       </div>
     </div>

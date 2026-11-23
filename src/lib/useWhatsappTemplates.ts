@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { WhatsappTemplate } from "../app/pages/Chats";
+export type { WhatsappTemplate };
 
 export const WHATSAPP_TEMPLATES_EVENT = "whatsappGlobalTemplates_updated";
 

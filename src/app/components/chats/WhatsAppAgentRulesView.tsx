@@ -2,53 +2,37 @@
  * WhatsAppAgentRulesView.tsx
  * Path: src/app/components/chats/WhatsAppAgentRulesView.tsx
  *
- * Primary table and management view for WhatsApp Agent automation rules:
- * - Rendered under WhatsApp > Agent tab
- * - Shows connected templates, directions, classification prompts, AI responses, CRM actions, and resolution criteria
+ * WhatsApp Agent automation rules list view:
+ * Columns:
+ * 1. Checkbox (bulk select via TableComponent)
+ * 2. Settings icon (column customization via TableComponent)
+ * 3. Rule name (no coloured dot, no description line, tooltip on hover)
+ * 4. Connected template ("New message" for new message trigger; first template +N more for templates)
+ * 5. Status (Toggle switch with "Active"/"Inactive" tooltip, immediate save & toast)
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Pencil,
   Copy,
   Trash2,
   FileText,
-  Sparkles,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ArrowLeftRight,
-  UserPlus,
-  CheckCircle2,
-  Clock,
-  Filter,
-  Check,
 } from "lucide-react";
 import TableComponent, { TableColumn, TableRowAction } from "../ui/TableComponent";
 import {
   useWhatsappAgentStore,
   WhatsAppAgentRule,
-  RuleDirection,
 } from "../../../lib/whatsappAgentStore";
+import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 
 interface WhatsAppAgentRulesViewProps {
   searchQuery?: string;
-  filterType?: "all" | "active" | "inbound" | "outbound";
+  filterType?: "all" | "active" | "inactive" | "template" | "new_message" | string;
   onOpenAddRule?: () => void;
   onEditRule?: (rule: WhatsAppAgentRule) => void;
 }
-
-const COLOR_MAP: Record<WhatsAppAgentRule["color"], { dot: string; bg: string; text: string; border: string }> = {
-  emerald: { dot: "bg-emerald-500", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  blue: { dot: "bg-blue-500", bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  purple: { dot: "bg-purple-500", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-  amber: { dot: "bg-amber-500", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  cyan: { dot: "bg-cyan-500", bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-200" },
-  rose: { dot: "bg-rose-500", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-  orange: { dot: "bg-orange-500", bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-  slate: { dot: "bg-slate-500", bg: "bg-slate-50", text: "text-slate-700", border: "border-slate-200" },
-};
 
 export default function WhatsAppAgentRulesView({
   searchQuery = "",
@@ -56,85 +40,83 @@ export default function WhatsAppAgentRulesView({
   onOpenAddRule,
   onEditRule,
 }: WhatsAppAgentRulesViewProps) {
-  const { rules, toggleRuleEnabled, duplicateRule, deleteRule } = useWhatsappAgentStore();
+  const {
+    rules,
+    toggleRuleEnabled,
+    duplicateRule,
+    deleteRule,
+  } = useWhatsappAgentStore();
 
-  // Filtered rules
+  const templatesList = useMemo(() => getStoredTemplates(), []);
+
+  // Selection state for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<any>>(new Set());
+
+  // Filter and sort rules strictly by priority
   const filteredRules = useMemo(() => {
-    return rules.filter((r) => {
-      // Status & Direction filter
-      if (filterType === "active" && !r.enabled) return false;
-      if (filterType === "inbound" && r.direction !== "inbound" && r.direction !== "both") return false;
-      if (filterType === "outbound" && r.direction !== "outbound" && r.direction !== "both") return false;
+    return rules
+      .filter((r) => {
+        const isActive = r.is_active !== undefined ? r.is_active : r.enabled;
+        // Status filter
+        if (filterType === "active" && !isActive) return false;
+        if (filterType === "inactive" && isActive) return false;
+        if (filterType === "template" && r.trigger_type !== "template_reply") return false;
+        if (filterType === "new_message" && r.trigger_type !== "new_message") return false;
 
-      // Search query
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      const matchName = r.name.toLowerCase().includes(q);
-      const matchDesc = r.description.toLowerCase().includes(q);
-      const matchTpl = (r.templateName || "").toLowerCase().includes(q);
-      const matchPrompt = (r.responsePrompt || "").toLowerCase().includes(q);
-      const matchClass = (r.classificationPrompt || "").toLowerCase().includes(q);
-      const matchEntity = (r.entityType || "").toLowerCase().includes(q);
-      return matchName || matchDesc || matchTpl || matchPrompt || matchClass || matchEntity;
-    });
+        // Search query
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        const matchName = r.name.toLowerCase().includes(q);
+        const matchTpl = (r.templateNames || []).some((tn) => tn.toLowerCase().includes(q));
+        const matchTriggerPrompt = (r.trigger_prompt || "").toLowerCase().includes(q);
+        const matchAgentPrompt = (r.agent_prompt || "").toLowerCase().includes(q);
+        const matchCategory = (r.contact_category_name || r.contact_category_id || "").toLowerCase().includes(q);
+        const matchWorkflow = (r.workflow_name || r.workflow_id || "").toLowerCase().includes(q);
+        const matchKeywords = (r.keywords || "").toLowerCase().includes(q);
+        const matchIntent = (r.intent_text || "").toLowerCase().includes(q);
+
+        return (
+          matchName ||
+          matchTpl ||
+          matchTriggerPrompt ||
+          matchAgentPrompt ||
+          matchCategory ||
+          matchWorkflow ||
+          matchKeywords ||
+          matchIntent
+        );
+      })
+      .sort((a, b) => a.priority - b.priority);
   }, [rules, filterType, searchQuery]);
 
-  // Table Columns
+  // Status toggle handler with immediate feedback
+  const handleToggleStatus = (ruleId: string) => {
+    try {
+      toggleRuleEnabled(ruleId);
+      toast.success("Agent rule updated ✓");
+    } catch {
+      toast.error("Failed to update status");
+    }
+  };
+
+  // Table Columns (Rule name, Connected template, Status)
   const columns: TableColumn<WhatsAppAgentRule>[] = [
     {
       id: "name",
       header: "RULE NAME",
       align: "left",
-      width: "220px",
       render: (row) => {
-        const c = COLOR_MAP[row.color] || COLOR_MAP.emerald;
         return (
-          <div className="flex flex-col gap-0.5 max-w-[210px]">
+          <Tooltip content={row.name} position="top">
             <button
               type="button"
               onClick={() => onEditRule?.(row)}
-              className="text-xs font-bold text-gray-900 hover:text-blue-600 transition-colors text-left truncate flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate block max-w-[320px] cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
-              <span className="truncate">{row.name}</span>
+              {row.name}
             </button>
-            {row.description && (
-              <span className="text-[11px] text-gray-400 truncate pl-3.5 block">
-                {row.description}
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "direction",
-      header: "DIRECTION",
-      align: "left",
-      width: "110px",
-      render: (row) => {
-        if (row.direction === "inbound") {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              <ArrowDownLeft className="w-3 h-3" />
-              Inbound
-            </span>
-          );
-        }
-        if (row.direction === "outbound") {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-              <ArrowUpRight className="w-3 h-3" />
-              Outbound
-            </span>
-          );
-        }
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <ArrowLeftRight className="w-3 h-3" />
-            Both
-          </span>
+          </Tooltip>
         );
       },
     },
@@ -142,145 +124,67 @@ export default function WhatsAppAgentRulesView({
       id: "template",
       header: "CONNECTED TEMPLATE",
       align: "left",
-      width: "190px",
-      render: (row) => (
-        <div className="space-y-0.5 max-w-[180px]">
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-800 truncate">
-            <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            <span className="truncate">{row.templateName || "All Templates"}</span>
-          </span>
-          <span className="text-[10px] text-gray-400 block pl-4.5">
-            Trigger: {row.triggerEvent === "button_click" ? `Button: ${row.targetButtonLabel || "Any"}` : row.triggerEvent === "customer_reply" ? "Customer Reply" : row.triggerEvent === "template_fired" ? "Template Dispatched" : "Any Event"}
-          </span>
-        </div>
-      ),
-    },
-    {
-      id: "classification",
-      header: "CLASSIFICATION CRITERIA",
-      align: "left",
-      width: "200px",
+      width: "280px",
       render: (row) => {
-        if (row.criteriaType === "prompt") {
+        if (row.trigger_type === "new_message") {
           return (
-            <Tooltip content={row.classificationPrompt || "AI Semantic Prompt Classification"}>
-              <span className="inline-flex items-center gap-1 text-xs text-gray-700 max-w-[190px] truncate bg-gray-50 border border-gray-200/80 px-2 py-1 rounded-lg">
-                <Sparkles className="w-3 h-3 text-purple-500 shrink-0" />
-                <span className="truncate">{row.classificationPrompt || "AI Intent Analysis"}</span>
-              </span>
-            </Tooltip>
+            <span className="text-xs text-slate-700 font-medium truncate block">
+              New message
+            </span>
           );
         }
+
+        const tplNames =
+          row.templates && row.templates.length > 0
+            ? row.templates.map((tid) => {
+                const found = templatesList.find((t) => t.id === tid);
+                return found ? found.name : tid;
+              })
+            : row.templateNames || ["Appointment Reminder"];
+
+        const firstTpl = tplNames[0] || "Any template";
+        const moreCount = tplNames.length - 1;
+        const displayText =
+          moreCount > 0 ? `${firstTpl} +${moreCount} more` : firstTpl;
+
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-amber-50 border border-amber-200/80 px-2 py-1 rounded-lg max-w-[190px] truncate font-medium">
-            <Filter className="w-3 h-3 text-amber-600 shrink-0" />
-            <span className="truncate">Keywords: {row.keywordsFilter?.contains || "Keyword Rules"}</span>
-          </span>
+          <Tooltip content={tplNames.join(", ")} position="top">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-800 max-w-[260px] truncate cursor-help">
+              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">{displayText}</span>
+            </span>
+          </Tooltip>
         );
-      },
-    },
-    {
-      id: "responsePrompt",
-      header: "AI RESPONSE INSTRUCTIONS",
-      align: "left",
-      width: "230px",
-      render: (row) => (
-        <Tooltip content={row.responsePrompt || row.fixedResponseText || "No prompt specified"}>
-          <div className="text-xs text-gray-600 max-w-[220px] truncate font-sans">
-            <span className="font-semibold text-gray-800 capitalize mr-1">[{row.aiTone || "AI"}]:</span>
-            <span>{row.responsePrompt || row.fixedResponseText || "Automated acknowledgment"}</span>
-          </div>
-        </Tooltip>
-      ),
-    },
-    {
-      id: "crm",
-      header: "CRM ENTITY ACTION",
-      align: "left",
-      width: "150px",
-      render: (row) => {
-        if (!row.autoCreateContact) {
-          return <span className="text-[11px] text-gray-400">None</span>;
-        }
-        return (
-          <div className="space-y-0.5">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-              <UserPlus className="w-3 h-3" />
-              Create {row.entityType}
-            </span>
-            {row.assignProcessEnabled && row.stageName && (
-              <span className="text-[10px] text-gray-400 block truncate max-w-[140px]">
-                Stage: {row.stageName}
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "resolution",
-      header: "RESOLUTION CRITERIA",
-      align: "left",
-      width: "180px",
-      render: (row) => {
-        if (row.resolutionCriteria === "immediate") {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              Immediate
-            </span>
-          );
-        }
-        if (row.resolutionCriteria === "customer_confirmation") {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-              <Check className="w-3 h-3 text-blue-600" />
-              On Confirmation
-            </span>
-          );
-        }
-        if (row.resolutionCriteria === "inactivity_timeout") {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-              <Clock className="w-3 h-3 text-amber-600" />
-              Timeout ({row.resolutionTimeoutHours || 24}h)
-            </span>
-          );
-        }
-        if (row.resolutionCriteria === "prompt_condition") {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
-              <Sparkles className="w-3 h-3 text-purple-600" />
-              AI Condition
-            </span>
-          );
-        }
-        return <span className="text-[11px] text-gray-500 font-medium">Manual Closure</span>;
       },
     },
     {
       id: "status",
       header: "STATUS",
       align: "center",
-      width: "90px",
-      render: (row) => (
-        <label className="inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={row.enabled}
-            onChange={() => toggleRuleEnabled(row.id)}
-            className="sr-only peer"
-          />
-          <div className="w-8 h-4.5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 relative"></div>
-        </label>
-      ),
+      width: "100px",
+      render: (row) => {
+        const isActive = row.is_active !== undefined ? row.is_active : row.enabled;
+        return (
+          <Tooltip content={isActive ? "Active" : "Inactive"} position="top">
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={() => handleToggleStatus(row.id)}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 relative"></div>
+            </label>
+          </Tooltip>
+        );
+      },
     },
   ];
 
   // Row Actions
   const rowActions: TableRowAction<WhatsAppAgentRule>[] = [
     {
-      label: "Edit Rule & Instructions",
+      label: "Edit Agent Rule",
       icon: <Pencil className="w-3.5 h-3.5" />,
       onClick: (r) => onEditRule?.(r),
     },
@@ -289,7 +193,7 @@ export default function WhatsAppAgentRulesView({
       icon: <Copy className="w-3.5 h-3.5" />,
       onClick: (r) => {
         duplicateRule(r);
-        toast.success(`Rule "${r.name}" duplicated ✓`);
+        toast.success(`Agent rule "${r.name}" duplicated ✓`);
       },
     },
     {
@@ -298,7 +202,21 @@ export default function WhatsAppAgentRulesView({
       isDanger: true,
       onClick: (r) => {
         deleteRule(r.id);
-        toast.success(`Rule "${r.name}" deleted`);
+        toast.success(`Agent rule "${r.name}" deleted`);
+      },
+    },
+  ];
+
+  // Bulk actions
+  const bulkActions = [
+    {
+      label: "Delete Selected",
+      icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+      isDanger: true,
+      onClick: (ids: Set<any>) => {
+        ids.forEach((id) => deleteRule(id));
+        setSelectedIds(new Set());
+        toast.success(`${ids.size} agent rules deleted`);
       },
     },
   ];
@@ -310,10 +228,14 @@ export default function WhatsAppAgentRulesView({
         data={filteredRules}
         columns={columns}
         rowActions={rowActions}
+        enableSelection={true}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        bulkActions={bulkActions}
         onRowClick={(row) => onEditRule?.(row)}
         getRowId={(row) => row.id}
-        tableId="whatsapp_agent_rules_table"
-        emptyMessage="No WhatsApp agent rules found matching your filters. Click '+ Add Rule' to create your first template-triggered rule."
+        tableId="whatsapp_agent_rules_table_v4"
+        emptyMessage="No WhatsApp agent rules found matching your filters. Click '+ Add Rule' to create your first agent."
         defaultRowsPerPage={10}
       />
     </div>
