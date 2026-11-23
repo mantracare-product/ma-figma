@@ -123,6 +123,23 @@ interface SidebarMenuContextType {
   isInWorkspace: (pathOrId: string) => boolean;
 }
 
+export function doesProcOrWfMatch(paramA: string | null | undefined, paramB: string | null | undefined): boolean {
+  if (!paramA || !paramB) return false;
+  const cleanA = decodeURIComponent(paramA).toLowerCase().trim();
+  const cleanB = decodeURIComponent(paramB).toLowerCase().trim();
+  if (cleanA === cleanB) return true;
+
+  const slugA = cleanA.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const slugB = cleanB.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  if (slugA === slugB) return true;
+
+  const isDefaultA = cleanA === "process-task-default" || cleanA.includes("clinical") || cleanA === "task workflow";
+  const isDefaultB = cleanB === "process-task-default" || cleanB.includes("clinical") || cleanB === "task workflow";
+  if (isDefaultA && isDefaultB) return true;
+
+  return false;
+}
+
 const globalForSidebar = typeof window !== "undefined" ? (window as any) : (globalThis as any);
 const SidebarMenuContext: React.Context<SidebarMenuContextType | undefined> =
   globalForSidebar.__MANTRA_SIDEBAR_MENU_CONTEXT__ ||
@@ -553,9 +570,21 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
-          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
+          if (doesProcOrWfMatch(targetProc, itemProc)) return true;
         }
       }
 
@@ -584,9 +613,21 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
-          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
+          if (doesProcOrWfMatch(targetProc, itemProc)) return true;
         }
       }
       return false;
@@ -684,9 +725,21 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         if (targetBase === itemBase) {
           const targetParams = new URLSearchParams(targetQuery);
           const itemParams = new URLSearchParams(itemQuery);
-          const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-          const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
-          if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+          const targetProc =
+            targetParams.get("process") ||
+            targetParams.get("processName") ||
+            targetParams.get("processId") ||
+            targetParams.get("workflow") ||
+            targetParams.get("workflowId") ||
+            targetParams.get("workflowName");
+          const itemProc =
+            itemParams.get("process") ||
+            itemParams.get("processName") ||
+            itemParams.get("processId") ||
+            itemParams.get("workflow") ||
+            itemParams.get("workflowId") ||
+            itemParams.get("workflowName");
+          if (doesProcOrWfMatch(targetProc, itemProc)) return true;
         }
       }
       return false;
@@ -858,6 +911,29 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
         const iLabel = i.label.toLowerCase();
         if (iId === cleanTarget || iPath === cleanTarget) return false;
         if (!cleanTarget.startsWith("/") && iLabel === cleanTarget) return false;
+        if (cleanTarget.includes("?") && iPath.includes("?")) {
+          const [targetBase, targetQuery] = cleanTarget.split("?");
+          const [itemBase, itemQuery] = iPath.split("?");
+          if (targetBase === itemBase) {
+            const targetParams = new URLSearchParams(targetQuery);
+            const itemParams = new URLSearchParams(itemQuery);
+            const targetProc =
+              targetParams.get("process") ||
+              targetParams.get("processName") ||
+              targetParams.get("processId") ||
+              targetParams.get("workflow") ||
+              targetParams.get("workflowId") ||
+              targetParams.get("workflowName");
+            const itemProc =
+              itemParams.get("process") ||
+              itemParams.get("processName") ||
+              itemParams.get("processId") ||
+              itemParams.get("workflow") ||
+              itemParams.get("workflowId") ||
+              itemParams.get("workflowName");
+            if (doesProcOrWfMatch(targetProc, itemProc)) return false;
+          }
+        }
         return true;
       }),
     }));
@@ -880,9 +956,21 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
           if (targetBase === itemBase) {
             const targetParams = new URLSearchParams(targetQuery);
             const itemParams = new URLSearchParams(itemQuery);
-            const targetProc = targetParams.get("process") || targetParams.get("processName") || targetParams.get("processId");
-            const itemProc = itemParams.get("process") || itemParams.get("processName") || itemParams.get("processId");
-            if (targetProc && itemProc && targetProc.toLowerCase() === itemProc.toLowerCase()) return true;
+            const targetProc =
+              targetParams.get("process") ||
+              targetParams.get("processName") ||
+              targetParams.get("processId") ||
+              targetParams.get("workflow") ||
+              targetParams.get("workflowId") ||
+              targetParams.get("workflowName");
+            const itemProc =
+              itemParams.get("process") ||
+              itemParams.get("processName") ||
+              itemParams.get("processId") ||
+              itemParams.get("workflow") ||
+              itemParams.get("workflowId") ||
+              itemParams.get("workflowName");
+            if (doesProcOrWfMatch(targetProc, itemProc)) return true;
           }
         }
         return false;

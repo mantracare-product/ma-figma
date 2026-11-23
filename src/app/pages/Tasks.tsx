@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -52,9 +53,67 @@ export default function Tasks() {
   }, [processes]);
 
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(() => {
+    const urlWf = searchParams.get("workflow") || searchParams.get("workflowId") || searchParams.get("workflowName");
+    if (urlWf) {
+      const cleanUrlWf = decodeURIComponent(urlWf).toLowerCase().trim();
+      const match = taskWorkflows.find(
+        (w) =>
+          w.id.toLowerCase().trim() === cleanUrlWf ||
+          w.name.toLowerCase().trim() === cleanUrlWf
+      );
+      if (match) return match.id;
+      return urlWf;
+    }
     return taskWorkflows[0]?.id || "process-task-default";
   });
   const [showWorkflowDropdown, setShowWorkflowDropdown] = useState(false);
+
+  // Dedicated workflow page when accessed via sidebar pinned workflow
+  const isWorkflowFixed = useMemo(() => {
+    return Boolean(
+      searchParams.get("workflow") ||
+      searchParams.get("workflowId") ||
+      searchParams.get("workflowName")
+    );
+  }, [searchParams]);
+
+  const fixedWorkflowParam = useMemo(() => {
+    return (
+      searchParams.get("workflow") ||
+      searchParams.get("workflowId") ||
+      searchParams.get("workflowName") ||
+      ""
+    );
+  }, [searchParams]);
+
+  const matchingFixedWorkflow = useMemo(() => {
+    if (!fixedWorkflowParam) return null;
+    const cleanParam = decodeURIComponent(fixedWorkflowParam).toLowerCase().trim();
+    const directMatch = taskWorkflows.find(
+      (w) =>
+        w.id.toLowerCase().trim() === cleanParam ||
+        w.name.toLowerCase().trim() === cleanParam
+    );
+    if (directMatch) return directMatch;
+
+    const slugMatch = taskWorkflows.find(
+      (w) =>
+        w.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") === cleanParam ||
+        w.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") === cleanParam
+    );
+    if (slugMatch) return slugMatch;
+
+    if (
+      cleanParam === "process-task-default" ||
+      cleanParam === "task" ||
+      cleanParam.includes("clinical") ||
+      cleanParam === "task workflow"
+    ) {
+      return taskWorkflows.find((w) => w.id === "process-task-default") || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
+    }
+
+    return null;
+  }, [fixedWorkflowParam, taskWorkflows]);
 
   // Client workspace segmented tabs: "My Tasks" vs "Tasks by me"
   const [clientTab, setClientTab] = useState<"my_tasks" | "tasks_by_me">("my_tasks");
@@ -62,17 +121,25 @@ export default function Tasks() {
 
   // Keep selectedWorkflowId pointing to a valid specific workflow
   useEffect(() => {
-    if (taskWorkflows.length > 0) {
+    if (fixedWorkflowParam) {
+      const match = matchingFixedWorkflow;
+      if (match) {
+        setSelectedWorkflowId(match.id);
+      } else {
+        setSelectedWorkflowId(fixedWorkflowParam);
+      }
+    } else if (taskWorkflows.length > 0) {
       const exists = taskWorkflows.some((w) => w.id === selectedWorkflowId);
       if (!exists || selectedWorkflowId === "all") {
         setSelectedWorkflowId(taskWorkflows[0].id);
       }
     }
-  }, [taskWorkflows, selectedWorkflowId]);
+  }, [fixedWorkflowParam, matchingFixedWorkflow, taskWorkflows, selectedWorkflowId]);
 
   const activeTaskWorkflow = useMemo(() => {
+    if (isWorkflowFixed && matchingFixedWorkflow) return matchingFixedWorkflow;
     return taskWorkflows.find((w) => w.id === selectedWorkflowId) || taskWorkflows[0] || DEFAULT_ENTITY_PROCESSES.task;
-  }, [taskWorkflows, selectedWorkflowId]);
+  }, [isWorkflowFixed, matchingFixedWorkflow, taskWorkflows, selectedWorkflowId]);
 
   const taskStages = useMemo(() => activeTaskWorkflow.stages || [], [activeTaskWorkflow]);
 
@@ -215,7 +282,7 @@ export default function Tasks() {
       }
 
       // 2. Client Tab Separation: "My Tasks" vs "Tasks by me"
-      if (!isAdmin) {
+      if (!isAdmin && !isWorkflowFixed) {
         if (clientTab === "my_tasks") {
           if (!isAssignedToMe(t)) return false;
         } else if (clientTab === "tasks_by_me") {
@@ -235,7 +302,34 @@ export default function Tasks() {
         (t.workflowName && t.workflowName.toLowerCase().includes(q)) ||
         (t.project && t.project.toLowerCase().includes(q));
 
-      // 4. Workflow filter (only applies in Tasks by me for clients; in My Tasks and Admin all tasks are shown)
+      // 4. Workflow filter
+      if (isWorkflowFixed) {
+        const targetWfId = (matchingFixedWorkflow?.id || fixedWorkflowParam || "").toLowerCase().trim();
+        const targetWfName = (matchingFixedWorkflow?.name || "").toLowerCase().trim();
+        const tWfId = (t.workflowId || "").toLowerCase().trim();
+        const tWfName = (t.workflowName || "").toLowerCase().trim();
+        const tProject = (t.project || "").toLowerCase().trim();
+
+        const isDefaultWf =
+          targetWfId === "process-task-default" ||
+          targetWfId === "task" ||
+          targetWfName.includes("clinical") ||
+          targetWfName === "task workflow";
+
+        const matchesThisWorkflow =
+          (targetWfId && tWfId === targetWfId) ||
+          (targetWfName && tWfName === targetWfName) ||
+          (targetWfName && tProject === targetWfName) ||
+          (isDefaultWf && (
+            !t.workflowId ||
+            t.workflowId === "process-task-default" ||
+            t.workflowName === "Clinical & Operational Tasks" ||
+            t.workflowName === "Task Workflow"
+          ));
+
+        return matchesSearch && matchesThisWorkflow;
+      }
+
       const matchesWorkflow =
         isAdmin ||
         clientTab === "my_tasks" ||
@@ -246,7 +340,19 @@ export default function Tasks() {
 
       return matchesSearch && matchesWorkflow;
     });
-  }, [tasks, searchQuery, selectedWorkflowId, activeTaskWorkflow, taskWorkflows, clientTab, currentUserName, isAdmin]);
+  }, [
+    tasks,
+    searchQuery,
+    selectedWorkflowId,
+    activeTaskWorkflow,
+    taskWorkflows,
+    clientTab,
+    currentUserName,
+    isAdmin,
+    isWorkflowFixed,
+    matchingFixedWorkflow,
+    fixedWorkflowParam,
+  ]);
 
   // Columns for 32px TableComponent
   const columns: TableColumn<TaskEntity>[] = useMemo(() => {
@@ -347,7 +453,7 @@ export default function Tasks() {
       );
     } else {
       // CLIENT WORKSPACE COLUMNS
-      if (clientTab === "tasks_by_me") {
+      if (clientTab === "tasks_by_me" || isWorkflowFixed) {
         // "Tasks by me": prominent WORKFLOW and interactive STAGE
         baseCols.push(
           {
@@ -575,7 +681,7 @@ export default function Tasks() {
     ];
 
     // In My Tasks, no delete option is available; delete only in Tasks by me or Admin
-    if (isAdmin || clientTab === "tasks_by_me") {
+    if (isAdmin || clientTab === "tasks_by_me" || isWorkflowFixed) {
       actions.push({
         label: "Delete",
         isDanger: true,
@@ -595,15 +701,17 @@ export default function Tasks() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Tasks"
+          title={isWorkflowFixed ? (matchingFixedWorkflow?.name || activeTaskWorkflow.name || "Task Workflow") : "Tasks"}
           subtitle={
-            isAdmin
+            isWorkflowFixed
+              ? `Tasks, checklists, and deadline tracking for ${matchingFixedWorkflow?.name || activeTaskWorkflow.name}`
+              : isAdmin
               ? "Corporate operational assignments, cross-organization delegation, and checklists"
               : "Clinical tasks, operational assignments, checklists, and deadline tracking"
           }
           actions={
             <HowItWorksButton
-              label="How Tasks Works"
+              label={isWorkflowFixed ? `How ${matchingFixedWorkflow?.name || activeTaskWorkflow.name} Works` : "How Tasks Works"}
               onClick={() => setShowHelp(true)}
             />
           }
@@ -612,7 +720,7 @@ export default function Tasks() {
         {/* ── PageTopBar with Tabs (My Tasks vs Tasks by me), Workflow Switcher, Search, and New Task ── */}
         <PageTopBar
           modes={
-            !isAdmin
+            (!isAdmin && !isWorkflowFixed)
               ? [
                   { id: "my_tasks", label: "My Tasks", badge: myTasksCount },
                   { id: "tasks_by_me", label: "Tasks by me", badge: tasksByMeCount },
@@ -622,8 +730,8 @@ export default function Tasks() {
           activeMode={clientTab}
           onModeChange={(id) => setClientTab(id as "my_tasks" | "tasks_by_me")}
           leftElement={
-            // Workflow switcher only in "Tasks by me" for clients; hidden in "My Tasks" and Admin
-            (!isAdmin && clientTab === "tasks_by_me") ? (
+            // Workflow switcher only in "Tasks by me" for clients; hidden when workflow is fixed, in "My Tasks", and in Admin
+            (!isAdmin && clientTab === "tasks_by_me" && !isWorkflowFixed) ? (
               <div className="flex items-center gap-3">
                 {/* Task Workflow Switcher Dropdown */}
                 <div className="relative shrink-0">
@@ -678,13 +786,22 @@ export default function Tasks() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           primaryAction={
-            (!isAdmin && clientTab === "my_tasks")
+            (!isAdmin && clientTab === "my_tasks" && !isWorkflowFixed)
               ? undefined
               : {
                   label: "New Task",
                   icon: <Plus className="w-4 h-4" />,
                   onClick: () => setShowQuickCreate(true),
                 }
+          }
+          afterPrimaryAction={
+            (!isAdmin && clientTab === "tasks_by_me" && !isWorkflowFixed) ? (
+              <WorkflowGearDropdown
+                entityType="task"
+                processId={activeTaskWorkflow?.id}
+                processName={activeTaskWorkflow?.name || "Tasks"}
+              />
+            ) : undefined
           }
         />
 
