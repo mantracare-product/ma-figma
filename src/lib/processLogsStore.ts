@@ -1,4 +1,5 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
+import { getStoredClients } from "./clientsStore";
 
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
@@ -75,6 +76,7 @@ function notifyProcessLogsChanged() {
 
 export function getStoredCallLogs(): CallLog[] {
   try {
+    let logs: CallLog[] = [];
     if (isDemoMantraActive()) {
       const demoRaw =
         (typeof window !== "undefined" &&
@@ -82,58 +84,92 @@ export function getStoredCallLogs(): CallLog[] {
         null;
       if (demoRaw) {
         try {
-          const logs = JSON.parse(demoRaw);
-          if (Array.isArray(logs) && logs.length > 0) return logs;
+          const parsed = JSON.parse(demoRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) logs = parsed;
         } catch {}
       }
-      return initialCallLogs;
-    }
-
-    if (isFreshWorkspace()) {
-      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      if (!logs.length) logs = [...initialCallLogs];
+    } else if (isFreshWorkspace()) {
+      const activeOrgId = typeof window !== "undefined" ? localStorage.getItem("mantra_active_org_id_v1") : null;
       const raw =
         (typeof window !== "undefined" &&
           ((activeOrgId && localStorage.getItem(`callLogs_${activeOrgId}`)) ||
-            localStorage.getItem("callLogs_signup"))) ||
+            localStorage.getItem("callLogs_signup") ||
+            localStorage.getItem(STORAGE_KEY))) ||
         null;
       if (raw) {
         try {
-          const logs = JSON.parse(raw);
-          if (Array.isArray(logs)) return logs;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) logs = parsed;
         } catch {}
       }
-      return [];
-    }
+    } else {
+      const raw =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY))) ||
+        null;
 
-    const raw =
-      (typeof window !== "undefined" &&
-        (localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY))) ||
-      null;
-
-    if (raw !== null && raw !== undefined) {
-      const logs = JSON.parse(raw);
-      if (Array.isArray(logs)) {
-        if (logs.length === 0) return [];
-        return logs;
+      if (raw !== null && raw !== undefined) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            logs = parsed;
+          }
+        } catch {}
       }
+      if (!logs.length) logs = [...initialCallLogs];
     }
 
-    let logs = initialCallLogs;
-    let migrated = false;
+    // Synchronize all client assigned processes from getStoredClients() into callLogs
+    try {
+      const storedClients = getStoredClients();
+      const existingKeySet = new Set(logs.map((l) => `${(l.clientId || "").toLowerCase()}::${(l.process || "").trim().toLowerCase()}`));
+      let clientLogsAdded = false;
 
-    // Ensure Patient Care Journey logs are present in logs only in demo mode
-    const hasPatientCare = logs.some((l: CallLog) => l.process === "Patient Care Journey");
-    if (!hasPatientCare) {
-      logs = [...initialPatientCareJourneyLogs, ...logs];
-      migrated = true;
-    }
+      storedClients.forEach((c) => {
+        if (c.processes && Array.isArray(c.processes)) {
+          c.processes.forEach((pName) => {
+            if (!pName) return;
+            const key = `${String(c.id).toLowerCase()}::${pName.trim().toLowerCase()}`;
+            if (!existingKeySet.has(key)) {
+              existingKeySet.add(key);
+              clientLogsAdded = true;
+              const fallbackStage = (c as any).processStagesMap?.[pName] || c.stage || "Client Checked In";
+              logs.unshift({
+                id: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                processId: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                client: c.name,
+                clientId: String(c.id),
+                type: "Inbound",
+                status: "In Progress",
+                process: pName,
+                currentStage: fallbackStage,
+                duration: "0:00",
+                date: new Date().toISOString().replace("T", " ").substring(0, 16),
+                hasRecording: false,
+                hasTranscript: true,
+                hasScheduledCall: false,
+                responsible: (c as any).responsible || "Unassigned",
+              });
+            }
+          });
+        }
+      });
 
-    if (migrated) {
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+      if (clientLogsAdded && typeof window !== "undefined") {
+        const serialized = JSON.stringify(logs);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        sessionStorage.setItem(STORAGE_KEY, serialized);
+        const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+        if (activeOrgId) {
+          localStorage.setItem(`callLogs_${activeOrgId}`, serialized);
+          sessionStorage.setItem(`callLogs_${activeOrgId}`, serialized);
+        }
+        localStorage.setItem("callLogs_signup", serialized);
+        sessionStorage.setItem("callLogs_signup", serialized);
       }
-    }
+    } catch {}
+
     return logs;
   } catch {
     return [];
@@ -146,6 +182,13 @@ export function saveCallLogs(logs: CallLog[]): void {
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, serialized);
       sessionStorage.setItem(STORAGE_KEY, serialized);
+      const activeOrgId = localStorage.getItem("mantra_active_org_id_v1");
+      if (activeOrgId) {
+        localStorage.setItem(`callLogs_${activeOrgId}`, serialized);
+        sessionStorage.setItem(`callLogs_${activeOrgId}`, serialized);
+      }
+      localStorage.setItem("callLogs_signup", serialized);
+      sessionStorage.setItem("callLogs_signup", serialized);
     }
     notifyProcessLogsChanged();
   } catch {}

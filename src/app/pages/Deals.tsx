@@ -35,7 +35,7 @@ import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "..
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
-import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
+import { getStoredClients, saveStoredClients, CLIENTS_STORE_EVENT } from "../../lib/clientsStore";
 import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { logStageMove } from "../../lib/useAutomationStore";
@@ -332,6 +332,8 @@ export default function Deals() {
     };
 
     window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+    window.addEventListener(CLIENTS_STORE_EVENT, handler);
+    window.addEventListener("deals_updated", handler);
     window.addEventListener("organizationChanged", handler);
     window.addEventListener("mantra_organization_changed", handler);
     window.addEventListener("storage", handler);
@@ -566,7 +568,7 @@ export default function Deals() {
     try {
       if (isFreshWorkspace()) {
         const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
-        const raw = localStorage.getItem(`deals_${signupOrgId}`) || sessionStorage.getItem(`deals_${signupOrgId}`);
+        const raw = localStorage.getItem(`deals_${signupOrgId}`) || sessionStorage.getItem(`deals_${signupOrgId}`) || localStorage.getItem("deals");
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
@@ -1518,7 +1520,7 @@ export default function Deals() {
 
     // Apply process filter
     const matchesProcessFilter = selectedProcessFilter
-      ? log.process === selectedProcessFilter
+      ? (log.process || "").trim().toLowerCase() === selectedProcessFilter.trim().toLowerCase()
       : true;
 
     return matchesSearch && matchesClientFilter && matchesProcessFilter;

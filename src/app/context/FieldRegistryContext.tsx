@@ -641,6 +641,7 @@ const SYSTEM_FIELD_KEYS = new Set([
   "name", "email", "phone", "location", "country",
   "company", "role", "status", "processes", "stage",
   "responsible", "lastContact", "companyName", "jobPosition",
+  "title", "entity", "created_on_date",
   "invoice_number", "issue_date", "due_date", "payment_mode",
   "product_name", "quantity", "unit_price", "tax_rate",
   "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url",
@@ -710,10 +711,24 @@ export function isProcessMatchingAssignment(
       (targetSlug && p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === targetSlug)
   );
 
+  // If target looks like a record ID (e.g. PRC-CL-988-PATIENT-), resolve its process name from call logs
+  let recordProcessName: string | undefined = undefined;
+  if (targetClean.startsWith("prc-")) {
+    try {
+      const rawLogs = typeof window !== "undefined" ? (localStorage.getItem("callLogs") || sessionStorage.getItem("callLogs")) : null;
+      if (rawLogs) {
+        const parsedLogs = JSON.parse(rawLogs);
+        const matchedL = Array.isArray(parsedLogs) ? parsedLogs.find((l: any) => l.id?.toLowerCase() === targetClean || l.processId?.toLowerCase() === targetClean) : null;
+        if (matchedL?.process) recordProcessName = matchedL.process.trim().toLowerCase();
+      }
+    } catch {}
+  }
+
   for (const assignedId of assignedProcessIds) {
     const cleanAssigned = assignedId.trim().toLowerCase();
     if (cleanAssigned === "all" || cleanAssigned === "*") return true;
     if (cleanAssigned === targetClean) return true;
+    if (recordProcessName && (cleanAssigned === recordProcessName || recordProcessName.includes(cleanAssigned) || cleanAssigned.includes(recordProcessName))) return true;
     const assignedSlug = cleanAssigned.replace(/[^a-z0-9]/g, "");
     if (targetSlug && assignedSlug === targetSlug) return true;
 

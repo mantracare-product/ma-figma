@@ -805,7 +805,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           else if (key === "status") updated.status = val;
           else if (key === "location") updated.location = val;
           else if (key === "country") updated.country = val;
-          else if (key === "processes") updated.processes = Array.isArray(val) ? val : [val];
+          else if (key === "processes") {
+            const nextProcs = Array.isArray(val) ? val : [val];
+            updated.processes = nextProcs;
+            nextProcs.forEach((pName) => {
+              if (pName) {
+                addProcessCallLog({
+                  clientId: String(client.id),
+                  clientName: client.name,
+                  processName: pName,
+                  stageName: (client as any)?.processStagesMap?.[pName] || client.stage || "Client Checked In",
+                });
+              }
+            });
+          }
           else {
             updated[key] = val;
           }
@@ -1111,6 +1124,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
       localStorage.setItem("deals", JSON.stringify(existingDeals));
       sessionStorage.setItem("deals", JSON.stringify(existingDeals));
+      const signupOrgId = localStorage.getItem("signup_org_id") || "signup";
+      localStorage.setItem(`deals_${signupOrgId}`, JSON.stringify(existingDeals));
+      sessionStorage.setItem(`deals_${signupOrgId}`, JSON.stringify(existingDeals));
       window.dispatchEvent(new Event("deals_updated"));
     } catch (e) {
       console.warn("Could not save to deals store:", e);

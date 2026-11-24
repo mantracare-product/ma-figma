@@ -486,6 +486,7 @@ export default function DraggableOverviewSections({
     "name", "email", "phone", "location", "country",
     "company", "role", "status", "processes", "stage",
     "responsible", "lastContact", "companyName", "jobPosition",
+    "title", "entity", "created_on_date", "client_name",
     "category", "cptCode", "description", "duration", "price", "tax", "assignedEmployees", "isActive"
   ]), []);
 

@@ -408,7 +408,8 @@ export default function ProcessDetailDrawer({
     return updatedSections;
   };
 
-  const currentProcessId = (log as any)?.processId || (log as any)?.process || (log as any)?.processName;
+  const currentProcessName = (log as any)?.process || (log as any)?.processName || "";
+  const currentProcessId = currentProcessName || (log as any)?.processTemplateId || (log as any)?.processId;
 
   // AI Scribe Consultation Drawer state (only available for appointment processes)
   const [showScribeModal, setShowScribeModal] = useState(false);
@@ -437,6 +438,20 @@ export default function ProcessDetailDrawer({
       visibleFieldKeys
     );
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const customSecs = getSectionsForOrg("process", activeOrganization, currentProcessId).filter((s) => s.source !== "system");
+    const fields = getFieldsForOrg("process", activeOrganization, currentProcessId);
+    setProcessSections((prev) =>
+      computeMergedProcessSections(
+        prev,
+        customSecs,
+        fields,
+        visibleFieldKeys
+      )
+    );
+  }, [isOpen, (log as any)?.id, currentProcessId, activeOrganization]);
 
   useEffect(() => {
     const handleSectionsUpdate = () => {
