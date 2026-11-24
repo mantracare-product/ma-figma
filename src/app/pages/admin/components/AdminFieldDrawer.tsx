@@ -3062,23 +3062,6 @@ export function AdminFieldDrawer({
               (f) => f.key !== form.key
             );
 
-            const sampleValues: Record<string, string> = {
-              policy_coverage: "Comprehensive",
-              first_name: "Kanak",
-              last_name: "Pandey",
-              name: "Kanak B Pandey",
-              email: "kanak@mantracare.org",
-              phone: "+11234567890",
-              category: "Lead",
-              status: "Active",
-              lead_source: "Website",
-              city: "New York",
-              country: "US",
-              diagnosis: "General Consultation",
-              doctorName: "Dr. Reynolds",
-              sessionDate: "2026-11-24",
-            };
-
             const currentItems = form.stringFormulaItems && form.stringFormulaItems.length > 0
               ? form.stringFormulaItems
               : [
@@ -3089,9 +3072,8 @@ export function AdminFieldDrawer({
             const computedPattern = computeTemplateFromStringItems(currentItems);
 
             const previewResult = computedPattern ? computedPattern.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
-              if (sampleValues[fKey]) return sampleValues[fKey];
               const matchF = availFields.find(f => f.key === fKey);
-              return matchF ? matchF.label : fKey;
+              return matchF ? matchF.label : fKey.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
             }) : "";
 
             return (
