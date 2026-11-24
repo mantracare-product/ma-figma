@@ -1,5 +1,6 @@
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 import { getStoredClients } from "./clientsStore";
+import { getStoredProcesses } from "./useProcessStore";
 
 export const PROCESS_LOGS_STORE_EVENT = "processLogs_updated";
 const STORAGE_KEY = "callLogs";
@@ -126,18 +127,87 @@ export function getStoredCallLogs(): CallLog[] {
     // Synchronize all client assigned processes from getStoredClients() into callLogs
     try {
       const storedClients = getStoredClients();
-      const existingKeySet = new Set(logs.map((l) => `${(l.clientId || "").toLowerCase()}::${(l.process || "").trim().toLowerCase()}`));
-      let clientLogsAdded = false;
+      const allProcesses = getStoredProcesses();
+      let clientLogsChanged = false;
 
+      // Pass 1: Normalize any existing logs where currentStage is invalid (e.g. "Initial Contact" in Patient Care Journey)
+      logs.forEach((l) => {
+        if (!l.process) return;
+        const matchedProc = allProcesses.find(
+          (p) => p.name.trim().toLowerCase() === l.process.trim().toLowerCase() || p.id === l.process
+        );
+        if (matchedProc && matchedProc.stages && matchedProc.stages.length > 0) {
+          const validStageNames = matchedProc.stages.map((s) => s.name.trim().toLowerCase());
+          if (l.currentStage && !validStageNames.includes(l.currentStage.trim().toLowerCase())) {
+            const initialStage = matchedProc.stages.find((s) => s.isInitial)?.name || matchedProc.stages[0]?.name || "Client Checked In";
+            l.currentStage = initialStage;
+            clientLogsChanged = true;
+          }
+        }
+      });
+
+      // Pass 2: Link and deduplicate logs matching stored clients
       storedClients.forEach((c) => {
         if (c.processes && Array.isArray(c.processes)) {
           c.processes.forEach((pName) => {
             if (!pName) return;
-            const key = `${String(c.id).toLowerCase()}::${pName.trim().toLowerCase()}`;
-            if (!existingKeySet.has(key)) {
-              existingKeySet.add(key);
-              clientLogsAdded = true;
-              const fallbackStage = (c as any).processStagesMap?.[pName] || c.stage || "Client Checked In";
+            const procLower = pName.trim().toLowerCase();
+            const matchedProc = allProcesses.find(
+              (p) => p.name.trim().toLowerCase() === procLower || p.id === pName
+            );
+            const validStageNames = (matchedProc?.stages || []).map((s) => s.name.trim().toLowerCase());
+            const defaultInitialStage =
+              matchedProc?.stages.find((s) => s.isInitial)?.name ||
+              matchedProc?.stages[0]?.name ||
+              "Client Checked In";
+
+            // Find all matching logs for this client and process
+            const matchingIndices: number[] = [];
+            logs.forEach((l, idx) => {
+              const clientMatches =
+                (l.clientId && String(l.clientId).toLowerCase() === String(c.id).toLowerCase()) ||
+                (l.client && c.name && l.client.trim().toLowerCase() === c.name.trim().toLowerCase());
+              const procMatches = l.process && l.process.trim().toLowerCase() === procLower;
+              if (clientMatches && procMatches) {
+                matchingIndices.push(idx);
+              }
+            });
+
+            if (matchingIndices.length > 0) {
+              // Update primary matching log with canonical clientId and client name
+              const primaryIdx = matchingIndices[0];
+              const primaryLog = logs[primaryIdx];
+              if (primaryLog.clientId !== String(c.id)) {
+                primaryLog.clientId = String(c.id);
+                clientLogsChanged = true;
+              }
+              if (c.name && primaryLog.client !== c.name) {
+                primaryLog.client = c.name;
+                clientLogsChanged = true;
+              }
+              if (validStageNames.length > 0 && (!primaryLog.currentStage || !validStageNames.includes(primaryLog.currentStage.trim().toLowerCase()))) {
+                primaryLog.currentStage = defaultInitialStage;
+                clientLogsChanged = true;
+              }
+
+              // Remove any duplicate records beyond the primary
+              if (matchingIndices.length > 1) {
+                const toRemove = new Set(matchingIndices.slice(1));
+                logs = logs.filter((_, idx) => !toRemove.has(idx));
+                clientLogsChanged = true;
+              }
+            } else {
+              // No log exists yet, create one with valid initial stage
+              let fallbackStage = (c as any).processStagesMap?.[pName];
+              if (!fallbackStage || !validStageNames.includes(fallbackStage.trim().toLowerCase())) {
+                if (c.stage && validStageNames.includes(c.stage.trim().toLowerCase())) {
+                  fallbackStage = c.stage;
+                } else {
+                  fallbackStage = defaultInitialStage;
+                }
+              }
+
+              clientLogsChanged = true;
               logs.unshift({
                 id: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
                 processId: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
@@ -159,7 +229,7 @@ export function getStoredCallLogs(): CallLog[] {
         }
       });
 
-      if (clientLogsAdded && typeof window !== "undefined") {
+      if (clientLogsChanged && typeof window !== "undefined") {
         const serialized = JSON.stringify(logs);
         localStorage.setItem(STORAGE_KEY, serialized);
         sessionStorage.setItem(STORAGE_KEY, serialized);

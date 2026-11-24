@@ -370,6 +370,10 @@ export default function ProcessDetailDrawer({
         iconName: (regSec.iconName as any) || s.iconName || "layers",
         isCustom: true,
         fieldKeys: mergedKeys,
+        processIds: regSec.processIds || s.processIds,
+        scopingRules: regSec.scopingRules || s.scopingRules,
+        permissions: regSec.permissions || s.permissions,
+        module: regSec.module || s.module,
       };
     });
 
@@ -392,6 +396,10 @@ export default function ProcessDetailDrawer({
           iconName: (regSec.iconName as any) || "layers",
           isCustom: true,
           fieldKeys: regKeys,
+          processIds: regSec.processIds,
+          scopingRules: regSec.scopingRules,
+          permissions: regSec.permissions,
+          module: regSec.module,
         });
         existingSecIds.add(regSec.id);
       }

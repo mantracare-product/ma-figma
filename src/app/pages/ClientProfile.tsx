@@ -1050,7 +1050,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const handleConfirmAssignProcess = () => {
     if (!selectedAssignProcess || !client) return;
     const procName = selectedAssignProcess;
-    const stageName = selectedAssignStage || getStagesForProcess(procName)[0]?.label || "Initial Contact";
+    const stageName = selectedAssignStage || getStagesForProcess(procName)[0]?.label || "Client Checked In";
 
     // 1. Update client processes list (ensuring no duplicates)
     const currentProcs = Array.isArray(client.processes) ? [...client.processes] : [];
@@ -2579,7 +2579,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       (client as any)?.processStagesMap?.[pName] ||
                       (client.stage && getStagesForProcess(pName).some((s) => s.label.toLowerCase() === client.stage.toLowerCase()) ? client.stage : null) ||
                       getStagesForProcess(pName)[0]?.label ||
-                      "Initial Contact";
+                      "Client Checked In";
 
                     allClientLogs.push({
                       id: `PRC-${client.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
