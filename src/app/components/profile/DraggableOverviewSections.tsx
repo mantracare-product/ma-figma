@@ -626,14 +626,52 @@ export default function DraggableOverviewSections({
       ) {
         const getStringVal = (fKey: string): string => {
           if (!fKey) return "";
-          if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== null) {
+          const lowerKey = fKey.toLowerCase();
+
+          // 1. Direct match in fieldValues
+          if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== null && String(fieldValues[fKey]).trim() !== "") {
             return String(fieldValues[fKey]);
           }
+
+          // 2. Case-insensitive or suffix match in fieldValues
           for (const [k, v] of Object.entries(fieldValues)) {
-            if ((k === fKey || k.endsWith(`_${fKey}`)) && v !== undefined && v !== null) {
+            if ((k.toLowerCase() === lowerKey || k.toLowerCase().endsWith(`_${lowerKey}`)) && v !== undefined && v !== null && String(v).trim() !== "") {
               return String(v);
             }
           }
+
+          // 3. Process Name alias handling
+          if (lowerKey === "process_name" || lowerKey === "process" || lowerKey === "processname" || lowerKey === "workflow") {
+            const procVal =
+              fieldValues["process_name"] ||
+              fieldValues["process"] ||
+              fieldValues["processName"] ||
+              (log as any)?.process ||
+              (log as any)?.processName ||
+              activeProcessName ||
+              (client?.processes && Array.isArray(client.processes) ? client.processes[0] : client?.processes) ||
+              (fieldValues["processes"] && Array.isArray(fieldValues["processes"]) ? fieldValues["processes"][0] : fieldValues["processes"]);
+            if (procVal) return String(procVal);
+          }
+
+          // 4. Name / Client Name alias handling
+          if (lowerKey === "name" || lowerKey === "client_name" || lowerKey === "clientname") {
+            const nameVal = fieldValues["name"] || fieldValues["client_name"] || client?.name || (log as any)?.client;
+            if (nameVal) return String(nameVal);
+          }
+
+          // 5. Contact Type alias handling
+          if (lowerKey === "contact_type" || lowerKey === "contacttype" || lowerKey === "category") {
+            const ctVal = fieldValues["contact_type"] || fieldValues["contactType"] || client?.contact_type || (client as any)?.category;
+            if (ctVal) return String(ctVal);
+          }
+
+          // 6. Stage alias handling
+          if (lowerKey === "stage" || lowerKey === "status" || lowerKey === "currentstage") {
+            const stgVal = fieldValues["stage"] || fieldValues["currentStage"] || (log as any)?.currentStage || client?.stage;
+            if (stgVal) return String(stgVal);
+          }
+
           return "";
         };
 

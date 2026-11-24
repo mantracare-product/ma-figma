@@ -745,8 +745,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   }, [client?.id]);
 
   const fieldValues = useMemo(() => {
+    const primaryProc = (selectedProcesses && selectedProcesses.length > 0) ? selectedProcesses[0] : "";
     return {
       name: clientName,
+      client_name: clientName,
+      process: primaryProc,
+      process_name: primaryProc,
       contact_type: clientContactType,
       contactType: clientContactType,
       email: clientEmail,
@@ -2581,9 +2585,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       getStagesForProcess(pName)[0]?.label ||
                       "Client Checked In";
 
+                    const cleanCId = String(client.id).startsWith("CL-") ? String(client.id) : `CL-${String(client.id).replace(/^cl-?/i, "")}`;
+                    const canonicalId = `PRC-${cleanCId}`;
+
                     allClientLogs.push({
-                      id: `PRC-${client.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
-                      processId: `PRC-${client.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                      id: canonicalId,
+                      processId: canonicalId,
                       client: client.name,
                       clientId: client.id,
                       type: "Inbound",
@@ -2632,11 +2639,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     key: "id",
                     header: "Process ID",
                     render: (log) => {
-                      const formattedId = (log as any).processId
-                        ? (log as any).processId
-                        : log.id.startsWith("CALL-")
-                          ? `PRC-${log.id.replace("CALL-", "")}`
-                          : (log.id.startsWith("PRC-") ? log.id : `PRC-${log.id}`);
+                      const rawId = (log as any).processId || log.id || "";
+                      const clMatch = rawId.match(/CL-\d+/i) || (log.clientId ? String(log.clientId).match(/CL-\d+/i) : null);
+                      const formattedId = clMatch
+                        ? `PRC-${clMatch[0].toUpperCase()}`
+                        : rawId.startsWith("CALL-")
+                          ? `PRC-${rawId.replace("CALL-", "")}`
+                          : (rawId.startsWith("PRC-") ? rawId : `PRC-${rawId}`);
                       return (
                         <button
                           type="button"

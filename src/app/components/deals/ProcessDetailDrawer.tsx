@@ -615,9 +615,13 @@ export default function ProcessDetailDrawer({
       return vals;
     }
 
+    const procName = log?.process || (log as any)?.processName || (log as any)?.process || "";
     const vals: Record<string, any> = {
       ...(log as any),
+      name: clientName,
       client_name: clientName,
+      process: procName,
+      process_name: procName,
       contact_type: (client as any)?.contact_type || (client as any)?.contactType || (log as any)?.contact_type || (log as any)?.contactType || "Lead",
       phone: client?.phone || (log as any)?.phone || "9667283405",
       email: client?.email || "anshul@mantracare.com",

@@ -130,6 +130,28 @@ export function getStoredCallLogs(): CallLog[] {
       const allProcesses = getStoredProcesses();
       let clientLogsChanged = false;
 
+      // Pass 0: Normalize all process IDs to standard pattern PRC-CL-XXX
+      logs.forEach((l) => {
+        let cleanId = (l.processId || l.id || "").trim();
+        const clMatch = cleanId.match(/CL-\d+/i) || (l.clientId ? String(l.clientId).match(/CL-\d+/i) : null);
+        if (clMatch) {
+          const canonicalId = `PRC-${clMatch[0].toUpperCase()}`;
+          if (l.id !== canonicalId || l.processId !== canonicalId) {
+            l.id = canonicalId;
+            l.processId = canonicalId;
+            clientLogsChanged = true;
+          }
+        } else if (l.clientId && String(l.clientId).toLowerCase() !== "new") {
+          const cId = String(l.clientId).startsWith("CL-") ? String(l.clientId) : `CL-${String(l.clientId).replace(/^cl-?/i, "")}`;
+          const canonicalId = `PRC-${cId}`;
+          if (l.id !== canonicalId || l.processId !== canonicalId) {
+            l.id = canonicalId;
+            l.processId = canonicalId;
+            clientLogsChanged = true;
+          }
+        }
+      });
+
       // Pass 1: Normalize any existing logs where currentStage is invalid (e.g. "Initial Contact" in Patient Care Journey)
       logs.forEach((l) => {
         if (!l.process) return;
@@ -177,6 +199,13 @@ export function getStoredCallLogs(): CallLog[] {
               // Update primary matching log with canonical clientId and client name
               const primaryIdx = matchingIndices[0];
               const primaryLog = logs[primaryIdx];
+              const cleanCId = String(c.id).startsWith("CL-") ? String(c.id) : `CL-${String(c.id).replace(/^cl-?/i, "")}`;
+              const canonicalId = `PRC-${cleanCId}`;
+              if (primaryLog.id !== canonicalId || primaryLog.processId !== canonicalId) {
+                primaryLog.id = canonicalId;
+                primaryLog.processId = canonicalId;
+                clientLogsChanged = true;
+              }
               if (primaryLog.clientId !== String(c.id)) {
                 primaryLog.clientId = String(c.id);
                 clientLogsChanged = true;
@@ -207,10 +236,12 @@ export function getStoredCallLogs(): CallLog[] {
                 }
               }
 
+              const cleanCId = String(c.id).startsWith("CL-") ? String(c.id) : `CL-${String(c.id).replace(/^cl-?/i, "")}`;
+              const canonicalId = `PRC-${cleanCId}`;
               clientLogsChanged = true;
               logs.unshift({
-                id: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
-                processId: `PRC-${c.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                id: canonicalId,
+                processId: canonicalId,
                 client: c.name,
                 clientId: String(c.id),
                 type: "Inbound",
@@ -293,8 +324,11 @@ export function addProcessCallLog(entry: {
     saveCallLogs(updated);
     return updated[existingIndex];
   } else {
+    const cleanCId = String(entry.clientId).startsWith("CL-") ? String(entry.clientId) : `CL-${String(entry.clientId).replace(/^cl-?/i, "")}`;
+    const canonicalId = `PRC-${cleanCId}`;
     const newLog: CallLog = {
-      id: `PRC-${entry.clientId}-${Date.now().toString().slice(-4)}`,
+      id: canonicalId,
+      processId: canonicalId,
       client: entry.clientName,
       clientId: entry.clientId,
       type: entry.channel === "sms" ? "SMS" : "WhatsApp",
@@ -339,8 +373,11 @@ export function updateProcessCallLogStage(clientId: string, processName: string,
   }
 
   if (!found) {
+    const cleanCId = String(clientId).startsWith("CL-") ? String(clientId) : `CL-${String(clientId).replace(/^cl-?/i, "")}`;
+    const canonicalId = `PRC-${cleanCId}`;
     const newLog: CallLog = {
-      id: `PRC-${clientId}-${Date.now().toString().slice(-4)}`,
+      id: canonicalId,
+      processId: canonicalId,
       client: clientDisplayName,
       clientId: clientId,
       type: "Inbound",

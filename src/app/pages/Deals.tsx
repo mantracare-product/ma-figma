@@ -1810,11 +1810,13 @@ export default function Deals() {
       key: "id",
       header: "Process ID",
       render: (log) => {
-        const formattedId = (log as any).processId
-          ? (log as any).processId
-          : log.id.startsWith("CALL-")
-            ? `PRC-${log.id.replace("CALL-", "")}`
-            : (log.id.startsWith("PRC-") ? log.id : `PRC-${log.id}`);
+        const rawId = (log as any).processId || log.id || "";
+        const clMatch = rawId.match(/CL-\d+/i) || (log.clientId ? String(log.clientId).match(/CL-\d+/i) : null);
+        const formattedId = clMatch
+          ? `PRC-${clMatch[0].toUpperCase()}`
+          : rawId.startsWith("CALL-")
+            ? `PRC-${rawId.replace("CALL-", "")}`
+            : (rawId.startsWith("PRC-") ? rawId : `PRC-${rawId}`);
         return (
           <button
             type="button"
