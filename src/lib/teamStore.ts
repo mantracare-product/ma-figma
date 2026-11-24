@@ -32,7 +32,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Admin User",
     email: "admin@mantra.care",
     role: "Admin",
-    department: "Administration",
+    department: "Administration, Clinical Operations",
+    departments: ["Administration", "Clinical Operations"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -46,7 +47,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Akshita Sharma",
     email: "akshita.sharma@mantra.care",
     role: "Ophthalmologist",
-    department: "Clinical",
+    department: "Clinical Operations",
+    departments: ["Clinical Operations"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -59,7 +61,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Alice",
     email: "alice@mantra.care",
     role: "Senior Surgeon",
-    department: "Surgery",
+    department: "Clinical Operations, Customer Support",
+    departments: ["Clinical Operations", "Customer Support"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -72,7 +75,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Charu Arora",
     email: "charu@mantra.care",
     role: "Physician",
-    department: "Consultation",
+    department: "Clinical Operations",
+    departments: ["Clinical Operations"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -115,18 +119,39 @@ export function cleanLegacyMembers(list: any[]): TeamMember[] {
     filtered.push(INITIAL_TEAM_MEMBERS[2]);
   }
 
-  if (!filtered.some((m) => m.name.toLowerCase() === "admin user" || (m.role && m.role.toLowerCase() === "admin"))) {
-    return [INITIAL_TEAM_MEMBERS[0], ...filtered];
+  let result = filtered;
+  if (!result.some((m) => m.name.toLowerCase() === "admin user" || (m.role && m.role.toLowerCase() === "admin"))) {
+    result = [INITIAL_TEAM_MEMBERS[0], ...result];
   }
-  return filtered.map((m) => {
-    if (m.name?.toLowerCase() === "admin user" && (!m.locations || m.locations.length === 0)) {
-      return {
-        ...m,
-        locations: ["California", "California Branch", "Online"],
-        availableLocations: ["California", "California Branch", "Online"],
-      };
+  return result.map((m) => {
+    const depts: string[] = [];
+    if (Array.isArray(m.departments) && m.departments.length > 0) {
+      m.departments.forEach((d) => {
+        if (typeof d === "string" && d.trim() && !depts.includes(d.trim())) depts.push(d.trim());
+      });
+    } else if (m.department) {
+      m.department.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((d: string) => {
+        if (!depts.includes(d)) depts.push(d);
+      });
     }
-    return m;
+    if (Array.isArray(m.assignedDepartments)) {
+      m.assignedDepartments.forEach((ad: any) => {
+        if (ad && ad.department && typeof ad.department === "string" && !depts.includes(ad.department.trim())) {
+          depts.push(ad.department.trim());
+        }
+      });
+    }
+    return {
+      ...m,
+      departments: depts,
+      department: depts.join(", ") || m.department,
+      ...(m.name?.toLowerCase() === "admin user" && (!m.locations || m.locations.length === 0)
+        ? {
+            locations: ["California", "California Branch", "Online"],
+            availableLocations: ["California", "California Branch", "Online"],
+          }
+        : {}),
+    };
   });
 }
 

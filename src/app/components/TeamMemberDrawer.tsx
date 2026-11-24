@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
 import SecurityTab from "./settings/SecurityTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TeamMember } from "../../lib/teamStore";
+import { getStoredDepartments } from "../../lib/departmentStore";
 import { useAuth } from "../context/AuthContext";
 import {
   useFieldRegistry,
@@ -284,18 +285,38 @@ export function TeamMemberDrawer({
   }, [member]);
 
   // Personal Information Form State
-  const [personalInfo, setPersonalInfo] = useState({
-    fullName: member?.name || "",
-    email: member?.email || "",
-    phone: member?.phone || "",
-    gender: "Male",
-    dateOfBirth: "1990-01-15",
-    role: member?.role || "Admin",
-    department: member?.department || "Engineering",
-    language: "English",
-    country: "USA",
-    timezone: "UTC",
-    status: true,
+  const [personalInfo, setPersonalInfo] = useState(() => {
+    const memberDepts: string[] = [];
+    if (Array.isArray(member?.departments) && member.departments.length > 0) {
+      member.departments.forEach((d) => {
+        if (typeof d === "string" && d.trim() && !memberDepts.includes(d.trim())) memberDepts.push(d.trim());
+      });
+    } else if (member?.department) {
+      member.department.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((d: string) => {
+        if (!memberDepts.includes(d)) memberDepts.push(d);
+      });
+    }
+    if (Array.isArray(member?.assignedDepartments)) {
+      member.assignedDepartments.forEach((ad: any) => {
+        if (ad && ad.department && typeof ad.department === "string" && !memberDepts.includes(ad.department.trim())) {
+          memberDepts.push(ad.department.trim());
+        }
+      });
+    }
+    return {
+      fullName: member?.name || "",
+      email: member?.email || "",
+      phone: member?.phone || "",
+      gender: "Male",
+      dateOfBirth: "1990-01-15",
+      role: member?.role || "Admin",
+      department: memberDepts.join(", ") || member?.department || "Clinical Operations",
+      departments: memberDepts.length > 0 ? memberDepts : ["Clinical Operations"],
+      language: "English",
+      country: "USA",
+      timezone: "UTC",
+      status: true,
+    };
   });
 
   // Generic helper: update a personal info field and flag unsaved changes
@@ -409,33 +430,60 @@ export function TeamMemberDrawer({
 
   // Department Combobox State
   const [deptList, setDeptList] = useState<string[]>(() => {
-    const defaultDepts = [
+    try {
+      const stored = getStoredDepartments();
+      if (stored && stored.length > 0) return stored.map((d) => d.name);
+    } catch {}
+    return [
+      "Clinical Operations",
+      "Administration",
+      "Customer Support",
       "Engineering",
       "Sales",
       "Marketing",
-      "Support",
-      "Operations",
-      "Finance",
-      "HR",
-      "Medical",
-      "Reception",
     ];
-    try {
-      const raw = localStorage.getItem("ma_departments");
-      const parsed = raw ? JSON.parse(raw) : [];
-      const storedNames = parsed.map((d: any) => d.name || d);
-      return Array.from(new Set([...defaultDepts, ...storedNames]));
-    } catch {
-      return defaultDepts;
-    }
   });
   const [deptComboboxOpen, setDeptComboboxOpen] = useState(false);
   const [deptSearch, setDeptSearch] = useState("");
 
+  const handleToggleDept = (deptName: string) => {
+    const trimmed = deptName.trim();
+    if (!trimmed) return;
+    const currentDepts: string[] = Array.isArray(personalInfo.departments)
+      ? personalInfo.departments
+      : personalInfo.department
+      ? personalInfo.department.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    const exists = currentDepts.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+    const nextDepts = exists
+      ? currentDepts.filter((d) => d.toLowerCase() !== trimmed.toLowerCase())
+      : [...currentDepts, trimmed];
+
+    updatePersonalInfo({
+      departments: nextDepts,
+      department: nextDepts.join(", "),
+    });
+  };
+
+  const handleRemoveDept = (deptName: string) => {
+    const currentDepts: string[] = Array.isArray(personalInfo.departments)
+      ? personalInfo.departments
+      : personalInfo.department
+      ? personalInfo.department.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    const nextDepts = currentDepts.filter((d) => d.toLowerCase() !== deptName.toLowerCase());
+    updatePersonalInfo({
+      departments: nextDepts,
+      department: nextDepts.join(", "),
+    });
+  };
+
   const handleCreateAndSelectDept = (deptName: string) => {
     const trimmed = deptName.trim();
     if (!trimmed) return;
-    if (!deptList.includes(trimmed)) {
+    if (!deptList.some((d) => d.toLowerCase() === trimmed.toLowerCase())) {
       const updated = [...deptList, trimmed];
       setDeptList(updated);
       try {
@@ -448,10 +496,9 @@ export function TeamMemberDrawer({
         }
       } catch {}
     }
-    updatePersonalInfo({ department: trimmed });
+    handleToggleDept(trimmed);
     setDeptSearch("");
-    setDeptComboboxOpen(false);
-    toast.success(`Department "${trimmed}" added and selected.`);
+    toast.success(`Department "${trimmed}" toggled.`);
   };
 
   // Calendar View State
@@ -628,13 +675,32 @@ export function TeamMemberDrawer({
   // Update personal info when member changes or drawer opens
   useEffect(() => {
     if (member) {
+      const memberDepts: string[] = [];
+      if (Array.isArray(member.departments) && member.departments.length > 0) {
+        member.departments.forEach((d) => {
+          if (typeof d === "string" && d.trim() && !memberDepts.includes(d.trim())) memberDepts.push(d.trim());
+        });
+      } else if (member.department) {
+        member.department.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((d: string) => {
+          if (!memberDepts.includes(d)) memberDepts.push(d);
+        });
+      }
+      if (Array.isArray(member.assignedDepartments)) {
+        member.assignedDepartments.forEach((ad: any) => {
+          if (ad && ad.department && typeof ad.department === "string" && !memberDepts.includes(ad.department.trim())) {
+            memberDepts.push(ad.department.trim());
+          }
+        });
+      }
+
       setPersonalInfo((prev) => ({
         ...prev,
         fullName: member.name || "",
         email: member.email || "",
         phone: member.phone || "",
         role: member.role || prev.role || "Admin",
-        department: member.department || prev.department || "Engineering",
+        department: memberDepts.join(", ") || prev.department || "Clinical Operations",
+        departments: memberDepts.length > 0 ? memberDepts : (prev as any).departments || ["Clinical Operations"],
       }));
       setHasUnsavedChanges(false);
     }
@@ -1099,23 +1165,72 @@ export function TeamMemberDrawer({
                         </div>
                       </div>
 
-                      {/* Department */}
+                      {/* Department(s) */}
                       <div>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <GripVertical className="w-3 h-3 text-slate-300" />
-                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
-                            DEPARTMENT
-                          </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                            <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                              DEPARTMENTS
+                            </label>
+                          </div>
+                          {(() => {
+                            const cur = Array.isArray(personalInfo.departments)
+                              ? personalInfo.departments
+                              : personalInfo.department
+                              ? personalInfo.department.split(",").map((s) => s.trim()).filter(Boolean)
+                              : [];
+                            return cur.length > 0 ? (
+                              <span className="text-[10px] text-purple-600 font-semibold">
+                                {cur.length} assigned
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
+
+                        {/* Selected Department Capsules */}
+                        {(() => {
+                          const cur = Array.isArray(personalInfo.departments)
+                            ? personalInfo.departments
+                            : personalInfo.department
+                            ? personalInfo.department.split(",").map((s) => s.trim()).filter(Boolean)
+                            : [];
+                          if (cur.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {cur.map((d) => (
+                                <span
+                                  key={d}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-xs font-semibold text-purple-800 shadow-2xs"
+                                >
+                                  <Building2 className="w-3 h-3 text-purple-600 shrink-0" />
+                                  <span>{d}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveDept(d)}
+                                    className="text-purple-400 hover:text-rose-500 cursor-pointer p-0.5 rounded hover:bg-purple-100 transition-colors"
+                                    title={`Remove ${d}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
                         <div className="relative">
                           <button
                             type="button"
                             onClick={() => setDeptComboboxOpen((v) => !v)}
                             className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus:outline-none transition-all cursor-pointer"
                           >
-                            <span className={personalInfo.department ? "text-xs font-medium text-[#1E293B]" : "text-xs text-gray-400"}>
-                              {personalInfo.department || "Select department..."}
-                            </span>
+                            <div className="flex items-center gap-2 truncate">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className={personalInfo.department ? "text-xs font-medium text-[#1E293B] truncate" : "text-xs text-gray-400"}>
+                                {personalInfo.department || "Assign departments..."}
+                              </span>
+                            </div>
                             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${deptComboboxOpen ? "rotate-180" : ""}`} />
                           </button>
 
@@ -1134,6 +1249,11 @@ export function TeamMemberDrawer({
                               </div>
                               <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-1">
                                 {(() => {
+                                  const currentDepts: string[] = Array.isArray(personalInfo.departments)
+                                    ? personalInfo.departments
+                                    : personalInfo.department
+                                    ? personalInfo.department.split(",").map((s) => s.trim()).filter(Boolean)
+                                    : [];
                                   const filtered = deptList.filter((d) =>
                                     d.toLowerCase().includes(deptSearch.trim().toLowerCase())
                                   );
@@ -1142,27 +1262,39 @@ export function TeamMemberDrawer({
                                   );
                                   return (
                                     <>
-                                      {filtered.map((d) => (
-                                        <button
-                                          key={d}
-                                          type="button"
-                                          onClick={() => {
-                                            updatePersonalInfo({ department: d });
-                                            setDeptSearch("");
-                                            setDeptComboboxOpen(false);
-                                          }}
-                                          className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                                            personalInfo.department === d
-                                              ? "bg-indigo-50 text-indigo-900 font-bold"
-                                              : "hover:bg-slate-100 text-slate-700"
-                                          }`}
-                                        >
-                                          <span>{d}</span>
-                                          {personalInfo.department === d && (
-                                            <Check className="w-3.5 h-3.5 text-indigo-600" />
-                                          )}
-                                        </button>
-                                      ))}
+                                      {filtered.map((d) => {
+                                        const isChecked = currentDepts.some(
+                                          (cd) => cd.toLowerCase() === d.toLowerCase()
+                                        );
+                                        return (
+                                          <button
+                                            key={d}
+                                            type="button"
+                                            onClick={() => handleToggleDept(d)}
+                                            className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                              isChecked
+                                                ? "bg-purple-50 text-purple-900 font-semibold"
+                                                : "hover:bg-slate-100 text-slate-700"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <div
+                                                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                                  isChecked
+                                                    ? "bg-purple-600 border-purple-600 text-white"
+                                                    : "border-slate-300 bg-white"
+                                                }`}
+                                              >
+                                                {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                              </div>
+                                              <span>{d}</span>
+                                            </div>
+                                            {isChecked && (
+                                              <span className="text-[10px] text-purple-600 font-medium">Assigned</span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
                                       {deptSearch.trim() !== "" && !exactMatch && (
                                         <button
                                           type="button"
@@ -1178,6 +1310,23 @@ export function TeamMemberDrawer({
                                           No departments found
                                         </div>
                                       )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                              <div className="p-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[11px]">
+                                {(() => {
+                                  const count = (personalInfo.departments || []).length;
+                                  return (
+                                    <>
+                                      <span className="text-slate-500 font-medium">{count} department(s) selected</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeptComboboxOpen(false)}
+                                        className="px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                                      >
+                                        Done
+                                      </button>
                                     </>
                                   );
                                 })()}
@@ -2212,6 +2361,13 @@ export function TeamMemberDrawer({
               onClick={() => {
                 setSaveStatus("saved");
                 setHasUnsavedChanges(false);
+                const userDepts: string[] =
+                  Array.isArray((personalInfo as any).departments) && (personalInfo as any).departments.length > 0
+                    ? (personalInfo as any).departments
+                    : personalInfo.department
+                    ? personalInfo.department.split(",").map((s: string) => s.trim()).filter(Boolean)
+                    : [];
+
                 if (member?.id) {
                   const updatedMemberData = {
                     ...member,
@@ -2219,7 +2375,12 @@ export function TeamMemberDrawer({
                     email: personalInfo.email,
                     phone: personalInfo.phone,
                     role: personalInfo.role,
-                    department: personalInfo.department,
+                    department: userDepts.join(", ") || personalInfo.department,
+                    departments: userDepts,
+                    assignedDepartments: userDepts.map((d: string) => ({
+                      department: d,
+                      role: personalInfo.role || "Member",
+                    })),
                     status: personalInfo.status,
                     customFields: customFieldValues,
                   };
@@ -2241,7 +2402,12 @@ export function TeamMemberDrawer({
                     email: personalInfo.email,
                     phone: personalInfo.phone,
                     role: personalInfo.role,
-                    department: personalInfo.department,
+                    department: userDepts.join(", ") || personalInfo.department,
+                    departments: userDepts,
+                    assignedDepartments: userDepts.map((d: string) => ({
+                      department: d,
+                      role: personalInfo.role || "Member",
+                    })),
                     status: personalInfo.status,
                     customFields: customFieldValues,
                   });

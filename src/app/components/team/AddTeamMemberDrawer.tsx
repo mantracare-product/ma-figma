@@ -11,6 +11,7 @@ export interface AddTeamMemberDrawerProps {
   onClose: () => void;
   onSuccess?: (newMember: TeamMember) => void;
   initialCanBookAppointments?: boolean;
+  initialDepartment?: string;
 }
 
 const DEFAULT_DEPARTMENTS = ["Clinical Operations", "Administration", "Customer Support"];
@@ -28,6 +29,7 @@ export default function AddTeamMemberDrawer({
   onClose,
   onSuccess,
   initialCanBookAppointments = true,
+  initialDepartment = "",
 }: AddTeamMemberDrawerProps) {
   const { activeOrganization } = useOrganization();
   const [name, setName] = useState("");
@@ -138,13 +140,17 @@ export default function AddTeamMemberDrawer({
     if (isOpen && !prevIsOpenRef.current) {
       setName("");
       setEmail("");
-      const firstDept = availableDepts[0] || "Clinical Operations";
+      const firstDept = initialDepartment || availableDepts[0] || "Clinical Operations";
       const matchingRole = availableRolesList.find(
         (r) => (r.department || "").toLowerCase() === firstDept.toLowerCase()
       );
       setSelectedDeptInput(firstDept);
       setSelectedRoleInput(matchingRole?.name || availableRolesList[0]?.name || "Specialist");
-      setAssignedDepartments([]);
+      if (initialDepartment) {
+        setAssignedDepartments([{ department: initialDepartment, role: "Member" }]);
+      } else {
+        setAssignedDepartments([]);
+      }
       setIsDeptDropdownOpen(false);
       setCanBookAppointments(initialCanBookAppointments);
       setSelectedLocationIds(orgLocations.map((l) => l.id));
@@ -153,7 +159,7 @@ export default function AddTeamMemberDrawer({
       setIsSubmitting(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, initialCanBookAppointments, availableDepts, availableRolesList, orgLocations]);
+  }, [isOpen, initialCanBookAppointments, initialDepartment, availableDepts, availableRolesList, orgLocations]);
 
   const handleAssignDepartment = () => {
     if (!selectedDeptInput) {

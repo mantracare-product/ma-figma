@@ -209,6 +209,38 @@ interface User {
   locations?: string[];
 }
 
+export function getUserDepartments(user: {
+  department?: string;
+  departments?: string[];
+  assignedDepartments?: Array<{ department: string; role?: string }>;
+} | null | undefined): string[] {
+  if (!user) return [];
+  const set = new Set<string>();
+
+  if (Array.isArray(user.departments)) {
+    user.departments.forEach((d) => {
+      if (typeof d === "string" && d.trim()) set.add(d.trim());
+    });
+  }
+
+  if (Array.isArray(user.assignedDepartments)) {
+    user.assignedDepartments.forEach((ad) => {
+      if (ad && typeof ad.department === "string" && ad.department.trim()) {
+        set.add(ad.department.trim());
+      }
+    });
+  }
+
+  if (user.department && typeof user.department === "string") {
+    user.department.split(",").forEach((part) => {
+      const trimmed = part.trim();
+      if (trimmed) set.add(trimmed);
+    });
+  }
+
+  return Array.from(set);
+}
+
 interface CustomField {
   id: number;
   label: string;
@@ -4918,7 +4950,7 @@ export default function Settings() {
                     {
                       id: "assigned",
                       label: "With Department",
-                      count: allUsers.filter((u: any) => Boolean(u.department)).length,
+                      count: allUsers.filter((u: any) => getUserDepartments(u).length > 0).length,
                       isActive: false,
                       onClick: () => {
                         setTeamSearchQuery("");
@@ -5017,11 +5049,10 @@ export default function Settings() {
                       header: "ASSIGNED USERS",
                       align: "left",
                       render: (dept) => {
-                        const deptUsers = allUsers.filter(
-                          (u) =>
-                            (u.department || "").toLowerCase() === dept.name.toLowerCase() ||
-                            (u.departments || []).some((d: string) => d.toLowerCase() === dept.name.toLowerCase())
-                        );
+                        const deptUsers = allUsers.filter((u) => {
+                          const userDepts = getUserDepartments(u);
+                          return userDepts.some((d) => d.toLowerCase() === dept.name.toLowerCase());
+                        });
                         if (deptUsers.length === 0) {
                           return (
                             <div className="flex items-center gap-2">
@@ -5208,10 +5239,11 @@ export default function Settings() {
                       teamSearchQuery === "" ||
                       u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
                       u.email.toLowerCase().includes(teamSearchQuery.toLowerCase());
+                    const uDepts = getUserDepartments(u);
                     const matchDept =
                       teamRoleFilter === "All" ||
                       teamRoleFilter === "all" ||
-                      (u.department || "").toLowerCase().includes(teamRoleFilter.toLowerCase());
+                      uDepts.some((d) => d.toLowerCase().includes(teamRoleFilter.toLowerCase()));
                     return matchSearch && matchDept;
                   });
 
@@ -5236,18 +5268,32 @@ export default function Settings() {
                     },
                     {
                       key: "department",
-                      header: "DEPARTMENT",
+                      header: "DEPARTMENTS",
                       align: "left",
-                      render: (u) => (
-                        u.department ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            <Building2 className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                            <span>{u.department}</span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Unassigned</span>
-                        )
-                      ),
+                      render: (u) => {
+                        const userDepts = getUserDepartments(u);
+                        if (userDepts.length === 0) {
+                          return <span className="text-xs text-slate-400 italic">Unassigned</span>;
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                            {userDepts.slice(0, 3).map((deptName) => (
+                              <span
+                                key={deptName}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs"
+                              >
+                                <Building2 className="w-3 h-3 text-purple-500 shrink-0" />
+                                <span>{deptName}</span>
+                              </span>
+                            ))}
+                            {userDepts.length > 3 && (
+                              <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                                +{userDepts.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        );
+                      },
                     },
                     {
                       key: "email",
@@ -12712,9 +12758,16 @@ export default function Settings() {
             role: (selectedTeamMember as any).role || "",
             phone: (selectedTeamMember as any).phone || "",
             department: (selectedTeamMember as any).department || "",
+            departments: (selectedTeamMember as any).departments || [],
+            assignedDepartments: (selectedTeamMember as any).assignedDepartments || [],
             canBookAppointments: (selectedTeamMember as any).canBookAppointments,
             locations: (selectedTeamMember as any).locations,
           } : null}
+          onSave={(updatedMember) => {
+            setAllUsers((prev) =>
+              prev.map((u) => (String(u.id) === String(updatedMember.id) ? { ...u, ...updatedMember } : u))
+            );
+          }}
         />
 
         {/* OLD EXTERNAL MODALS REMOVED - NOW INSIDE DRAWER */}
@@ -13055,7 +13108,11 @@ export default function Settings() {
 
         <AddTeamMemberDrawer
           isOpen={showAddUserModal}
-          onClose={() => setShowAddUserModal(false)}
+          onClose={() => {
+            setShowAddUserModal(false);
+            setPreselectedDepartment("");
+          }}
+          initialDepartment={preselectedDepartment}
           onSuccess={(newMember) => {
             setAllUsers((prev) => {
               return cleanLegacyMembers([...prev, newMember as any]) as any;
