@@ -6,6 +6,7 @@ const STORAGE_KEY = "callLogs";
 
 export interface CallLog {
   id: string;
+  processId?: string;
   client: string;
   clientId: string;
   type: string;
@@ -21,6 +22,8 @@ export interface CallLog {
   parentCallId?: string;
   childCallIds?: string[];
   relationshipReason?: "Call Trigger" | "Stage Change" | "Retry" | "Manual Trigger";
+  responsible?: string;
+  [key: string]: any;
 }
 
 export const initialPatientCareJourneyLogs: CallLog[] = [
