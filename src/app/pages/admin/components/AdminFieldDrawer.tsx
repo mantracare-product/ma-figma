@@ -3356,9 +3356,6 @@ export function AdminFieldDrawer({
                       <div className="p-2 bg-white border border-blue-100 rounded-lg text-xs font-mono text-slate-900 break-all font-semibold">
                         {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{name}"}_hi</span>}
                       </div>
-                      <div className="text-[11px] text-blue-700/80">
-                        Formula pattern: <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-semibold">{computedPattern || "{name}_hi"}</code>
-                      </div>
                     </div>
                   </div>
                 );
