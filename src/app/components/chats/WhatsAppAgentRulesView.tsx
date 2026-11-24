@@ -236,10 +236,10 @@ export default function WhatsAppAgentRulesView({
             const assigneeStr =
               Array.isArray(c.assignees) && c.assignees.length > 0
                 ? c.assignees
-                    .map((a, aIdx) => `${aIdx + 1}. ${a.name} (${a.type === "department" ? "Dept" : "User"})`)
-                    .join(" → ")
+                    .map((a) => a.name)
+                    .join(", ")
                 : c.assigneeName || "Team";
-            return `${i + 1}. ${c.prompt || c.title || "Condition"}\n   ↳ Escalation: ${assigneeStr}`;
+            return `${i + 1}. ${c.prompt || c.title || "Condition"}\n   ↳ Assignees: ${assigneeStr}`;
           })
           .join("\n\n");
 

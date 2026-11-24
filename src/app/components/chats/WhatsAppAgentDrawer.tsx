@@ -37,8 +37,8 @@
  *    - Multi-Condition Evaluation: Detects critical events (medical emergencies, upset patients, refund demands).
  *    - Multi-Select Responsible Assignees: Supports assigning individual team members and/or entire organization
  *      departments (e.g. Clinical Operations, Customer Support, Administration).
- *    - Escalation Sequencing: Re-orderable tier hierarchy (Tier 1 -> Tier 2 -> Tier 3...) with intuitive Move Up,
- *      Move Down, and Remove actions to establish clear escalation order.
+ *    - Multi-Select Capsules & Sequence: Selected members or departments are rendered as clean capsules in the exact
+ *      order they are selected, with instant capsule dismissal and zero clutter.
  *    - Contextual Handoff Messages: Sends condition-specific reassurance with live variable placeholders.
  *
  * 5. AFTER REPLYING (ADVANCED POST-REPLY AUTOMATIONS):
@@ -296,29 +296,6 @@ export default function WhatsAppAgentDrawer({
       ...prev,
       [`handoff_assignee_${condId}`]: "",
     }));
-  };
-
-  /**
-   * Helper: Moves an assignee up or down in the escalation sequence.
-   */
-  const handleMoveAssignee = (condId: string, fromIndex: number, direction: "up" | "down") => {
-    setHandoffConditions((prev) =>
-      prev.map((c) => {
-        if (c.id !== condId) return c;
-        const list = [...(c.assignees || [])];
-        const targetIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
-        if (targetIndex < 0 || targetIndex >= list.length) return c;
-        const temp = list[fromIndex];
-        list[fromIndex] = list[targetIndex];
-        list[targetIndex] = temp;
-        return {
-          ...c,
-          assignees: list,
-          assigneeId: list[0]?.id || "",
-          assigneeName: list[0]?.name || "",
-        };
-      })
-    );
   };
 
   /**
@@ -1872,43 +1849,59 @@ export default function WhatsAppAgentDrawer({
                                       }}
                                       type="button"
                                       onClick={() => toggleAssigneeDropdown(cond.id)}
-                                      className={`w-full h-10 px-3 py-2 rounded-lg border text-sm text-left flex items-center justify-between bg-white cursor-pointer transition-colors ${
+                                      className={`w-full min-h-[42px] px-3 py-1.5 rounded-lg border text-sm text-left flex items-center justify-between bg-white cursor-pointer transition-colors ${
                                         assigneeErr
                                           ? "border-red-400 bg-red-50/20"
                                           : "border-slate-200 hover:border-slate-300"
                                       }`}
                                     >
-                                      <div className="flex items-center gap-2 truncate">
-                                        {currentLevel === "user" ? (
-                                          <User className="w-4 h-4 text-slate-400 shrink-0" />
-                                        ) : (
-                                          <Building2 className="w-4 h-4 text-purple-500 shrink-0" />
-                                        )}
+                                      <div className="flex items-center gap-1.5 flex-wrap flex-1 mr-2">
                                         {selectedAssignees.length === 0 ? (
-                                          <span className="text-slate-400">
-                                            {currentLevel === "user"
-                                              ? "Select team members..."
-                                              : "Select departments..."}
-                                          </span>
-                                        ) : selectedAssignees.length === 1 ? (
-                                          <span className="text-slate-900 font-medium truncate">
-                                            {selectedAssignees[0].name}
-                                          </span>
+                                          <div className="flex items-center gap-2 text-slate-400">
+                                            {currentLevel === "user" ? (
+                                              <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                            ) : (
+                                              <Building2 className="w-4 h-4 text-purple-400 shrink-0" />
+                                            )}
+                                            <span className="text-sm">
+                                              {currentLevel === "user"
+                                                ? "Select team members..."
+                                                : "Select departments..."}
+                                            </span>
+                                          </div>
                                         ) : (
-                                          <span className="text-slate-900 font-medium truncate">
-                                            {selectedAssignees
-                                              .map((a, i) => `${i + 1}. ${a.name}`)
-                                              .join("  →  ")}
-                                          </span>
+                                          selectedAssignees.map((assignee) => (
+                                            <span
+                                              key={`${assignee.type}-${assignee.id}`}
+                                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                                                assignee.type === "department"
+                                                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                  : "bg-blue-50 text-blue-700 border-blue-200"
+                                              }`}
+                                            >
+                                              {assignee.type === "department" ? (
+                                                <Building2 className="w-3 h-3 text-purple-600 shrink-0" />
+                                              ) : (
+                                                <User className="w-3 h-3 text-blue-600 shrink-0" />
+                                              )}
+                                              <span>{assignee.name}</span>
+                                              <span
+                                                role="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleAssigneeItem(cond.id, assignee);
+                                                }}
+                                                className="ml-0.5 p-0.5 hover:bg-black/5 rounded-full transition-colors cursor-pointer"
+                                                title="Remove"
+                                              >
+                                                <X className="w-3 h-3 opacity-60 hover:opacity-100" />
+                                              </span>
+                                            </span>
+                                          ))
                                         )}
                                       </div>
 
-                                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                        {selectedAssignees.length > 1 && (
-                                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 rounded-full border border-blue-200">
-                                            {selectedAssignees.length} in sequence
-                                          </span>
-                                        )}
+                                      <div className="flex items-center shrink-0">
                                         <ChevronDown
                                           className={`w-4 h-4 text-slate-400 transition-transform ${
                                             openAssigneeDropdownId === cond.id ? "rotate-180" : ""
@@ -2282,61 +2275,6 @@ export default function WhatsAppAgentDrawer({
                   )}
                 </div>
 
-                {/* Escalation Sequence Reordering Header (when 2 or more selected) */}
-                {selectedAssignees.length > 1 && (
-                  <div className="px-2.5 py-1.5 bg-blue-50/60 border-b border-blue-100 shrink-0 text-xs">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-blue-900 mb-1">
-                      <span>Escalation Order ({selectedAssignees.length})</span>
-                      <span className="text-[10px] text-blue-600 font-normal">Reorder sequence:</span>
-                    </div>
-                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
-                      {selectedAssignees.map((assignee, seqIdx) => (
-                        <div
-                          key={`seq-pop-${assignee.type}-${assignee.id}`}
-                          className="flex items-center justify-between px-2 py-0.5 bg-white rounded border border-blue-200 text-xs"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                              {seqIdx + 1}
-                            </span>
-                            <span className="truncate font-medium text-slate-800 text-[11px]">
-                              {assignee.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                            <button
-                              type="button"
-                              disabled={seqIdx === 0}
-                              onClick={() => handleMoveAssignee(activeCond.id, seqIdx, "up")}
-                              className={`p-0.5 rounded hover:bg-slate-100 ${
-                                seqIdx === 0
-                                  ? "opacity-30 cursor-not-allowed"
-                                  : "cursor-pointer text-slate-600"
-                              }`}
-                              title="Move up in sequence"
-                            >
-                              <ChevronUp className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={seqIdx === selectedAssignees.length - 1}
-                              onClick={() => handleMoveAssignee(activeCond.id, seqIdx, "down")}
-                              className={`p-0.5 rounded hover:bg-slate-100 ${
-                                seqIdx === selectedAssignees.length - 1
-                                  ? "opacity-30 cursor-not-allowed"
-                                  : "cursor-pointer text-slate-600"
-                              }`}
-                              title="Move down in sequence"
-                            >
-                              <ChevronDown className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Candidate Multi-Select Options List with Checkboxes */}
                 <div className="overflow-y-auto p-1 divide-y divide-slate-50 flex-1">
                   {filteredCandidates.length === 0 ? (
@@ -2348,10 +2286,6 @@ export default function WhatsAppAgentDrawer({
                       const isSelected = selectedAssignees.some(
                         (a) => String(a.id) === String(item.id) && a.type === currentLevel
                       );
-                      const seqIndex =
-                        selectedAssignees.findIndex(
-                          (a) => String(a.id) === String(item.id) && a.type === currentLevel
-                        ) + 1;
 
                       return (
                         <button
@@ -2406,16 +2340,6 @@ export default function WhatsAppAgentDrawer({
                               )}
                             </div>
                           </div>
-
-                          {/* Sequence badge */}
-                          {isSelected && (
-                            <span
-                              className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0 ml-2"
-                              title={`Escalation Order #${seqIndex}`}
-                            >
-                              #{seqIndex}
-                            </span>
-                          )}
                         </button>
                       );
                     })
