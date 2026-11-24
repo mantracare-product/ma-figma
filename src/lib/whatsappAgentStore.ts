@@ -55,6 +55,9 @@ export interface WhatsAppAgentRule {
   keyword_match?: "any" | "all"; // default: any
 
   // Step 3: Agent replies
+  reply_mode?: "ai_prompt" | "template";
+  reply_template_id?: string;
+  reply_template_name?: string;
   agent_prompt: string; // Instructions for how the agent handles the whole conversation
   use_kb?: boolean;
   send_mode: "auto" | "draft";
@@ -98,7 +101,7 @@ export interface WhatsAppAgentRule {
   keywordsFilter?: { contains?: string };
 }
 
-export const WHATSAPP_AGENT_STORAGE_KEY = "mantra_whatsapp_agent_rules";
+export const WHATSAPP_AGENT_STORAGE_KEY = "mantra_whatsapp_agent_rules_v5";
 export const WHATSAPP_AGENT_EVENT = "whatsapp_agent_rules_updated";
 
 /**
@@ -153,6 +156,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     templateNames: ["Appointment Reminder"],
     condition_type: "button",
     button_ids: ["Confirm Attendance"],
+    reply_mode: "ai_prompt",
     agent_prompt:
       "Warmly acknowledge and thank {{contact_name}} for confirming their appointment on {{appointment_date}}. Advise them to arrive 10 minutes early with valid identification and their insurance card. Provide clinic address and parking details.",
     use_kb: false,
@@ -193,6 +197,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     templateNames: ["Appointment Reminder"],
     condition_type: "button",
     button_ids: ["Reschedule Visit"],
+    reply_mode: "ai_prompt",
     agent_prompt:
       "Politely acknowledge {{contact_name}}'s reschedule request. Offer the next 2 available slots with their assigned provider. Ask whether morning or afternoon works best for them.",
     use_kb: false,
@@ -206,6 +211,14 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
         assigneeId: 1,
         assigneeName: "Admin User",
         handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our scheduling team to finalize your visit.",
+      },
+      {
+        id: "cond-2-2",
+        title: "Urgent Slot Reschedule Escalation",
+        prompt: "Patient states severe symptoms or demands emergency consultation",
+        assigneeId: 2,
+        assigneeName: "Akshita Sharma",
+        handoffMessage: "Thanks {{contact_name}}, I am alerting our clinical emergency staff immediately.",
       },
     ],
     handoff_condition_prompt: "Contact requests a provider who is unavailable or has complex scheduling requirements",
@@ -234,8 +247,10 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     condition_type: "keywords",
     keywords: "booking, confirmation, appointment",
     keyword_match: "any",
-    agent_prompt:
-      "Verify if {{contact_name}} has completed their pre-consultation medical questionnaire. If incomplete, provide the link and instructions.",
+    reply_mode: "template",
+    reply_template_id: "tpl-2",
+    reply_template_name: "Booking Confirmation",
+    agent_prompt: "Reply with template Booking Confirmation",
     use_kb: false,
     send_mode: "auto",
     handoff_enabled: true,
@@ -273,21 +288,13 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     templates: ["tpl-1", "tpl-2"],
     templateNames: ["Appointment Reminder", "Booking Confirmation"],
     condition_type: "fallback",
+    reply_mode: "ai_prompt",
     agent_prompt:
       "Warmly thank {{contact_name}} for their message. Let them know their inquiry has been received and our care coordinator will assist them shortly.",
     use_kb: true,
     send_mode: "auto",
-    handoff_enabled: true,
-    handoff_conditions: [
-      {
-        id: "cond-4-1",
-        title: "Urgent Inquiry Fallback",
-        prompt: "Contact is upset, asks for refund, or has an urgent inquiry",
-        assigneeId: 1,
-        assigneeName: "Admin User",
-        handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
-      },
-    ],
+    handoff_enabled: false,
+    handoff_conditions: [],
     handoff_condition_prompt: "Contact is upset, asks for refund, or has an urgent inquiry",
     handoff_assignee_id: 1,
     handoff_assignee_name: "Admin User",
@@ -309,6 +316,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     trigger_type: "new_message",
     templates: [],
     trigger_prompt: "Contact asks about clinic pricing, services, insurance, or wants to book an appointment",
+    reply_mode: "ai_prompt",
     agent_prompt:
       "Warmly welcome the contact to MantraCare. Explain our available care services, answer inquiries accurately using our knowledge base, and offer to schedule a consultation with the appropriate doctor.",
     use_kb: true,
@@ -403,6 +411,11 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
 
   const send_mode: "auto" | "draft" =
     raw.send_mode === "draft" || raw.responseType === "ai_draft_only" ? "draft" : "auto";
+
+  const reply_mode: "ai_prompt" | "template" =
+    raw.reply_mode === "template" || raw.reply_type === "fixed" ? "template" : "ai_prompt";
+  const reply_template_id = raw.reply_template_id || undefined;
+  const reply_template_name = raw.reply_template_name || undefined;
 
   // Hand off migration & multi-conditions support
   const handoff_enabled =
@@ -522,6 +535,9 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
     keywords: trigger_type === "template_reply" && condition_type === "keywords" ? raw.keywords || raw.keywordsFilter?.contains || "" : undefined,
     keyword_match: trigger_type === "template_reply" && condition_type === "keywords" ? raw.keyword_match || "any" : undefined,
 
+    reply_mode,
+    reply_template_id,
+    reply_template_name,
     agent_prompt,
     use_kb: Boolean(raw.use_kb),
     send_mode,

@@ -17,6 +17,8 @@ import {
   Copy,
   Trash2,
   FileText,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import TableComponent, { TableColumn, TableRowAction } from "../ui/TableComponent";
 import {
@@ -99,19 +101,21 @@ export default function WhatsAppAgentRulesView({
     }
   };
 
-  // Table Columns (Rule name, Connected template, Status)
+  // Table Columns (Rule name, Connected template, Reply with, Handoff conditions, Status)
   const columns: TableColumn<WhatsAppAgentRule>[] = [
     {
       id: "name",
       header: "RULE NAME",
       align: "left",
+      width: "280px",
+      minWidth: "220px",
       render: (row) => {
         return (
-          <Tooltip content={row.name} position="top">
+          <Tooltip content={row.description || row.name} position="top">
             <button
               type="button"
               onClick={() => onEditRule?.(row)}
-              className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate block max-w-[320px] cursor-pointer"
+              className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate block max-w-full cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               {row.name}
@@ -124,7 +128,8 @@ export default function WhatsAppAgentRulesView({
       id: "template",
       header: "CONNECTED TEMPLATE",
       align: "left",
-      width: "280px",
+      width: "240px",
+      minWidth: "180px",
       render: (row) => {
         if (row.trigger_type === "new_message") {
           return (
@@ -149,9 +154,94 @@ export default function WhatsAppAgentRulesView({
 
         return (
           <Tooltip content={tplNames.join(", ")} position="top">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-800 max-w-[260px] truncate cursor-help">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-800 max-w-[220px] truncate cursor-help">
               <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span className="truncate">{displayText}</span>
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      id: "reply_with",
+      header: "REPLY WITH",
+      align: "left",
+      width: "160px",
+      minWidth: "130px",
+      render: (row) => {
+        const isTemplate = row.reply_mode === "template";
+        if (isTemplate) {
+          const tplName =
+            row.reply_template_name ||
+            (row.reply_template_id
+              ? templatesList.find((t) => t.id === row.reply_template_id)?.name
+              : undefined) ||
+            "Template";
+          return (
+            <Tooltip content={`Reply with template: ${tplName}`} position="top">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 cursor-help">
+                <FileText className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                <span className="truncate max-w-[105px]">Template</span>
+              </span>
+            </Tooltip>
+          );
+        }
+
+        return (
+          <Tooltip content={row.agent_prompt ? `AI Prompt: ${row.agent_prompt}` : "AI Prompt"} position="top">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 cursor-help">
+              <Sparkles className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span>AI</span>
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      id: "handoff_conditions",
+      header: "HANDOFF CONDITIONS",
+      align: "left",
+      width: "180px",
+      minWidth: "150px",
+      render: (row) => {
+        const isHandoffEnabled = row.handoff_enabled !== false;
+        const conditions = Array.isArray(row.handoff_conditions)
+          ? row.handoff_conditions
+          : row.handoff_condition_prompt
+          ? [
+              {
+                id: "c-1",
+                prompt: row.handoff_condition_prompt,
+                assigneeName: row.handoff_assignee_name,
+                assigneeId: row.handoff_assignee_id || 1,
+                handoffMessage: row.handoff_message || "",
+              },
+            ]
+          : [];
+
+        const conditionCount = isHandoffEnabled ? conditions.length : 0;
+
+        if (!isHandoffEnabled || conditionCount === 0) {
+          return (
+            <Tooltip content={!isHandoffEnabled ? "Handoff disabled (0 conditions)" : "0 handoff conditions"} position="top">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 cursor-help">
+                0
+              </span>
+            </Tooltip>
+          );
+        }
+
+        const tooltipContent = conditions
+          .map((c, i) => `${i + 1}. ${c.prompt || c.title || "Condition"} → ${c.assigneeName || "Team"}`)
+          .join("\n");
+
+        return (
+          <Tooltip content={tooltipContent} position="top">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 cursor-help">
+              <Users className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>
+                {conditionCount} {conditionCount === 1 ? "condition" : "conditions"}
+              </span>
             </span>
           </Tooltip>
         );
@@ -234,7 +324,7 @@ export default function WhatsAppAgentRulesView({
         bulkActions={bulkActions}
         onRowClick={(row) => onEditRule?.(row)}
         getRowId={(row) => row.id}
-        tableId="whatsapp_agent_rules_table_v4"
+        tableId="whatsapp_agent_rules_table_v5"
         emptyMessage="No WhatsApp agent rules found matching your filters. Click '+ Add Rule' to create your first agent."
         defaultRowsPerPage={10}
       />

@@ -124,6 +124,8 @@ export default function WhatsAppAgentDrawer({
   const [triggerPrompt, setTriggerPrompt] = useState("");
 
   // ── Section 3: Agent replies ──
+  const [replyMode, setReplyMode] = useState<"ai_prompt" | "template">("ai_prompt");
+  const [replyTemplateId, setReplyTemplateId] = useState<string>("");
   const [agentPrompt, setAgentPrompt] = useState("");
   const [useKb, setUseKb] = useState(false);
   const [sendMode, setSendMode] = useState<"auto" | "draft">("auto");
@@ -302,6 +304,8 @@ export default function WhatsAppAgentDrawer({
       setTriggerPrompt(rule.trigger_prompt || "");
 
       // Section 3: Agent replies
+      setReplyMode(rule.reply_mode || "ai_prompt");
+      setReplyTemplateId(rule.reply_template_id || approvedTemplates[0]?.id || "");
       setAgentPrompt(
         rule.agent_prompt ||
           rule.instructions ||
@@ -388,6 +392,8 @@ export default function WhatsAppAgentDrawer({
       setTriggerPrompt("");
 
       // Section 3: Agent replies
+      setReplyMode("ai_prompt");
+      setReplyTemplateId(approvedTemplates[0]?.id || "");
       setAgentPrompt("");
       setUseKb(false);
       setSendMode("auto");
@@ -431,7 +437,8 @@ export default function WhatsAppAgentDrawer({
           (conditionType === "button" && selectedButtonIds.length > 0) ||
           (conditionType === "intent" && intentText.trim().length > 0) ||
           (conditionType === "keywords" && keywords.trim().length > 0));
-  const isSection3Valid = Boolean(agentPrompt.trim());
+  const isSection3Valid =
+    replyMode === "ai_prompt" ? Boolean(agentPrompt.trim()) : Boolean(replyTemplateId);
   const isSection4Valid =
     !handoffEnabled ||
     (handoffConditions.length > 0 &&
@@ -539,18 +546,35 @@ export default function WhatsAppAgentDrawer({
     }
 
     // 3. Agent replies validation
-    if (!agentPrompt.trim()) {
-      nextErrors.agentPrompt = "Agent prompt is required.";
-      if (
-        !nextErrors.name &&
-        !nextErrors.templates &&
-        !nextErrors.button &&
-        !nextErrors.intent &&
-        !nextErrors.keywords &&
-        !nextErrors.fallback &&
-        !nextErrors.triggerPrompt
-      ) {
-        setOpenSection(3);
+    if (replyMode === "ai_prompt") {
+      if (!agentPrompt.trim()) {
+        nextErrors.agentPrompt = "Agent prompt is required.";
+        if (
+          !nextErrors.name &&
+          !nextErrors.templates &&
+          !nextErrors.button &&
+          !nextErrors.intent &&
+          !nextErrors.keywords &&
+          !nextErrors.fallback &&
+          !nextErrors.triggerPrompt
+        ) {
+          setOpenSection(3);
+        }
+      }
+    } else {
+      if (!replyTemplateId) {
+        nextErrors.replyTemplate = "Please select a reply template.";
+        if (
+          !nextErrors.name &&
+          !nextErrors.templates &&
+          !nextErrors.button &&
+          !nextErrors.intent &&
+          !nextErrors.keywords &&
+          !nextErrors.fallback &&
+          !nextErrors.triggerPrompt
+        ) {
+          setOpenSection(3);
+        }
       }
     }
 
@@ -632,6 +656,9 @@ export default function WhatsAppAgentDrawer({
 
     const isActive = rule ? (rule.is_active !== undefined ? rule.is_active : rule.enabled) : true;
 
+    const replyTemplate = approvedTemplates.find((t) => t.id === replyTemplateId);
+    const replyTemplateName = replyTemplate ? replyTemplate.name : undefined;
+
     const savedRule: WhatsAppAgentRule = {
       id: rule?.id || `wa-rule-${Date.now()}`,
       name: name.trim(),
@@ -651,8 +678,14 @@ export default function WhatsAppAgentDrawer({
       keywords: triggerType === "template_reply" && conditionType === "keywords" ? keywords.trim() : undefined,
       keyword_match: triggerType === "template_reply" && conditionType === "keywords" ? keywordMatch : undefined,
 
-      agent_prompt: agentPrompt.trim(),
-      use_kb: useKb,
+      reply_mode: replyMode,
+      reply_template_id: replyMode === "template" ? replyTemplateId : undefined,
+      reply_template_name: replyMode === "template" ? replyTemplateName : undefined,
+      agent_prompt:
+        replyMode === "ai_prompt"
+          ? agentPrompt.trim()
+          : (agentPrompt.trim() || `Reply with template ${replyTemplateName || replyTemplateId}`),
+      use_kb: replyMode === "ai_prompt" ? useKb : false,
       send_mode: sendMode,
 
       handoff_enabled: handoffEnabled,
@@ -1241,64 +1274,135 @@ export default function WhatsAppAgentDrawer({
 
           {openSection === 3 && (
             <div className="px-4 py-4 border-t border-slate-100 space-y-4">
-              {/* Agent prompt (textarea, at least 8 rows) */}
+              {/* Reply mode selector */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="flex items-center text-[13px] font-medium text-slate-700">
-                    <span>Agent prompt</span>
-                    <span className="text-red-500 ml-0.5">*</span>
-                    <InfoTip text="Explain how the conversation should flow: what to say first, what to ask, how to respond to different answers, and when the conversation is done. The agent follows this for the whole conversation." />
-                  </label>
-
-                  {/* Insert variable button (opens Document Template Select Fields Modal) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveVariableTarget({ type: "agentPrompt" });
-                      setVariableModalOpen(true);
-                    }}
-                    className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                    title="Select and insert field placeholder variables"
-                  >
-                    <Sparkles className="w-3 h-3 text-blue-600" />
-                    <span>Insert variable</span>
-                  </button>
-                </div>
-
-                <textarea
-                  ref={agentPromptTextareaRef}
-                  rows={8}
-                  value={agentPrompt}
+                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                  <span>Reply type</span>
+                  <span className="text-red-500 ml-0.5">*</span>
+                  <InfoTip text="Choose whether the agent responds dynamically with AI or sends an approved WhatsApp template." />
+                </label>
+                <select
+                  value={replyMode}
                   onChange={(e) => {
-                    setAgentPrompt(e.target.value);
+                    const nextMode = e.target.value as "ai_prompt" | "template";
+                    setReplyMode(nextMode);
                     if (errors.agentPrompt) setErrors((prev) => ({ ...prev, agentPrompt: "" }));
+                    if (errors.replyTemplate) setErrors((prev) => ({ ...prev, replyTemplate: "" }));
+                    if (nextMode === "template" && !replyTemplateId && approvedTemplates.length > 0) {
+                      setReplyTemplateId(approvedTemplates[0].id);
+                    }
                   }}
-                  placeholder="Explain how the conversation should flow: what to say first, what to ask, how to respond to different answers, and when the conversation is done..."
-                  className={`w-full p-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y ${
-                    errors.agentPrompt ? "border-red-400 bg-red-50/20" : "border-slate-200 text-slate-900"
-                  }`}
-                />
-                {errors.agentPrompt && (
-                  <p className="text-xs text-red-500 mt-1">{errors.agentPrompt}</p>
-                )}
+                  className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                >
+                  <option value="ai_prompt">AI Prompt</option>
+                  <option value="template">Reply with template</option>
+                </select>
               </div>
 
-              {/* Use knowledge base switch */}
-              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
-                <label className="flex items-center text-[13px] font-medium text-slate-700 cursor-pointer">
-                  <span>Use knowledge base</span>
-                  <InfoTip text="Lets the agent answer using your knowledge base, for example pricing or insurance questions." />
-                </label>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useKb}
-                    onChange={(e) => setUseKb(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+              {/* Mode A: AI Prompt */}
+              {replyMode === "ai_prompt" && (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="flex items-center text-[13px] font-medium text-slate-700">
+                        <span>Agent prompt</span>
+                        <span className="text-red-500 ml-0.5">*</span>
+                        <InfoTip text="Explain how the conversation should flow: what to say first, what to ask, how to respond to different answers, and when the conversation is done. The agent follows this for the whole conversation." />
+                      </label>
+
+                      {/* Insert variable button (opens Document Template Select Fields Modal) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveVariableTarget({ type: "agentPrompt" });
+                          setVariableModalOpen(true);
+                        }}
+                        className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                        title="Select and insert field placeholder variables"
+                      >
+                        <Sparkles className="w-3 h-3 text-blue-600" />
+                        <span>Insert variable</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      ref={agentPromptTextareaRef}
+                      rows={8}
+                      value={agentPrompt}
+                      onChange={(e) => {
+                        setAgentPrompt(e.target.value);
+                        if (errors.agentPrompt) setErrors((prev) => ({ ...prev, agentPrompt: "" }));
+                      }}
+                      placeholder="Explain how the conversation should flow: what to say first, what to ask, how to respond to different answers, and when the conversation is done..."
+                      className={`w-full p-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y ${
+                        errors.agentPrompt ? "border-red-400 bg-red-50/20" : "border-slate-200 text-slate-900"
+                      }`}
+                    />
+                    {errors.agentPrompt && (
+                      <p className="text-xs text-red-500 mt-1">{errors.agentPrompt}</p>
+                    )}
+                  </div>
+
+                  {/* Use knowledge base switch */}
+                  <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                    <label className="flex items-center text-[13px] font-medium text-slate-700 cursor-pointer">
+                      <span>Use knowledge base</span>
+                      <InfoTip text="Lets the agent answer using your knowledge base, for example pricing or insurance questions." />
+                    </label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useKb}
+                        onChange={(e) => setUseKb(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {/* Mode B: Reply with template */}
+              {replyMode === "template" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                      <span>Select reply template</span>
+                      <span className="text-red-500 ml-0.5">*</span>
+                      <InfoTip text="The approved WhatsApp template that will be sent automatically when this rule triggers." />
+                    </label>
+                    <select
+                      value={replyTemplateId}
+                      onChange={(e) => {
+                        setReplyTemplateId(e.target.value);
+                        if (errors.replyTemplate) setErrors((prev) => ({ ...prev, replyTemplate: "" }));
+                      }}
+                      className={`w-full h-10 px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors ${
+                        errors.replyTemplate ? "border-red-400 bg-red-50/20" : "border-slate-200"
+                      }`}
+                    >
+                      <option value="">Select a template...</option>
+                      {approvedTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.category || "Utility"})
+                        </option>
+                      ))}
+                    </select>
+                    {errors.replyTemplate && (
+                      <p className="text-xs text-red-500 mt-1">{errors.replyTemplate}</p>
+                    )}
+                  </div>
+
+                  {replyTemplateId && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-start gap-2">
+                      <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>
+                        When triggered, the agent will send <strong>{approvedTemplates.find((t) => t.id === replyTemplateId)?.name || replyTemplateId}</strong> directly to the contact.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Send automatically toggle switch */}
               <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
