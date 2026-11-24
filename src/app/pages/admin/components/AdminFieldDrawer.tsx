@@ -1142,6 +1142,7 @@ interface FieldFormState {
   // Formula & Static for number and money
   numberValueMode?: "static" | "formula";
   formulaTerms?: FormulaTerm[];
+  formulaTemplate?: string;
   staticNumberValue?: number | "";
 
   // Group binding configuration
@@ -1271,6 +1272,10 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     crmBindPrimaryKeyField: "",
     crmBindIsPrimaryLookup: false,
     defaultValue: undefined,
+    numberValueMode: "static",
+    formulaTerms: [],
+    formulaTemplate: "",
+    staticNumberValue: "",
   };
 }
 
@@ -1415,6 +1420,11 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     // Formula / Static for Number and Money
     numberValueMode: (f.formulaConfig?.mode as ("static" | "formula")) || "static",
     formulaTerms: f.formulaConfig?.terms || [],
+    formulaTemplate: f.formulaConfig?.template || (
+      f.formulaConfig?.terms && f.formulaConfig.terms.length > 0
+        ? f.formulaConfig.terms.map(t => `{${t.fieldKey}}${t.operator !== undefined ? t.operator : ""}`).join("")
+        : ""
+    ),
     staticNumberValue: f.formulaConfig?.staticValue ?? "",
     // Group Binding
     primarySubFieldId: f.primarySubFieldId || f.primaryColumnId || (f.tableColumns?.[0]?.id ?? f.subFields?.[0]?.id ?? ""),
@@ -1444,6 +1454,13 @@ export interface AdminFieldDrawerProps {
   onClose: () => void;
   onSaved?: (field: FieldDefinition) => void;
   onHide?: (field: FieldDefinition) => void;
+}
+
+function extractTermsFromTemplate(template?: string): FormulaTerm[] {
+  if (!template) return [];
+  const matches = template.match(/{([a-zA-Z0-9_]+)}/g);
+  if (!matches) return [];
+  return matches.map((m) => ({ fieldKey: m.slice(1, -1) }));
 }
 
 export function AdminFieldDrawer({
@@ -1479,6 +1496,35 @@ export function AdminFieldDrawer({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
   const teamPickerRef = useRef<HTMLDivElement>(null);
+  const formulaInputRef = useRef<HTMLInputElement>(null);
+
+  const insertFieldIntoFormula = (fieldKey: string) => {
+    if (!fieldKey) return;
+    const token = `{${fieldKey}}`;
+    const input = formulaInputRef.current;
+    if (!input) {
+      setForm((p) => ({
+        ...p,
+        formulaTemplate: (p.formulaTemplate || "") + token,
+      }));
+      return;
+    }
+
+    const currentVal = form.formulaTemplate || "";
+    const start = input.selectionStart ?? currentVal.length;
+    const end = input.selectionEnd ?? currentVal.length;
+    const nextVal = currentVal.substring(0, start) + token + currentVal.substring(end);
+
+    setForm((p) => ({
+      ...p,
+      formulaTemplate: nextVal,
+    }));
+
+    setTimeout(() => {
+      input.focus();
+      input.setSelectionRange(start + token.length, start + token.length);
+    }, 10);
+  };
 
   const hasActiveProcessContext = Boolean(
     activeProcessId || activeProcessName || (processStages && processStages.length > 0)
@@ -2246,9 +2292,13 @@ export function AdminFieldDrawer({
         isPrimaryLookup: Boolean(form.crmBindIsPrimaryLookup),
       } : undefined,
 
-      formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money" || form.primaryCategory === "string") && form.numberValueMode === "formula" ? {
+      formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money") && form.numberValueMode === "formula" ? {
         mode: "formula",
         terms: form.formulaTerms || [],
+      } : (form.primaryCategory === "string" && form.numberValueMode === "formula") ? {
+        mode: "formula",
+        template: form.formulaTemplate || "",
+        terms: extractTermsFromTemplate(form.formulaTemplate),
       } : undefined,
 
       primarySubFieldId: form.primaryCategory === "composite" ? (form.primarySubFieldId || form.tableColumns[0]?.id || undefined) : undefined,
@@ -2938,32 +2988,14 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3A-2. String Configuration (with custom separator Apply Formula) */}
+          {/* 3A-2. String Configuration (with Formula String Pattern Builder) */}
           {form.primaryCategory === "string" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Max Characters (Optional)
-                  </label>
-                  <InfoTooltip text="Limit the maximum number of characters allowed in this string field. Leave blank for unlimited." size="sm" />
-                </div>
-                <input
-                  type="number"
-                  min={1}
-                  value={form.maxChars || ""}
-                  disabled={isReadOnly}
-                  onChange={(e) => setForm((p) => ({ ...p, maxChars: e.target.value ? Number(e.target.value) : undefined }))}
-                  placeholder="e.g. 255"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                />
-              </div>
-
               {/* Apply Formula Toggle (for String) */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <label className="text-xs font-semibold text-slate-700">Apply Formula</label>
-                  <InfoTooltip text="Automatically concatenate this string value using other fields and custom separators." size="sm" />
+                  <InfoTooltip text="Automatically construct this string value using field placeholders and custom text (e.g. {any_field}_hi)." size="sm" />
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer select-none">
                   <input
@@ -2979,10 +3011,7 @@ export function AdminFieldDrawer({
                         setForm((p) => ({
                           ...p,
                           numberValueMode: "formula",
-                          formulaTerms: p.formulaTerms && p.formulaTerms.length > 0 ? p.formulaTerms : [
-                            { fieldKey: avail[0]?.key || "", operator: ", " },
-                            { fieldKey: avail[1]?.key || avail[0]?.key || "", operator: undefined }
-                          ]
+                          formulaTemplate: p.formulaTemplate || (avail[0]?.key ? `{${avail[0].key}}_hi` : "{any_field}_hi"),
                         }));
                       } else {
                         setForm((p) => ({
@@ -2997,125 +3026,130 @@ export function AdminFieldDrawer({
                 </label>
               </div>
 
-              {/* Formula applying functionality shown only if toggle is enabled (in same row with reduced width) */}
-              {form.numberValueMode === "formula" && (
-                <div className="space-y-3 pt-2 border-t border-slate-200">
-                  {/* Select fields and separators in the same row */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {(form.formulaTerms || []).map((term, tIdx) => {
-                      const availFields = getAllFields(form.module).filter(
-                        (f) => f.key !== form.key
-                      );
-                      const isLast = tIdx === (form.formulaTerms || []).length - 1;
+              {/* String Formula Pattern Builder */}
+              {form.numberValueMode === "formula" && (() => {
+                const availFields = getAllFields(form.module).filter(
+                  (f) => f.key !== form.key
+                );
 
-                      return (
-                        <div key={tIdx} className="flex items-center gap-1.5">
-                          <div className="w-[145px] sm:w-[165px]">
-                            <select
-                              value={term.fieldKey}
-                              disabled={isReadOnly}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setForm((p) => ({
-                                  ...p,
-                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, fieldKey: val } : tm)
-                                }));
-                              }}
-                              className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                            >
-                              <option value="">Select field...</option>
-                              {availFields.map((f) => (
-                                <option key={f.key} value={f.key}>{f.label} ({f.inputType})</option>
-                              ))}
-                            </select>
-                          </div>
+                const sampleValues: Record<string, string> = {
+                  policy_coverage: "Comprehensive",
+                  first_name: "John",
+                  last_name: "Doe",
+                  name: "Kanak B Pandey",
+                  email: "kanak@example.com",
+                  phone: "+1234567890",
+                  category: "Lead",
+                  status: "Active",
+                  lead_source: "Website",
+                  city: "New York",
+                  country: "US",
+                };
 
-                          {!isLast && (
-                            <select
-                              value={term.operator !== undefined ? term.operator : ", "}
-                              disabled={isReadOnly}
-                              onChange={(e) => {
-                                const sep = e.target.value;
-                                setForm((p) => ({
-                                  ...p,
-                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, operator: sep } : tm)
-                                }));
-                              }}
-                              className="w-24 sm:w-28 px-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-blue-600 text-center outline-none focus:border-blue-500 cursor-pointer"
-                            >
-                              <option value=", ">Comma (, )</option>
-                              <option value="-">Hyphen (-)</option>
-                              <option value=" - ">- (spaced)</option>
-                              <option value="_">Underscore (_)</option>
-                              <option value=" ">Space</option>
-                              <option value="/">Slash (/)</option>
-                              <option value="">None</option>
-                            </select>
-                          )}
+                const template = form.formulaTemplate || "";
+                const previewResult = template ? template.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
+                  if (sampleValues[fKey]) return sampleValues[fKey];
+                  const matchF = availFields.find(f => f.key === fKey);
+                  return matchF ? matchF.label : fKey;
+                }) : "";
 
-                          {!isReadOnly && (form.formulaTerms || []).length > 2 && (
+                return (
+                  <div className="space-y-3 pt-3 border-t border-slate-200">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-700">
+                          String Pattern / Template
+                        </label>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Select fields & add custom text
+                        </span>
+                      </div>
+
+                      {/* Select Field Dropdown */}
+                      <div className="mb-2">
+                        <select
+                          value=""
+                          disabled={isReadOnly}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              insertFieldIntoFormula(e.target.value);
+                            }
+                          }}
+                          className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">+ Select field to insert...</option>
+                          {availFields.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {f.label} ({`{${f.key}}`})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Quick Add Pills */}
+                      {availFields.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                          <span className="text-[11px] text-slate-400 font-medium mr-0.5">Quick add:</span>
+                          {availFields.slice(0, 5).map((f) => (
                             <button
+                              key={f.key}
                               type="button"
-                              onClick={() => {
-                                setForm((p) => {
-                                  const filtered = (p.formulaTerms || []).filter((_, idx) => idx !== tIdx);
-                                  const normalized = filtered.map((item, idx) => idx === filtered.length - 1 ? { ...item, operator: undefined } : item);
-                                  return { ...p, formulaTerms: normalized };
-                                });
-                              }}
-                              className="p-1 text-slate-400 hover:text-red-500 cursor-pointer"
-                              title="Remove operand"
+                              disabled={isReadOnly}
+                              onClick={() => insertFieldIntoFormula(f.key)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-md text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
+                              title={`Insert {${f.key}}`}
                             >
-                              <X className="w-3.5 h-3.5" />
+                              <Plus className="w-2.5 h-2.5 text-blue-500" />
+                              <span>{f.label}</span>
                             </button>
-                          )}
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
+                      )}
 
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const avail = getAllFields(form.module).filter(
-                          (f) => f.key !== form.key
-                        );
-                        setForm((p) => {
-                          const current = p.formulaTerms || [];
-                          const updated = current.map((tm, idx) => idx === current.length - 1 ? { ...tm, operator: tm.operator !== undefined ? tm.operator : ", " } : tm);
-                          return {
-                            ...p,
-                            formulaTerms: [...updated, { fieldKey: avail[0]?.key || "", operator: undefined }]
-                          };
-                        });
-                      }}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Operand / Field</span>
-                    </button>
-                  )}
+                      {/* Freeform Pattern Input */}
+                      <div className="relative">
+                        <input
+                          ref={formulaInputRef}
+                          type="text"
+                          value={form.formulaTemplate || ""}
+                          disabled={isReadOnly}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setForm((p) => ({
+                              ...p,
+                              formulaTemplate: val,
+                            }));
+                          }}
+                          placeholder="e.g. {any_field}_hi"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 outline-none focus:border-blue-500 shadow-2xs"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Select fields from the dropdown or type custom text freely (e.g. <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">{"{any_field}"}_hi</code> or <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">{"{first_name}"}_{"{last_name}"}</code>).
+                      </p>
+                    </div>
 
-                  {/* Formula Preview Box */}
-                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 font-mono flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-blue-700">Preview:</span>
-                    <span className="font-semibold">
-                      {(form.formulaTerms || []).map((t) => {
-                        const fKey = t.fieldKey || "?";
-                        const sepDisplay = t.operator !== undefined
-                          ? t.operator === " "
-                            ? " [space] "
-                            : t.operator === ""
-                            ? ""
-                            : ` ${t.operator} `
-                          : "";
-                        return `{${fKey}}${sepDisplay}`;
-                      }).join("")}
-                    </span>
+                    {/* Live Preview Box */}
+                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between text-blue-900 font-semibold text-xs">
+                        <span className="flex items-center gap-1.5 text-blue-800">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                          Live Formula Preview:
+                        </span>
+                        <span className="text-[11px] text-blue-600 font-normal">
+                          Evaluated String
+                        </span>
+                      </div>
+                      <div className="p-2 bg-white border border-blue-100 rounded-lg text-xs font-mono text-slate-900 break-all font-semibold">
+                        {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{any_field}"}_hi</span>}
+                      </div>
+                      <div className="text-[11px] text-blue-700/80">
+                        Result for pattern <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-semibold">{form.formulaTemplate || "{any_field}_hi"}</code> when field values are filled.
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

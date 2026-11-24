@@ -607,14 +607,11 @@ export default function DraggableOverviewSections({
         }
       }
 
-      // String formula concatenation using custom separators
+      // String formula concatenation using custom pattern/template or terms
       if (
         (field.inputType === "string" || (field as any).inputType === "string") &&
-        field.formulaConfig?.mode === "formula" &&
-        Array.isArray(field.formulaConfig.terms) &&
-        field.formulaConfig.terms.length >= 2
+        field.formulaConfig?.mode === "formula"
       ) {
-        const terms = field.formulaConfig.terms;
         const getStringVal = (fKey: string): string => {
           if (!fKey) return "";
           if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== null) {
@@ -630,13 +627,24 @@ export default function DraggableOverviewSections({
 
         let combined = "";
         let hasAnyValue = false;
-        for (let i = 0; i < terms.length; i++) {
-          const val = getStringVal(terms[i].fieldKey);
-          if (val) hasAnyValue = true;
-          combined += val;
-          if (i < terms.length - 1) {
-            const sep = terms[i].operator !== undefined ? terms[i].operator : " ";
-            combined += sep;
+
+        if (field.formulaConfig.template) {
+          const tpl = field.formulaConfig.template;
+          combined = tpl.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
+            const val = getStringVal(fKey);
+            if (val) hasAnyValue = true;
+            return val;
+          });
+        } else if (Array.isArray(field.formulaConfig.terms) && field.formulaConfig.terms.length >= 2) {
+          const terms = field.formulaConfig.terms;
+          for (let i = 0; i < terms.length; i++) {
+            const val = getStringVal(terms[i].fieldKey);
+            if (val) hasAnyValue = true;
+            combined += val;
+            if (i < terms.length - 1) {
+              const sep = terms[i].operator !== undefined ? terms[i].operator : " ";
+              combined += sep;
+            }
           }
         }
 
