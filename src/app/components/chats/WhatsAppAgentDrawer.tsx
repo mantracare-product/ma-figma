@@ -33,17 +33,20 @@ import {
   Trash2,
   Search,
   Sparkles,
+  Plus,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import {
   WhatsAppAgentRule,
+  HandoffCondition,
   useWhatsappAgentStore,
 } from "../../../lib/whatsappAgentStore";
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { getContactCategories } from "../../../lib/contactCategoriesStore";
+import DocumentSelectFieldsModal from "../ui/DocumentSelectFieldsModal";
 
 export interface WhatsAppAgentDrawerProps {
   isOpen: boolean;
@@ -52,15 +55,6 @@ export interface WhatsAppAgentDrawerProps {
   onSave: (rule: WhatsAppAgentRule) => void;
   onDelete?: (ruleId: string) => void;
 }
-
-const DYNAMIC_VARIABLES = [
-  { key: "contact_name", label: "contact_name" },
-  { key: "appointment_date", label: "appointment_date" },
-  { key: "appointment_time", label: "appointment_time" },
-  { key: "service_name", label: "service_name" },
-  { key: "clinic_name", label: "clinic_name" },
-  { key: "template_name", label: "template_name" },
-];
 
 /**
  * Clean Info Icon Tooltip with hover & keyboard focus
@@ -110,8 +104,9 @@ export default function WhatsAppAgentDrawer({
   // Collapsible section state: 1, 2, 3, 4, or 5 (only one open at a time)
   const [openSection, setOpenSection] = useState<number | null>(1);
 
-  // ── Section 1: Name ──
+  // ── Section 1: Name & Description ──
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
 
   // ── Section 2: When it runs ──
   const [triggerType, setTriggerType] = useState<"template_reply" | "new_message">("template_reply");
@@ -132,42 +127,49 @@ export default function WhatsAppAgentDrawer({
   const [agentPrompt, setAgentPrompt] = useState("");
   const [useKb, setUseKb] = useState(false);
   const [sendMode, setSendMode] = useState<"auto" | "draft">("auto");
-  const [showAgentVariableDropdown, setShowAgentVariableDropdown] = useState(false);
   const agentPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Section 4: Hand off ──
+  // Variable Picker Modal State (using Document Template Variable Picker)
+  const [variableModalOpen, setVariableModalOpen] = useState(false);
+  const [activeVariableTarget, setActiveVariableTarget] = useState<
+    | { type: "agentPrompt" }
+    | { type: "handoffCondition"; conditionId: string }
+    | null
+  >(null);
+
+  // ── Section 4: Hand off (Multi-condition support) ──
   const [handoffEnabled, setHandoffEnabled] = useState(true);
-  const [handoffConditionPrompt, setHandoffConditionPrompt] = useState("");
-  const [handoffAssigneeId, setHandoffAssigneeId] = useState<string | number>("");
-  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
-  const [assigneeSearchQuery, setAssigneeSearchQuery] = useState("");
-  const [handoffMessage, setHandoffMessage] = useState("");
-  const [showHandoffVariableDropdown, setShowHandoffVariableDropdown] = useState(false);
-  const handoffMessageTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [handoffConditionsOpen, setHandoffConditionsOpen] = useState(true);
+  const [handoffConditions, setHandoffConditions] = useState<HandoffCondition[]>([
+    {
+      id: "cond-1",
+      title: "Condition 1",
+      prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
+      assigneeId: teamMembers[0]?.id || 1,
+      assigneeName: teamMembers[0]?.name || "Admin User",
+      handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+    },
+  ]);
+  const handoffMessageRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // ── Section 5: After replying (Advanced) ──
   const [createContactEnabled, setCreateContactEnabled] = useState(false);
   const [contactCategoryId, setContactCategoryId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
-  const [resolveMode, setResolveMode] = useState<"condition" | "inactivity">("condition");
+  const [resolveMode, setResolveMode] = useState<"condition" | "inactivity" | "transferred_to_team">("condition");
   const [resolveConditionPrompt, setResolveConditionPrompt] = useState("");
   const [resolveAfterHours, setResolveAfterHours] = useState<number>(24);
+  const [isCustomHours, setIsCustomHours] = useState<boolean>(false);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Dropdown portal positioning & refs
+  // Dropdown portal positioning & refs for section 2 templates & buttons
   const templateButtonRef = useRef<HTMLButtonElement>(null);
   const buttonButtonRef = useRef<HTMLButtonElement>(null);
-  const agentVariableButtonRef = useRef<HTMLButtonElement>(null);
-  const assigneeButtonRef = useRef<HTMLButtonElement>(null);
-  const handoffVariableButtonRef = useRef<HTMLButtonElement>(null);
 
   const [templatePos, setTemplatePos] = useState<DropdownPos | null>(null);
   const [buttonPos, setButtonPos] = useState<DropdownPos | null>(null);
-  const [agentVariablePos, setAgentVariablePos] = useState<DropdownPos | null>(null);
-  const [assigneePos, setAssigneePos] = useState<DropdownPos | null>(null);
-  const [handoffVariablePos, setHandoffVariablePos] = useState<DropdownPos | null>(null);
 
   const calculateDropdownPos = (
     el: HTMLElement | null,
@@ -205,9 +207,6 @@ export default function WhatsAppAgentDrawer({
   const closeAllDropdowns = () => {
     setShowTemplateDropdown(false);
     setShowButtonDropdown(false);
-    setShowAgentVariableDropdown(false);
-    setShowAssigneeDropdown(false);
-    setShowHandoffVariableDropdown(false);
   };
 
   const toggleTemplateDropdown = () => {
@@ -229,39 +228,6 @@ export default function WhatsAppAgentDrawer({
       setShowButtonDropdown(true);
     } else {
       setShowButtonDropdown(false);
-    }
-  };
-
-  const toggleAgentVariableDropdown = () => {
-    if (!showAgentVariableDropdown) {
-      closeAllDropdowns();
-      const pos = calculateDropdownPos(agentVariableButtonRef.current, { minWidth: 240, estimatedHeight: 240, alignRight: true });
-      setAgentVariablePos(pos);
-      setShowAgentVariableDropdown(true);
-    } else {
-      setShowAgentVariableDropdown(false);
-    }
-  };
-
-  const toggleAssigneeDropdown = () => {
-    if (!showAssigneeDropdown) {
-      closeAllDropdowns();
-      const pos = calculateDropdownPos(assigneeButtonRef.current, { minWidth: 320, estimatedHeight: 260 });
-      setAssigneePos(pos);
-      setShowAssigneeDropdown(true);
-    } else {
-      setShowAssigneeDropdown(false);
-    }
-  };
-
-  const toggleHandoffVariableDropdown = () => {
-    if (!showHandoffVariableDropdown) {
-      closeAllDropdowns();
-      const pos = calculateDropdownPos(handoffVariableButtonRef.current, { minWidth: 240, estimatedHeight: 240, alignRight: true });
-      setHandoffVariablePos(pos);
-      setShowHandoffVariableDropdown(true);
-    } else {
-      setShowHandoffVariableDropdown(false);
     }
   };
 
@@ -313,6 +279,7 @@ export default function WhatsAppAgentDrawer({
     setErrors({});
     if (rule) {
       setName(rule.name || "");
+      setDescription(rule.description || "");
 
       // Section 2: When it runs
       const tType = rule.trigger_type || "template_reply";
@@ -345,14 +312,38 @@ export default function WhatsAppAgentDrawer({
       setUseKb(Boolean(rule.use_kb));
       setSendMode(rule.send_mode || (rule.responseType === "ai_draft_only" ? "draft" : "auto"));
 
-      // Section 4: Hand off
+      // Section 4: Hand off (Multi-condition support)
       setHandoffEnabled(rule.handoff_enabled !== undefined ? rule.handoff_enabled : true);
-      setHandoffConditionPrompt(rule.handoff_condition_prompt || "");
-      setHandoffAssigneeId(rule.handoff_assignee_id || teamMembers[0]?.id || "");
-      setHandoffMessage(
-        rule.handoff_message ||
-          "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly."
-      );
+      if (Array.isArray(rule.handoff_conditions) && rule.handoff_conditions.length > 0) {
+        setHandoffConditions(
+          rule.handoff_conditions.map((c, i) => ({
+            id: c.id || `cond-${i + 1}`,
+            title: c.title || `Condition ${i + 1}`,
+            prompt: c.prompt || "",
+            assigneeId: c.assigneeId || teamMembers[0]?.id || "",
+            assigneeName: c.assigneeName,
+            handoffMessage:
+              c.handoffMessage ||
+              "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+          }))
+        );
+      } else {
+        setHandoffConditions([
+          {
+            id: "cond-1",
+            title: "Condition 1",
+            prompt:
+              rule.handoff_condition_prompt ||
+              "Contact is upset, asks for a refund, or raises a medical emergency",
+            assigneeId: rule.handoff_assignee_id || teamMembers[0]?.id || "",
+            assigneeName: rule.handoff_assignee_name,
+            handoffMessage:
+              rule.handoff_message ||
+              "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+          },
+        ]);
+      }
+      setHandoffConditionsOpen(true);
 
       // Section 5: After replying (Advanced)
       setCreateContactEnabled(Boolean(rule.create_contact_enabled || (rule as any).crm_update));
@@ -361,8 +352,13 @@ export default function WhatsAppAgentDrawer({
       );
       setWorkflowId(rule.workflow_id || (rule as any).processId || "");
 
-      // Resolve mode: condition (default) or inactivity only
-      const rMode = rule.resolve_mode === "inactivity" ? "inactivity" : "condition";
+      // Resolve mode: "condition", "transferred_to_team", or "inactivity" (capped at 24 hrs)
+      const rMode: "condition" | "inactivity" | "transferred_to_team" =
+        rule.resolve_mode === "transferred_to_team"
+          ? "transferred_to_team"
+          : rule.resolve_mode === "inactivity"
+          ? "inactivity"
+          : "condition";
       setResolveMode(rMode);
       setResolveConditionPrompt(
         rule.resolve_condition_prompt ||
@@ -370,12 +366,15 @@ export default function WhatsAppAgentDrawer({
             ? "Contact has confirmed or has no further questions"
             : "")
       );
-      setResolveAfterHours(rule.resolve_after_hours || (rule as any).resolutionTimeoutHours || 24);
+      const hours = Math.min(24, Math.max(1, rule.resolve_after_hours || (rule as any).resolutionTimeoutHours || 24));
+      setResolveAfterHours(hours);
+      setIsCustomHours(![1, 2, 4, 6, 12, 24].includes(hours));
 
       setOpenSection(1);
     } else {
       // Create new agent rule defaults
       setName("");
+      setDescription("");
 
       // Section 2: When it runs
       setTriggerType("template_reply");
@@ -395,11 +394,18 @@ export default function WhatsAppAgentDrawer({
 
       // Section 4: Hand off
       setHandoffEnabled(true);
-      setHandoffConditionPrompt("");
-      setHandoffAssigneeId(teamMembers[0]?.id || "");
-      setHandoffMessage(
-        "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly."
-      );
+      setHandoffConditionsOpen(true);
+      setHandoffConditions([
+        {
+          id: `cond-${Date.now()}`,
+          title: "Condition 1",
+          prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
+          assigneeId: teamMembers[0]?.id || "",
+          assigneeName: teamMembers[0]?.name,
+          handoffMessage:
+            "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+        },
+      ]);
 
       // Section 5: After replying (Advanced)
       setCreateContactEnabled(false);
@@ -408,6 +414,7 @@ export default function WhatsAppAgentDrawer({
       setResolveMode("condition");
       setResolveConditionPrompt("");
       setResolveAfterHours(24);
+      setIsCustomHours(false);
 
       setOpenSection(1);
     }
@@ -427,53 +434,58 @@ export default function WhatsAppAgentDrawer({
   const isSection3Valid = Boolean(agentPrompt.trim());
   const isSection4Valid =
     !handoffEnabled ||
-    (Boolean(handoffConditionPrompt.trim()) &&
-      Boolean(handoffAssigneeId) &&
-      Boolean(handoffMessage.trim()));
+    (handoffConditions.length > 0 &&
+      handoffConditions.every(
+        (c) => Boolean(c.prompt.trim()) && Boolean(c.assigneeId) && Boolean(c.handoffMessage.trim())
+      ));
 
   // Toggle single section open/closed
   const handleToggleSection = (sec: number) => {
     setOpenSection((prev) => (prev === sec ? null : sec));
   };
 
-  // Variable insertion into Agent Prompt textarea
-  const handleInsertAgentVariable = (varName: string) => {
-    const textarea = agentPromptTextareaRef.current;
-    const token = `{{${varName}}}`;
-    if (!textarea) {
-      setAgentPrompt((prev) => (prev ? `${prev} ${token}` : token));
-      setShowAgentVariableDropdown(false);
-      return;
-    }
-    const start = textarea.selectionStart ?? agentPrompt.length;
-    const end = textarea.selectionEnd ?? agentPrompt.length;
-    const nextVal = agentPrompt.substring(0, start) + token + agentPrompt.substring(end);
-    setAgentPrompt(nextVal);
-    setShowAgentVariableDropdown(false);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + token.length, start + token.length);
-    }, 10);
-  };
+  // Variable insertion from Document Template Select Fields Modal
+  const handleInsertModalVariable = (token: string) => {
+    if (!activeVariableTarget) return;
 
-  // Variable insertion into Handoff message textarea
-  const handleInsertHandoffVariable = (varName: string) => {
-    const textarea = handoffMessageTextareaRef.current;
-    const token = `{{${varName}}}`;
-    if (!textarea) {
-      setHandoffMessage((prev) => (prev ? `${prev} ${token}` : token));
-      setShowHandoffVariableDropdown(false);
-      return;
+    if (activeVariableTarget.type === "agentPrompt") {
+      const textarea = agentPromptTextareaRef.current;
+      if (!textarea) {
+        setAgentPrompt((prev) => (prev ? `${prev} ${token}` : token));
+        return;
+      }
+      const start = textarea.selectionStart ?? agentPrompt.length;
+      const end = textarea.selectionEnd ?? agentPrompt.length;
+      const nextVal = agentPrompt.substring(0, start) + token + agentPrompt.substring(end);
+      setAgentPrompt(nextVal);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + token.length, start + token.length);
+      }, 10);
+    } else if (activeVariableTarget.type === "handoffCondition") {
+      const targetId = activeVariableTarget.conditionId;
+      setHandoffConditions((prev) =>
+        prev.map((c) => {
+          if (c.id !== targetId) return c;
+          const textarea = handoffMessageRefs.current[targetId];
+          if (!textarea) {
+            return {
+              ...c,
+              handoffMessage: c.handoffMessage ? `${c.handoffMessage} ${token}` : token,
+            };
+          }
+          const start = textarea.selectionStart ?? c.handoffMessage.length;
+          const end = textarea.selectionEnd ?? c.handoffMessage.length;
+          const nextVal =
+            c.handoffMessage.substring(0, start) + token + c.handoffMessage.substring(end);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + token.length, start + token.length);
+          }, 10);
+          return { ...c, handoffMessage: nextVal };
+        })
+      );
     }
-    const start = textarea.selectionStart ?? handoffMessage.length;
-    const end = textarea.selectionEnd ?? handoffMessage.length;
-    const nextVal = handoffMessage.substring(0, start) + token + handoffMessage.substring(end);
-    setHandoffMessage(nextVal);
-    setShowHandoffVariableDropdown(false);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + token.length, start + token.length);
-    }, 10);
   };
 
   // Save handler with strict validation
@@ -544,52 +556,35 @@ export default function WhatsAppAgentDrawer({
 
     // 4. Hand off validation
     if (handoffEnabled) {
-      if (!handoffConditionPrompt.trim()) {
-        nextErrors.handoffCondition = "Hand off when condition is required.";
-        if (
-          !nextErrors.name &&
-          !nextErrors.templates &&
-          !nextErrors.button &&
-          !nextErrors.intent &&
-          !nextErrors.keywords &&
-          !nextErrors.fallback &&
-          !nextErrors.triggerPrompt &&
-          !nextErrors.agentPrompt
-        ) {
-          setOpenSection(4);
-        }
-      }
-      if (!handoffAssigneeId) {
-        nextErrors.handoffAssignee = "Assignee is required.";
-        if (
-          !nextErrors.name &&
-          !nextErrors.templates &&
-          !nextErrors.button &&
-          !nextErrors.intent &&
-          !nextErrors.keywords &&
-          !nextErrors.fallback &&
-          !nextErrors.triggerPrompt &&
-          !nextErrors.agentPrompt &&
-          !nextErrors.handoffCondition
-        ) {
-          setOpenSection(4);
-        }
-      }
-      if (!handoffMessage.trim()) {
-        nextErrors.handoffMessage = "Hand off message is required.";
-        if (
-          !nextErrors.name &&
-          !nextErrors.templates &&
-          !nextErrors.button &&
-          !nextErrors.intent &&
-          !nextErrors.keywords &&
-          !nextErrors.fallback &&
-          !nextErrors.triggerPrompt &&
-          !nextErrors.agentPrompt &&
-          !nextErrors.handoffCondition &&
-          !nextErrors.handoffAssignee
-        ) {
-          setOpenSection(4);
+      if (handoffConditions.length === 0) {
+        nextErrors.handoff = "At least one handoff condition is required.";
+        if (Object.keys(nextErrors).length === 1) setOpenSection(4);
+      } else {
+        handoffConditions.forEach((c, idx) => {
+          if (!c.prompt.trim()) {
+            nextErrors[`handoff_prompt_${c.id}`] = `Condition ${idx + 1}: Prompt is required.`;
+          }
+          if (!c.assigneeId) {
+            nextErrors[`handoff_assignee_${c.id}`] = `Condition ${idx + 1}: Responsible user is required.`;
+          }
+          if (!c.handoffMessage.trim()) {
+            nextErrors[`handoff_message_${c.id}`] = `Condition ${idx + 1}: Hand off message is required.`;
+          }
+        });
+        if (Object.keys(nextErrors).some((k) => k.startsWith("handoff_"))) {
+          setHandoffConditionsOpen(true);
+          if (
+            !nextErrors.name &&
+            !nextErrors.templates &&
+            !nextErrors.button &&
+            !nextErrors.intent &&
+            !nextErrors.keywords &&
+            !nextErrors.fallback &&
+            !nextErrors.triggerPrompt &&
+            !nextErrors.agentPrompt
+          ) {
+            setOpenSection(4);
+          }
         }
       }
     }
@@ -607,6 +602,14 @@ export default function WhatsAppAgentDrawer({
         setOpenSection(5);
       }
     }
+    if (resolveMode === "inactivity") {
+      if (!resolveAfterHours || resolveAfterHours < 1 || resolveAfterHours > 24) {
+        nextErrors.resolveInactivity = "Inactivity period must be between 1 and 24 hours.";
+        if (Object.keys(nextErrors).length === 1) {
+          setOpenSection(5);
+        }
+      }
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -620,7 +623,10 @@ export default function WhatsAppAgentDrawer({
       return match ? match.name : tid;
     });
 
-    const assignedMember = teamMembers.find((m) => String(m.id) === String(handoffAssigneeId));
+    const primaryCondition = handoffConditions[0];
+    const primaryAssignee = teamMembers.find(
+      (m) => String(m.id) === String(primaryCondition?.assigneeId)
+    );
     const selectedWorkflow = workflows.find((w) => w.id === workflowId);
     const workflow_name = selectedWorkflow ? (selectedWorkflow as any).title || selectedWorkflow.name : undefined;
 
@@ -629,6 +635,7 @@ export default function WhatsAppAgentDrawer({
     const savedRule: WhatsAppAgentRule = {
       id: rule?.id || `wa-rule-${Date.now()}`,
       name: name.trim(),
+      description: description.trim() || undefined,
       is_active: isActive,
       enabled: isActive,
       priority: rule?.priority || rules.length + 1,
@@ -649,10 +656,20 @@ export default function WhatsAppAgentDrawer({
       send_mode: sendMode,
 
       handoff_enabled: handoffEnabled,
-      handoff_condition_prompt: handoffEnabled ? handoffConditionPrompt.trim() : undefined,
-      handoff_assignee_id: handoffEnabled ? handoffAssigneeId : undefined,
-      handoff_assignee_name: handoffEnabled ? assignedMember?.name : undefined,
-      handoff_message: handoffEnabled ? handoffMessage.trim() : undefined,
+      handoff_conditions: handoffEnabled
+        ? handoffConditions.map((c, i) => {
+            const member = teamMembers.find((m) => String(m.id) === String(c.assigneeId));
+            return {
+              ...c,
+              title: c.title || `Condition ${i + 1}`,
+              assigneeName: member?.name || c.assigneeName || "Admin User",
+            };
+          })
+        : undefined,
+      handoff_condition_prompt: handoffEnabled ? primaryCondition?.prompt.trim() : undefined,
+      handoff_assignee_id: handoffEnabled ? primaryCondition?.assigneeId : undefined,
+      handoff_assignee_name: handoffEnabled ? (primaryAssignee?.name || primaryCondition?.assigneeName) : undefined,
+      handoff_message: handoffEnabled ? primaryCondition?.handoffMessage.trim() : undefined,
 
       create_contact_enabled: createContactEnabled,
       contact_category_id: createContactEnabled ? contactCategoryId : undefined,
@@ -661,7 +678,7 @@ export default function WhatsAppAgentDrawer({
       workflow_name,
       resolve_mode: resolveMode,
       resolve_condition_prompt: resolveMode === "condition" ? resolveConditionPrompt.trim() : undefined,
-      resolve_after_hours: resolveMode === "inactivity" ? resolveAfterHours : undefined,
+      resolve_after_hours: resolveMode === "inactivity" ? Math.min(24, Math.max(1, resolveAfterHours)) : undefined,
 
       direction: triggerType === "template_reply" ? "both" : "inbound",
       createdAt: rule?.createdAt || new Date().toISOString().substring(0, 10),
@@ -719,7 +736,7 @@ export default function WhatsAppAgentDrawer({
       }
     >
       <div className="space-y-3.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-        {/* ── SECTION 1: NAME (Agent name only) ── */}
+        {/* ── SECTION 1: NAME & DESCRIPTION ── */}
         <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
@@ -760,6 +777,20 @@ export default function WhatsAppAgentDrawer({
                   }`}
                 />
                 {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+              </div>
+
+              <div>
+                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                  <span>Description</span>
+                  <InfoTip text="Optional description describing the role and purpose of this agent rule." />
+                </label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g. Automatically handles appointment attendance and confirms clinic visit details"
+                  className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none"
+                />
               </div>
             </div>
           )}
@@ -1219,53 +1250,19 @@ export default function WhatsAppAgentDrawer({
                     <InfoTip text="Explain how the conversation should flow: what to say first, what to ask, how to respond to different answers, and when the conversation is done. The agent follows this for the whole conversation." />
                   </label>
 
-                  {/* Insert variable dropdown */}
-                  <div>
-                    <button
-                      ref={agentVariableButtonRef}
-                      type="button"
-                      onClick={toggleAgentVariableDropdown}
-                      className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer"
-                      title="Adds a placeholder filled in with real data when the message is sent."
-                    >
-                      <Sparkles className="w-3 h-3 text-blue-600" />
-                      <span>Insert variable</span>
-                      <ChevronDown className="w-3 h-3 text-slate-400" />
-                    </button>
-
-                    {showAgentVariableDropdown && agentVariablePos && createPortal(
-                      <>
-                        <div
-                          className="fixed inset-0 cursor-default"
-                          style={{ zIndex: 9998 }}
-                          onClick={() => setShowAgentVariableDropdown(false)}
-                        />
-                        <div
-                          className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
-                          style={{
-                            top: agentVariablePos.top,
-                            left: agentVariablePos.left,
-                            width: agentVariablePos.width,
-                            maxHeight: agentVariablePos.maxHeight || 240,
-                            zIndex: 9999,
-                            fontFamily: "Outfit, sans-serif",
-                          }}
-                        >
-                          {DYNAMIC_VARIABLES.map((v) => (
-                            <button
-                              key={v.key}
-                              type="button"
-                              onClick={() => handleInsertAgentVariable(v.key)}
-                              className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center justify-between cursor-pointer transition-colors"
-                            >
-                              <span>{`{{${v.label}}}`}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>,
-                      document.body
-                    )}
-                  </div>
+                  {/* Insert variable button (opens Document Template Select Fields Modal) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveVariableTarget({ type: "agentPrompt" });
+                      setVariableModalOpen(true);
+                    }}
+                    className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Select and insert field placeholder variables"
+                  >
+                    <Sparkles className="w-3 h-3 text-blue-600" />
+                    <span>Insert variable</span>
+                  </button>
                 </div>
 
                 <textarea
@@ -1303,26 +1300,27 @@ export default function WhatsAppAgentDrawer({
                 </label>
               </div>
 
-              {/* Send mode */}
-              <div>
-                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                  <span>Send mode</span>
-                  <InfoTip text="Drafts wait for a team member to approve before anything is sent." />
+              {/* Send automatically toggle switch */}
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>Send automatically</span>
+                  <InfoTip text="When enabled, the agent sends responses automatically. When disabled, replies are saved as drafts for staff approval." />
                 </label>
-                <select
-                  value={sendMode}
-                  onChange={(e) => setSendMode(e.target.value as "auto" | "draft")}
-                  className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
-                >
-                  <option value="auto">Send automatically</option>
-                  <option value="draft">Draft for staff approval</option>
-                </select>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendMode === "auto"}
+                    onChange={(e) => setSendMode(e.target.checked ? "auto" : "draft")}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── SECTION 4: HAND OFF ── */}
+        {/* ── SECTION 4: HAND OFF (Multi-condition support) ── */}
         <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
@@ -1348,7 +1346,7 @@ export default function WhatsAppAgentDrawer({
               <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
                 <label className="flex items-center text-[13px] font-medium text-slate-700 cursor-pointer">
                   <span>Hand off to a team member</span>
-                  <InfoTip text="When the condition below is met, the agent stops replying and assigns the conversation to a team member." />
+                  <InfoTip text="When enabled, conditions below determine when the agent stops replying and assigns the conversation to a team member." />
                 </label>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -1357,12 +1355,13 @@ export default function WhatsAppAgentDrawer({
                     onChange={(e) => {
                       setHandoffEnabled(e.target.checked);
                       if (!e.target.checked) {
-                        setErrors((prev) => ({
-                          ...prev,
-                          handoffCondition: "",
-                          handoffAssignee: "",
-                          handoffMessage: "",
-                        }));
+                        setErrors((prev) => {
+                          const cleaned = { ...prev };
+                          Object.keys(cleaned).forEach((k) => {
+                            if (k.startsWith("handoff_")) delete cleaned[k];
+                          });
+                          return cleaned;
+                        });
                       }
                     }}
                     className="sr-only peer"
@@ -1371,230 +1370,228 @@ export default function WhatsAppAgentDrawer({
                 </label>
               </div>
 
-              {/* Subfields when handoff is enabled */}
+              {/* Multi-condition Container when handoff is enabled */}
               {handoffEnabled && (
-                <div className="space-y-4 pt-1">
-                  {/* Hand off when */}
-                  <div>
-                    <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                      <span>Hand off when</span>
-                      <span className="text-red-500 ml-0.5">*</span>
-                      <InfoTip text="Describe in plain language when the agent should stop and hand over." />
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={handoffConditionPrompt}
-                      onChange={(e) => {
-                        setHandoffConditionPrompt(e.target.value);
-                        if (errors.handoffCondition) {
-                          setErrors((prev) => ({ ...prev, handoffCondition: "" }));
-                        }
-                      }}
-                      placeholder="e.g. Contact is upset, asks for a refund, or raises a medical emergency"
-                      className={`w-full p-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none ${
-                        errors.handoffCondition
-                          ? "border-red-400 bg-red-50/20"
-                          : "border-slate-200 text-slate-900"
-                      }`}
-                    />
-                    {errors.handoffCondition && (
-                      <p className="text-xs text-red-500 mt-1">{errors.handoffCondition}</p>
-                    )}
-                  </div>
-
-                  {/* Assign to (searchable dropdown) */}
-                  <div>
-                    <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                      <span>Assign to</span>
-                      <span className="text-red-500 ml-0.5">*</span>
-                      <InfoTip text="The team member who receives the conversation." />
-                    </label>
-
-                    <button
-                      ref={assigneeButtonRef}
-                      type="button"
-                      onClick={toggleAssigneeDropdown}
-                      className={`w-full h-10 px-3 py-2 rounded-lg border text-sm text-left flex items-center justify-between bg-white cursor-pointer transition-colors ${
-                        errors.handoffAssignee
-                          ? "border-red-400 bg-red-50/20"
-                          : "border-slate-200 hover:border-slate-300"
-                      }`}
-                    >
-                      <span className="truncate">
-                        {handoffAssigneeId ? (
-                          <span className="text-slate-900 font-medium">
-                            {teamMembers.find((m) => String(m.id) === String(handoffAssigneeId))?.name ||
-                              "Selected team member"}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Select team member...</span>
-                        )}
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
-                    </button>
-
-                    {errors.handoffAssignee && (
-                      <p className="text-xs text-red-500 mt-1">{errors.handoffAssignee}</p>
-                    )}
-
-                    {showAssigneeDropdown && assigneePos && createPortal(
-                      <>
-                        <div
-                          className="fixed inset-0 cursor-default"
-                          style={{ zIndex: 9998 }}
-                          onClick={() => setShowAssigneeDropdown(false)}
+                <div className="space-y-3.5 pt-1">
+                  <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/40">
+                    {/* Collapsible header: Condition open / close and + Add condition */}
+                    <div className="flex items-center justify-between p-3 bg-slate-50/90 border-b border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setHandoffConditionsOpen(!handoffConditionsOpen)}
+                        className="flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-blue-600 transition-colors cursor-pointer"
+                      >
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-500 transition-transform ${
+                            handoffConditionsOpen ? "rotate-180" : ""
+                          }`}
                         />
-                        <div
-                          className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
-                          style={{
-                            top: assigneePos.top,
-                            left: assigneePos.left,
-                            width: assigneePos.width,
-                            maxHeight: assigneePos.maxHeight || 260,
-                            zIndex: 9999,
-                            fontFamily: "Outfit, sans-serif",
-                          }}
-                        >
-                          {/* Search box */}
-                          <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50/70 shrink-0">
-                            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <input
-                              type="text"
-                              value={assigneeSearchQuery}
-                              onChange={(e) => setAssigneeSearchQuery(e.target.value)}
-                              placeholder="Search team members..."
-                              className="w-full text-xs bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400"
-                              autoFocus
-                            />
-                          </div>
-
-                          {/* Options list */}
-                          <div className="overflow-y-auto p-1 divide-y divide-slate-50 flex-1">
-                            {teamMembers
-                              .filter(
-                                (m) =>
-                                  m.name.toLowerCase().includes(assigneeSearchQuery.toLowerCase()) ||
-                                  (m.role && m.role.toLowerCase().includes(assigneeSearchQuery.toLowerCase()))
-                              )
-                              .map((member) => {
-                                const isSelected = String(handoffAssigneeId) === String(member.id);
-                                return (
-                                  <button
-                                    key={member.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setHandoffAssigneeId(member.id);
-                                      if (errors.handoffAssignee) {
-                                        setErrors((prev) => ({ ...prev, handoffAssignee: "" }));
-                                      }
-                                      setShowAssigneeDropdown(false);
-                                    }}
-                                    className={`w-full flex items-center justify-between p-2 text-left hover:bg-slate-50 rounded-md cursor-pointer transition-colors ${
-                                      isSelected ? "bg-blue-50/60 font-semibold" : ""
-                                    }`}
-                                  >
-                                    <div className="min-w-0 pr-2">
-                                      <div className="text-xs text-slate-900 truncate font-medium">
-                                        {member.name}
-                                      </div>
-                                      {member.role && (
-                                        <div className="text-[11px] text-slate-400 truncate">
-                                          {member.role}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                                  </button>
-                                );
-                              })}
-
-                            {teamMembers.length === 0 && (
-                              <div className="p-3 text-center text-xs text-slate-400">
-                                No team members found.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>,
-                      document.body
-                    )}
-                  </div>
-
-                  {/* Hand off message */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="flex items-center text-[13px] font-medium text-slate-700">
-                        <span>Hand off message</span>
-                        <span className="text-red-500 ml-0.5">*</span>
-                        <InfoTip text="Sent to the contact when the conversation is handed over." />
-                      </label>
-
-                      {/* Insert variable dropdown */}
-                      <div>
-                        <button
-                          ref={handoffVariableButtonRef}
-                          type="button"
-                          onClick={toggleHandoffVariableDropdown}
-                          className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer"
-                          title="Adds a placeholder filled in with real data when the message is sent."
-                        >
-                          <Sparkles className="w-3 h-3 text-blue-600" />
-                          <span>Insert variable</span>
-                          <ChevronDown className="w-3 h-3 text-slate-400" />
-                        </button>
-
-                        {showHandoffVariableDropdown && handoffVariablePos && createPortal(
-                          <>
-                            <div
-                              className="fixed inset-0 cursor-default"
-                              style={{ zIndex: 9998 }}
-                              onClick={() => setShowHandoffVariableDropdown(false)}
-                            />
-                            <div
-                              className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
-                              style={{
-                                top: handoffVariablePos.top,
-                                left: handoffVariablePos.left,
-                                width: handoffVariablePos.width,
-                                maxHeight: handoffVariablePos.maxHeight || 240,
-                                zIndex: 9999,
-                                fontFamily: "Outfit, sans-serif",
-                              }}
-                            >
-                              {DYNAMIC_VARIABLES.map((v) => (
-                                <button
-                                  key={v.key}
-                                  type="button"
-                                  onClick={() => handleInsertHandoffVariable(v.key)}
-                                  className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center justify-between cursor-pointer transition-colors"
-                                >
-                                  <span>{`{{${v.label}}}`}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </>,
-                          document.body
-                        )}
-                      </div>
+                        <span>Handoff Conditions ({handoffConditions.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newId = `cond-${Date.now()}`;
+                          setHandoffConditions((prev) => [
+                            ...prev,
+                            {
+                              id: newId,
+                              title: `Condition ${prev.length + 1}`,
+                              prompt: "",
+                              assigneeId: teamMembers[0]?.id || "",
+                              assigneeName: teamMembers[0]?.name,
+                              handoffMessage:
+                                "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+                            },
+                          ]);
+                          setHandoffConditionsOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 bg-white border border-blue-200 rounded-md transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add condition</span>
+                      </button>
                     </div>
 
-                    <textarea
-                      ref={handoffMessageTextareaRef}
-                      rows={3}
-                      value={handoffMessage}
-                      onChange={(e) => {
-                        setHandoffMessage(e.target.value);
-                        if (errors.handoffMessage) {
-                          setErrors((prev) => ({ ...prev, handoffMessage: "" }));
-                        }
-                      }}
-                      placeholder="e.g. Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly."
-                      className={`w-full p-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none ${
-                        errors.handoffMessage ? "border-red-400 bg-red-50/20" : "border-slate-200 text-slate-900"
-                      }`}
-                    />
-                    {errors.handoffMessage && (
-                      <p className="text-xs text-red-500 mt-1">{errors.handoffMessage}</p>
+                    {/* Conditions list */}
+                    {handoffConditionsOpen && (
+                      <div className="p-3 space-y-3 bg-white">
+                        {handoffConditions.map((cond, index) => {
+                          const promptErr = errors[`handoff_prompt_${cond.id}`];
+                          const assigneeErr = errors[`handoff_assignee_${cond.id}`];
+                          const messageErr = errors[`handoff_message_${cond.id}`];
+
+                          return (
+                            <div
+                              key={cond.id}
+                              className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/30 space-y-3 relative transition-all"
+                            >
+                              {/* Condition Top Bar */}
+                              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <span className="text-xs font-bold text-slate-800">
+                                  Condition {index + 1}
+                                </span>
+                                {handoffConditions.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setHandoffConditions((prev) =>
+                                        prev.filter((c) => c.id !== cond.id)
+                                      );
+                                    }}
+                                    className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Remove this condition"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* 1. Condition Prompt: Hand off when */}
+                              <div>
+                                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                                  <span>Hand off when</span>
+                                  <span className="text-red-500 ml-0.5">*</span>
+                                  <InfoTip text="Describe in plain language when the agent should trigger hand off for this condition." />
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={cond.prompt}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setHandoffConditions((prev) =>
+                                      prev.map((c) =>
+                                        c.id === cond.id ? { ...c, prompt: val } : c
+                                      )
+                                    );
+                                    if (promptErr) {
+                                      setErrors((prev) => ({
+                                        ...prev,
+                                        [`handoff_prompt_${cond.id}`]: "",
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="e.g. Contact is upset, asks for a refund, or raises a medical emergency"
+                                  className={`w-full p-2.5 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none ${
+                                    promptErr
+                                      ? "border-red-400 bg-red-50/20"
+                                      : "border-slate-200 text-slate-900"
+                                  }`}
+                                />
+                                {promptErr && (
+                                  <p className="text-xs text-red-500 mt-1">{promptErr}</p>
+                                )}
+                              </div>
+
+                              {/* 2. Assign responsible user */}
+                              <div>
+                                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                                  <span>Assign responsible</span>
+                                  <span className="text-red-500 ml-0.5">*</span>
+                                  <InfoTip text="The specific team member assigned when this condition triggers." />
+                                </label>
+                                <select
+                                  value={cond.assigneeId}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const member = teamMembers.find(
+                                      (m) => String(m.id) === String(val)
+                                    );
+                                    setHandoffConditions((prev) =>
+                                      prev.map((c) =>
+                                        c.id === cond.id
+                                          ? {
+                                              ...c,
+                                              assigneeId: val,
+                                              assigneeName: member?.name,
+                                            }
+                                          : c
+                                      )
+                                    );
+                                    if (assigneeErr) {
+                                      setErrors((prev) => ({
+                                        ...prev,
+                                        [`handoff_assignee_${cond.id}`]: "",
+                                      }));
+                                    }
+                                  }}
+                                  className={`w-full h-10 px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors ${
+                                    assigneeErr
+                                      ? "border-red-400 bg-red-50/20"
+                                      : "border-slate-200"
+                                  }`}
+                                >
+                                  <option value="">Select team member...</option>
+                                  {teamMembers.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name} {m.role ? `(${m.role})` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                                {assigneeErr && (
+                                  <p className="text-xs text-red-500 mt-1">{assigneeErr}</p>
+                                )}
+                              </div>
+
+                              {/* 3. Dependent Handoff Message */}
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="flex items-center text-[13px] font-medium text-slate-700">
+                                    <span>Hand off message</span>
+                                    <span className="text-red-500 ml-0.5">*</span>
+                                    <InfoTip text="Sent to the contact when this specific condition triggers handoff." />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveVariableTarget({
+                                        type: "handoffCondition",
+                                        conditionId: cond.id,
+                                      });
+                                      setVariableModalOpen(true);
+                                    }}
+                                    className="h-7 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                    title="Adds a placeholder filled in with real data when the message is sent."
+                                  >
+                                    <Sparkles className="w-3 h-3 text-blue-600" />
+                                    <span>Insert variable</span>
+                                  </button>
+                                </div>
+                                <textarea
+                                  ref={(el) => {
+                                    handoffMessageRefs.current[cond.id] = el;
+                                  }}
+                                  rows={2}
+                                  value={cond.handoffMessage}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setHandoffConditions((prev) =>
+                                      prev.map((c) =>
+                                        c.id === cond.id ? { ...c, handoffMessage: val } : c
+                                      )
+                                    );
+                                    if (messageErr) {
+                                      setErrors((prev) => ({
+                                        ...prev,
+                                        [`handoff_message_${cond.id}`]: "",
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="e.g. Thanks {{contact_name}}, I'm connecting you with our specialist who will reply shortly."
+                                  className={`w-full p-2.5 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none ${
+                                    messageErr
+                                      ? "border-red-400 bg-red-50/20"
+                                      : "border-slate-200 text-slate-900"
+                                  }`}
+                                />
+                                {messageErr && (
+                                  <p className="text-xs text-red-500 mt-1">{messageErr}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1704,7 +1701,7 @@ export default function WhatsAppAgentDrawer({
                 <select
                   value={resolveMode}
                   onChange={(e) => {
-                    const next = e.target.value as "condition" | "inactivity";
+                    const next = e.target.value as "condition" | "inactivity" | "transferred_to_team";
                     setResolveMode(next);
                     if (errors.resolveCondition) {
                       setErrors((prev) => ({ ...prev, resolveCondition: "" }));
@@ -1713,9 +1710,20 @@ export default function WhatsAppAgentDrawer({
                   className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                 >
                   <option value="condition">When my condition is met</option>
+                  <option value="transferred_to_team">If transferred to team</option>
                   <option value="inactivity">After inactivity</option>
                 </select>
               </div>
+
+              {/* If transferred to team info box */}
+              {resolveMode === "transferred_to_team" && (
+                <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <span>
+                    The conversation will be automatically marked as resolved as soon as it is handed off or transferred to a team member.
+                  </span>
+                </div>
+              )}
 
               {/* When my condition is met: Resolve when textarea */}
               {resolveMode === "condition" && (
@@ -1747,30 +1755,84 @@ export default function WhatsAppAgentDrawer({
                 </div>
               )}
 
-              {/* After inactivity: Hours of no reply */}
+              {/* After inactivity: Hours of no reply (maximum 24 hr with custom range) */}
               {resolveMode === "inactivity" && (
-                <div>
-                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                    <span>Hours of no reply</span>
-                    <InfoTip text="Hours of inactivity before marking the conversation resolved." />
-                  </label>
-                  <select
-                    value={resolveAfterHours}
-                    onChange={(e) => setResolveAfterHours(Number(e.target.value))}
-                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
-                  >
-                    <option value={1}>1 hour</option>
-                    <option value={6}>6 hours</option>
-                    <option value={12}>12 hours</option>
-                    <option value={24}>24 hours</option>
-                    <option value={48}>48 hours</option>
-                  </select>
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                      <span>Hours of no reply</span>
+                      <InfoTip text="Hours of inactivity before marking the conversation resolved (maximum 24 hours)." />
+                    </label>
+                    <select
+                      value={isCustomHours ? "custom" : resolveAfterHours}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setIsCustomHours(true);
+                        } else {
+                          setIsCustomHours(false);
+                          setResolveAfterHours(Number(val));
+                        }
+                      }}
+                      className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                    >
+                      <option value={1}>1 hour</option>
+                      <option value={2}>2 hours</option>
+                      <option value={4}>4 hours</option>
+                      <option value={6}>6 hours</option>
+                      <option value={12}>12 hours</option>
+                      <option value={24}>24 hours</option>
+                      <option value="custom">Custom range (up to 24 hr)...</option>
+                    </select>
+                  </div>
+
+                  {isCustomHours && (
+                    <div>
+                      <label className="flex items-center text-[12px] font-medium text-slate-600 mb-1">
+                        <span>Custom duration (1 to 24 hours)</span>
+                        <InfoTip text="Set a custom inactivity window up to a maximum of 24 hours." />
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          max={24}
+                          value={resolveAfterHours}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            const clamped = Math.min(24, Math.max(1, val || 1));
+                            setResolveAfterHours(clamped);
+                          }}
+                          className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                          placeholder="e.g. 8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">
+                          hours (max 24)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Maximum inactivity period allowed is 24 hours.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Document Template Field Variable Picker Modal */}
+      <DocumentSelectFieldsModal
+        isOpen={variableModalOpen}
+        onClose={() => {
+          setVariableModalOpen(false);
+          setActiveVariableTarget(null);
+        }}
+        onInsert={handleInsertModalVariable}
+        tokenFormat="double_curly"
+        zIndex={10050}
+      />
     </DrawerShell>
   );
 }

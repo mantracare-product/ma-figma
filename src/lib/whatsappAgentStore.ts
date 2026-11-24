@@ -21,11 +21,22 @@ export type ResolutionCriteriaType =
   | "customer_confirmation"
   | "inactivity_timeout"
   | "prompt_condition"
+  | "transferred_to_team"
   | "manual";
+
+export interface HandoffCondition {
+  id: string;
+  title?: string;
+  prompt: string;
+  assigneeId: string | number;
+  assigneeName?: string;
+  handoffMessage: string;
+}
 
 export interface WhatsAppAgentRule {
   id: string;
   name: string;
+  description?: string;
   is_active: boolean; // Controlled only from list Status toggle. Default true on create.
   enabled: boolean; // Alias of is_active for backward compatibility
   priority: number; // 1-based order; 1 wins first; fallback is lowest & pinned
@@ -50,6 +61,7 @@ export interface WhatsAppAgentRule {
 
   // Step 4: Hand off
   handoff_enabled: boolean; // default: true
+  handoff_conditions?: HandoffCondition[];
   handoff_condition_prompt?: string;
   handoff_assignee_id?: string | number;
   handoff_assignee_name?: string;
@@ -61,9 +73,9 @@ export interface WhatsAppAgentRule {
   contact_category_name?: string;
   workflow_id?: string;
   workflow_name?: string;
-  resolve_mode: "condition" | "inactivity"; // Only condition or inactivity allowed
+  resolve_mode: "condition" | "inactivity" | "transferred_to_team";
   resolve_condition_prompt?: string;
-  resolve_after_hours?: number; // 1, 6, 12, 24, 48
+  resolve_after_hours?: number; // 1 to 24 max
 
   // Derived direction: "both" for template_reply, "inbound" for new_message
   direction: RuleDirection;
@@ -132,6 +144,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   {
     id: "wa-rule-1",
     name: "Appointment Attendance Confirmation",
+    description: "Confirms attendance, shares clinic directions, and checks patient preparation before arrival.",
     is_active: true,
     enabled: true,
     priority: 1,
@@ -145,6 +158,16 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     use_kb: false,
     send_mode: "auto",
     handoff_enabled: true,
+    handoff_conditions: [
+      {
+        id: "cond-1-1",
+        title: "Medical Emergency or Complaints",
+        prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
+        assigneeId: 2,
+        assigneeName: "Akshita Sharma",
+        handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our care team who will reply shortly.",
+      },
+    ],
     handoff_condition_prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
     handoff_assignee_id: 2,
     handoff_assignee_name: "Akshita Sharma",
@@ -161,6 +184,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   {
     id: "wa-rule-2",
     name: "Reschedule Request & Slot Reallocation",
+    description: "Handles rescheduling inquiries, checks provider calendars, and proposes alternative booking slots.",
     is_active: true,
     enabled: true,
     priority: 2,
@@ -174,6 +198,16 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     use_kb: false,
     send_mode: "auto",
     handoff_enabled: true,
+    handoff_conditions: [
+      {
+        id: "cond-2-1",
+        title: "Unavailable Provider or Special Request",
+        prompt: "Contact requests a provider who is unavailable or has complex scheduling requirements",
+        assigneeId: 1,
+        assigneeName: "Admin User",
+        handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our scheduling team to finalize your visit.",
+      },
+    ],
     handoff_condition_prompt: "Contact requests a provider who is unavailable or has complex scheduling requirements",
     handoff_assignee_id: 1,
     handoff_assignee_name: "Admin User",
@@ -190,6 +224,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   {
     id: "wa-rule-3",
     name: "Booking Follow-up & Intake Lead Capture",
+    description: "Sends digital intake forms, collects pre-visit questionnaires, and answers intake questions.",
     is_active: true,
     enabled: true,
     priority: 3,
@@ -204,6 +239,16 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     use_kb: false,
     send_mode: "auto",
     handoff_enabled: true,
+    handoff_conditions: [
+      {
+        id: "cond-3-1",
+        title: "Intake Error or Form Questions",
+        prompt: "Contact is unable to access forms or encounters an error",
+        assigneeId: 4,
+        assigneeName: "Charu Arora",
+        handoffMessage: "Thanks {{contact_name}}, our clinical coordinator will assist you with your intake forms directly.",
+      },
+    ],
     handoff_condition_prompt: "Contact is unable to access forms or encounters an error",
     handoff_assignee_id: 4,
     handoff_assignee_name: "Charu Arora",
@@ -220,6 +265,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   {
     id: "wa-rule-4",
     name: "General Template Reply Fallback",
+    description: "Fallback handler when contact messages do not match specific button clicks or intents.",
     is_active: true,
     enabled: true,
     priority: 4,
@@ -232,6 +278,16 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     use_kb: true,
     send_mode: "auto",
     handoff_enabled: true,
+    handoff_conditions: [
+      {
+        id: "cond-4-1",
+        title: "Urgent Inquiry Fallback",
+        prompt: "Contact is upset, asks for refund, or has an urgent inquiry",
+        assigneeId: 1,
+        assigneeName: "Admin User",
+        handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+      },
+    ],
     handoff_condition_prompt: "Contact is upset, asks for refund, or has an urgent inquiry",
     handoff_assignee_id: 1,
     handoff_assignee_name: "Admin User",
@@ -246,6 +302,7 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   {
     id: "wa-rule-5",
     name: "Inbound Inquiries & Appointment Booking",
+    description: "Direct customer greeting, services overview, knowledge base queries, and triage for incoming messages.",
     is_active: true,
     enabled: true,
     priority: 5,
@@ -257,6 +314,16 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
     use_kb: true,
     send_mode: "auto",
     handoff_enabled: true,
+    handoff_conditions: [
+      {
+        id: "cond-5-1",
+        title: "Clinical Symptoms or Emergency",
+        prompt: "Contact reports urgent symptoms or asks to speak with a physician directly",
+        assigneeId: 2,
+        assigneeName: "Akshita Sharma",
+        handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our clinical team immediately.",
+      },
+    ],
     handoff_condition_prompt: "Contact reports urgent symptoms or asks to speak with a physician directly",
     handoff_assignee_id: 2,
     handoff_assignee_name: "Akshita Sharma",
@@ -337,21 +404,49 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
   const send_mode: "auto" | "draft" =
     raw.send_mode === "draft" || raw.responseType === "ai_draft_only" ? "draft" : "auto";
 
-  // Hand off migration
+  // Hand off migration & multi-conditions support
   const handoff_enabled =
     raw.handoff_enabled !== undefined
       ? Boolean(raw.handoff_enabled)
       : raw.human_handoff !== undefined
       ? Boolean(raw.human_handoff)
       : true;
-  const handoff_condition_prompt =
-    raw.handoff_condition_prompt ||
-    "Contact is upset, asks for a refund, or raises a medical emergency";
-  const handoff_assignee_id = raw.handoff_assignee_id || 1;
-  const handoff_assignee_name = raw.handoff_assignee_name || "Admin User";
-  const handoff_message =
-    raw.handoff_message ||
-    "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.";
+
+  let handoff_conditions: HandoffCondition[] = [];
+  if (Array.isArray(raw.handoff_conditions) && raw.handoff_conditions.length > 0) {
+    handoff_conditions = raw.handoff_conditions.map((c: any, cIdx: number) => ({
+      id: c.id || `cond-${cIdx + 1}`,
+      title: c.title || `Condition ${cIdx + 1}`,
+      prompt: c.prompt || c.conditionPrompt || "",
+      assigneeId: c.assigneeId || c.handoff_assignee_id || 1,
+      assigneeName: c.assigneeName || c.handoff_assignee_name || "Admin User",
+      handoffMessage:
+        c.handoffMessage ||
+        c.handoff_message ||
+        "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+    }));
+  } else {
+    handoff_conditions = [
+      {
+        id: "cond-1",
+        title: "Condition 1",
+        prompt:
+          raw.handoff_condition_prompt ||
+          "Contact is upset, asks for a refund, or raises a medical emergency",
+        assigneeId: raw.handoff_assignee_id || 1,
+        assigneeName: raw.handoff_assignee_name || "Admin User",
+        handoffMessage:
+          raw.handoff_message ||
+          "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+      },
+    ];
+  }
+
+  const primaryCondition = handoff_conditions[0];
+  const handoff_condition_prompt = primaryCondition?.prompt || "";
+  const handoff_assignee_id = primaryCondition?.assigneeId || 1;
+  const handoff_assignee_name = primaryCondition?.assigneeName || "Admin User";
+  const handoff_message = primaryCondition?.handoffMessage || "";
 
   // Create contact migration
   const create_contact_enabled =
@@ -364,12 +459,14 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
     raw.contact_category_name || raw.crm_create_as || raw.entityType || "Patient";
 
   // Resolve mode migration:
-  // Existing agents with resolve_mode "never" or "after_reply" are set to "inactivity" with 24 hours.
-  let resolve_mode: "condition" | "inactivity" = "condition";
+  // "transferred_to_team" | "condition" | "inactivity" (capped at 24 hours max)
+  let resolve_mode: "condition" | "inactivity" | "transferred_to_team" = "condition";
   let resolve_condition_prompt = raw.resolve_condition_prompt || "";
-  let resolve_after_hours = raw.resolve_after_hours || raw.resolutionTimeoutHours || 24;
+  let resolve_after_hours = Math.min(24, Math.max(1, raw.resolve_after_hours || raw.resolutionTimeoutHours || 24));
 
-  if (
+  if (raw.resolve_mode === "transferred_to_team" || raw.resolutionCriteria === "transferred_to_team") {
+    resolve_mode = "transferred_to_team";
+  } else if (
     raw.resolve_mode === "never" ||
     raw.resolve_mode === "after_reply" ||
     raw.resolutionCriteria === "immediate"
@@ -382,7 +479,7 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
     raw.resolutionCriteria === "inactivity_timeout"
   ) {
     resolve_mode = "inactivity";
-    resolve_after_hours = raw.resolve_after_hours || 24;
+    resolve_after_hours = Math.min(24, Math.max(1, raw.resolve_after_hours || 24));
   } else if (
     raw.resolve_mode === "condition" ||
     raw.resolve_mode === "customer_confirms" ||
@@ -409,6 +506,7 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
   return {
     id: raw.id || `wa-rule-${Date.now()}-${index}`,
     name: raw.name || "Untitled Agent Rule",
+    description: raw.description || undefined,
     is_active,
     enabled: is_active,
     priority: typeof raw.priority === "number" ? raw.priority : index + 1,
@@ -429,6 +527,7 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
     send_mode,
 
     handoff_enabled,
+    handoff_conditions,
     handoff_condition_prompt,
     handoff_assignee_id,
     handoff_assignee_name,
