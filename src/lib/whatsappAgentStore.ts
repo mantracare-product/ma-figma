@@ -42,6 +42,7 @@ export interface HandoffCondition {
   id: string;
   title?: string;
   prompt: string;
+  assigneeLevel?: "user" | "department"; // Level toggle: assign at user level or department level
   assigneeId: string | number; // Primary assignee (e.g. 1st in sequence) maintained for backward compatibility
   assigneeName?: string;
   assignees?: HandoffAssignee[]; // Ordered sequence of responsible users and/or departments
@@ -474,10 +475,13 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
           },
         ];
       }
+      const assigneeLevel: "user" | "department" =
+        c.assigneeLevel || (assignees[0]?.type === "department" ? "department" : "user");
       return {
         id: c.id || `cond-${cIdx + 1}`,
         title: c.title || `Condition ${cIdx + 1}`,
         prompt: c.prompt || c.conditionPrompt || "",
+        assigneeLevel,
         assigneeId: assignees[0]?.id || c.assigneeId || c.handoff_assignee_id || 1,
         assigneeName: assignees[0]?.name || c.assigneeName || c.handoff_assignee_name || "Admin User",
         assignees,
@@ -497,6 +501,7 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
         prompt:
           raw.handoff_condition_prompt ||
           "Contact is upset, asks for a refund, or raises a medical emergency",
+        assigneeLevel: "user",
         assigneeId: defaultAssigneeId,
         assigneeName: defaultAssigneeName,
         assignees: [

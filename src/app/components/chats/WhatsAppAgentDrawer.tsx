@@ -181,6 +181,7 @@ export default function WhatsAppAgentDrawer({
       id: "cond-1",
       title: "Condition 1",
       prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
+      assigneeLevel: "user",
       assigneeId: teamMembers[0]?.id || 1,
       assigneeName: teamMembers[0]?.name || "Admin User",
       assignees: teamMembers[0]
@@ -198,55 +199,94 @@ export default function WhatsAppAgentDrawer({
   ]);
   const handoffMessageRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
+  // Multi-select Assignee Dropdown State (per condition)
+  const [openAssigneeDropdownId, setOpenAssigneeDropdownId] = useState<string | null>(null);
+  const [assigneeSearchQuery, setAssigneeSearchQuery] = useState("");
+  const [assigneeDropdownPos, setAssigneeDropdownPos] = useState<DropdownPos | null>(null);
+  const assigneeButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
   /**
-   * Helper: Appends a team member or department to a handoff condition's escalation sequence.
-   * Format: "dept:<id>" or "user:<id>"
+   * Helper: Switches a condition's assignment level between "user" and "department".
    */
-  const handleAddAssignee = (condId: string, val: string) => {
-    const [type, id] = val.split(":");
-    let newAssignee: HandoffAssignee | null = null;
-
-    if (type === "dept") {
-      const dept = departments.find((d) => String(d.id) === String(id));
-      if (dept) {
-        newAssignee = {
-          id: dept.id,
-          type: "department",
-          name: dept.name,
-          roleOrDept: "Department",
-        };
-      }
-    } else if (type === "user") {
-      const member = teamMembers.find((m) => String(m.id) === String(id));
-      if (member) {
-        newAssignee = {
-          id: member.id,
-          type: "user",
-          name: member.name,
-          roleOrDept: member.role || member.department || "Team Member",
-        };
-      }
-    }
-
-    if (!newAssignee) return;
-
+  const handleSetAssigneeLevel = (condId: string, level: "user" | "department") => {
     setHandoffConditions((prev) =>
       prev.map((c) => {
         if (c.id !== condId) return c;
-        const currentAssignees = c.assignees || [];
-        const alreadyExists = currentAssignees.some(
-          (a) => String(a.id) === String(newAssignee!.id) && a.type === newAssignee!.type
-        );
-        if (alreadyExists) {
-          toast.info(`"${newAssignee!.name}" is already in the sequence`);
-          return c;
+        const currentLevel = c.assigneeLevel || (c.assignees?.[0]?.type === "department" ? "department" : "user");
+        if (currentLevel === level) return c;
+
+        // Keep items matching the new level if previously selected, otherwise pick first available default
+        const existingOfLevel = (c.assignees || []).filter((a) => a.type === level);
+        let newAssignees: HandoffAssignee[] = existingOfLevel;
+
+        if (newAssignees.length === 0) {
+          if (level === "user" && teamMembers[0]) {
+            newAssignees = [
+              {
+                id: teamMembers[0].id,
+                type: "user",
+                name: teamMembers[0].name,
+                roleOrDept: teamMembers[0].role || teamMembers[0].department || "Team Member",
+              },
+            ];
+          } else if (level === "department" && departments[0]) {
+            newAssignees = [
+              {
+                id: departments[0].id,
+                type: "department",
+                name: departments[0].name,
+                roleOrDept: "Department",
+              },
+            ];
+          }
         }
-        const updated = [...currentAssignees, newAssignee!];
+
         return {
           ...c,
-          assignees: updated,
-          assigneeId: updated[0]?.id || "",
-          assigneeName: updated[0]?.name || "",
+          assigneeLevel: level,
+          assignees: newAssignees,
+          assigneeId: newAssignees[0]?.id || "",
+          assigneeName: newAssignees[0]?.name || "",
+        };
+      })
+    );
+
+    setErrors((prev) => ({
+      ...prev,
+      [`handoff_assignee_${condId}`]: "",
+    }));
+  };
+
+  /**
+   * Helper: Toggles selection of a team member or department inside the multi-select dropdown.
+   * If not selected, appends to the escalation sequence. If selected, removes from sequence.
+   */
+  const handleToggleAssigneeItem = (
+    condId: string,
+    item: { id: string | number; type: "user" | "department"; name: string; roleOrDept?: string }
+  ) => {
+    setHandoffConditions((prev) =>
+      prev.map((c) => {
+        if (c.id !== condId) return c;
+        const current = c.assignees || [];
+        const existsIndex = current.findIndex(
+          (a) => String(a.id) === String(item.id) && a.type === item.type
+        );
+
+        let nextAssignees: HandoffAssignee[];
+        if (existsIndex >= 0) {
+          // Uncheck / Remove
+          nextAssignees = current.filter((_, idx) => idx !== existsIndex);
+        } else {
+          // Check / Append to sequence
+          nextAssignees = [...current, item];
+        }
+
+        return {
+          ...c,
+          assignees: nextAssignees,
+          assigneeId: nextAssignees[0]?.id || "",
+          assigneeName: nextAssignees[0]?.name || "",
         };
       })
     );
@@ -282,21 +322,19 @@ export default function WhatsAppAgentDrawer({
   };
 
   /**
-   * Helper: Removes an assignee from the condition's escalation sequence.
+   * Helper: Toggles the Assignee multi-select dropdown for a specific condition.
    */
-  const handleRemoveAssignee = (condId: string, removeIndex: number) => {
-    setHandoffConditions((prev) =>
-      prev.map((c) => {
-        if (c.id !== condId) return c;
-        const list = (c.assignees || []).filter((_, i) => i !== removeIndex);
-        return {
-          ...c,
-          assignees: list,
-          assigneeId: list[0]?.id || "",
-          assigneeName: list[0]?.name || "",
-        };
-      })
-    );
+  const toggleAssigneeDropdown = (condId: string) => {
+    if (openAssigneeDropdownId === condId) {
+      setOpenAssigneeDropdownId(null);
+    } else {
+      closeAllDropdowns();
+      const btn = assigneeButtonRefs.current[condId];
+      const pos = calculateDropdownPos(btn, { minWidth: 320, estimatedHeight: 320 });
+      setAssigneeDropdownPos(pos);
+      setOpenAssigneeDropdownId(condId);
+      setAssigneeSearchQuery("");
+    }
   };
 
   // ── Section 5: After replying (Advanced) ──
@@ -354,6 +392,7 @@ export default function WhatsAppAgentDrawer({
   const closeAllDropdowns = () => {
     setShowTemplateDropdown(false);
     setShowButtonDropdown(false);
+    setOpenAssigneeDropdownId(null);
   };
 
   const toggleTemplateDropdown = () => {
@@ -1781,140 +1820,104 @@ export default function WhatsAppAgentDrawer({
                                 )}
                               </div>
 
-                              {/* 2. Assign responsible (Multi-select, Departments & Escalation Sequencing) */}
+                              {/* 2. Assign responsible (Toggle: User level vs Department level + Multi-select Dropdown) */}
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
                                   <label className="flex items-center text-[13px] font-medium text-slate-700">
                                     <span>Assign responsible</span>
                                     <span className="text-red-500 ml-0.5">*</span>
-                                    <InfoTip text="Assign team members or entire departments to handle this handoff. Sequence the order (1st, 2nd, 3rd) for escalation routing." />
+                                    <InfoTip text="Assign responsible team members or departments to handle this handoff. Select multiple in priority escalation order." />
                                   </label>
-                                  {cond.assignees && cond.assignees.length > 0 && (
-                                    <span className="text-xs text-slate-500 font-medium">
-                                      {cond.assignees.length} assigned &bull; Sequenced order
-                                    </span>
-                                  )}
+
+                                  {/* Segmented Toggle: User Level vs Department Level */}
+                                  <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetAssigneeLevel(cond.id, "user")}
+                                      className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                                        (cond.assigneeLevel || "user") === "user"
+                                          ? "bg-white text-blue-700 shadow-2xs"
+                                          : "text-slate-600 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      <User className="w-3 h-3" />
+                                      <span>User level</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetAssigneeLevel(cond.id, "department")}
+                                      className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                                        (cond.assigneeLevel || "user") === "department"
+                                          ? "bg-white text-purple-700 shadow-2xs"
+                                          : "text-slate-600 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      <Building2 className="w-3 h-3" />
+                                      <span>Department level</span>
+                                    </button>
+                                  </div>
                                 </div>
 
-                                {/* Sequenced List of Assignees */}
-                                {cond.assignees && cond.assignees.length > 0 ? (
-                                  <div className="space-y-1.5 mb-2.5">
-                                    {cond.assignees.map((assignee, seqIdx) => {
-                                      const isFirst = seqIdx === 0;
-                                      const isLast = seqIdx === cond.assignees!.length - 1;
-                                      const isDept = assignee.type === "department";
+                                {/* Multi-select Dropdown Trigger Button */}
+                                {(() => {
+                                  const currentLevel = cond.assigneeLevel || "user";
+                                  const selectedAssignees = (cond.assignees || []).filter(
+                                    (a) => a.type === currentLevel
+                                  );
 
-                                      return (
-                                        <div
-                                          key={`${assignee.type}-${assignee.id}-${seqIdx}`}
-                                          className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors text-sm"
-                                        >
-                                          {/* Left: Sequence index badge & identity */}
-                                          <div className="flex items-center gap-2.5 min-w-0">
-                                            <span
-                                              className="w-5 h-5 rounded-full bg-white border border-slate-300 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0 shadow-2xs"
-                                              title={`Escalation Tier #${seqIdx + 1}`}
-                                            >
-                                              {seqIdx + 1}
-                                            </span>
-                                            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                                              {isDept ? (
-                                                <Building2 className="w-3.5 h-3.5 text-purple-600" />
-                                              ) : (
-                                                <User className="w-3.5 h-3.5 text-blue-600" />
-                                              )}
-                                            </div>
-                                            <div className="min-w-0 flex items-center gap-2">
-                                              <span className="font-medium text-slate-900 truncate text-xs sm:text-sm">
-                                                {assignee.name}
-                                              </span>
-                                              <span
-                                                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
-                                                  isDept
-                                                    ? "bg-purple-50 text-purple-700 border-purple-200"
-                                                    : "bg-blue-50 text-blue-700 border-blue-200"
-                                                }`}
-                                              >
-                                                {isDept ? "Department" : assignee.roleOrDept || "Member"}
-                                              </span>
-                                            </div>
-                                          </div>
+                                  return (
+                                    <button
+                                      ref={(el) => {
+                                        assigneeButtonRefs.current[cond.id] = el;
+                                      }}
+                                      type="button"
+                                      onClick={() => toggleAssigneeDropdown(cond.id)}
+                                      className={`w-full h-10 px-3 py-2 rounded-lg border text-sm text-left flex items-center justify-between bg-white cursor-pointer transition-colors ${
+                                        assigneeErr
+                                          ? "border-red-400 bg-red-50/20"
+                                          : "border-slate-200 hover:border-slate-300"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 truncate">
+                                        {currentLevel === "user" ? (
+                                          <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                        ) : (
+                                          <Building2 className="w-4 h-4 text-purple-500 shrink-0" />
+                                        )}
+                                        {selectedAssignees.length === 0 ? (
+                                          <span className="text-slate-400">
+                                            {currentLevel === "user"
+                                              ? "Select team members..."
+                                              : "Select departments..."}
+                                          </span>
+                                        ) : selectedAssignees.length === 1 ? (
+                                          <span className="text-slate-900 font-medium truncate">
+                                            {selectedAssignees[0].name}
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-900 font-medium truncate">
+                                            {selectedAssignees
+                                              .map((a, i) => `${i + 1}. ${a.name}`)
+                                              .join("  →  ")}
+                                          </span>
+                                        )}
+                                      </div>
 
-                                          {/* Right: Sequencing controls (Move up, Move down, Remove) */}
-                                          <div className="flex items-center gap-1 shrink-0 ml-2">
-                                            <button
-                                              type="button"
-                                              disabled={isFirst}
-                                              onClick={() => handleMoveAssignee(cond.id, seqIdx, "up")}
-                                              className={`p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 transition-colors ${
-                                                isFirst ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
-                                              }`}
-                                              title="Move up in sequence"
-                                            >
-                                              <ChevronUp className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={isLast}
-                                              onClick={() => handleMoveAssignee(cond.id, seqIdx, "down")}
-                                              className={`p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 transition-colors ${
-                                                isLast ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
-                                              }`}
-                                              title="Move down in sequence"
-                                            >
-                                              <ChevronDown className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleRemoveAssignee(cond.id, seqIdx)}
-                                              className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer ml-0.5"
-                                              title="Remove from assignees"
-                                            >
-                                              <X className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <div className="p-3 mb-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 text-center text-xs text-slate-500">
-                                    No responsible person or department assigned yet. Add one below.
-                                  </div>
-                                )}
-
-                                {/* Add Assignee Dropdown */}
-                                <div className="relative">
-                                  <select
-                                    value=""
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (!val) return;
-                                      handleAddAssignee(cond.id, val);
-                                    }}
-                                    className={`w-full h-10 px-3 py-2 text-sm rounded-lg border bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors ${
-                                      assigneeErr
-                                        ? "border-red-400 bg-red-50/20"
-                                        : "border-slate-200"
-                                    }`}
-                                  >
-                                    <option value="">+ Add team member or department to sequence...</option>
-                                    <optgroup label="── Departments ──">
-                                      {departments.map((d) => (
-                                        <option key={`dept-${d.id}`} value={`dept:${d.id}`}>
-                                          🏢 {d.name} (Department)
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                    <optgroup label="── Team Members ──">
-                                      {teamMembers.map((m) => (
-                                        <option key={`user-${m.id}`} value={`user:${m.id}`}>
-                                          👤 {m.name} {m.role ? `(${m.role})` : ""}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  </select>
-                                </div>
+                                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                        {selectedAssignees.length > 1 && (
+                                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                                            {selectedAssignees.length} in sequence
+                                          </span>
+                                        )}
+                                        <ChevronDown
+                                          className={`w-4 h-4 text-slate-400 transition-transform ${
+                                            openAssigneeDropdownId === cond.id ? "rotate-180" : ""
+                                          }`}
+                                        />
+                                      </div>
+                                    </button>
+                                  );
+                                })()}
                                 {assigneeErr && (
                                   <p className="text-xs text-red-500 mt-1">{assigneeErr}</p>
                                 )}
@@ -2208,6 +2211,237 @@ export default function WhatsAppAgentDrawer({
           )}
         </div>
       </div>
+
+      {/* Searchable Multi-Select Assignee Dropdown Popover Portaled to Body */}
+      {openAssigneeDropdownId && assigneeDropdownPos && createPortal(
+        (() => {
+          const activeCond = handoffConditions.find((c) => c.id === openAssigneeDropdownId);
+          if (!activeCond) return null;
+
+          const currentLevel = activeCond.assigneeLevel || "user";
+          const selectedAssignees = (activeCond.assignees || []).filter(
+            (a) => a.type === currentLevel
+          );
+
+          // List of available candidates based on level
+          const candidates = currentLevel === "user" ? teamMembers : departments;
+          const filteredCandidates = candidates.filter((item) => {
+            const q = assigneeSearchQuery.trim().toLowerCase();
+            if (!q) return true;
+            const matchName = item.name.toLowerCase().includes(q);
+            const matchRole = (item as any).role?.toLowerCase().includes(q);
+            const matchDept = (item as any).department?.toLowerCase().includes(q);
+            const matchDesc = (item as any).description?.toLowerCase().includes(q);
+            return matchName || matchRole || matchDept || matchDesc;
+          });
+
+          return (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 cursor-default"
+                style={{ zIndex: 9998 }}
+                onClick={() => setOpenAssigneeDropdownId(null)}
+              />
+
+              {/* Popover Card */}
+              <div
+                className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
+                style={{
+                  top: assigneeDropdownPos.top,
+                  left: assigneeDropdownPos.left,
+                  width: assigneeDropdownPos.width,
+                  maxHeight: assigneeDropdownPos.maxHeight || 340,
+                  zIndex: 9999,
+                  fontFamily: "Outfit, sans-serif",
+                }}
+              >
+                {/* Search Box */}
+                <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50/70 shrink-0">
+                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={assigneeSearchQuery}
+                    onChange={(e) => setAssigneeSearchQuery(e.target.value)}
+                    placeholder={
+                      currentLevel === "user"
+                        ? "Search team members..."
+                        : "Search departments..."
+                    }
+                    className="w-full text-xs bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400"
+                    autoFocus
+                  />
+                  {assigneeSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setAssigneeSearchQuery("")}
+                      className="text-slate-400 hover:text-slate-600 text-xs px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Escalation Sequence Reordering Header (when 2 or more selected) */}
+                {selectedAssignees.length > 1 && (
+                  <div className="px-2.5 py-1.5 bg-blue-50/60 border-b border-blue-100 shrink-0 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-blue-900 mb-1">
+                      <span>Escalation Order ({selectedAssignees.length})</span>
+                      <span className="text-[10px] text-blue-600 font-normal">Reorder sequence:</span>
+                    </div>
+                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                      {selectedAssignees.map((assignee, seqIdx) => (
+                        <div
+                          key={`seq-pop-${assignee.type}-${assignee.id}`}
+                          className="flex items-center justify-between px-2 py-0.5 bg-white rounded border border-blue-200 text-xs"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                              {seqIdx + 1}
+                            </span>
+                            <span className="truncate font-medium text-slate-800 text-[11px]">
+                              {assignee.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                            <button
+                              type="button"
+                              disabled={seqIdx === 0}
+                              onClick={() => handleMoveAssignee(activeCond.id, seqIdx, "up")}
+                              className={`p-0.5 rounded hover:bg-slate-100 ${
+                                seqIdx === 0
+                                  ? "opacity-30 cursor-not-allowed"
+                                  : "cursor-pointer text-slate-600"
+                              }`}
+                              title="Move up in sequence"
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={seqIdx === selectedAssignees.length - 1}
+                              onClick={() => handleMoveAssignee(activeCond.id, seqIdx, "down")}
+                              className={`p-0.5 rounded hover:bg-slate-100 ${
+                                seqIdx === selectedAssignees.length - 1
+                                  ? "opacity-30 cursor-not-allowed"
+                                  : "cursor-pointer text-slate-600"
+                              }`}
+                              title="Move down in sequence"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Candidate Multi-Select Options List with Checkboxes */}
+                <div className="overflow-y-auto p-1 divide-y divide-slate-50 flex-1">
+                  {filteredCandidates.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400">
+                      No {currentLevel === "user" ? "team members" : "departments"} found.
+                    </div>
+                  ) : (
+                    filteredCandidates.map((item) => {
+                      const isSelected = selectedAssignees.some(
+                        (a) => String(a.id) === String(item.id) && a.type === currentLevel
+                      );
+                      const seqIndex =
+                        selectedAssignees.findIndex(
+                          (a) => String(a.id) === String(item.id) && a.type === currentLevel
+                        ) + 1;
+
+                      return (
+                        <button
+                          key={`${currentLevel}-${item.id}`}
+                          type="button"
+                          onClick={() =>
+                            handleToggleAssigneeItem(activeCond.id, {
+                              id: item.id,
+                              type: currentLevel,
+                              name: item.name,
+                              roleOrDept:
+                                currentLevel === "user"
+                                  ? (item as any).role || (item as any).department || "Team Member"
+                                  : "Department",
+                            })
+                          }
+                          className={`w-full px-2.5 py-2 text-left text-xs flex items-center justify-between rounded hover:bg-slate-50 transition-colors cursor-pointer ${
+                            isSelected ? "bg-blue-50/40 text-blue-900 font-medium" : "text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {/* Checkbox */}
+                            <div
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                isSelected
+                                  ? "bg-blue-600 border-blue-600 text-white"
+                                  : "border-slate-300 bg-white"
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+
+                            {/* Icon */}
+                            {currentLevel === "user" ? (
+                              <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            ) : (
+                              <Building2 className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                            )}
+
+                            {/* Name & Role */}
+                            <div className="truncate">
+                              <span className="truncate">{item.name}</span>
+                              {currentLevel === "user" && (item as any).role && (
+                                <span className="text-[11px] text-slate-400 font-normal ml-1.5">
+                                  ({(item as any).role})
+                                </span>
+                              )}
+                              {currentLevel === "department" && (item as any).description && (
+                                <span className="text-[11px] text-slate-400 font-normal ml-1.5">
+                                  — {(item as any).description}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Sequence badge */}
+                          {isSelected && (
+                            <span
+                              className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0 ml-2"
+                              title={`Escalation Order #${seqIndex}`}
+                            >
+                              #{seqIndex}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Footer Bar */}
+                <div className="p-2 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between text-xs shrink-0">
+                  <span className="text-[11px] text-slate-500">
+                    {selectedAssignees.length}{" "}
+                    {currentLevel === "user" ? "member(s)" : "department(s)"} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenAssigneeDropdownId(null)}
+                    className="px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </>
+          );
+        })(),
+        document.body
+      )}
 
       {/* Document Template Field Variable Picker Modal */}
       <DocumentSelectFieldsModal
