@@ -3230,7 +3230,7 @@ export function AdminFieldDrawer({
                   })}
                 </div>
 
-                {/* Add Placeholder / Value Buttons */}
+                {/* Add Item Button */}
                 {!isReadOnly && (
                   <div className="flex items-center gap-2 pt-1">
                     <button
@@ -3249,32 +3249,10 @@ export function AdminFieldDrawer({
                           formulaTemplate: computeTemplateFromStringItems(updated),
                         }));
                       }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-blue-600 transition-colors cursor-pointer shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-blue-600 transition-colors cursor-pointer shadow-2xs"
                     >
                       <Plus className="w-3.5 h-3.5 text-blue-500" />
-                      <span>Add Placeholder</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newItem: StringFormulaItem = {
-                          id: `s-${Date.now()}`,
-                          type: "value",
-                          value: "",
-                          separator: "",
-                        };
-                        const updated = [...currentItems, newItem];
-                        setForm((p) => ({
-                          ...p,
-                          stringFormulaItems: updated,
-                          formulaTemplate: computeTemplateFromStringItems(updated),
-                        }));
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-slate-700 transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Add Value</span>
+                      <span>Add</span>
                     </button>
                   </div>
                 )}

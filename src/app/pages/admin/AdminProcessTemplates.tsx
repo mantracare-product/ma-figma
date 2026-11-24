@@ -3199,10 +3199,7 @@ export default function AdminProcessTemplates() {
             </span>
           }
           actions={
-            <>
-              <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
-              <HowItWorksButton label="How Workflow Works" onClick={() => setShowHelp(true)} />
-            </>
+            <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
           }
         />
 

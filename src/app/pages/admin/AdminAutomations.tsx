@@ -417,12 +417,6 @@ export default function AdminAutomations() {
               Admin Global Rules
             </span>
           }
-          actions={
-            <HowItWorksButton
-              label="How Automations Work"
-              onClick={() => setShowHelp(true)}
-            />
-          }
         />
 
         {/* Action Bar powered by PageTopBar with Admin Scope Filters */}

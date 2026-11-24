@@ -14,7 +14,6 @@ import { Outlet, Link, useLocation } from "react-router";
 import AdminSidebar from "./AdminSidebar";
 import logo from "../../../imports/ma_logo.png";
 import TopBarNotificationBell from "./TopBarNotificationBell";
-import AIAssistantCapsule from "../ai/AIAssistantCapsule";
 import { Menu, X } from "lucide-react";
 import TeamMemberDrawer, { OPEN_USER_PROFILE_DRAWER_EVENT } from "../TeamMemberDrawer";
 import { useAuth } from "../../context/AuthContext";
@@ -125,7 +124,6 @@ export default function AdminLayout() {
         <div className="flex-1 h-full px-6 sm:px-10 flex items-center justify-between gap-3 min-w-0">
           <div id="topbar-page-header" className="flex-1 flex items-center justify-between gap-3 min-w-0" />
           <div className="flex items-center gap-2.5 shrink-0">
-            <AIAssistantCapsule />
             <TopBarNotificationBell />
           </div>
         </div>

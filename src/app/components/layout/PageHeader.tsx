@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { HowItWorksButton } from "../help/HowItWorksModal";
 
@@ -27,6 +28,7 @@ export default function PageHeader({
   // badge is intentionally omitted to remove "Directory" and category capsules from the UI
 }: PageHeaderProps) {
   const [mounted, setMounted] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     setMounted(true);
@@ -41,8 +43,9 @@ export default function PageHeader({
     return null;
   }
 
+  const isAdmin = location.pathname.startsWith("/admin");
   const hasCustomActions = Boolean(actions || children);
-  const showDefaultHowItWorks = !hasCustomActions && !hideHowItWorks;
+  const showDefaultHowItWorks = !hasCustomActions && !hideHowItWorks && !isAdmin;
 
   const handleHowItWorksClick = () => {
     if (onHowItWorks) {
