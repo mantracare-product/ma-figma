@@ -571,7 +571,7 @@ export function RolesPermissionsDrawer({
   const handleSave = () => {
     const trimmed = roleName.trim();
     if (!trimmed) {
-      toast.error("Role Name is required.");
+      toast.error("Permission Name is required.");
       return;
     }
 
@@ -623,7 +623,7 @@ export function RolesPermissionsDrawer({
         {/* Drawer Header matching screenshot */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0 bg-white">
           <h2 className="text-lg font-bold text-gray-900 tracking-tight">
-            {editingRole ? "Edit Role" : "Create Role"}
+            {editingRole ? "Edit Permission" : "Create Permission"}
           </h2>
           <button
             type="button"
@@ -637,11 +637,11 @@ export function RolesPermissionsDrawer({
 
         {/* Drawer Scrollable Body */}
         <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6 bg-white">
-          {/* Top 3-Column Inputs: Role Name, Department, Description */}
+          {/* Top 3-Column Inputs: Permission Name, Department, Description */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
-                Role Name <span className="text-rose-500">*</span>
+                Permission Name <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"

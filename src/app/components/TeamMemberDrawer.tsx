@@ -885,26 +885,13 @@ export function TeamMemberDrawer({
                     <div className="p-4 space-y-3 text-xs text-left">
                       {/* Department */}
                       <div className="flex items-start gap-2.5 min-w-0">
-                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mt-0.5 border border-purple-200">
                           <Building2 className="w-3 h-3" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Department</div>
-                          <div className="text-slate-800 font-medium truncate">
+                          <div className="text-slate-800 font-semibold truncate">
                             {personalInfo.department || member?.department || "General"}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Role */}
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
-                          <Briefcase className="w-3 h-3" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Role</div>
-                          <div className="text-slate-800 font-medium truncate">
-                            {personalInfo.role || member?.role || "Team Member"}
                           </div>
                         </div>
                       </div>
@@ -1109,29 +1096,6 @@ export function TeamMemberDrawer({
                             onChange={(e) => updatePersonalInfo({ dateOfBirth: e.target.value })}
                             className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer"
                           />
-                        </div>
-                      </div>
-
-                      {/* Role */}
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <GripVertical className="w-3 h-3 text-slate-300" />
-                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
-                            ROLE
-                          </label>
-                        </div>
-                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-                          <select
-                            value={personalInfo.role}
-                            onChange={(e) => updatePersonalInfo({ role: e.target.value })}
-                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
-                          >
-                            <option value="Admin">Admin</option>
-                            <option value="Manager">Manager</option>
-                            <option value="Agent">Agent</option>
-                            <option value="Supervisor">Supervisor</option>
-                          </select>
-                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
                         </div>
                       </div>
 

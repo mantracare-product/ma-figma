@@ -4890,7 +4890,7 @@ export default function Settings() {
                 <PageTopBar
                   modes={[
                     { id: "departments", label: "Departments", badge: departments.length },
-                    { id: "roles", label: "Roles", badge: roles.length },
+                    { id: "roles", label: "Permissions", badge: roles.length },
                     { id: "users", label: "Users", badge: allUsers.length },
                   ]}
                   activeMode={teamSubTab}
@@ -4901,7 +4901,7 @@ export default function Settings() {
                     teamSubTab === "departments"
                       ? "Search departments..."
                       : teamSubTab === "roles"
-                      ? "Search roles..."
+                      ? "Search permissions..."
                       : "Search users..."
                   }
                   filterPresets={[
@@ -4909,22 +4909,20 @@ export default function Settings() {
                       id: "all",
                       label: "All Team Members",
                       count: allUsers.length,
-                      isActive: !teamSearchQuery,
-                      onClick: () => setTeamSearchQuery(""),
+                      isActive: !teamSearchQuery && (teamRoleFilter === "All" || teamRoleFilter === "all"),
+                      onClick: () => {
+                        setTeamSearchQuery("");
+                        setTeamRoleFilter("All");
+                      },
                     },
                     {
-                      id: "admins",
-                      label: "Admins",
-                      count: allUsers.filter((u: any) => u.role?.toLowerCase().includes("admin")).length,
+                      id: "assigned",
+                      label: "With Department",
+                      count: allUsers.filter((u: any) => Boolean(u.department)).length,
                       isActive: false,
-                      onClick: () => setTeamSearchQuery("Admin"),
-                    },
-                    {
-                      id: "members",
-                      label: "Members & Staff",
-                      count: allUsers.filter((u: any) => !u.role?.toLowerCase().includes("admin")).length,
-                      isActive: false,
-                      onClick: () => setTeamSearchQuery(""),
+                      onClick: () => {
+                        setTeamSearchQuery("");
+                      },
                     },
                   ]}
                   filterFields={[
@@ -4937,16 +4935,14 @@ export default function Settings() {
                       onChange: (val) => setTeamSearchQuery(val || ""),
                     },
                     {
-                      id: "role",
-                      label: "Role",
+                      id: "department",
+                      label: "Department",
                       type: "select",
-                      value: "all",
-                      onChange: (val) => setTeamSearchQuery(val === "all" ? "" : val || ""),
+                      value: teamRoleFilter || "all",
+                      onChange: (val) => setTeamRoleFilter(val === "all" ? "All" : val || "All"),
                       options: [
-                        { label: "All Roles", value: "all" },
-                        { label: "Admin", value: "Admin" },
-                        { label: "Manager", value: "Manager" },
-                        { label: "Agent", value: "Agent" },
+                        { label: "All Departments", value: "all" },
+                        ...departments.map((d) => ({ label: d.name, value: d.name })),
                       ],
                     },
                   ]}
@@ -4955,7 +4951,7 @@ export default function Settings() {
                       teamSubTab === "departments"
                         ? "Create Department"
                         : teamSubTab === "roles"
-                        ? "Create Role"
+                        ? "Create Permission"
                         : "Add User",
                     icon: <Plus className="w-3.5 h-3.5" />,
                     onClick: () => {
@@ -5018,7 +5014,7 @@ export default function Settings() {
                     },
                     {
                       key: "roles",
-                      header: "ASSIGNED ROLES",
+                      header: "ASSIGNED PERMISSIONS",
                       align: "left",
                       render: (dept) => {
                         const assignedRoles = roles.filter(
@@ -5027,7 +5023,7 @@ export default function Settings() {
                         if (assignedRoles.length === 0) {
                           return (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-400 italic">No roles assigned</span>
+                              <span className="text-xs text-slate-400 italic">No permissions assigned</span>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -5037,7 +5033,7 @@ export default function Settings() {
                                 }}
                                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
                               >
-                                <Plus className="w-3 h-3" /> Add Role
+                                <Plus className="w-3 h-3" /> Add Permission
                               </button>
                             </div>
                           );
@@ -5060,9 +5056,9 @@ export default function Settings() {
                                 setShowRolesDrawer(true);
                               }}
                               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
-                              title="Create Role in this Department"
+                              title="Create Permission in this Department"
                             >
-                              <Plus className="w-3 h-3" /> Role
+                              <Plus className="w-3 h-3" /> Permission
                             </button>
                           </div>
                         );
@@ -5072,7 +5068,7 @@ export default function Settings() {
 
                   const deptRowActions: TableRowAction<Department>[] = [
                     {
-                      label: "Create Role in Department",
+                      label: "Create Permission in Department",
                       onClick: (dept) => {
                         setPreselectedDepartment(dept.name);
                         setEditingClientRole(null);
@@ -5109,7 +5105,7 @@ export default function Settings() {
                   );
                 })()}
 
-                {/* VIEW 2: ROLES TABLE */}
+                {/* VIEW 2: PERMISSIONS TABLE */}
                 {teamSubTab === "roles" && (() => {
                   const filteredRoles = roles.filter(
                     (r) =>
@@ -5121,7 +5117,7 @@ export default function Settings() {
                   const roleColumns: TableColumn<Role>[] = [
                     {
                       key: "name",
-                      header: "ROLE NAME",
+                      header: "PERMISSION NAME",
                       align: "left",
                       render: (r) => (
                         <button
@@ -5144,8 +5140,8 @@ export default function Settings() {
                       align: "left",
                       render: (r) => (
                         r.department ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-                            <Building2 className="w-3 h-3 text-slate-500" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                            <Building2 className="w-3 h-3 text-purple-500" />
                             {r.department}
                           </span>
                         ) : (
@@ -5159,31 +5155,15 @@ export default function Settings() {
                       align: "left",
                       render: (r) => (
                         <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {r.description || "Custom role permissions"}
+                          {r.description || "Custom permissions"}
                         </span>
                       ),
-                    },
-                    {
-                      key: "users",
-                      header: "USERS ASSIGNED",
-                      align: "center",
-                      render: (r) => {
-                        const count = allUsers.filter(
-                          (u) => (u.role || "").toLowerCase() === (r.name || "").toLowerCase()
-                        ).length;
-                        return (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                            <User className="w-3 h-3 text-slate-500" />
-                            {count} {count === 1 ? "user" : "users"}
-                          </span>
-                        );
-                      },
                     },
                   ];
 
                   const roleRowActions: TableRowAction<Role>[] = [
                     {
-                      label: "Edit Role",
+                      label: "Edit Permission",
                       onClick: (r) => {
                         setEditingClientRole(r);
                         setPreselectedDepartment(r.department || "");
@@ -5191,13 +5171,13 @@ export default function Settings() {
                       },
                     },
                     {
-                      label: "Delete Role",
+                      label: "Delete Permission",
                       isDanger: true,
                       hidden: (r) => Boolean(r.isDefault) || (r.name || "").toLowerCase() === "admin",
                       onClick: (r) => {
                         const updated = roles.filter((role) => role.id !== r.id);
                         handleSaveRoles(updated);
-                        toast.success(`Role "${r.name}" deleted.`);
+                        toast.success(`Permission "${r.name}" deleted.`);
                       },
                     },
                   ];
@@ -5208,7 +5188,7 @@ export default function Settings() {
                       data={filteredRoles}
                       getRowId={(r) => r.id}
                       rowActions={roleRowActions}
-                      emptyMessage="No roles found matching your search."
+                      emptyMessage="No permissions found matching your search."
                     />
                   );
                 })()}
@@ -5221,8 +5201,11 @@ export default function Settings() {
                       teamSearchQuery === "" ||
                       u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
                       u.email.toLowerCase().includes(teamSearchQuery.toLowerCase());
-                    const matchRole = teamRoleFilter === "All" || u.role === teamRoleFilter;
-                    return matchSearch && matchRole;
+                    const matchDept =
+                      teamRoleFilter === "All" ||
+                      teamRoleFilter === "all" ||
+                      (u.department || "").toLowerCase().includes(teamRoleFilter.toLowerCase());
+                    return matchSearch && matchDept;
                   });
 
                   const userColumns: TableColumn<User>[] = [
@@ -5245,21 +5228,18 @@ export default function Settings() {
                       ),
                     },
                     {
-                      key: "role",
-                      header: "ROLE",
-                      align: "center",
+                      key: "department",
+                      header: "DEPARTMENT",
+                      align: "left",
                       render: (u) => (
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
-                            (u.role || "").toUpperCase() === "ADMIN"
-                              ? "bg-slate-200 text-slate-800"
-                              : (u.role || "").toUpperCase() === "EXECUTIVE"
-                              ? "bg-slate-100 text-slate-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {u.role || "UNASSIGNED"}
-                        </span>
+                        u.department ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                            <Building2 className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                            <span>{u.department}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Unassigned</span>
+                        )
                       ),
                     },
                     {

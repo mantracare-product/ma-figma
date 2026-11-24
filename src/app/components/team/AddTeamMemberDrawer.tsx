@@ -161,20 +161,13 @@ export default function AddTeamMemberDrawer({
       return;
     }
     if (assignedDepartments.some((d) => d.department.toLowerCase() === selectedDeptInput.toLowerCase())) {
-      setAssignedDepartments((prev) =>
-        prev.map((d) =>
-          d.department.toLowerCase() === selectedDeptInput.toLowerCase()
-            ? { ...d, role: selectedRoleInput }
-            : d
-        )
-      );
-      toast.success(`Updated role for "${selectedDeptInput}" to "${selectedRoleInput}"`);
+      toast.info(`"${selectedDeptInput}" is already assigned.`);
     } else {
       setAssignedDepartments((prev) => [
         ...prev,
-        { department: selectedDeptInput, role: selectedRoleInput },
+        { department: selectedDeptInput, role: "Member" },
       ]);
-      toast.success(`Assigned to "${selectedDeptInput}" (${selectedRoleInput})`);
+      toast.success(`Assigned to "${selectedDeptInput}"`);
     }
   };
 
@@ -362,23 +355,23 @@ export default function AddTeamMemberDrawer({
                   <h3 className="text-xs font-bold text-slate-900 truncate">
                     {invitedMember.name}
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                    {invitedMember.role || "Specialist"}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                    {invitedMember.department || "General"}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                  {invitedMember.email} · {invitedMember.department || "Medical"}
+                  {invitedMember.email} · {invitedMember.department || "General"}
                 </p>
               </div>
             </div>
 
             <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600">
               <span className="flex items-center gap-1.5 font-medium">
-                <Shield className="w-3.5 h-3.5 text-blue-600" />
-                Access Permissions:
+                <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                Department:
               </span>
               <span className="font-semibold text-slate-800">
-                {invitedMember.role} Access Scope
+                {invitedMember.department || "General"}
               </span>
             </div>
           </div>
@@ -477,18 +470,18 @@ export default function AddTeamMemberDrawer({
           />
         </div>
 
-        {/* Department & Role Assignment (Allows multiple departments) */}
+        {/* Department Assignment */}
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-700">
             <span className="flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                Departments & Roles
+                Department
               </span>
               <span className="text-[11px] font-normal text-slate-400">
                 {assignedDepartments.length > 0
                   ? `${assignedDepartments.length} assigned`
-                  : "Assign one or more"}
+                  : "Assign department"}
               </span>
             </span>
           </label>
@@ -504,8 +497,8 @@ export default function AddTeamMemberDrawer({
                 <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span className="truncate">
                   {assignedDepartments.length === 0
-                    ? "Select department and role..."
-                    : assignedDepartments.map((d) => `${d.department} (${d.role})`).join(", ")}
+                    ? "Select department..."
+                    : assignedDepartments.map((d) => d.department).join(", ")}
                 </span>
               </div>
               <ChevronDown
@@ -517,92 +510,29 @@ export default function AddTeamMemberDrawer({
 
             {/* Dropdown Content */}
             {isDeptDropdownOpen && (
-              <div className="p-3.5 bg-slate-50/80 border-t border-slate-100 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Department
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={selectedDeptInput}
-                        onChange={(e) => {
-                          const newDept = e.target.value;
-                          setSelectedDeptInput(newDept);
-                          const matchingRole = availableRolesList.find(
-                            (r) => (r.department || "").toLowerCase() === newDept.toLowerCase()
-                          );
-                          if (matchingRole) {
-                            setSelectedRoleInput(matchingRole.name);
-                          }
-                        }}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 transition-colors appearance-none cursor-pointer"
-                      >
-                        {availableDepts.map((dept) => (
-                          <option key={dept} value={dept}>
-                            {dept}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-slate-400" />
-                    </div>
+              <div className="p-3 bg-slate-50/80 border-t border-slate-100 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <select
+                      value={selectedDeptInput}
+                      onChange={(e) => setSelectedDeptInput(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 transition-colors appearance-none cursor-pointer"
+                    >
+                      {availableDepts.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-slate-400" />
                   </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Role
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={selectedRoleInput}
-                        onChange={(e) => setSelectedRoleInput(e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 transition-colors appearance-none cursor-pointer"
-                      >
-                        {(() => {
-                          const matchingRoles = availableRolesList.filter(
-                            (r) => (r.department || "").toLowerCase() === selectedDeptInput.toLowerCase()
-                          );
-                          const otherRoles = availableRolesList.filter(
-                            (r) => (r.department || "").toLowerCase() !== selectedDeptInput.toLowerCase()
-                          );
-                          return (
-                            <>
-                              {matchingRoles.length > 0 && (
-                                <optgroup label={`${selectedDeptInput} Roles`}>
-                                  {matchingRoles.map((r) => (
-                                    <option key={r.id || r.name} value={r.name}>
-                                      {r.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                              {otherRoles.length > 0 && (
-                                <optgroup label="Other Available Roles">
-                                  {otherRoles.map((r) => (
-                                    <option key={r.id || r.name} value={r.name}>
-                                      {r.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </select>
-                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Below on right corner: option to assign department */}
-                <div className="flex justify-end pt-1">
                   <button
                     type="button"
                     onClick={handleAssignDepartment}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shadow-2xs"
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Assign Department
+                    Assign
                   </button>
                 </div>
               </div>
@@ -615,12 +545,10 @@ export default function AddTeamMemberDrawer({
               {assignedDepartments.map((item, idx) => (
                 <span
                   key={idx}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-xs font-semibold text-purple-800 shadow-2xs"
                 >
-                  <Building2 className="w-3 h-3 text-slate-500" />
+                  <Building2 className="w-3 h-3 text-purple-600" />
                   <span>{item.department}</span>
-                  <span className="text-slate-400 font-normal">·</span>
-                  <span className="text-blue-600 font-medium">{item.role}</span>
                   <button
                     type="button"
                     onClick={() =>
@@ -628,7 +556,7 @@ export default function AddTeamMemberDrawer({
                         prev.filter((d) => d.department !== item.department)
                       )
                     }
-                    className="ml-1 text-slate-400 hover:text-red-500 cursor-pointer p-0.5 rounded hover:bg-slate-200 transition-colors"
+                    className="ml-1 text-purple-400 hover:text-red-500 cursor-pointer p-0.5 rounded hover:bg-purple-100 transition-colors"
                     title="Remove assignment"
                   >
                     <X className="w-3 h-3" />
