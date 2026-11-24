@@ -188,6 +188,7 @@ export interface FormulaConfig {
   staticValue?: number;
   terms: FormulaTerm[];
   template?: string;
+  stringTerms?: any[];
 }
 
 export interface GroupBindingConfig {
@@ -2702,6 +2703,7 @@ export function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldMod
       staticValue: f.formulaConfig.staticValue,
       terms: Array.isArray(f.formulaConfig.terms) ? f.formulaConfig.terms.map((t: any) => ({ ...t })) : [],
       template: f.formulaConfig.template,
+      stringTerms: Array.isArray(f.formulaConfig.stringTerms) ? f.formulaConfig.stringTerms.map((st: any) => ({ ...st })) : undefined,
     } : undefined,
     groupBindingConfig: f.groupBindingConfig ? { ...f.groupBindingConfig } : undefined,
     compositeDisplayMode: f.compositeDisplayMode ?? undefined,

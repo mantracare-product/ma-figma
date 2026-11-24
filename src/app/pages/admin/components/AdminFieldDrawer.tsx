@@ -1049,6 +1049,65 @@ function CsvOptionListImportModal({
   );
 }
 
+export interface StringFormulaItem {
+  id: string;
+  type: "placeholder" | "value";
+  fieldKey?: string;
+  value?: string;
+  separator?: string;
+}
+
+export function computeTemplateFromStringItems(items: StringFormulaItem[]): string {
+  if (!items || items.length === 0) return "";
+  return items
+    .map((item, idx) => {
+      const part = item.type === "placeholder" ? (item.fieldKey ? `{${item.fieldKey}}` : "") : (item.value || "");
+      const isLast = idx === items.length - 1;
+      const sep = !isLast ? (item.separator !== undefined ? item.separator : "") : "";
+      return part + sep;
+    })
+    .join("");
+}
+
+export function parseTemplateToStringItems(template: string, defaultFieldKey: string = ""): StringFormulaItem[] {
+  if (!template) {
+    return [
+      { id: "s-1", type: "placeholder", fieldKey: defaultFieldKey, separator: "" },
+      { id: "s-2", type: "value", value: "_hi", separator: "" },
+    ];
+  }
+
+  const items: StringFormulaItem[] = [];
+  const regex = /({[a-zA-Z0-9_]+})/g;
+  const parts = template.split(regex).filter(Boolean);
+
+  parts.forEach((p, idx) => {
+    if (p.startsWith("{") && p.endsWith("}")) {
+      const fieldKey = p.slice(1, -1);
+      items.push({
+        id: `s-${idx + 1}-${Date.now()}`,
+        type: "placeholder",
+        fieldKey,
+        separator: "",
+      });
+    } else {
+      items.push({
+        id: `s-${idx + 1}-${Date.now()}`,
+        type: "value",
+        value: p,
+        separator: "",
+      });
+    }
+  });
+
+  return items.length > 0
+    ? items
+    : [
+        { id: "s-1", type: "placeholder", fieldKey: defaultFieldKey, separator: "" },
+        { id: "s-2", type: "value", value: "_hi", separator: "" },
+      ];
+}
+
 interface FieldFormState {
   label: string;
   key: string;
@@ -1143,6 +1202,7 @@ interface FieldFormState {
   numberValueMode?: "static" | "formula";
   formulaTerms?: FormulaTerm[];
   formulaTemplate?: string;
+  stringFormulaItems?: StringFormulaItem[];
   staticNumberValue?: number | "";
 
   // Group binding configuration
@@ -1275,6 +1335,10 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     numberValueMode: "static",
     formulaTerms: [],
     formulaTemplate: "",
+    stringFormulaItems: [
+      { id: "s-1", type: "placeholder", fieldKey: "", separator: "" },
+      { id: "s-2", type: "value", value: "_hi", separator: "" },
+    ],
     staticNumberValue: "",
   };
 }
@@ -1425,6 +1489,9 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
         ? f.formulaConfig.terms.map(t => `{${t.fieldKey}}${t.operator !== undefined ? t.operator : ""}`).join("")
         : ""
     ),
+    stringFormulaItems: (f.formulaConfig as any)?.stringTerms && Array.isArray((f.formulaConfig as any).stringTerms) && (f.formulaConfig as any).stringTerms.length > 0
+      ? (f.formulaConfig as any).stringTerms
+      : parseTemplateToStringItems(f.formulaConfig?.template || ""),
     staticNumberValue: f.formulaConfig?.staticValue ?? "",
     // Group Binding
     primarySubFieldId: f.primarySubFieldId || f.primaryColumnId || (f.tableColumns?.[0]?.id ?? f.subFields?.[0]?.id ?? ""),
@@ -2297,8 +2364,9 @@ export function AdminFieldDrawer({
         terms: form.formulaTerms || [],
       } : (form.primaryCategory === "string" && form.numberValueMode === "formula") ? {
         mode: "formula",
-        template: form.formulaTemplate || "",
-        terms: extractTermsFromTemplate(form.formulaTemplate),
+        template: computeTemplateFromStringItems(form.stringFormulaItems || []) || form.formulaTemplate || "",
+        stringTerms: form.stringFormulaItems || [],
+        terms: extractTermsFromTemplate(computeTemplateFromStringItems(form.stringFormulaItems || []) || form.formulaTemplate || ""),
       } : undefined,
 
       primarySubFieldId: form.primaryCategory === "composite" ? (form.primarySubFieldId || form.tableColumns[0]?.id || undefined) : undefined,
@@ -2988,14 +3056,14 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3A-2. String Configuration (with Formula String Pattern Builder) */}
+          {/* 3A-2. String Configuration (Placeholder / Value Formula Builder) */}
           {form.primaryCategory === "string" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
               {/* Apply Formula Toggle (for String) */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <label className="text-xs font-semibold text-slate-700">Apply Formula</label>
-                  <InfoTooltip text="Automatically construct this string value using field placeholders and custom text (e.g. {any_field}_hi)." size="sm" />
+                  <InfoTooltip text="Construct this string by combining field placeholders, custom text values, and separators." size="sm" />
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer select-none">
                   <input
@@ -3008,10 +3076,18 @@ export function AdminFieldDrawer({
                         const avail = getAllFields(form.module).filter(
                           (f) => f.key !== form.key
                         );
+                        const initialItems: StringFormulaItem[] =
+                          form.stringFormulaItems && form.stringFormulaItems.length > 0
+                            ? form.stringFormulaItems
+                            : [
+                                { id: `s-1-${Date.now()}`, type: "placeholder", fieldKey: avail[0]?.key || "name", separator: "" },
+                                { id: `s-2-${Date.now()}`, type: "value", value: "_hi", separator: "" },
+                              ];
                         setForm((p) => ({
                           ...p,
                           numberValueMode: "formula",
-                          formulaTemplate: p.formulaTemplate || (avail[0]?.key ? `{${avail[0].key}}_hi` : "{any_field}_hi"),
+                          stringFormulaItems: initialItems,
+                          formulaTemplate: computeTemplateFromStringItems(initialItems),
                         }));
                       } else {
                         setForm((p) => ({
@@ -3026,7 +3102,7 @@ export function AdminFieldDrawer({
                 </label>
               </div>
 
-              {/* String Formula Pattern Builder */}
+              {/* String Formula Builder: Placeholder / Value + Separator */}
               {form.numberValueMode === "formula" && (() => {
                 const availFields = getAllFields(form.module).filter(
                   (f) => f.key !== form.key
@@ -3034,100 +3110,237 @@ export function AdminFieldDrawer({
 
                 const sampleValues: Record<string, string> = {
                   policy_coverage: "Comprehensive",
-                  first_name: "John",
-                  last_name: "Doe",
+                  first_name: "Kanak",
+                  last_name: "Pandey",
                   name: "Kanak B Pandey",
-                  email: "kanak@example.com",
-                  phone: "+1234567890",
+                  email: "kanak@mantracare.org",
+                  phone: "+11234567890",
                   category: "Lead",
                   status: "Active",
                   lead_source: "Website",
                   city: "New York",
                   country: "US",
+                  diagnosis: "General Consultation",
+                  doctorName: "Dr. Reynolds",
+                  sessionDate: "2026-11-24",
                 };
 
-                const template = form.formulaTemplate || "";
-                const previewResult = template ? template.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
+                const currentItems = form.stringFormulaItems && form.stringFormulaItems.length > 0
+                  ? form.stringFormulaItems
+                  : [
+                      { id: "s-1", type: "placeholder" as const, fieldKey: availFields[0]?.key || "name", separator: "" },
+                      { id: "s-2", type: "value" as const, value: "_hi", separator: "" },
+                    ];
+
+                const computedPattern = computeTemplateFromStringItems(currentItems);
+
+                const previewResult = computedPattern ? computedPattern.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
                   if (sampleValues[fKey]) return sampleValues[fKey];
                   const matchF = availFields.find(f => f.key === fKey);
                   return matchF ? matchF.label : fKey;
                 }) : "";
 
                 return (
-                  <div className="space-y-3 pt-3 border-t border-slate-200">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-xs font-semibold text-slate-700">
-                          String Pattern / Template
-                        </label>
-                        <span className="text-[11px] text-slate-400 font-medium">
-                          Select fields & add custom text
-                        </span>
-                      </div>
+                  <div className="space-y-2.5 pt-3 border-t border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Formula Structure
+                      </label>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        Placeholder / Value &amp; Separator
+                      </span>
+                    </div>
 
-                      {/* Select Field Dropdown */}
-                      <div className="mb-2">
-                        <select
-                          value=""
-                          disabled={isReadOnly}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              insertFieldIntoFormula(e.target.value);
-                            }
-                          }}
-                          className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value="">+ Select field to insert...</option>
-                          {availFields.map((f) => (
-                            <option key={f.key} value={f.key}>
-                              {f.label} ({`{${f.key}}`})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    {/* Formula Items List */}
+                    <div className="space-y-2">
+                      {currentItems.map((item, idx) => {
+                        const isLast = idx === currentItems.length - 1;
 
-                      {/* Quick Add Pills */}
-                      {availFields.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                          <span className="text-[11px] text-slate-400 font-medium mr-0.5">Quick add:</span>
-                          {availFields.slice(0, 5).map((f) => (
-                            <button
-                              key={f.key}
-                              type="button"
+                        return (
+                          <div key={item.id || idx} className="flex items-center gap-1.5 flex-nowrap">
+                            {/* Sequence number */}
+                            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-200/80 text-[10px] font-bold text-slate-600 shrink-0">
+                              {idx + 1}
+                            </span>
+
+                            {/* Type selector: Placeholder or Value */}
+                            <select
+                              value={item.type}
                               disabled={isReadOnly}
-                              onClick={() => insertFieldIntoFormula(f.key)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-md text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
-                              title={`Insert {${f.key}}`}
+                              onChange={(e) => {
+                                const nextType = e.target.value as "placeholder" | "value";
+                                const updated = currentItems.map((it, i) =>
+                                  i === idx
+                                    ? {
+                                        ...it,
+                                        type: nextType,
+                                        fieldKey: nextType === "placeholder" ? it.fieldKey || availFields[0]?.key || "" : undefined,
+                                        value: nextType === "value" ? it.value ?? "_hi" : undefined,
+                                      }
+                                    : it
+                                );
+                                setForm((p) => ({
+                                  ...p,
+                                  stringFormulaItems: updated,
+                                  formulaTemplate: computeTemplateFromStringItems(updated),
+                                }));
+                              }}
+                              className="w-28 sm:w-32 h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
                             >
-                              <Plus className="w-2.5 h-2.5 text-blue-500" />
-                              <span>{f.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                              <option value="placeholder">Placeholder</option>
+                              <option value="value">Value</option>
+                            </select>
 
-                      {/* Freeform Pattern Input */}
-                      <div className="relative">
-                        <input
-                          ref={formulaInputRef}
-                          type="text"
-                          value={form.formulaTemplate || ""}
-                          disabled={isReadOnly}
-                          onChange={(e) => {
-                            const val = e.target.value;
+                            {/* If placeholder: fields dropdown */}
+                            {item.type === "placeholder" ? (
+                              <select
+                                value={item.fieldKey || ""}
+                                disabled={isReadOnly}
+                                onChange={(e) => {
+                                  const selectedKey = e.target.value;
+                                  const updated = currentItems.map((it, i) =>
+                                    i === idx ? { ...it, fieldKey: selectedKey } : it
+                                  );
+                                  setForm((p) => ({
+                                    ...p,
+                                    stringFormulaItems: updated,
+                                    formulaTemplate: computeTemplateFromStringItems(updated),
+                                  }));
+                                }}
+                                className="flex-1 min-w-[120px] h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">Select field...</option>
+                                {availFields.map((f) => (
+                                  <option key={f.key} value={f.key}>
+                                    {f.label} ({f.inputType})
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              /* If value: custom text input */
+                              <input
+                                type="text"
+                                value={item.value ?? ""}
+                                disabled={isReadOnly}
+                                placeholder="Enter text (e.g. _hi)"
+                                onChange={(e) => {
+                                  const textVal = e.target.value;
+                                  const updated = currentItems.map((it, i) =>
+                                    i === idx ? { ...it, value: textVal } : it
+                                  );
+                                  setForm((p) => ({
+                                    ...p,
+                                    stringFormulaItems: updated,
+                                    formulaTemplate: computeTemplateFromStringItems(updated),
+                                  }));
+                                }}
+                                className="flex-1 min-w-[120px] h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 outline-none focus:border-blue-500 shadow-2xs"
+                              />
+                            )}
+
+                            {/* Separator selector (shown if not last, or to define joiner with next) */}
+                            {!isLast ? (
+                              <select
+                                value={item.separator !== undefined ? item.separator : ""}
+                                disabled={isReadOnly}
+                                onChange={(e) => {
+                                  const sep = e.target.value;
+                                  const updated = currentItems.map((it, i) =>
+                                    i === idx ? { ...it, separator: sep } : it
+                                  );
+                                  setForm((p) => ({
+                                    ...p,
+                                    stringFormulaItems: updated,
+                                    formulaTemplate: computeTemplateFromStringItems(updated),
+                                  }));
+                                }}
+                                className="w-24 sm:w-28 h-8 px-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-blue-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
+                                title="Separator between this item and next"
+                              >
+                                <option value="">No gap</option>
+                                <option value="_">_ (Underscore)</option>
+                                <option value="-">- (Hyphen)</option>
+                                <option value=" ">Space</option>
+                                <option value=", ">, (Comma)</option>
+                                <option value="/">/ (Slash)</option>
+                              </select>
+                            ) : (
+                              <div className="w-24 sm:w-28 shrink-0 text-center text-[10px] text-slate-400 font-medium select-none">
+                                (End)
+                              </div>
+                            )}
+
+                            {/* Remove item button */}
+                            {!isReadOnly && currentItems.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const filtered = currentItems.filter((_, i) => i !== idx);
+                                  setForm((p) => ({
+                                    ...p,
+                                    stringFormulaItems: filtered,
+                                    formulaTemplate: computeTemplateFromStringItems(filtered),
+                                  }));
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0 rounded hover:bg-slate-100"
+                                title="Remove item"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Add Placeholder / Value Buttons */}
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItem: StringFormulaItem = {
+                              id: `s-${Date.now()}`,
+                              type: "placeholder",
+                              fieldKey: availFields[0]?.key || "",
+                              separator: "",
+                            };
+                            const updated = [...currentItems, newItem];
                             setForm((p) => ({
                               ...p,
-                              formulaTemplate: val,
+                              stringFormulaItems: updated,
+                              formulaTemplate: computeTemplateFromStringItems(updated),
                             }));
                           }}
-                          placeholder="e.g. {any_field}_hi"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 outline-none focus:border-blue-500 shadow-2xs"
-                        />
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-blue-600 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Add Placeholder</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItem: StringFormulaItem = {
+                              id: `s-${Date.now()}`,
+                              type: "value",
+                              value: "",
+                              separator: "",
+                            };
+                            const updated = [...currentItems, newItem];
+                            setForm((p) => ({
+                              ...p,
+                              stringFormulaItems: updated,
+                              formulaTemplate: computeTemplateFromStringItems(updated),
+                            }));
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Add Value</span>
+                        </button>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Select fields from the dropdown or type custom text freely (e.g. <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">{"{any_field}"}_hi</code> or <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">{"{first_name}"}_{"{last_name}"}</code>).
-                      </p>
-                    </div>
+                    )}
 
                     {/* Live Preview Box */}
                     <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
@@ -3141,10 +3354,10 @@ export function AdminFieldDrawer({
                         </span>
                       </div>
                       <div className="p-2 bg-white border border-blue-100 rounded-lg text-xs font-mono text-slate-900 break-all font-semibold">
-                        {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{any_field}"}_hi</span>}
+                        {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{name}"}_hi</span>}
                       </div>
                       <div className="text-[11px] text-blue-700/80">
-                        Result for pattern <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-semibold">{form.formulaTemplate || "{any_field}_hi"}</code> when field values are filled.
+                        Formula pattern: <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-semibold">{computedPattern || "{name}_hi"}</code>
                       </div>
                     </div>
                   </div>
