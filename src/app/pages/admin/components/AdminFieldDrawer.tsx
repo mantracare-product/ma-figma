@@ -2362,7 +2362,7 @@ export function AdminFieldDrawer({
       formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money") && form.numberValueMode === "formula" ? {
         mode: "formula",
         terms: form.formulaTerms || [],
-      } : (form.primaryCategory === "string" && form.numberValueMode === "formula") ? {
+      } : form.primaryCategory === "string" ? {
         mode: "formula",
         template: computeTemplateFromStringItems(form.stringFormulaItems || []) || form.formulaTemplate || "",
         stringTerms: form.stringFormulaItems || [],
@@ -3056,312 +3056,265 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3A-2. String Configuration (Placeholder / Value Formula Builder) */}
-          {form.primaryCategory === "string" && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              {/* Apply Formula Toggle (for String) */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Apply Formula</label>
-                  <InfoTooltip text="Construct this string by combining field placeholders, custom text values, and separators." size="sm" />
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.numberValueMode === "formula"}
-                    disabled={isReadOnly}
-                    onChange={(e) => {
-                      const isFormula = e.target.checked;
-                      if (isFormula) {
-                        const avail = getAllFields(form.module).filter(
-                          (f) => f.key !== form.key
-                        );
-                        const initialItems: StringFormulaItem[] =
-                          form.stringFormulaItems && form.stringFormulaItems.length > 0
-                            ? form.stringFormulaItems
-                            : [
-                                { id: `s-1-${Date.now()}`, type: "placeholder", fieldKey: avail[0]?.key || "name", separator: "" },
-                                { id: `s-2-${Date.now()}`, type: "value", value: "_hi", separator: "" },
-                              ];
-                        setForm((p) => ({
-                          ...p,
-                          numberValueMode: "formula",
-                          stringFormulaItems: initialItems,
-                          formulaTemplate: computeTemplateFromStringItems(initialItems),
-                        }));
-                      } else {
-                        setForm((p) => ({
-                          ...p,
-                          numberValueMode: "static"
-                        }));
-                      }
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+          {/* 3A-2. String Configuration (String Structure Builder: Placeholder / Value & Separator) */}
+          {form.primaryCategory === "string" && (() => {
+            const availFields = getAllFields(form.module).filter(
+              (f) => f.key !== form.key
+            );
 
-              {/* String Formula Builder: Placeholder / Value + Separator */}
-              {form.numberValueMode === "formula" && (() => {
-                const availFields = getAllFields(form.module).filter(
-                  (f) => f.key !== form.key
-                );
+            const sampleValues: Record<string, string> = {
+              policy_coverage: "Comprehensive",
+              first_name: "Kanak",
+              last_name: "Pandey",
+              name: "Kanak B Pandey",
+              email: "kanak@mantracare.org",
+              phone: "+11234567890",
+              category: "Lead",
+              status: "Active",
+              lead_source: "Website",
+              city: "New York",
+              country: "US",
+              diagnosis: "General Consultation",
+              doctorName: "Dr. Reynolds",
+              sessionDate: "2026-11-24",
+            };
 
-                const sampleValues: Record<string, string> = {
-                  policy_coverage: "Comprehensive",
-                  first_name: "Kanak",
-                  last_name: "Pandey",
-                  name: "Kanak B Pandey",
-                  email: "kanak@mantracare.org",
-                  phone: "+11234567890",
-                  category: "Lead",
-                  status: "Active",
-                  lead_source: "Website",
-                  city: "New York",
-                  country: "US",
-                  diagnosis: "General Consultation",
-                  doctorName: "Dr. Reynolds",
-                  sessionDate: "2026-11-24",
-                };
+            const currentItems = form.stringFormulaItems && form.stringFormulaItems.length > 0
+              ? form.stringFormulaItems
+              : [
+                  { id: "s-1", type: "placeholder" as const, fieldKey: availFields[0]?.key || "name", separator: "" },
+                  { id: "s-2", type: "value" as const, value: "_hi", separator: "" },
+                ];
 
-                const currentItems = form.stringFormulaItems && form.stringFormulaItems.length > 0
-                  ? form.stringFormulaItems
-                  : [
-                      { id: "s-1", type: "placeholder" as const, fieldKey: availFields[0]?.key || "name", separator: "" },
-                      { id: "s-2", type: "value" as const, value: "_hi", separator: "" },
-                    ];
+            const computedPattern = computeTemplateFromStringItems(currentItems);
 
-                const computedPattern = computeTemplateFromStringItems(currentItems);
+            const previewResult = computedPattern ? computedPattern.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
+              if (sampleValues[fKey]) return sampleValues[fKey];
+              const matchF = availFields.find(f => f.key === fKey);
+              return matchF ? matchF.label : fKey;
+            }) : "";
 
-                const previewResult = computedPattern ? computedPattern.replace(/{([a-zA-Z0-9_]+)}/g, (_, fKey) => {
-                  if (sampleValues[fKey]) return sampleValues[fKey];
-                  const matchF = availFields.find(f => f.key === fKey);
-                  return matchF ? matchF.label : fKey;
-                }) : "";
-
-                return (
-                  <div className="space-y-2.5 pt-3 border-t border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Formula Structure
-                      </label>
-                      <span className="text-[11px] text-slate-400 font-medium">
-                        Placeholder / Value &amp; Separator
-                      </span>
-                    </div>
-
-                    {/* Formula Items List */}
-                    <div className="space-y-2">
-                      {currentItems.map((item, idx) => {
-                        const isLast = idx === currentItems.length - 1;
-
-                        return (
-                          <div key={item.id || idx} className="flex items-center gap-1.5 flex-nowrap">
-                            {/* Sequence number */}
-                            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-200/80 text-[10px] font-bold text-slate-600 shrink-0">
-                              {idx + 1}
-                            </span>
-
-                            {/* Type selector: Placeholder or Value */}
-                            <select
-                              value={item.type}
-                              disabled={isReadOnly}
-                              onChange={(e) => {
-                                const nextType = e.target.value as "placeholder" | "value";
-                                const updated = currentItems.map((it, i) =>
-                                  i === idx
-                                    ? {
-                                        ...it,
-                                        type: nextType,
-                                        fieldKey: nextType === "placeholder" ? it.fieldKey || availFields[0]?.key || "" : undefined,
-                                        value: nextType === "value" ? it.value ?? "_hi" : undefined,
-                                      }
-                                    : it
-                                );
-                                setForm((p) => ({
-                                  ...p,
-                                  stringFormulaItems: updated,
-                                  formulaTemplate: computeTemplateFromStringItems(updated),
-                                }));
-                              }}
-                              className="w-28 sm:w-32 h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
-                            >
-                              <option value="placeholder">Placeholder</option>
-                              <option value="value">Value</option>
-                            </select>
-
-                            {/* If placeholder: fields dropdown */}
-                            {item.type === "placeholder" ? (
-                              <select
-                                value={item.fieldKey || ""}
-                                disabled={isReadOnly}
-                                onChange={(e) => {
-                                  const selectedKey = e.target.value;
-                                  const updated = currentItems.map((it, i) =>
-                                    i === idx ? { ...it, fieldKey: selectedKey } : it
-                                  );
-                                  setForm((p) => ({
-                                    ...p,
-                                    stringFormulaItems: updated,
-                                    formulaTemplate: computeTemplateFromStringItems(updated),
-                                  }));
-                                }}
-                                className="flex-1 min-w-[120px] h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
-                              >
-                                <option value="">Select field...</option>
-                                {availFields.map((f) => (
-                                  <option key={f.key} value={f.key}>
-                                    {f.label} ({f.inputType})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              /* If value: custom text input */
-                              <input
-                                type="text"
-                                value={item.value ?? ""}
-                                disabled={isReadOnly}
-                                placeholder="Enter text (e.g. _hi)"
-                                onChange={(e) => {
-                                  const textVal = e.target.value;
-                                  const updated = currentItems.map((it, i) =>
-                                    i === idx ? { ...it, value: textVal } : it
-                                  );
-                                  setForm((p) => ({
-                                    ...p,
-                                    stringFormulaItems: updated,
-                                    formulaTemplate: computeTemplateFromStringItems(updated),
-                                  }));
-                                }}
-                                className="flex-1 min-w-[120px] h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 outline-none focus:border-blue-500 shadow-2xs"
-                              />
-                            )}
-
-                            {/* Separator selector (shown if not last, or to define joiner with next) */}
-                            {!isLast ? (
-                              <select
-                                value={item.separator !== undefined ? item.separator : ""}
-                                disabled={isReadOnly}
-                                onChange={(e) => {
-                                  const sep = e.target.value;
-                                  const updated = currentItems.map((it, i) =>
-                                    i === idx ? { ...it, separator: sep } : it
-                                  );
-                                  setForm((p) => ({
-                                    ...p,
-                                    stringFormulaItems: updated,
-                                    formulaTemplate: computeTemplateFromStringItems(updated),
-                                  }));
-                                }}
-                                className="w-24 sm:w-28 h-8 px-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-blue-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
-                                title="Separator between this item and next"
-                              >
-                                <option value="">No gap</option>
-                                <option value="_">_ (Underscore)</option>
-                                <option value="-">- (Hyphen)</option>
-                                <option value=" ">Space</option>
-                                <option value=", ">, (Comma)</option>
-                                <option value="/">/ (Slash)</option>
-                              </select>
-                            ) : (
-                              <div className="w-24 sm:w-28 shrink-0 text-center text-[10px] text-slate-400 font-medium select-none">
-                                (End)
-                              </div>
-                            )}
-
-                            {/* Remove item button */}
-                            {!isReadOnly && currentItems.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const filtered = currentItems.filter((_, i) => i !== idx);
-                                  setForm((p) => ({
-                                    ...p,
-                                    stringFormulaItems: filtered,
-                                    formulaTemplate: computeTemplateFromStringItems(filtered),
-                                  }));
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0 rounded hover:bg-slate-100"
-                                title="Remove item"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Add Placeholder / Value Buttons */}
-                    {!isReadOnly && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItem: StringFormulaItem = {
-                              id: `s-${Date.now()}`,
-                              type: "placeholder",
-                              fieldKey: availFields[0]?.key || "",
-                              separator: "",
-                            };
-                            const updated = [...currentItems, newItem];
-                            setForm((p) => ({
-                              ...p,
-                              stringFormulaItems: updated,
-                              formulaTemplate: computeTemplateFromStringItems(updated),
-                            }));
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-blue-600 transition-colors cursor-pointer shadow-2xs"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-blue-500" />
-                          <span>Add Placeholder</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItem: StringFormulaItem = {
-                              id: `s-${Date.now()}`,
-                              type: "value",
-                              value: "",
-                              separator: "",
-                            };
-                            const updated = [...currentItems, newItem];
-                            setForm((p) => ({
-                              ...p,
-                              stringFormulaItems: updated,
-                              formulaTemplate: computeTemplateFromStringItems(updated),
-                            }));
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-slate-700 transition-colors cursor-pointer shadow-2xs"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Add Value</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Live Preview Box */}
-                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
-                      <div className="flex items-center justify-between text-blue-900 font-semibold text-xs">
-                        <span className="flex items-center gap-1.5 text-blue-800">
-                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                          Live Formula Preview:
-                        </span>
-                        <span className="text-[11px] text-blue-600 font-normal">
-                          Evaluated String
-                        </span>
-                      </div>
-                      <div className="p-2 bg-white border border-blue-100 rounded-lg text-xs font-mono text-slate-900 break-all font-semibold">
-                        {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{name}"}_hi</span>}
-                      </div>
-                    </div>
+            return (
+              <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-700">String Structure</label>
+                    <InfoTooltip text="Construct this string by combining field placeholders, custom text values, and separators." size="sm" />
                   </div>
-                );
-              })()}
-            </div>
-          )}
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Placeholder / Value &amp; Separator
+                  </span>
+                </div>
+
+                {/* Formula Items List */}
+                <div className="space-y-2">
+                  {currentItems.map((item, idx) => {
+                    const isLast = idx === currentItems.length - 1;
+
+                    return (
+                      <div key={item.id || idx} className="flex items-center gap-1.5 flex-nowrap">
+                        {/* Sequence number */}
+                        <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-200/80 text-[10px] font-bold text-slate-600 shrink-0">
+                          {idx + 1}
+                        </span>
+
+                        {/* Type selector: Placeholder or Value */}
+                        <select
+                          value={item.type}
+                          disabled={isReadOnly}
+                          onChange={(e) => {
+                            const nextType = e.target.value as "placeholder" | "value";
+                            const updated = currentItems.map((it, i) =>
+                              i === idx
+                                ? {
+                                    ...it,
+                                    type: nextType,
+                                    fieldKey: nextType === "placeholder" ? it.fieldKey || availFields[0]?.key || "" : undefined,
+                                    value: nextType === "value" ? it.value ?? "_hi" : undefined,
+                                  }
+                                : it
+                            );
+                            setForm((p) => ({
+                              ...p,
+                              stringFormulaItems: updated,
+                              formulaTemplate: computeTemplateFromStringItems(updated),
+                            }));
+                          }}
+                          className="w-28 sm:w-32 h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
+                        >
+                          <option value="placeholder">Placeholder</option>
+                          <option value="value">Value</option>
+                        </select>
+
+                        {/* If placeholder: fields dropdown */}
+                        {item.type === "placeholder" ? (
+                          <select
+                            value={item.fieldKey || ""}
+                            disabled={isReadOnly}
+                            onChange={(e) => {
+                              const selectedKey = e.target.value;
+                              const updated = currentItems.map((it, i) =>
+                                i === idx ? { ...it, fieldKey: selectedKey } : it
+                              );
+                              setForm((p) => ({
+                                ...p,
+                                stringFormulaItems: updated,
+                                formulaTemplate: computeTemplateFromStringItems(updated),
+                              }));
+                            }}
+                            className="flex-1 min-w-[120px] h-8 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                          >
+                            <option value="">Select field...</option>
+                            {availFields.map((f) => (
+                              <option key={f.key} value={f.key}>
+                                {f.label} ({f.inputType})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          /* If value: custom text input */
+                          <input
+                            type="text"
+                            value={item.value ?? ""}
+                            disabled={isReadOnly}
+                            placeholder="Enter text (e.g. _hi)"
+                            onChange={(e) => {
+                              const textVal = e.target.value;
+                              const updated = currentItems.map((it, i) =>
+                                i === idx ? { ...it, value: textVal } : it
+                              );
+                              setForm((p) => ({
+                                ...p,
+                                stringFormulaItems: updated,
+                                formulaTemplate: computeTemplateFromStringItems(updated),
+                              }));
+                            }}
+                            className="flex-1 min-w-[120px] h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 outline-none focus:border-blue-500 shadow-2xs"
+                          />
+                        )}
+
+                        {/* Separator selector (shown if not last, or to define joiner with next) */}
+                        {!isLast ? (
+                          <select
+                            value={item.separator !== undefined ? item.separator : ""}
+                            disabled={isReadOnly}
+                            onChange={(e) => {
+                              const sep = e.target.value;
+                              const updated = currentItems.map((it, i) =>
+                                i === idx ? { ...it, separator: sep } : it
+                              );
+                              setForm((p) => ({
+                                ...p,
+                                stringFormulaItems: updated,
+                                formulaTemplate: computeTemplateFromStringItems(updated),
+                              }));
+                            }}
+                            className="w-24 sm:w-28 h-8 px-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-blue-700 outline-none focus:border-blue-500 cursor-pointer shrink-0 shadow-2xs"
+                            title="Separator between this item and next"
+                          >
+                            <option value="">No gap</option>
+                            <option value="_">_ (Underscore)</option>
+                            <option value="-">- (Hyphen)</option>
+                            <option value=" ">Space</option>
+                            <option value=", ">, (Comma)</option>
+                            <option value="/">/ (Slash)</option>
+                          </select>
+                        ) : (
+                          <div className="w-24 sm:w-28 shrink-0 text-center text-[10px] text-slate-400 font-medium select-none">
+                            (End)
+                          </div>
+                        )}
+
+                        {/* Remove item button */}
+                        {!isReadOnly && currentItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filtered = currentItems.filter((_, i) => i !== idx);
+                              setForm((p) => ({
+                                ...p,
+                                stringFormulaItems: filtered,
+                                formulaTemplate: computeTemplateFromStringItems(filtered),
+                              }));
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0 rounded hover:bg-slate-100"
+                            title="Remove item"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Add Placeholder / Value Buttons */}
+                {!isReadOnly && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newItem: StringFormulaItem = {
+                          id: `s-${Date.now()}`,
+                          type: "placeholder",
+                          fieldKey: availFields[0]?.key || "",
+                          separator: "",
+                        };
+                        const updated = [...currentItems, newItem];
+                        setForm((p) => ({
+                          ...p,
+                          stringFormulaItems: updated,
+                          formulaTemplate: computeTemplateFromStringItems(updated),
+                        }));
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-blue-600 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Add Placeholder</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newItem: StringFormulaItem = {
+                          id: `s-${Date.now()}`,
+                          type: "value",
+                          value: "",
+                          separator: "",
+                        };
+                        const updated = [...currentItems, newItem];
+                        setForm((p) => ({
+                          ...p,
+                          stringFormulaItems: updated,
+                          formulaTemplate: computeTemplateFromStringItems(updated),
+                        }));
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 rounded-lg text-xs font-semibold text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Add Value</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Live Preview Box */}
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between text-blue-900 font-semibold text-xs">
+                    <span className="flex items-center gap-1.5 text-blue-800">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      Live Preview:
+                    </span>
+                    <span className="text-[11px] text-blue-600 font-normal">
+                      Evaluated String
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white border border-blue-100 rounded-lg text-xs font-mono text-slate-900 break-all font-semibold">
+                    {previewResult || <span className="text-slate-400 font-normal italic">e.g. {"{name}"}_hi</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 3B. Number & Currency / Money Configuration */}
           {(form.primaryCategory === "number" || form.primaryCategory === "money") && (
