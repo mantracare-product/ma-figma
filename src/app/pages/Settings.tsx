@@ -5013,52 +5013,58 @@ export default function Settings() {
                       ),
                     },
                     {
-                      key: "roles",
-                      header: "ASSIGNED PERMISSIONS",
+                      key: "users",
+                      header: "ASSIGNED USERS",
                       align: "left",
                       render: (dept) => {
-                        const assignedRoles = roles.filter(
-                          (r) => (r.department || "").toLowerCase() === dept.name.toLowerCase()
+                        const deptUsers = allUsers.filter(
+                          (u) =>
+                            (u.department || "").toLowerCase() === dept.name.toLowerCase() ||
+                            (u.departments || []).some((d: string) => d.toLowerCase() === dept.name.toLowerCase())
                         );
-                        if (assignedRoles.length === 0) {
+                        if (deptUsers.length === 0) {
                           return (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-400 italic">No permissions assigned</span>
+                              <span className="text-xs text-slate-400 italic">No users assigned</span>
                               <button
                                 type="button"
                                 onClick={() => {
                                   setPreselectedDepartment(dept.name);
-                                  setEditingClientRole(null);
-                                  setShowRolesDrawer(true);
+                                  setShowAddUserModal(true);
                                 }}
                                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
                               >
-                                <Plus className="w-3 h-3" /> Add Permission
+                                <Plus className="w-3 h-3" /> Add User
                               </button>
                             </div>
                           );
                         }
                         return (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {assignedRoles.map((r) => (
+                            {deptUsers.slice(0, 4).map((u) => (
                               <span
-                                key={r.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                                key={u.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
                               >
-                                {r.name}
+                                <User className="w-3 h-3 text-blue-500" />
+                                <span>{u.name}</span>
                               </span>
                             ))}
+                            {deptUsers.length > 4 && (
+                              <span className="text-[11px] font-bold text-slate-500">
+                                +{deptUsers.length - 4} more
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
                                 setPreselectedDepartment(dept.name);
-                                setEditingClientRole(null);
-                                setShowRolesDrawer(true);
+                                setShowAddUserModal(true);
                               }}
                               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
-                              title="Create Permission in this Department"
+                              title="Assign User to this Department"
                             >
-                              <Plus className="w-3 h-3" /> Permission
+                              <Plus className="w-3 h-3" /> User
                             </button>
                           </div>
                         );
@@ -5068,11 +5074,10 @@ export default function Settings() {
 
                   const deptRowActions: TableRowAction<Department>[] = [
                     {
-                      label: "Create Permission in Department",
+                      label: "Add User to Department",
                       onClick: (dept) => {
                         setPreselectedDepartment(dept.name);
-                        setEditingClientRole(null);
-                        setShowRolesDrawer(true);
+                        setShowAddUserModal(true);
                       },
                     },
                     {
@@ -5124,7 +5129,6 @@ export default function Settings() {
                           type="button"
                           onClick={() => {
                             setEditingClientRole(r);
-                            setPreselectedDepartment(r.department || "");
                             setShowRolesDrawer(true);
                           }}
                           className="text-xs font-semibold text-[#0F172A] hover:text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
@@ -5135,19 +5139,23 @@ export default function Settings() {
                       ),
                     },
                     {
-                      key: "department",
-                      header: "DEPARTMENT",
+                      key: "roleType",
+                      header: "ACCESS TYPE",
                       align: "left",
-                      render: (r) => (
-                        r.department ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            <Building2 className="w-3 h-3 text-purple-500" />
-                            {r.department}
+                      render: (r) => {
+                        const isObserver = (r as any).roleType === "observer";
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              isObserver
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {isObserver ? "Observer (View & Monitor)" : "Responsible (Full Access)"}
                           </span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Unassigned</span>
-                        )
-                      ),
+                        );
+                      },
                     },
                     {
                       key: "description",
@@ -5166,7 +5174,6 @@ export default function Settings() {
                       label: "Edit Permission",
                       onClick: (r) => {
                         setEditingClientRole(r);
-                        setPreselectedDepartment(r.department || "");
                         setShowRolesDrawer(true);
                       },
                     },

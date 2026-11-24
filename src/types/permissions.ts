@@ -30,6 +30,7 @@ export interface Role {
   name: string;
   description?: string;
   department?: string;
+  roleType?: "responsible" | "observer";
   isDefault?: boolean;
   permissions: ItemPermissions;
 }

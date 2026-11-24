@@ -47,6 +47,8 @@ export interface PermissionSelectProps {
   allowInherit?: boolean;
   isInherit?: boolean;
   onToggleInherit?: (inherit: boolean) => void;
+  inheritLabel?: string;
+  isObserver?: boolean;
 }
 
 export default function PermissionSelect({
@@ -57,6 +59,8 @@ export default function PermissionSelect({
   allowInherit = false,
   isInherit = false,
   onToggleInherit,
+  inheritLabel = "Inherit from parent module",
+  isObserver = false,
 }: PermissionSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -69,10 +73,21 @@ export default function PermissionSelect({
     showAbove: boolean;
   } | null>(null);
 
+  // When in observer mode, Add/Create and Delete actions are removed completely
+  const displayedActions = useMemo(() => {
+    if (isObserver) {
+      return PERMISSION_ACTIONS.filter(
+        (a) => a.id !== "create" && a.id !== "delete"
+      );
+    }
+    return PERMISSION_ACTIONS;
+  }, [isObserver]);
+
   // Normalize incoming value: legacy "read" -> "view", legacy "write" -> "create" + "edit"
   const normalizedValue = useMemo(() => {
     const set = new Set<PermissionAction>();
     value.forEach((v) => {
+      if (isObserver && (v === "create" || v === "delete" || v === "write")) return;
       if (v === "read") {
         set.add("view");
       } else if (v === "write") {
@@ -83,7 +98,7 @@ export default function PermissionSelect({
       }
     });
     return Array.from(set);
-  }, [value]);
+  }, [value, isObserver]);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
@@ -203,7 +218,7 @@ export default function PermissionSelect({
     if (allowInherit && isInherit) {
       onToggleInherit?.(false);
     }
-    onChange(["view", "create", "edit", "delete", "import", "export"]);
+    onChange(displayedActions.map((a) => a.id));
   };
 
   const clearAll = () => {
@@ -353,7 +368,12 @@ export default function PermissionSelect({
             {/* Header with Quick Presets */}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-50/90 border-b border-gray-100 text-[11px]">
               <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
-                Permissions ({normalizedValue.length}/6)
+                Permissions ({normalizedValue.length}/{displayedActions.length})
+                {isObserver && (
+                  <span className="ml-1.5 font-normal text-amber-700 bg-amber-50 px-1 py-0.5 rounded text-[9px] border border-amber-200">
+                    Observer
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -401,12 +421,12 @@ export default function PermissionSelect({
                     <span className="text-xs">Inherit</span>
                   </div>
                   <span className={`text-[10px] shrink-0 ml-2 ${isInherit ? "text-blue-600 font-semibold" : "text-gray-400"}`}>
-                    Inherit from parent module
+                    {inheritLabel}
                   </span>
                 </div>
               )}
 
-              {PERMISSION_ACTIONS.map((action) => {
+              {displayedActions.map((action) => {
                 const isChecked = normalizedValue.includes(action.id);
 
                 return (
