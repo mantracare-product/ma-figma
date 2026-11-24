@@ -2318,11 +2318,9 @@ export default function WhatsAppAgentDrawer({
                               {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
 
-                            {/* Icon */}
-                            {currentLevel === "user" ? (
+                            {/* Icon (User level only) */}
+                            {currentLevel === "user" && (
                               <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            ) : (
-                              <Building2 className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                             )}
 
                             {/* Name & Role */}
@@ -2331,11 +2329,6 @@ export default function WhatsAppAgentDrawer({
                               {currentLevel === "user" && (item as any).role && (
                                 <span className="text-[11px] text-slate-400 font-normal ml-1.5">
                                   ({(item as any).role})
-                                </span>
-                              )}
-                              {currentLevel === "department" && (item as any).description && (
-                                <span className="text-[11px] text-slate-400 font-normal ml-1.5">
-                                  — {(item as any).description}
                                 </span>
                               )}
                             </div>
