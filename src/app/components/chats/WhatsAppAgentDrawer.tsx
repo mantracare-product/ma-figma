@@ -2,24 +2,51 @@
  * WhatsAppAgentDrawer.tsx
  * Path: src/app/components/chats/WhatsAppAgentDrawer.tsx
  *
- * Redesigned "New / Edit WhatsApp Agent Rule" drawer:
- * Mental model: "When a contact replies to X, if they say Y, reply like Z, then do these things."
+ * WhatsApp Agent Rule Configuration & Drawer Engine:
+ * Mental Model: "When a contact replies to X, if they say Y, reply like Z, then do these things."
  *
- * 5 Distinct Sections:
- * 1. Name (Agent name only; active switch, colour & description removed)
- * 2. When it runs (Trigger + Templates & Condition or New Message Prompt)
- * 3. Agent replies (Agent Prompt, KB, Send Mode)
- * 4. Hand off (Team Hand off settings)
- * 5. After replying (Advanced) (Contact creation, workflow routing, resolution: condition or inactivity only)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ARCHITECTURE OVERVIEW & 5 OPERATIONAL STAGES:
  *
- * Design Rules:
- * - Collapsible-section style with numbered title, chevron, checkmark when valid.
- * - One section open at a time; Section 1 open by default on create.
- * - NO subtext (no grey helper text under titles, toggles, options).
- * - NO capsules, pills, badges, or chips. Multi-select values shown as plain text.
- * - Explanations live strictly in info (i) icon tooltips.
- * - 8px spacing grid, 40px control height, 8px radius, 1px neutral borders.
- * - 16px padding between section header divider and first label, 16px bottom padding, 16px between fields, 6px between label and control.
+ * 1. NAME & DESCRIPTION:
+ *    - Uniquely identifies the agent rule across team inboxes and audit histories.
+ *    - Controls label presentation and search indexing in the rules table.
+ *
+ * 2. WHEN IT RUNS (TRIGGER & CONDITIONS):
+ *    - Trigger Type:
+ *        a) "template_reply": Activates when a customer responds to outbound approved WhatsApp templates.
+ *        b) "new_message": Activates when a customer initiates an inbound conversation (matched via AI prompt).
+ *    - Conditions (for template replies):
+ *        a) "any": Universal match - fires whenever a reply is received on the template. (Note: Redundant fallback
+ *           option was retired in favor of "any reply" for clean, predictable routing).
+ *        b) "button": Deterministic match on WhatsApp quick-reply button payloads (no AI latency or cost).
+ *        c) "intent": Natural-language intent matching evaluated by an AI model.
+ *        d) "keywords": Substring/token keyword filter with "ANY" or "ALL" matching modes.
+ *
+ * 3. AGENT REPLIES (RESPONSE GENERATION & KNOWLEDGE):
+ *    - Reply Modes:
+ *        a) "ai_prompt": Full generative AI response guided by prompt instructions. Supports dynamic variable
+ *           placeholders (e.g., {{contact_name}}, {{appointment_date}}) injected via Document Variable Picker.
+ *        b) "template": Dispatches an approved WhatsApp business template response.
+ *    - Knowledge Base (useKb): Grounding toggle to incorporate clinic/business FAQ & clinical guidelines (RAG).
+ *    - Delivery Mode (sendMode):
+ *        a) "auto": Instant dispatch directly to WhatsApp conversation.
+ *        b) "draft": Queues as an AI draft requiring human supervisor approval before sending.
+ *
+ * 4. HAND OFF (MULTI-CONDITION ESCALATION, MULTI-ASSIGNEES & PRIORITY SEQUENCING):
+ *    - Multi-Condition Evaluation: Detects critical events (medical emergencies, upset patients, refund demands).
+ *    - Multi-Select Responsible Assignees: Supports assigning individual team members and/or entire organization
+ *      departments (e.g. Clinical Operations, Customer Support, Administration).
+ *    - Escalation Sequencing: Re-orderable tier hierarchy (Tier 1 -> Tier 2 -> Tier 3...) with intuitive Move Up,
+ *      Move Down, and Remove actions to establish clear escalation order.
+ *    - Contextual Handoff Messages: Sends condition-specific reassurance with live variable placeholders.
+ *
+ * 5. AFTER REPLYING (ADVANCED POST-REPLY AUTOMATIONS):
+ *    - Contact Creation: Automatically upserts contacts into CRM and assigns a category (Patient, Lead, Client).
+ *    - Workflow Routing: Initiates an operational/clinical workflow (e.g., Patient Care Journey, Intake Pipeline).
+ *    - Conversation Resolution: Resolves conversation via AI confirmation prompt, inactivity timer (1-24h), or
+ *      immediate team transfer.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
@@ -34,17 +61,22 @@ import {
   Search,
   Sparkles,
   Plus,
+  User,
+  Building2,
+  X,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import {
   WhatsAppAgentRule,
   HandoffCondition,
+  HandoffAssignee,
   useWhatsappAgentStore,
 } from "../../../lib/whatsappAgentStore";
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
+import { getStoredDepartments } from "../../../lib/departmentStore";
 import { getContactCategories } from "../../../lib/contactCategoriesStore";
 import DocumentSelectFieldsModal from "../ui/DocumentSelectFieldsModal";
 
@@ -91,7 +123,7 @@ export default function WhatsAppAgentDrawer({
   const isEditing = Boolean(rule);
   const { rules } = useWhatsappAgentStore();
 
-  // Load available templates, workflows, team members, contact categories
+  // Load available templates, workflows, team members, departments, and contact categories
   const allTemplates = useMemo(() => getStoredTemplates(), [isOpen]);
   const approvedTemplates = useMemo(
     () => allTemplates.filter((t) => t.approvalStatus === "approved"),
@@ -99,6 +131,7 @@ export default function WhatsAppAgentDrawer({
   );
   const workflows = useMemo(() => getStoredProcesses(), [isOpen]);
   const teamMembers = useMemo(() => getStoredTeamMembers(), [isOpen]);
+  const departments = useMemo(() => getStoredDepartments(), [isOpen]);
   const contactCategories = useMemo(() => getContactCategories(), [isOpen]);
 
   // Collapsible section state: 1, 2, 3, 4, or 5 (only one open at a time)
@@ -113,8 +146,9 @@ export default function WhatsAppAgentDrawer({
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  // Note: "fallback" option removed as "any" reply covers all incoming template replies
   const [conditionType, setConditionType] = useState<
-    "any" | "button" | "intent" | "keywords" | "fallback"
+    "any" | "button" | "intent" | "keywords"
   >("any");
   const [selectedButtonIds, setSelectedButtonIds] = useState<string[]>([]);
   const [showButtonDropdown, setShowButtonDropdown] = useState(false);
@@ -139,7 +173,7 @@ export default function WhatsAppAgentDrawer({
     | null
   >(null);
 
-  // ── Section 4: Hand off (Multi-condition support) ──
+  // ── Section 4: Hand off (Multi-condition & Multi-assignee support with Departments & Sequencing) ──
   const [handoffEnabled, setHandoffEnabled] = useState(true);
   const [handoffConditionsOpen, setHandoffConditionsOpen] = useState(true);
   const [handoffConditions, setHandoffConditions] = useState<HandoffCondition[]>([
@@ -149,10 +183,121 @@ export default function WhatsAppAgentDrawer({
       prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
       assigneeId: teamMembers[0]?.id || 1,
       assigneeName: teamMembers[0]?.name || "Admin User",
+      assignees: teamMembers[0]
+        ? [
+            {
+              id: teamMembers[0].id,
+              type: "user",
+              name: teamMembers[0].name,
+              roleOrDept: teamMembers[0].role || teamMembers[0].department || "Team Member",
+            },
+          ]
+        : [],
       handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
     },
   ]);
   const handoffMessageRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  /**
+   * Helper: Appends a team member or department to a handoff condition's escalation sequence.
+   * Format: "dept:<id>" or "user:<id>"
+   */
+  const handleAddAssignee = (condId: string, val: string) => {
+    const [type, id] = val.split(":");
+    let newAssignee: HandoffAssignee | null = null;
+
+    if (type === "dept") {
+      const dept = departments.find((d) => String(d.id) === String(id));
+      if (dept) {
+        newAssignee = {
+          id: dept.id,
+          type: "department",
+          name: dept.name,
+          roleOrDept: "Department",
+        };
+      }
+    } else if (type === "user") {
+      const member = teamMembers.find((m) => String(m.id) === String(id));
+      if (member) {
+        newAssignee = {
+          id: member.id,
+          type: "user",
+          name: member.name,
+          roleOrDept: member.role || member.department || "Team Member",
+        };
+      }
+    }
+
+    if (!newAssignee) return;
+
+    setHandoffConditions((prev) =>
+      prev.map((c) => {
+        if (c.id !== condId) return c;
+        const currentAssignees = c.assignees || [];
+        const alreadyExists = currentAssignees.some(
+          (a) => String(a.id) === String(newAssignee!.id) && a.type === newAssignee!.type
+        );
+        if (alreadyExists) {
+          toast.info(`"${newAssignee!.name}" is already in the sequence`);
+          return c;
+        }
+        const updated = [...currentAssignees, newAssignee!];
+        return {
+          ...c,
+          assignees: updated,
+          assigneeId: updated[0]?.id || "",
+          assigneeName: updated[0]?.name || "",
+        };
+      })
+    );
+
+    // Clear validation error if any
+    setErrors((prev) => ({
+      ...prev,
+      [`handoff_assignee_${condId}`]: "",
+    }));
+  };
+
+  /**
+   * Helper: Moves an assignee up or down in the escalation sequence.
+   */
+  const handleMoveAssignee = (condId: string, fromIndex: number, direction: "up" | "down") => {
+    setHandoffConditions((prev) =>
+      prev.map((c) => {
+        if (c.id !== condId) return c;
+        const list = [...(c.assignees || [])];
+        const targetIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
+        if (targetIndex < 0 || targetIndex >= list.length) return c;
+        const temp = list[fromIndex];
+        list[fromIndex] = list[targetIndex];
+        list[targetIndex] = temp;
+        return {
+          ...c,
+          assignees: list,
+          assigneeId: list[0]?.id || "",
+          assigneeName: list[0]?.name || "",
+        };
+      })
+    );
+  };
+
+  /**
+   * Helper: Removes an assignee from the condition's escalation sequence.
+   */
+  const handleRemoveAssignee = (condId: string, removeIndex: number) => {
+    setHandoffConditions((prev) =>
+      prev.map((c) => {
+        if (c.id !== condId) return c;
+        const list = (c.assignees || []).filter((_, i) => i !== removeIndex);
+        return {
+          ...c,
+          assignees: list,
+          assigneeId: list[0]?.id || "",
+          assigneeName: list[0]?.name || "",
+        };
+      })
+    );
+  };
 
   // ── Section 5: After replying (Advanced) ──
   const [createContactEnabled, setCreateContactEnabled] = useState(false);
@@ -280,10 +425,15 @@ export default function WhatsAppAgentDrawer({
   useEffect(() => {
     setErrors({});
     if (rule) {
+      // ═════════════════════════════════════════════════════════════════════════
+      // EDIT MODE: Populate existing rule settings into local form state
+      // ═════════════════════════════════════════════════════════════════════════
+
+      // ── Step 1: Agent Identification ──
       setName(rule.name || "");
       setDescription(rule.description || "");
 
-      // Section 2: When it runs
+      // ── Step 2: Trigger & Condition Rules ──
       const tType = rule.trigger_type || "template_reply";
       setTriggerType(tType);
       const defaultTpls =
@@ -296,14 +446,15 @@ export default function WhatsAppAgentDrawer({
           : [];
       setSelectedTemplateIds(defaultTpls);
 
-      setConditionType(rule.condition_type || "any");
+      // Migrate any legacy "fallback" condition to universal "any" reply
+      setConditionType(rule.condition_type === "fallback" ? "any" : (rule.condition_type || "any"));
       setSelectedButtonIds(rule.button_ids || (rule.targetButtonLabel ? [rule.targetButtonLabel] : []));
       setIntentText(rule.intent_text || rule.classificationPrompt || "");
       setKeywords(rule.keywords || rule.keywordsFilter?.contains || "");
       setKeywordMatch(rule.keyword_match || "any");
       setTriggerPrompt(rule.trigger_prompt || "");
 
-      // Section 3: Agent replies
+      // ── Step 3: Agent Reply Configuration ──
       setReplyMode(rule.reply_mode || "ai_prompt");
       setReplyTemplateId(rule.reply_template_id || approvedTemplates[0]?.id || "");
       setAgentPrompt(
@@ -316,22 +467,56 @@ export default function WhatsAppAgentDrawer({
       setUseKb(Boolean(rule.use_kb));
       setSendMode(rule.send_mode || (rule.responseType === "ai_draft_only" ? "draft" : "auto"));
 
-      // Section 4: Hand off (Multi-condition support)
+      // ── Step 4: Human Handoff with Multi-Assignees, Departments & Sequencing ──
       setHandoffEnabled(rule.handoff_enabled !== undefined ? rule.handoff_enabled : true);
       if (Array.isArray(rule.handoff_conditions) && rule.handoff_conditions.length > 0) {
         setHandoffConditions(
-          rule.handoff_conditions.map((c, i) => ({
-            id: c.id || `cond-${i + 1}`,
-            title: c.title || `Condition ${i + 1}`,
-            prompt: c.prompt || "",
-            assigneeId: c.assigneeId || teamMembers[0]?.id || "",
-            assigneeName: c.assigneeName,
-            handoffMessage:
-              c.handoffMessage ||
-              "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
-          }))
+          rule.handoff_conditions.map((c, i) => {
+            let assignees: HandoffAssignee[] = [];
+            if (Array.isArray(c.assignees) && c.assignees.length > 0) {
+              assignees = c.assignees;
+            } else if (c.assigneeId) {
+              const member = teamMembers.find((m) => String(m.id) === String(c.assigneeId));
+              const dept = departments.find((d) => String(d.id) === String(c.assigneeId));
+              if (dept) {
+                assignees = [{ id: dept.id, type: "department", name: dept.name, roleOrDept: "Department" }];
+              } else if (member) {
+                assignees = [{ id: member.id, type: "user", name: member.name, roleOrDept: member.role || member.department || "Team Member" }];
+              } else {
+                assignees = [{ id: c.assigneeId, type: "user", name: c.assigneeName || "Admin User" }];
+              }
+            } else if (teamMembers[0]) {
+              assignees = [{ id: teamMembers[0].id, type: "user", name: teamMembers[0].name, roleOrDept: teamMembers[0].role || teamMembers[0].department || "Team Member" }];
+            }
+
+            return {
+              id: c.id || `cond-${i + 1}`,
+              title: c.title || `Condition ${i + 1}`,
+              prompt: c.prompt || "",
+              assigneeId: assignees[0]?.id || c.assigneeId || teamMembers[0]?.id || "",
+              assigneeName: assignees[0]?.name || c.assigneeName,
+              assignees,
+              handoffMessage:
+                c.handoffMessage ||
+                "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+            };
+          })
         );
       } else {
+        const defaultMember = teamMembers[0];
+        const defaultAssigneeId = rule.handoff_assignee_id || defaultMember?.id || "";
+        const defaultAssigneeName = rule.handoff_assignee_name || defaultMember?.name;
+        const initialAssignees: HandoffAssignee[] = defaultMember
+          ? [
+              {
+                id: defaultMember.id,
+                type: "user",
+                name: defaultMember.name,
+                roleOrDept: defaultMember.role || defaultMember.department || "Team Member",
+              },
+            ]
+          : [];
+
         setHandoffConditions([
           {
             id: "cond-1",
@@ -339,8 +524,9 @@ export default function WhatsAppAgentDrawer({
             prompt:
               rule.handoff_condition_prompt ||
               "Contact is upset, asks for a refund, or raises a medical emergency",
-            assigneeId: rule.handoff_assignee_id || teamMembers[0]?.id || "",
-            assigneeName: rule.handoff_assignee_name,
+            assigneeId: defaultAssigneeId,
+            assigneeName: defaultAssigneeName,
+            assignees: initialAssignees,
             handoffMessage:
               rule.handoff_message ||
               "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
@@ -349,7 +535,7 @@ export default function WhatsAppAgentDrawer({
       }
       setHandoffConditionsOpen(true);
 
-      // Section 5: After replying (Advanced)
+      // ── Step 5: After Replying (Advanced Automations & Resolution) ──
       setCreateContactEnabled(Boolean(rule.create_contact_enabled || (rule as any).crm_update));
       setContactCategoryId(
         rule.contact_category_id || contactCategories[0] || "Client"
@@ -376,11 +562,13 @@ export default function WhatsAppAgentDrawer({
 
       setOpenSection(1);
     } else {
-      // Create new agent rule defaults
+      // ═════════════════════════════════════════════════════════════════════════
+      // CREATE MODE: Initialize sensible defaults for a new WhatsApp agent rule
+      // ═════════════════════════════════════════════════════════════════════════
       setName("");
       setDescription("");
 
-      // Section 2: When it runs
+      // Step 2: Trigger & Condition Defaults
       setTriggerType("template_reply");
       const firstTplId = approvedTemplates[0]?.id ? [approvedTemplates[0].id] : [];
       setSelectedTemplateIds(firstTplId);
@@ -391,29 +579,40 @@ export default function WhatsAppAgentDrawer({
       setKeywordMatch("any");
       setTriggerPrompt("");
 
-      // Section 3: Agent replies
+      // Step 3: Agent Reply Defaults
       setReplyMode("ai_prompt");
       setReplyTemplateId(approvedTemplates[0]?.id || "");
       setAgentPrompt("");
       setUseKb(false);
       setSendMode("auto");
 
-      // Section 4: Hand off
+      // Step 4: Hand Off Defaults with primary team member
       setHandoffEnabled(true);
       setHandoffConditionsOpen(true);
+      const defaultMember = teamMembers[0];
       setHandoffConditions([
         {
           id: `cond-${Date.now()}`,
           title: "Condition 1",
           prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
-          assigneeId: teamMembers[0]?.id || "",
-          assigneeName: teamMembers[0]?.name,
+          assigneeId: defaultMember?.id || "",
+          assigneeName: defaultMember?.name,
+          assignees: defaultMember
+            ? [
+                {
+                  id: defaultMember.id,
+                  type: "user",
+                  name: defaultMember.name,
+                  roleOrDept: defaultMember.role || defaultMember.department || "Team Member",
+                },
+              ]
+            : [],
           handoffMessage:
             "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
         },
       ]);
 
-      // Section 5: After replying (Advanced)
+      // Step 5: Advanced Automation Defaults
       setCreateContactEnabled(false);
       setContactCategoryId(contactCategories[0] || "Client");
       setWorkflowId("");
@@ -424,16 +623,17 @@ export default function WhatsAppAgentDrawer({
 
       setOpenSection(1);
     }
-  }, [rule, isOpen, approvedTemplates, teamMembers, contactCategories]);
+  }, [rule, isOpen, approvedTemplates, teamMembers, departments, contactCategories]);
 
-  // Section validity calculation for checkmarks (Sections 1-4)
+  // ═════════════════════════════════════════════════════════════════════════════
+  // Section Validity State: Used to render green checkmarks in section headers
+  // ═════════════════════════════════════════════════════════════════════════════
   const isSection1Valid = Boolean(name.trim());
   const isSection2Valid =
     triggerType === "new_message"
       ? Boolean(triggerPrompt.trim())
       : selectedTemplateIds.length > 0 &&
         (conditionType === "any" ||
-          conditionType === "fallback" ||
           (conditionType === "button" && selectedButtonIds.length > 0) ||
           (conditionType === "intent" && intentText.trim().length > 0) ||
           (conditionType === "keywords" && keywords.trim().length > 0));
@@ -443,7 +643,10 @@ export default function WhatsAppAgentDrawer({
     !handoffEnabled ||
     (handoffConditions.length > 0 &&
       handoffConditions.every(
-        (c) => Boolean(c.prompt.trim()) && Boolean(c.assigneeId) && Boolean(c.handoffMessage.trim())
+        (c) =>
+          Boolean(c.prompt.trim()) &&
+          Boolean((c.assignees && c.assignees.length > 0) || c.assigneeId) &&
+          Boolean(c.handoffMessage.trim())
       ));
 
   // Toggle single section open/closed
@@ -495,7 +698,9 @@ export default function WhatsAppAgentDrawer({
     }
   };
 
-  // Save handler with strict validation
+  // ═════════════════════════════════════════════════════════════════════════════
+  // Save Handler: Validates all 5 sections and persists the agent rule
+  // ═════════════════════════════════════════════════════════════════════════════
   const handleSave = () => {
     const nextErrors: Record<string, string> = {};
 
@@ -525,17 +730,6 @@ export default function WhatsAppAgentDrawer({
       } else if (conditionType === "keywords" && !keywords.trim()) {
         nextErrors.keywords = "At least one keyword is required.";
         if (!nextErrors.name && !nextErrors.templates) setOpenSection(2);
-      } else if (conditionType === "fallback") {
-        const existingFallback = rules.find(
-          (r) =>
-            r.condition_type === "fallback" &&
-            r.trigger_type === triggerType &&
-            r.id !== rule?.id
-        );
-        if (existingFallback) {
-          nextErrors.fallback = `A fallback agent ("${existingFallback.name}") already exists for this trigger. Only one fallback agent is allowed.`;
-          if (!nextErrors.name && !nextErrors.templates) setOpenSection(2);
-        }
       }
     } else {
       // New message trigger
@@ -555,7 +749,6 @@ export default function WhatsAppAgentDrawer({
           !nextErrors.button &&
           !nextErrors.intent &&
           !nextErrors.keywords &&
-          !nextErrors.fallback &&
           !nextErrors.triggerPrompt
         ) {
           setOpenSection(3);
@@ -570,7 +763,6 @@ export default function WhatsAppAgentDrawer({
           !nextErrors.button &&
           !nextErrors.intent &&
           !nextErrors.keywords &&
-          !nextErrors.fallback &&
           !nextErrors.triggerPrompt
         ) {
           setOpenSection(3);
@@ -578,7 +770,7 @@ export default function WhatsAppAgentDrawer({
       }
     }
 
-    // 4. Hand off validation
+    // 4. Hand off validation (Multi-condition & Multi-assignees)
     if (handoffEnabled) {
       if (handoffConditions.length === 0) {
         nextErrors.handoff = "At least one handoff condition is required.";
@@ -588,8 +780,9 @@ export default function WhatsAppAgentDrawer({
           if (!c.prompt.trim()) {
             nextErrors[`handoff_prompt_${c.id}`] = `Condition ${idx + 1}: Prompt is required.`;
           }
-          if (!c.assigneeId) {
-            nextErrors[`handoff_assignee_${c.id}`] = `Condition ${idx + 1}: Responsible user is required.`;
+          const hasAssignee = (c.assignees && c.assignees.length > 0) || Boolean(c.assigneeId);
+          if (!hasAssignee) {
+            nextErrors[`handoff_assignee_${c.id}`] = `Condition ${idx + 1}: At least one responsible member or department is required.`;
           }
           if (!c.handoffMessage.trim()) {
             nextErrors[`handoff_message_${c.id}`] = `Condition ${idx + 1}: Hand off message is required.`;
@@ -603,7 +796,6 @@ export default function WhatsAppAgentDrawer({
             !nextErrors.button &&
             !nextErrors.intent &&
             !nextErrors.keywords &&
-            !nextErrors.fallback &&
             !nextErrors.triggerPrompt &&
             !nextErrors.agentPrompt
           ) {
@@ -647,10 +839,12 @@ export default function WhatsAppAgentDrawer({
       return match ? match.name : tid;
     });
 
+    // Primary condition & first assignee for backward compatibility
     const primaryCondition = handoffConditions[0];
-    const primaryAssignee = teamMembers.find(
-      (m) => String(m.id) === String(primaryCondition?.assigneeId)
-    );
+    const primaryFirstAssignee = primaryCondition?.assignees?.[0];
+    const primaryAssigneeId = primaryFirstAssignee?.id || primaryCondition?.assigneeId;
+    const primaryAssigneeName = primaryFirstAssignee?.name || primaryCondition?.assigneeName;
+
     const selectedWorkflow = workflows.find((w) => w.id === workflowId);
     const workflow_name = selectedWorkflow ? (selectedWorkflow as any).title || selectedWorkflow.name : undefined;
 
@@ -691,17 +885,19 @@ export default function WhatsAppAgentDrawer({
       handoff_enabled: handoffEnabled,
       handoff_conditions: handoffEnabled
         ? handoffConditions.map((c, i) => {
-            const member = teamMembers.find((m) => String(m.id) === String(c.assigneeId));
+            const firstAssignee = c.assignees?.[0];
             return {
               ...c,
               title: c.title || `Condition ${i + 1}`,
-              assigneeName: member?.name || c.assigneeName || "Admin User",
+              assigneeId: firstAssignee?.id || c.assigneeId || "",
+              assigneeName: firstAssignee?.name || c.assigneeName || "Admin User",
+              assignees: c.assignees || [],
             };
           })
         : undefined,
       handoff_condition_prompt: handoffEnabled ? primaryCondition?.prompt.trim() : undefined,
-      handoff_assignee_id: handoffEnabled ? primaryCondition?.assigneeId : undefined,
-      handoff_assignee_name: handoffEnabled ? (primaryAssignee?.name || primaryCondition?.assigneeName) : undefined,
+      handoff_assignee_id: handoffEnabled ? primaryAssigneeId : undefined,
+      handoff_assignee_name: handoffEnabled ? primaryAssigneeName : undefined,
       handoff_message: handoffEnabled ? primaryCondition?.handoffMessage.trim() : undefined,
 
       create_contact_enabled: createContactEnabled,
@@ -1018,7 +1214,6 @@ export default function WhatsAppAgentDrawer({
                           button: "",
                           intent: "",
                           keywords: "",
-                          fallback: "",
                         }));
                       }}
                       className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
@@ -1032,7 +1227,6 @@ export default function WhatsAppAgentDrawer({
                       </option>
                       <option value="intent">Matches intent (AI)</option>
                       <option value="keywords">Contains keywords</option>
-                      <option value="fallback">Nothing else matched (fallback)</option>
                     </select>
                   </div>
 
@@ -1209,17 +1403,6 @@ export default function WhatsAppAgentDrawer({
                       </div>
                     </div>
                   )}
-
-                  {/* Fallback */}
-                  {conditionType === "fallback" && (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-start gap-2">
-                      <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                      <span>
-                        Runs only when no other agent on this trigger matches. Only one fallback agent is allowed per trigger.
-                      </span>
-                    </div>
-                  )}
-                  {errors.fallback && <p className="text-xs text-red-500 mt-1">{errors.fallback}</p>}
                 </>
               )}
 
@@ -1496,14 +1679,25 @@ export default function WhatsAppAgentDrawer({
                         type="button"
                         onClick={() => {
                           const newId = `cond-${Date.now()}`;
+                          const defaultMember = teamMembers[0];
                           setHandoffConditions((prev) => [
                             ...prev,
                             {
                               id: newId,
                               title: `Condition ${prev.length + 1}`,
                               prompt: "",
-                              assigneeId: teamMembers[0]?.id || "",
-                              assigneeName: teamMembers[0]?.name,
+                              assigneeId: defaultMember?.id || "",
+                              assigneeName: defaultMember?.name,
+                              assignees: defaultMember
+                                ? [
+                                    {
+                                      id: defaultMember.id,
+                                      type: "user",
+                                      name: defaultMember.name,
+                                      roleOrDept: defaultMember.role || defaultMember.department || "Team Member",
+                                    },
+                                  ]
+                                : [],
                               handoffMessage:
                                 "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
                             },
@@ -1587,51 +1781,140 @@ export default function WhatsAppAgentDrawer({
                                 )}
                               </div>
 
-                              {/* 2. Assign responsible user */}
+                              {/* 2. Assign responsible (Multi-select, Departments & Escalation Sequencing) */}
                               <div>
-                                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                                  <span>Assign responsible</span>
-                                  <span className="text-red-500 ml-0.5">*</span>
-                                  <InfoTip text="The specific team member assigned when this condition triggers." />
-                                </label>
-                                <select
-                                  value={cond.assigneeId}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    const member = teamMembers.find(
-                                      (m) => String(m.id) === String(val)
-                                    );
-                                    setHandoffConditions((prev) =>
-                                      prev.map((c) =>
-                                        c.id === cond.id
-                                          ? {
-                                              ...c,
-                                              assigneeId: val,
-                                              assigneeName: member?.name,
-                                            }
-                                          : c
-                                      )
-                                    );
-                                    if (assigneeErr) {
-                                      setErrors((prev) => ({
-                                        ...prev,
-                                        [`handoff_assignee_${cond.id}`]: "",
-                                      }));
-                                    }
-                                  }}
-                                  className={`w-full h-10 px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors ${
-                                    assigneeErr
-                                      ? "border-red-400 bg-red-50/20"
-                                      : "border-slate-200"
-                                  }`}
-                                >
-                                  <option value="">Select team member...</option>
-                                  {teamMembers.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.name} {m.role ? `(${m.role})` : ""}
-                                    </option>
-                                  ))}
-                                </select>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="flex items-center text-[13px] font-medium text-slate-700">
+                                    <span>Assign responsible</span>
+                                    <span className="text-red-500 ml-0.5">*</span>
+                                    <InfoTip text="Assign team members or entire departments to handle this handoff. Sequence the order (1st, 2nd, 3rd) for escalation routing." />
+                                  </label>
+                                  {cond.assignees && cond.assignees.length > 0 && (
+                                    <span className="text-xs text-slate-500 font-medium">
+                                      {cond.assignees.length} assigned &bull; Sequenced order
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Sequenced List of Assignees */}
+                                {cond.assignees && cond.assignees.length > 0 ? (
+                                  <div className="space-y-1.5 mb-2.5">
+                                    {cond.assignees.map((assignee, seqIdx) => {
+                                      const isFirst = seqIdx === 0;
+                                      const isLast = seqIdx === cond.assignees!.length - 1;
+                                      const isDept = assignee.type === "department";
+
+                                      return (
+                                        <div
+                                          key={`${assignee.type}-${assignee.id}-${seqIdx}`}
+                                          className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors text-sm"
+                                        >
+                                          {/* Left: Sequence index badge & identity */}
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <span
+                                              className="w-5 h-5 rounded-full bg-white border border-slate-300 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                                              title={`Escalation Tier #${seqIdx + 1}`}
+                                            >
+                                              {seqIdx + 1}
+                                            </span>
+                                            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                                              {isDept ? (
+                                                <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                                              ) : (
+                                                <User className="w-3.5 h-3.5 text-blue-600" />
+                                              )}
+                                            </div>
+                                            <div className="min-w-0 flex items-center gap-2">
+                                              <span className="font-medium text-slate-900 truncate text-xs sm:text-sm">
+                                                {assignee.name}
+                                              </span>
+                                              <span
+                                                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
+                                                  isDept
+                                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                                                }`}
+                                              >
+                                                {isDept ? "Department" : assignee.roleOrDept || "Member"}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {/* Right: Sequencing controls (Move up, Move down, Remove) */}
+                                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                                            <button
+                                              type="button"
+                                              disabled={isFirst}
+                                              onClick={() => handleMoveAssignee(cond.id, seqIdx, "up")}
+                                              className={`p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 transition-colors ${
+                                                isFirst ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
+                                              }`}
+                                              title="Move up in sequence"
+                                            >
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={isLast}
+                                              onClick={() => handleMoveAssignee(cond.id, seqIdx, "down")}
+                                              className={`p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 transition-colors ${
+                                                isLast ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
+                                              }`}
+                                              title="Move down in sequence"
+                                            >
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveAssignee(cond.id, seqIdx)}
+                                              className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer ml-0.5"
+                                              title="Remove from assignees"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="p-3 mb-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 text-center text-xs text-slate-500">
+                                    No responsible person or department assigned yet. Add one below.
+                                  </div>
+                                )}
+
+                                {/* Add Assignee Dropdown */}
+                                <div className="relative">
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (!val) return;
+                                      handleAddAssignee(cond.id, val);
+                                    }}
+                                    className={`w-full h-10 px-3 py-2 text-sm rounded-lg border bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors ${
+                                      assigneeErr
+                                        ? "border-red-400 bg-red-50/20"
+                                        : "border-slate-200"
+                                    }`}
+                                  >
+                                    <option value="">+ Add team member or department to sequence...</option>
+                                    <optgroup label="── Departments ──">
+                                      {departments.map((d) => (
+                                        <option key={`dept-${d.id}`} value={`dept:${d.id}`}>
+                                          🏢 {d.name} (Department)
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="── Team Members ──">
+                                      {teamMembers.map((m) => (
+                                        <option key={`user-${m.id}`} value={`user:${m.id}`}>
+                                          👤 {m.name} {m.role ? `(${m.role})` : ""}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  </select>
+                                </div>
                                 {assigneeErr && (
                                   <p className="text-xs text-red-500 mt-1">{assigneeErr}</p>
                                 )}

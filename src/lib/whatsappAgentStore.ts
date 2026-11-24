@@ -24,13 +24,28 @@ export type ResolutionCriteriaType =
   | "transferred_to_team"
   | "manual";
 
+/**
+ * Represents an individual team member or entire department assigned to handle a conversation escalation.
+ * Supports priority sequencing (1st, 2nd, 3rd routing order).
+ */
+export interface HandoffAssignee {
+  id: string | number;
+  type: "user" | "department";
+  name: string;
+  roleOrDept?: string;
+}
+
+/**
+ * Configuration for when and how an agent conversation escalates to human team members or departments.
+ */
 export interface HandoffCondition {
   id: string;
   title?: string;
   prompt: string;
-  assigneeId: string | number;
+  assigneeId: string | number; // Primary assignee (e.g. 1st in sequence) maintained for backward compatibility
   assigneeName?: string;
-  handoffMessage: string;
+  assignees?: HandoffAssignee[]; // Ordered sequence of responsible users and/or departments
+  handoffMessage: string; // Message sent to the contact upon escalation
 }
 
 export interface WhatsAppAgentRule {
@@ -169,6 +184,20 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
         prompt: "Contact is upset, asks for a refund, or raises a medical emergency",
         assigneeId: 2,
         assigneeName: "Akshita Sharma",
+        assignees: [
+          {
+            id: 2,
+            type: "user",
+            name: "Akshita Sharma",
+            roleOrDept: "Clinical Triage",
+          },
+          {
+            id: "dept_1",
+            type: "department",
+            name: "Clinical Operations",
+            roleOrDept: "Department",
+          },
+        ],
         handoffMessage: "Thanks {{contact_name}}, I'm connecting you with our care team who will reply shortly.",
       },
     ],
@@ -279,15 +308,15 @@ export const DEFAULT_WHATSAPP_RULES: WhatsAppAgentRule[] = [
   },
   {
     id: "wa-rule-4",
-    name: "General Template Reply Fallback",
-    description: "Fallback handler when contact messages do not match specific button clicks or intents.",
+    name: "General Template Reply Assistant",
+    description: "Answers any general customer inquiries and template replies.",
     is_active: true,
     enabled: true,
     priority: 4,
     trigger_type: "template_reply",
     templates: ["tpl-1", "tpl-2"],
     templateNames: ["Appointment Reminder", "Booking Confirmation"],
-    condition_type: "fallback",
+    condition_type: "any",
     reply_mode: "ai_prompt",
     agent_prompt:
       "Warmly thank {{contact_name}} for their message. Let them know their inquiry has been received and our care coordinator will assist them shortly.",
@@ -373,9 +402,14 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
       : undefined;
 
   // Condition normalization (for template replies only)
+  // "fallback" is migrated to "any"
   let condition_type: "any" | "button" | "intent" | "keywords" | "fallback" = "any";
   if (trigger_type === "template_reply") {
-    condition_type = raw.condition_type || "any";
+    if (raw.condition_type === "fallback") {
+      condition_type = "any";
+    } else {
+      condition_type = raw.condition_type || "any";
+    }
     if (!raw.condition_type) {
       if (raw.triggerEvent === "button_click" || raw.targetButtonLabel) {
         condition_type = "button";
@@ -417,7 +451,7 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
   const reply_template_id = raw.reply_template_id || undefined;
   const reply_template_name = raw.reply_template_name || undefined;
 
-  // Hand off migration & multi-conditions support
+  // Hand off migration & multi-conditions support with multi-assignee sequencing & departments
   const handoff_enabled =
     raw.handoff_enabled !== undefined
       ? Boolean(raw.handoff_enabled)
@@ -427,18 +461,35 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
 
   let handoff_conditions: HandoffCondition[] = [];
   if (Array.isArray(raw.handoff_conditions) && raw.handoff_conditions.length > 0) {
-    handoff_conditions = raw.handoff_conditions.map((c: any, cIdx: number) => ({
-      id: c.id || `cond-${cIdx + 1}`,
-      title: c.title || `Condition ${cIdx + 1}`,
-      prompt: c.prompt || c.conditionPrompt || "",
-      assigneeId: c.assigneeId || c.handoff_assignee_id || 1,
-      assigneeName: c.assigneeName || c.handoff_assignee_name || "Admin User",
-      handoffMessage:
-        c.handoffMessage ||
-        c.handoff_message ||
-        "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
-    }));
+    handoff_conditions = raw.handoff_conditions.map((c: any, cIdx: number) => {
+      let assignees: HandoffAssignee[] = [];
+      if (Array.isArray(c.assignees) && c.assignees.length > 0) {
+        assignees = c.assignees;
+      } else if (c.assigneeId || c.handoff_assignee_id) {
+        assignees = [
+          {
+            id: c.assigneeId || c.handoff_assignee_id || 1,
+            type: "user",
+            name: c.assigneeName || c.handoff_assignee_name || "Admin User",
+          },
+        ];
+      }
+      return {
+        id: c.id || `cond-${cIdx + 1}`,
+        title: c.title || `Condition ${cIdx + 1}`,
+        prompt: c.prompt || c.conditionPrompt || "",
+        assigneeId: assignees[0]?.id || c.assigneeId || c.handoff_assignee_id || 1,
+        assigneeName: assignees[0]?.name || c.assigneeName || c.handoff_assignee_name || "Admin User",
+        assignees,
+        handoffMessage:
+          c.handoffMessage ||
+          c.handoff_message ||
+          "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
+      };
+    });
   } else {
+    const defaultAssigneeId = raw.handoff_assignee_id || 1;
+    const defaultAssigneeName = raw.handoff_assignee_name || "Admin User";
     handoff_conditions = [
       {
         id: "cond-1",
@@ -446,8 +497,15 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
         prompt:
           raw.handoff_condition_prompt ||
           "Contact is upset, asks for a refund, or raises a medical emergency",
-        assigneeId: raw.handoff_assignee_id || 1,
-        assigneeName: raw.handoff_assignee_name || "Admin User",
+        assigneeId: defaultAssigneeId,
+        assigneeName: defaultAssigneeName,
+        assignees: [
+          {
+            id: defaultAssigneeId,
+            type: "user",
+            name: defaultAssigneeName,
+          },
+        ],
         handoffMessage:
           raw.handoff_message ||
           "Thanks {{contact_name}}, I'm connecting you with our team who will reply shortly.",
@@ -457,8 +515,8 @@ function normalizeRule(raw: any, index: number): WhatsAppAgentRule {
 
   const primaryCondition = handoff_conditions[0];
   const handoff_condition_prompt = primaryCondition?.prompt || "";
-  const handoff_assignee_id = primaryCondition?.assigneeId || 1;
-  const handoff_assignee_name = primaryCondition?.assigneeName || "Admin User";
+  const handoff_assignee_id = primaryCondition?.assignees?.[0]?.id || primaryCondition?.assigneeId || 1;
+  const handoff_assignee_name = primaryCondition?.assignees?.[0]?.name || primaryCondition?.assigneeName || "Admin User";
   const handoff_message = primaryCondition?.handoffMessage || "";
 
   // Create contact migration

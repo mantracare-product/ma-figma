@@ -232,8 +232,16 @@ export default function WhatsAppAgentRulesView({
         }
 
         const tooltipContent = conditions
-          .map((c, i) => `${i + 1}. ${c.prompt || c.title || "Condition"} → ${c.assigneeName || "Team"}`)
-          .join("\n");
+          .map((c, i) => {
+            const assigneeStr =
+              Array.isArray(c.assignees) && c.assignees.length > 0
+                ? c.assignees
+                    .map((a, aIdx) => `${aIdx + 1}. ${a.name} (${a.type === "department" ? "Dept" : "User"})`)
+                    .join(" → ")
+                : c.assigneeName || "Team";
+            return `${i + 1}. ${c.prompt || c.title || "Condition"}\n   ↳ Escalation: ${assigneeStr}`;
+          })
+          .join("\n\n");
 
         return (
           <Tooltip content={tooltipContent} position="top">
