@@ -103,7 +103,6 @@ export interface WhatsAppAgentRule {
   updatedAt?: string;
 
   // Optional legacy fields for backward compatibility
-  description?: string;
   color?: string;
   templateId?: string;
   templateName?: string;
