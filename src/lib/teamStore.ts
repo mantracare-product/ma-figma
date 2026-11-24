@@ -32,8 +32,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Admin User",
     email: "admin@mantra.care",
     role: "Admin",
-    department: "Administration, Clinical Operations",
-    departments: ["Administration", "Clinical Operations"],
+    department: "Administration",
+    departments: ["Administration"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -61,8 +61,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     name: "Alice",
     email: "alice@mantra.care",
     role: "Senior Surgeon",
-    department: "Clinical Operations, Customer Support",
-    departments: ["Clinical Operations", "Customer Support"],
+    department: "Customer Support",
+    departments: ["Customer Support"],
     status: true,
     organizationId: "1",
     canBookAppointments: true,
@@ -140,6 +140,30 @@ export function cleanLegacyMembers(list: any[]): TeamMember[] {
           depts.push(ad.department.trim());
         }
       });
+    }
+
+    // Default/fallback department assignment if empty
+    if (depts.length === 0) {
+      const match = INITIAL_TEAM_MEMBERS.find(
+        (im) =>
+          (im.name && m.name && im.name.toLowerCase() === m.name.toLowerCase()) ||
+          String(im.id) === String(m.id)
+      );
+      if (match && match.departments && match.departments.length > 0) {
+        match.departments.forEach((d) => {
+          if (!depts.includes(d)) depts.push(d);
+        });
+      } else {
+        const lowerName = (m.name || "").toLowerCase();
+        const lowerRole = (m.role || "").toLowerCase();
+        if (lowerName.includes("admin") || lowerRole.includes("admin")) {
+          depts.push("Administration");
+        } else if (lowerName.includes("alice") || lowerRole.includes("support")) {
+          depts.push("Customer Support");
+        } else {
+          depts.push("Clinical Operations");
+        }
+      }
     }
     return {
       ...m,

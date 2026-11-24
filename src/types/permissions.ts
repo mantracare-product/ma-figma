@@ -17,6 +17,14 @@ export interface ItemPermissions {
   webForms: ModulePermissions;
   appointments: ModulePermissions;
   services: ModulePermissions;
+  aiScribe?: ModulePermissions;
+  billings?: ModulePermissions;
+  contacts?: ModulePermissions;
+  dashboard?: ModulePermissions;
+  documentTemplates?: ModulePermissions;
+  integrations?: ModulePermissions;
+  tasks?: ModulePermissions;
+  [key: string]: any;
 
   // Dynamic: one entry per real process, keyed by process id.
   processInstances: Record<string, ModulePermissions>;

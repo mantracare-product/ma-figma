@@ -5016,22 +5016,17 @@ export default function Settings() {
                       header: "DEPARTMENT NAME",
                       align: "left",
                       render: (dept) => (
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                            <Building2 className="w-3.5 h-3.5 text-slate-700" />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingDepartment(dept);
-                              setIsDepartmentDrawerOpen(true);
-                            }}
-                            className="text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {dept.name}
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingDepartment(dept);
+                            setIsDepartmentDrawerOpen(true);
+                          }}
+                          className="text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {dept.name}
+                        </button>
                       ),
                     },
                     {
@@ -5055,19 +5050,7 @@ export default function Settings() {
                         });
                         if (deptUsers.length === 0) {
                           return (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-400 italic">No users assigned</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPreselectedDepartment(dept.name);
-                                  setShowAddUserModal(true);
-                                }}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" /> Add User
-                              </button>
-                            </div>
+                            <span className="text-xs text-slate-400 italic">No users assigned</span>
                           );
                         }
                         return (
@@ -5086,17 +5069,6 @@ export default function Settings() {
                                 +{deptUsers.length - 4} more
                               </span>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPreselectedDepartment(dept.name);
-                                setShowAddUserModal(true);
-                              }}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
-                              title="Assign User to this Department"
-                            >
-                              <Plus className="w-3 h-3" /> User
-                            </button>
                           </div>
                         );
                       },
@@ -5105,10 +5077,10 @@ export default function Settings() {
 
                   const deptRowActions: TableRowAction<Department>[] = [
                     {
-                      label: "Add User to Department",
+                      label: "Assign Users",
                       onClick: (dept) => {
-                        setPreselectedDepartment(dept.name);
-                        setShowAddUserModal(true);
+                        setEditingDepartment(dept);
+                        setIsDepartmentDrawerOpen(true);
                       },
                     },
                     {
@@ -5280,9 +5252,8 @@ export default function Settings() {
                             {userDepts.slice(0, 3).map((deptName) => (
                               <span
                                 key={deptName}
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs"
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs"
                               >
-                                <Building2 className="w-3 h-3 text-purple-500 shrink-0" />
                                 <span>{deptName}</span>
                               </span>
                             ))}
@@ -13101,6 +13072,8 @@ export default function Settings() {
           }}
           roles={roles}
           onRolesChange={handleSaveRoles}
+          users={allUsers}
+          onUsersChange={(updated) => setAllUsers(updated)}
           initialEditDepartment={editingDepartment}
           onDepartmentsChange={(updated) => setDepartments(updated)}
           zIndex={10100}
