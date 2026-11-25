@@ -55,6 +55,14 @@ import FormBuilderDrawer from "../../components/form-builder/FormBuilderDrawer";
 import FormFlowDrawer from "../../components/forms/FormFlowDrawer";
 import FormFlowCreateDrawer from "../../components/forms/FormFlowCreateDrawer";
 import FormCreateDrawer from "../../components/forms/FormCreateDrawer";
+import NoteTemplateBuilderDrawer from "../../components/clinical/NoteTemplateBuilderDrawer";
+import {
+  NoteTemplate,
+  NOTE_TEMPLATES_EVENT,
+  getNoteTemplates,
+  duplicateNoteTemplate,
+  deleteNoteTemplate,
+} from "../../../lib/noteTemplatesStore";
 import {
   INITIAL_CATEGORIES,
   INITIAL_INDUSTRIES,
@@ -93,8 +101,20 @@ export default function AdminFormTemplates() {
   const [isBuilderDrawerOpen, setIsBuilderDrawerOpen] = useState(false);
   const [activeBuilderForm, setActiveBuilderForm] = useState<Form | null>(null);
 
-  // Sub-tabs: Forms vs Form Flows
-  const [subTab, setSubTab] = useState<"forms" | "flows">("forms");
+  // Sub-tabs: Forms vs Form Flows vs Note Templates
+  const [subTab, setSubTab] = useState<"forms" | "flows" | "note-templates">("forms");
+
+  // Note Templates state
+  const [noteTemplates, setNoteTemplates] = useState<NoteTemplate[]>(() => getNoteTemplates());
+  const [noteSearch, setNoteSearch] = useState("");
+  const [isNoteBuilderOpen, setIsNoteBuilderOpen] = useState(false);
+  const [activeNoteTemplate, setActiveNoteTemplate] = useState<NoteTemplate | null>(null);
+
+  useEffect(() => {
+    const syncNotes = () => setNoteTemplates(getNoteTemplates());
+    window.addEventListener(NOTE_TEMPLATES_EVENT, syncNotes);
+    return () => window.removeEventListener(NOTE_TEMPLATES_EVENT, syncNotes);
+  }, []);
 
   // Form Flows state
   const [flows, setFlows] = useState<FormFlow[]>(getStoredFlows);
@@ -586,17 +606,31 @@ export default function AdminFormTemplates() {
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         {/* Page Header */}
         <PageHeader
-          title={subTab === "forms" ? "Form Templates" : "Form Flows"}
+          title={
+            subTab === "forms"
+              ? "Form Templates"
+              : subTab === "flows"
+              ? "Form Flows"
+              : "Clinical Note Templates"
+          }
           subtitle={
             subTab === "forms"
               ? "Manage standardized form templates, define industry scope rules, and establish role-based access permissions."
-              : "Sequence multiple forms into automated guided step-by-step experiences for clients."
+              : subTab === "flows"
+              ? "Sequence multiple forms into automated guided step-by-step experiences for clients."
+              : "Curate baseline SOAP, DAP, BIRP & clinical session note templates scoped by specialty and industry."
           }
-          badge={subTab === "forms" ? `${filteredForms.length} Templates` : `${filteredFlows.length} Flows`}
+          badge={
+            subTab === "forms"
+              ? `${filteredForms.length} Templates`
+              : subTab === "flows"
+              ? `${filteredFlows.length} Flows`
+              : `${noteTemplates.length} Note Templates`
+          }
         />
 
-        {/* ── Sub-tab Switcher: Forms vs Form Flows ── */}
-        <div className="flex items-center gap-2 border-b border-border pb-3">
+        {/* ── Sub-tab Switcher: Forms vs Form Flows vs Note Templates ── */}
+        <div className="flex items-center gap-2 border-b border-border pb-3 flex-wrap">
           <button
             type="button"
             onClick={() => {
@@ -626,6 +660,22 @@ export default function AdminFormTemplates() {
           >
             <GitMerge className="w-3.5 h-3.5" />
             <span>Form Flows ({flows.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab("note-templates");
+              setActiveFlow(null);
+            }}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              subTab === "note-templates"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Note Templates ({noteTemplates.length})</span>
           </button>
         </div>
 
@@ -1150,6 +1200,162 @@ export default function AdminFormTemplates() {
             )}
           </div>
         )}
+
+        {/* ── CLINICAL NOTE TEMPLATES TAB ── */}
+        {subTab === "note-templates" && (() => {
+          const filteredNoteTemplates = noteTemplates.filter((t) => {
+            const q = noteSearch.toLowerCase().trim();
+            if (!q) return true;
+            return (
+              t.name.toLowerCase().includes(q) ||
+              t.shortName.toLowerCase().includes(q) ||
+              t.category.toLowerCase().includes(q)
+            );
+          });
+
+          const noteCols: TableColumn<NoteTemplate>[] = [
+            {
+              id: "name",
+              header: "TEMPLATE",
+              align: "left",
+              render: (tpl) => (
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px] font-mono font-semibold shrink-0">
+                    {tpl.shortName}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="font-semibold text-xs text-slate-900 block truncate">{tpl.name}</span>
+                    <span className="text-[11px] text-slate-500 block truncate max-w-[260px]">
+                      {tpl.description}
+                    </span>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              id: "category",
+              header: "SPECIALTY",
+              align: "left",
+              render: (tpl) => <span className="text-xs text-slate-700 font-medium">{tpl.category}</span>,
+            },
+            {
+              id: "sections",
+              header: "SECTIONS",
+              align: "center",
+              render: (tpl) => (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-100 text-slate-700">
+                  {tpl.sections.length} sections
+                </span>
+              ),
+            },
+            {
+              id: "scope",
+              header: "SCOPE",
+              align: "center",
+              render: (tpl) => (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+                  {tpl.scopingRules && tpl.scopingRules.length > 0
+                    ? `${tpl.scopingRules.length} Scoped Rule(s)`
+                    : "Global (All Orgs)"}
+                </span>
+              ),
+            },
+            {
+              id: "origin",
+              header: "ORIGIN",
+              align: "center",
+              render: (tpl) =>
+                tpl.isSystem ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                    System Baseline
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                    Custom
+                  </span>
+                ),
+            },
+          ];
+
+          const noteActions: TableRowAction<NoteTemplate>[] = [
+            {
+              label: "Edit & Configure Scope",
+              icon: <Pencil className="w-3.5 h-3.5" />,
+              onClick: (tpl) => {
+                setActiveNoteTemplate(tpl);
+                setIsNoteBuilderOpen(true);
+              },
+            },
+            {
+              label: "Duplicate",
+              icon: <Copy className="w-3.5 h-3.5" />,
+              onClick: (tpl) => {
+                const copy = duplicateNoteTemplate(tpl.id);
+                if (copy) {
+                  setNoteTemplates(getNoteTemplates());
+                  toast.success(`Duplicated "${tpl.name}"`);
+                }
+              },
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              condition: (tpl) => !tpl.isSystem,
+              onClick: (tpl) => {
+                if (deleteNoteTemplate(tpl.id)) {
+                  setNoteTemplates(getNoteTemplates());
+                  toast.success(`Deleted "${tpl.name}"`);
+                }
+              },
+            },
+          ];
+
+          return (
+            <div className="space-y-4">
+              <div className="bg-white p-3 border border-[#E2E8F0] rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
+                <div className="relative flex-1 max-w-[360px] min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8] pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search clinical note templates..."
+                    value={noteSearch}
+                    onChange={(e) => setNoteSearch(e.target.value)}
+                    className="w-full h-9 pl-9 pr-8 bg-[#F8FAFC] hover:bg-white focus:bg-white border border-[#E2E8F0] rounded-lg text-[13px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setActiveNoteTemplate(null);
+                    setIsNoteBuilderOpen(true);
+                  }}
+                  className="text-xs font-semibold gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Note Template</span>
+                </Button>
+              </div>
+
+              <TableComponent
+                data={filteredNoteTemplates}
+                columns={noteCols}
+                getRowId={(tpl) => tpl.id}
+                rowActions={noteActions}
+                onRowClick={(tpl) => {
+                  setActiveNoteTemplate(tpl);
+                  setIsNoteBuilderOpen(true);
+                }}
+                defaultRowsPerPage={12}
+                emptyMessage="No note templates found."
+                tableId="admin-note-templates-table"
+              />
+            </div>
+          );
+        })()}
       </div>
 
       {/* ─── CREATE FORM TEMPLATE SIDE DRAWER ──────────────────────────────── */}
@@ -1364,6 +1570,18 @@ export default function AdminFormTemplates() {
         onSaveSuccess={(savedForm) => {
           setForms(getStoredForms());
         }}
+      />
+
+      {/* ─── ADMIN CLINICAL NOTE TEMPLATE BUILDER ────────────────────────────── */}
+      <NoteTemplateBuilderDrawer
+        isOpen={isNoteBuilderOpen}
+        onClose={() => {
+          setIsNoteBuilderOpen(false);
+          setActiveNoteTemplate(null);
+        }}
+        initialTemplate={activeNoteTemplate}
+        isAdmin={true}
+        onSaved={() => setNoteTemplates(getNoteTemplates())}
       />
     </div>
   );

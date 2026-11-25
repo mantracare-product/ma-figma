@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   X,
-  Check,
   Lock,
   FileText,
   Sparkles,
@@ -13,25 +12,28 @@ import {
   User,
   Activity,
   ShieldCheck,
-  Search,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../ui/Button";
-import CPTCodeInput from "../ui/CPTCodeInput";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import NoteTemplateBuilderDrawer from "./NoteTemplateBuilderDrawer";
 import { useTeamMembers } from "../../../lib/teamStore";
-import { searchICDCodes, getICDCodeItem } from "../../../lib/icdCodes";
 import { getScribeSessions, ScribeSession } from "../../../lib/scribeSessionStore";
 import { getEhrSessionNoteTargets, EhrSessionNotePushTarget } from "../../../lib/integrationsRegistry";
+import {
+  NoteTemplate,
+  NOTE_TEMPLATES_EVENT,
+  getNoteTemplates,
+  getNoteTemplateById,
+} from "../../../lib/noteTemplatesStore";
 import {
   SessionNote,
   SessionNoteTemplateType,
   SessionNoteVitals,
-  SESSION_NOTE_TEMPLATES,
   saveSessionNote,
   signAndLockSessionNote,
   addSessionNoteAddendum,
@@ -63,8 +65,6 @@ export interface SessionNoteEditorDrawerProps {
   onSaved?: (note: SessionNote) => void;
 }
 
-const TEMPLATE_LIST: SessionNoteTemplateType[] = ["SOAP", "DAP", "BIRP", "Procedure", "Freeform"];
-
 export default function SessionNoteEditorDrawer({
   isOpen,
   onClose,
@@ -79,6 +79,7 @@ export default function SessionNoteEditorDrawer({
 }: SessionNoteEditorDrawerProps) {
   const { teamMembers } = useTeamMembers();
 
+  const [templates, setTemplates] = useState<NoteTemplate[]>(() => getNoteTemplates({ onlyEnabled: true }));
   const [noteId, setNoteId] = useState<string>("");
   const [templateType, setTemplateType] = useState<SessionNoteTemplateType>("SOAP");
   const [title, setTitle] = useState("");
@@ -88,8 +89,6 @@ export default function SessionNoteEditorDrawer({
   const [sections, setSections] = useState<Record<string, string>>({});
   const [vitals, setVitals] = useState<SessionNoteVitals>({});
   const [showVitals, setShowVitals] = useState(false);
-  const [icd10Codes, setIcd10Codes] = useState<string[]>([]);
-  const [cptCodes, setCptCodes] = useState<string[]>([]);
   const [status, setStatus] = useState<"draft" | "signed">("draft");
   const [signedAt, setSignedAt] = useState<string | undefined>(undefined);
   const [signedBy, setSignedBy] = useState<string | undefined>(undefined);
@@ -99,14 +98,23 @@ export default function SessionNoteEditorDrawer({
   const [linkedScribeId, setLinkedScribeId] = useState<string | undefined>(undefined);
 
   // Sub-controls state
-  const [icdQuery, setIcdQuery] = useState("");
-  const [showIcdDropdown, setShowIcdDropdown] = useState(false);
-  const [cptInputVal, setCptInputVal] = useState("");
   const [addendumText, setAddendumText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncingEhr, setIsSyncingEhr] = useState(false);
   const [showScribeRecorder, setShowScribeRecorder] = useState(false);
+  const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
   const [ehrTargets, setEhrTargets] = useState<EhrSessionNotePushTarget[]>([]);
+
+  // Reactive templates sync
+  useEffect(() => {
+    const syncTemplates = () => setTemplates(getNoteTemplates({ onlyEnabled: true }));
+    window.addEventListener(NOTE_TEMPLATES_EVENT, syncTemplates);
+    window.addEventListener("storage", syncTemplates);
+    return () => {
+      window.removeEventListener(NOTE_TEMPLATES_EVENT, syncTemplates);
+      window.removeEventListener("storage", syncTemplates);
+    };
+  }, []);
 
   // Available AI Scribe sessions for this client
   const clientScribeSessions = useMemo(() => {
@@ -123,6 +131,7 @@ export default function SessionNoteEditorDrawer({
   useEffect(() => {
     if (!isOpen) return;
     setEhrTargets(getEhrSessionNoteTargets());
+    setTemplates(getNoteTemplates({ onlyEnabled: true }));
 
     if (initialNote) {
       setNoteId(initialNote.id);
@@ -138,8 +147,6 @@ export default function SessionNoteEditorDrawer({
       setSections(initialNote.sections || {});
       setVitals(initialNote.vitals || {});
       setShowVitals(Boolean(initialNote.vitals && Object.values(initialNote.vitals).some(Boolean)));
-      setIcd10Codes(initialNote.icd10Codes || []);
-      setCptCodes(initialNote.cptCodes || []);
       setStatus(initialNote.status);
       setSignedAt(initialNote.signedAt);
       setSignedBy(initialNote.signedBy);
@@ -148,19 +155,17 @@ export default function SessionNoteEditorDrawer({
       setSharedToPatient(Boolean(initialNote.sharedToPatient));
       setLinkedScribeId(initialNote.scribeSessionId);
     } else if (initialScribeSession) {
-      const tpl: SessionNoteTemplateType = "SOAP";
-      const mapped = mapScribeSessionToSections(initialScribeSession, tpl);
+      const tpl = getNoteTemplateById("SOAP");
+      const mapped = mapScribeSessionToSections(initialScribeSession, tpl.id);
       setNoteId(`sn-${Date.now()}`);
-      setTemplateType(tpl);
+      setTemplateType(tpl.id);
       setTitle(mapped.title);
       setProviderName(initialScribeSession.doctorName || appointment?.employeeName || "Dr. Akshita Sharma");
       setSessionDate(new Date().toISOString().slice(0, 16));
       setDurationMinutes(Math.max(15, Math.round((initialScribeSession.durationSeconds || 900) / 60)));
       setSections(mapped.sections);
       setVitals(mapped.vitals || {});
-      setShowVitals(Boolean(mapped.vitals && Object.values(mapped.vitals).some(Boolean)));
-      setIcd10Codes(mapped.icd10Codes);
-      setCptCodes([]);
+      setShowVitals(Boolean(mapped.vitals && Object.values(mapped.vitals).some(Boolean)) || Boolean(tpl.includeVitals));
       setStatus("draft");
       setSignedAt(undefined);
       setSignedBy(undefined);
@@ -169,8 +174,9 @@ export default function SessionNoteEditorDrawer({
       setSharedToPatient(false);
       setLinkedScribeId(initialScribeSession.id);
     } else {
+      const defaultTpl = getNoteTemplateById("SOAP");
       setNoteId(`sn-${Date.now()}`);
-      setTemplateType("SOAP");
+      setTemplateType(defaultTpl.id);
       setTitle(appointment?.title ? `${appointment.title} Note` : "Clinical Consultation Note");
       setProviderName(appointment?.employeeName || teamMembers[1]?.name || "Dr. Akshita Sharma");
       setSessionDate(
@@ -181,9 +187,7 @@ export default function SessionNoteEditorDrawer({
       setDurationMinutes(30);
       setSections({});
       setVitals({});
-      setShowVitals(false);
-      setIcd10Codes([]);
-      setCptCodes([]);
+      setShowVitals(Boolean(defaultTpl.includeVitals));
       setStatus("draft");
       setSignedAt(undefined);
       setSignedBy(undefined);
@@ -194,16 +198,18 @@ export default function SessionNoteEditorDrawer({
     }
 
     setAddendumText("");
-    setIcdQuery("");
-    setCptInputVal("");
   }, [isOpen, initialNote, initialScribeSession, appointment?.id]);
 
   if (!isOpen) return null;
 
   const isSigned = status === "signed";
-  const currentSpec = SESSION_NOTE_TEMPLATES[templateType];
-  const icdSuggestions = searchICDCodes(icdQuery, 10);
+  const currentSpec = templates.find((t) => t.id === templateType) || getNoteTemplateById(templateType);
   const connectedEhrs = ehrTargets.filter((t) => t.connected && t.sessionNotesEnabled);
+
+  const handleSelectTemplate = (tpl: NoteTemplate) => {
+    setTemplateType(tpl.id);
+    if (tpl.includeVitals) setShowVitals(true);
+  };
 
   const handleApplyScribe = (scribeId: string) => {
     const found = clientScribeSessions.find((s) => s.id === scribeId);
@@ -214,14 +220,11 @@ export default function SessionNoteEditorDrawer({
       setVitals(mapped.vitals);
       setShowVitals(true);
     }
-    if (mapped.icd10Codes.length > 0) {
-      setIcd10Codes((prev) => Array.from(new Set([...prev, ...mapped.icd10Codes])));
-    }
     if (!title.trim() || title === "Clinical Consultation Note") {
       setTitle(mapped.title);
     }
     setLinkedScribeId(found.id);
-    toast.success(`Populated ${templateType} sections from AI Scribe`);
+    toast.success(`Populated "${currentSpec.name}" sections from AI Scribe`);
   };
 
   const handleSaveDraft = () => {
@@ -243,11 +246,10 @@ export default function SessionNoteEditorDrawer({
         sessionDate: sessionDate ? new Date(sessionDate).toISOString() : new Date().toISOString(),
         durationMinutes,
         title: title.trim(),
-        templateType,
+        templateType: currentSpec.id,
+        templateName: currentSpec.name,
         sections,
         vitals: showVitals ? vitals : undefined,
-        icd10Codes,
-        cptCodes,
         status: "draft",
         sharedToPatient,
         sharedDocumentId: initialNote?.sharedDocumentId,
@@ -262,6 +264,13 @@ export default function SessionNoteEditorDrawer({
   const handleSignAndLock = async () => {
     if (!title.trim()) {
       toast.error("Please enter a note title before signing");
+      return;
+    }
+    const missingRequired = currentSpec.sections.find(
+      (sec) => sec.required && !String(sections[sec.key] || "").trim()
+    );
+    if (missingRequired) {
+      toast.error(`Please complete required section: "${missingRequired.label}"`);
       return;
     }
     const hasContent = Object.values(sections).some((v) => String(v || "").trim().length > 0);
@@ -286,11 +295,10 @@ export default function SessionNoteEditorDrawer({
           sessionDate: sessionDate ? new Date(sessionDate).toISOString() : new Date().toISOString(),
           durationMinutes,
           title: title.trim(),
-          templateType,
+          templateType: currentSpec.id,
+          templateName: currentSpec.name,
           sections,
           vitals: showVitals ? vitals : undefined,
-          icd10Codes,
-          cptCodes,
           status: "draft",
           sharedToPatient,
           sharedDocumentId: initialNote?.sharedDocumentId,
@@ -319,7 +327,6 @@ export default function SessionNoteEditorDrawer({
   const handleManualEhrPush = async (targetId?: string) => {
     setIsSyncingEhr(true);
     try {
-      // Ensure latest state is persisted before pushing
       saveSessionNote({
         id: noteId,
         clientId: String(client.id),
@@ -331,11 +338,10 @@ export default function SessionNoteEditorDrawer({
         sessionDate: sessionDate ? new Date(sessionDate).toISOString() : new Date().toISOString(),
         durationMinutes,
         title: title.trim() || "Session Note",
-        templateType,
+        templateType: currentSpec.id,
+        templateName: currentSpec.name,
         sections,
         vitals: showVitals ? vitals : undefined,
-        icd10Codes,
-        cptCodes,
         status,
         signedAt,
         signedBy,
@@ -381,13 +387,24 @@ export default function SessionNoteEditorDrawer({
     }
   };
 
+  const toggleCheckboxOption = (secKey: string, opt: string) => {
+    const currentList = (sections[secKey] || "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    const exists = currentList.includes(opt);
+    const nextList = exists ? currentList.filter((item) => item !== opt) : [...currentList, opt];
+    setSections((prev) => ({ ...prev, [secKey]: nextList.join(", ") }));
+  };
+
   return (
     <>
       <div
         className="fixed inset-0 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
         style={{ zIndex }}
       >
-        <div className="w-full max-w-3xl bg-white h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-250 ease-out">
+        {/* 65-70% Desktop Side Drawer */}
+        <div className="w-full md:w-[68vw] md:min-w-[740px] md:max-w-[1180px] bg-white h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-250 ease-out">
           {/* ── TOP HEADER ── */}
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
             <div className="flex items-center gap-3 min-w-0">
@@ -399,6 +416,9 @@ export default function SessionNoteEditorDrawer({
                   <h2 className="text-base font-semibold text-slate-900 truncate">
                     {initialNote ? "Session Note" : "New Session Note"}
                   </h2>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-semibold">
+                    {currentSpec.shortName}
+                  </span>
                   {isSigned ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <Lock className="w-3 h-3" />
@@ -426,458 +446,420 @@ export default function SessionNoteEditorDrawer({
             </button>
           </div>
 
-          {/* ── SCROLLABLE EDITOR BODY ── */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/40">
-            {/* Signed Lock Banner */}
-            {isSigned && (
-              <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-800">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    Signed by <span className="font-semibold">{signedBy || providerName}</span> on{" "}
-                    {signedAt ? new Date(signedAt).toLocaleString() : "file"} — chart content is locked.
-                  </span>
-                </div>
-                {sharedToPatient ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                    <CheckCircle2 className="w-3 h-3" /> Visit Summary Shared
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSharePatientSummary}
-                    className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
-                  >
-                    <Send className="w-3 h-3" /> Share Visit Summary
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* 1. Template Switcher & AI Scribe Prefill Bar */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Note Format
-                </span>
-                {!isSigned && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {clientScribeSessions.length > 0 && (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) handleApplyScribe(e.target.value);
-                        }}
-                        className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer focus:outline-none"
-                      >
-                        <option value="">Prefill from AI Scribe ({clientScribeSessions.length})...</option>
-                        {clientScribeSessions.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.title || s.extractedData?.diagnosis || "Consultation"} (
-                            {new Date(s.sessionDate).toLocaleDateString()})
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setShowScribeRecorder(true)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>Dictate via AI Scribe</span>
-                    </button>
+          {/* ── 2-COLUMN WIDE EHR BODY ── */}
+          <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40">
+            <div className="space-y-5">
+              {/* Signed Lock Banner */}
+              {isSigned && (
+                <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Signed by <span className="font-semibold">{signedBy || providerName}</span> on{" "}
+                      {signedAt ? new Date(signedAt).toLocaleString() : "file"} — chart content is locked.
+                    </span>
                   </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {TEMPLATE_LIST.map((tpl) => {
-                  const spec = SESSION_NOTE_TEMPLATES[tpl];
-                  const active = templateType === tpl;
-                  return (
+                  {sharedToPatient ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                      <CheckCircle2 className="w-3 h-3" /> Visit Summary Shared
+                    </span>
+                  ) : (
                     <button
-                      key={tpl}
                       type="button"
-                      disabled={isSigned}
-                      onClick={() => setTemplateType(tpl)}
-                      className={`px-3 py-2 rounded-lg border text-left transition-all ${
-                        active
-                          ? "bg-slate-900 text-white border-slate-900"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                      } ${isSigned ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                      onClick={handleSharePatientSummary}
+                      className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
                     >
-                      <div className="text-xs font-semibold">{spec.shortName}</div>
-                      <div className={`text-[10px] truncate ${active ? "text-slate-300" : "text-slate-400"}`}>
-                        {tpl === "SOAP"
-                          ? "S · O · A · P"
-                          : tpl === "DAP"
-                          ? "D · A · P"
-                          : tpl === "BIRP"
-                          ? "B · I · R · P"
-                          : tpl === "Procedure"
-                          ? "Clinical Proc"
-                          : "Open Note"}
-                      </div>
+                      <Send className="w-3 h-3" /> Share Visit Summary
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. Encounter Metadata */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="sm:col-span-2 space-y-1">
-                <label className="text-xs font-medium text-slate-700">Note Title *</label>
-                <input
-                  type="text"
-                  value={title}
-                  disabled={isSigned}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Initial Consultation & Care Plan"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Clinician / Provider</span>
-                </label>
-                <select
-                  value={providerName}
-                  disabled={isSigned}
-                  onChange={(e) => setProviderName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                >
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.name} {m.role ? `(${m.role})` : ""}
-                    </option>
-                  ))}
-                  {!teamMembers.some((m) => m.name === providerName) && (
-                    <option value={providerName}>{providerName}</option>
                   )}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Session Date</span>
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={sessionDate}
-                    disabled={isSigned}
-                    onChange={(e) => setSessionDate(e.target.value)}
-                    className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Duration (min)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={5}
-                    max={240}
-                    value={durationMinutes}
-                    disabled={isSigned}
-                    onChange={(e) => setDurationMinutes(Number(e.target.value) || 30)}
-                    className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Optional Vitals Strip */}
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowVitals((v) => !v)}
-                className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-700 hover:bg-slate-50/70 transition-colors cursor-pointer"
-              >
-                <span className="flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Vitals & Measurements (Optional)</span>
-                </span>
-                {showVitals ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-              </button>
-
-              {showVitals && (
-                <div className="px-4 pb-4 pt-1 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                  {[
-                    { key: "bloodPressure", label: "BP (mmHg)", ph: "120/80" },
-                    { key: "pulse", label: "Pulse (bpm)", ph: "72" },
-                    { key: "temperature", label: "Temp", ph: "98.6°F" },
-                    { key: "spo2", label: "SpO2", ph: "99%" },
-                    { key: "weight", label: "Weight", ph: "68 kg" },
-                  ].map((vField) => (
-                    <div key={vField.key} className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-500">{vField.label}</label>
-                      <input
-                        type="text"
-                        disabled={isSigned}
-                        value={(vitals as any)[vField.key] || ""}
-                        onChange={(e) => setVitals((prev) => ({ ...prev, [vField.key]: e.target.value }))}
-                        placeholder={vField.ph}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                      />
-                    </div>
-                  ))}
                 </div>
               )}
-            </div>
 
-            {/* 4. Structured Clinical Sections */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  {currentSpec.label} Sections
-                </h3>
-                <span className="text-[11px] text-slate-400">{currentSpec.description}</span>
-              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* LEFT COLUMN (~65%): Template Selector + Chart Writing Sections + Addendums */}
+                <div className="lg:col-span-8 space-y-5">
+                  {/* Template Switcher Bar */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Note Template
+                      </span>
+                      {!isSigned && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTemplateBuilder(true)}
+                          className="text-xs font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                        >
+                          <SlidersHorizontal className="w-3 h-3" />
+                          <span>+ New Custom Template</span>
+                        </button>
+                      )}
+                    </div>
 
-              {currentSpec.sections.map((sec) => (
-                <div key={sec.key} className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-800 block">{sec.label}</label>
-                  <textarea
-                    rows={sec.rows || 3}
-                    disabled={isSigned}
-                    value={sections[sec.key] || ""}
-                    onChange={(e) => setSections((prev) => ({ ...prev, [sec.key]: e.target.value }))}
-                    placeholder={sec.placeholder}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 leading-relaxed focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
-                  />
-                </div>
-              ))}
-            </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {templates.map((tpl) => {
+                        const active = currentSpec.id === tpl.id;
+                        return (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            disabled={isSigned}
+                            onClick={() => handleSelectTemplate(tpl)}
+                            className={`px-3.5 py-2 rounded-lg border text-left transition-all ${
+                              active
+                                ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            } ${isSigned ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="text-xs font-semibold">{tpl.shortName}</div>
+                            <div className={`text-[10px] truncate max-w-[140px] ${active ? "text-slate-300" : "text-slate-400"}`}>
+                              {tpl.name}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-            {/* 5. Diagnosis (ICD-10) & Billing Codes (CPT) */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Clinical Coding (ICD-10 & CPT)
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* ICD-10 Selector */}
-                <div className="space-y-2 relative">
-                  <label className="text-xs font-medium text-slate-700 block">ICD-10 Diagnosis Codes</label>
-                  {!isSigned && (
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  {/* Structured Clinical Writing Sections */}
+                  <div className="p-5 rounded-xl border border-slate-200 bg-white space-y-4">
+                    <div className="space-y-1.5 pb-3 border-b border-slate-100">
+                      <label className="text-xs font-semibold text-slate-700">Note Title *</label>
                       <input
                         type="text"
-                        value={icdQuery}
-                        onFocus={() => setShowIcdDropdown(true)}
-                        onChange={(e) => {
-                          setIcdQuery(e.target.value);
-                          setShowIcdDropdown(true);
-                        }}
-                        placeholder="Search ICD-10 code or condition..."
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                        value={title}
+                        disabled={isSigned}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="e.g. Initial Consultation & Care Plan"
+                        className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
                       />
-                      {showIcdDropdown && (
-                        <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
-                          {icdSuggestions.map((item) => (
-                            <button
-                              key={item.code}
-                              type="button"
-                              onClick={() => {
-                                if (!icd10Codes.includes(item.code)) {
-                                  setIcd10Codes((prev) => [...prev, item.code]);
-                                }
-                                setIcdQuery("");
-                                setShowIcdDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between gap-2 cursor-pointer"
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        {currentSpec.name}
+                      </h3>
+                      <span className="text-[11px] text-slate-400">{currentSpec.description}</span>
+                    </div>
+
+                    {currentSpec.sections.map((sec) => {
+                      const val = sections[sec.key] || "";
+                      const inputType = sec.inputType || "textarea";
+                      return (
+                        <div key={sec.key} className="space-y-1.5">
+                          <label className="text-xs font-semibold text-slate-800 block">
+                            {sec.label}
+                            {sec.required && <span className="text-rose-500 ml-0.5">*</span>}
+                          </label>
+
+                          {inputType === "select" ? (
+                            <select
+                              disabled={isSigned}
+                              value={val}
+                              onChange={(e) => setSections((prev) => ({ ...prev, [sec.key]: e.target.value }))}
+                              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
                             >
-                              <span className="text-xs text-slate-700 truncate">{item.shortDescription}</span>
-                              <span className="text-[11px] font-mono font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded shrink-0">
-                                {item.code}
-                              </span>
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setShowIcdDropdown(false)}
-                            className="w-full px-3 py-1.5 text-[11px] text-slate-400 hover:text-slate-600 text-center bg-slate-50 cursor-pointer"
-                          >
-                            Close
-                          </button>
+                              <option value="">Select an option...</option>
+                              {(sec.options || []).map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : inputType === "checkbox" ? (
+                            <div className="flex flex-wrap gap-2 pt-0.5">
+                              {(sec.options || []).map((opt) => {
+                                const selectedList = val.split(",").map((x) => x.trim());
+                                const checked = selectedList.includes(opt);
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    disabled={isSigned}
+                                    onClick={() => toggleCheckboxOption(sec.key, opt)}
+                                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                                      checked
+                                        ? "bg-slate-900 text-white border-slate-900"
+                                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                    } ${isSigned ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : inputType === "yes_no" ? (
+                            <div className="flex items-center gap-2">
+                              {["Yes", "No"].map((choice) => (
+                                <button
+                                  key={choice}
+                                  type="button"
+                                  disabled={isSigned}
+                                  onClick={() => setSections((prev) => ({ ...prev, [sec.key]: choice }))}
+                                  className={`px-4 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                                    val === choice
+                                      ? "bg-slate-900 text-white border-slate-900"
+                                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                  } ${isSigned ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+                                >
+                                  {choice}
+                                </button>
+                              ))}
+                            </div>
+                          ) : inputType === "text" ? (
+                            <input
+                              type="text"
+                              disabled={isSigned}
+                              value={val}
+                              onChange={(e) => setSections((prev) => ({ ...prev, [sec.key]: e.target.value }))}
+                              placeholder={sec.placeholder}
+                              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                            />
+                          ) : (
+                            <textarea
+                              rows={sec.rows || 4}
+                              disabled={isSigned}
+                              value={val}
+                              onChange={(e) => setSections((prev) => ({ ...prev, [sec.key]: e.target.value }))}
+                              placeholder={sec.placeholder}
+                              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 leading-relaxed focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                            />
+                          )}
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Signed Addendums */}
+                  {isSigned && (
+                    <div className="p-5 rounded-xl border border-slate-200 bg-white space-y-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Signed Note Addendums ({addendums.length})
+                      </h3>
+
+                      {addendums.length > 0 && (
+                        <div className="space-y-2">
+                          {addendums.map((add) => (
+                            <div key={add.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                <span className="font-semibold text-slate-700">{add.authorName}</span>
+                                <span>{new Date(add.createdAt).toLocaleString()}</span>
+                              </div>
+                              <p className="text-xs text-slate-800 whitespace-pre-line">{add.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                        <textarea
+                          rows={2}
+                          value={addendumText}
+                          onChange={(e) => setAddendumText(e.target.value)}
+                          placeholder="Append an addendum to this signed clinical record..."
+                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!addendumText.trim()}
+                          onClick={handleAddAddendum}
+                          className="self-end text-xs font-semibold shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" />
+                          Add Addendum
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT COLUMN (~35%): Encounter Details, AI Scribe, Vitals, EHR Sync */}
+                <div className="lg:col-span-4 space-y-4">
+                  {/* AI Scribe Card */}
+                  {!isSigned && (
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          AI Scribe Assist
+                        </span>
+                        <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowScribeRecorder(true)}
+                        className="w-full px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Dictate & Auto-Fill Sections</span>
+                      </button>
+                      {clientScribeSessions.length > 0 && (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) handleApplyScribe(e.target.value);
+                          }}
+                          className="w-full px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer focus:outline-none"
+                        >
+                          <option value="">Prefill from recording ({clientScribeSessions.length})...</option>
+                          {clientScribeSessions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.title || s.extractedData?.diagnosis || "Consultation"} (
+                              {new Date(s.sessionDate).toLocaleDateString()})
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-1.5 min-h-[26px]">
-                    {icd10Codes.length === 0 ? (
-                      <span className="text-[11px] text-slate-400">No ICD-10 codes selected</span>
-                    ) : (
-                      icd10Codes.map((code) => {
-                        const meta = getICDCodeItem(code);
-                        return (
-                          <span
-                            key={code}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200/70"
-                            title={meta?.shortDescription || code}
-                          >
-                            <span>{code}</span>
-                            {meta && <span className="font-sans text-blue-600/80 max-w-[140px] truncate">· {meta.shortDescription}</span>}
-                            {!isSigned && (
-                              <button
-                                type="button"
-                                onClick={() => setIcd10Codes((prev) => prev.filter((c) => c !== code))}
-                                className="hover:text-rose-600 cursor-pointer ml-0.5"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </span>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
+                  {/* Encounter Metadata Card */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Encounter Details
+                    </h3>
 
-                {/* CPT Selector */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-700 block">CPT / Service Codes</label>
-                  {!isSigned && (
-                    <CPTCodeInput
-                      value={cptInputVal}
-                      disabled={isSigned}
-                      onChange={(code, opt) => {
-                        setCptInputVal(code);
-                        if (opt && !cptCodes.includes(opt.code)) {
-                          setCptCodes((prev) => [...prev, opt.code]);
-                          setCptInputVal("");
-                        }
-                      }}
-                      placeholder="Search CPT (e.g. 90834, 99213)..."
-                      className="py-2 text-xs"
-                    />
-                  )}
-                  <div className="flex flex-wrap gap-1.5 min-h-[26px]">
-                    {cptCodes.length === 0 ? (
-                      <span className="text-[11px] text-slate-400">No CPT codes selected</span>
-                    ) : (
-                      cptCodes.map((code) => (
-                        <span
-                          key={code}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono bg-slate-100 text-slate-700 border border-slate-200"
-                        >
-                          <span>{code}</span>
-                          {!isSigned && (
-                            <button
-                              type="button"
-                              onClick={() => setCptCodes((prev) => prev.filter((c) => c !== code))}
-                              className="hover:text-rose-600 cursor-pointer ml-0.5"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          )}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. External EHR Sync Card */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    External EHR Sync
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {connectedEhrs.length > 0
-                      ? `Signing auto-syncs to ${connectedEhrs.map((t) => t.integrationName).join(", ")}.`
-                      : "No external EHR currently connected with Session Note sync enabled."}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  loading={isSyncingEhr}
-                  onClick={() => handleManualEhrPush()}
-                  className="text-xs font-semibold flex items-center gap-1.5 shrink-0"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingEhr ? "animate-spin" : ""}`} />
-                  <span>{connectedEhrs.length > 0 ? "Push to EHR" : "Test EHR Push"}</span>
-                </Button>
-              </div>
-
-              {ehrSyncRecords.length > 0 && (
-                <div className="border-t border-slate-100 pt-2.5 space-y-1.5">
-                  {ehrSyncRecords.map((rec) => (
-                    <div
-                      key={`${rec.integrationId}-${rec.externalNoteId}`}
-                      className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200/70"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="font-semibold text-slate-800">{rec.integrationName}</span>
-                        <span className="font-mono text-[11px] text-slate-500 truncate">{rec.externalNoteId}</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                        {new Date(rec.syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Clinician / Provider</span>
+                      </label>
+                      <select
+                        value={providerName}
+                        disabled={isSigned}
+                        onChange={(e) => setProviderName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                      >
+                        {teamMembers.map((m) => (
+                          <option key={m.id} value={m.name}>
+                            {m.name} {m.role ? `(${m.role})` : ""}
+                          </option>
+                        ))}
+                        {!teamMembers.some((m) => m.name === providerName) && (
+                          <option value={providerName}>{providerName}</option>
+                        )}
+                      </select>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            {/* 7. Signed Addendums Section */}
-            {isSigned && (
-              <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Signed Note Addendums ({addendums.length})
-                </h3>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Session Date & Time</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={sessionDate}
+                        disabled={isSigned}
+                        onChange={(e) => setSessionDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                      />
+                    </div>
 
-                {addendums.length > 0 && (
-                  <div className="space-y-2">
-                    {addendums.map((add) => (
-                      <div key={add.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500">
-                          <span className="font-semibold text-slate-700">{add.authorName}</span>
-                          <span>{new Date(add.createdAt).toLocaleString()}</span>
-                        </div>
-                        <p className="text-xs text-slate-800 whitespace-pre-line">{add.text}</p>
-                      </div>
-                    ))}
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Duration (minutes)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={240}
+                        value={durationMinutes}
+                        disabled={isSigned}
+                        onChange={(e) => setDurationMinutes(Number(e.target.value) || 30)}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                      />
+                    </div>
                   </div>
-                )}
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                  <textarea
-                    rows={2}
-                    value={addendumText}
-                    onChange={(e) => setAddendumText(e.target.value)}
-                    placeholder="Append an addendum to this signed clinical record..."
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!addendumText.trim()}
-                    onClick={handleAddAddendum}
-                    className="self-end text-xs font-semibold shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add Addendum
-                  </Button>
+                  {/* Vitals & Measurements */}
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowVitals((v) => !v)}
+                      className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-700 hover:bg-slate-50/70 transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Activity className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Vitals (Optional)</span>
+                      </span>
+                      {showVitals ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    </button>
+
+                    {showVitals && (
+                      <div className="px-4 pb-4 pt-2 border-t border-slate-100 grid grid-cols-2 gap-2.5">
+                        {[
+                          { key: "bloodPressure", label: "BP (mmHg)", ph: "120/80" },
+                          { key: "pulse", label: "Pulse (bpm)", ph: "72" },
+                          { key: "temperature", label: "Temp", ph: "98.6°F" },
+                          { key: "spo2", label: "SpO2", ph: "99%" },
+                          { key: "weight", label: "Weight", ph: "68 kg" },
+                        ].map((vField) => (
+                          <div key={vField.key} className="space-y-1">
+                            <label className="text-[11px] font-medium text-slate-500">{vField.label}</label>
+                            <input
+                              type="text"
+                              disabled={isSigned}
+                              value={(vitals as any)[vField.key] || ""}
+                              onChange={(e) => setVitals((prev) => ({ ...prev, [vField.key]: e.target.value }))}
+                              placeholder={vField.ph}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* External EHR Sync Card */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        External EHR Sync
+                      </h3>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        loading={isSyncingEhr}
+                        onClick={() => handleManualEhrPush()}
+                        className="text-xs font-semibold flex items-center gap-1.5 shrink-0"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncingEhr ? "animate-spin" : ""}`} />
+                        <span>{connectedEhrs.length > 0 ? "Push to EHR" : "Test Push"}</span>
+                      </Button>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      {connectedEhrs.length > 0
+                        ? `Auto-syncs on Sign & Lock to: ${connectedEhrs.map((t) => t.integrationName).join(", ")}.`
+                        : "Connect an EHR (Cliniko, Healthie, Epic, Athena, Phorest) in Settings -> Integrations to push signed notes automatically."}
+                    </p>
+
+                    {ehrSyncRecords.length > 0 && (
+                      <div className="border-t border-slate-100 pt-2.5 space-y-1.5">
+                        {ehrSyncRecords.map((rec) => (
+                          <div
+                            key={`${rec.integrationId}-${rec.externalNoteId}`}
+                            className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 gap-2"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="font-semibold text-slate-800">{rec.integrationName}</span>
+                              <span className="font-mono text-slate-500 truncate">{rec.externalNoteId}</span>
+                            </div>
+                            <span className="text-slate-400 font-mono shrink-0">
+                              {new Date(rec.syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* ── FOOTER ── */}
@@ -936,11 +918,19 @@ export default function SessionNoteEditorDrawer({
             setVitals(mapped.vitals);
             setShowVitals(true);
           }
-          if (mapped.icd10Codes.length > 0) {
-            setIcd10Codes((prev) => Array.from(new Set([...prev, ...mapped.icd10Codes])));
-          }
           setLinkedScribeId(newSession.id);
           toast.success("AI Scribe output applied to session note");
+        }}
+      />
+
+      {/* Inline Custom Template Builder */}
+      <NoteTemplateBuilderDrawer
+        isOpen={showTemplateBuilder}
+        onClose={() => setShowTemplateBuilder(false)}
+        onSaved={(newTpl) => {
+          setTemplates(getNoteTemplates({ onlyEnabled: true }));
+          setTemplateType(newTpl.id);
+          if (newTpl.includeVitals) setShowVitals(true);
         }}
       />
     </>

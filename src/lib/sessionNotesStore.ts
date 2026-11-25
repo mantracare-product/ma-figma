@@ -2,87 +2,22 @@ import { saveClientDocument } from "./clientDocumentsStore";
 import { appendActivity } from "./activityEngine";
 import { ScribeSession } from "./scribeSessionStore";
 import { pushSessionNoteToEhr, getEhrSessionNoteTargets } from "./integrationsRegistry";
+import {
+  getNoteTemplateById,
+  NoteTemplate,
+  SYSTEM_NOTE_TEMPLATES,
+} from "./noteTemplatesStore";
 
 export const SESSION_NOTES_EVENT = "mantra_session_notes_updated";
 const STORAGE_KEY = "mantra_session_notes_v1";
 
-export type SessionNoteTemplateType = "SOAP" | "DAP" | "BIRP" | "Procedure" | "Freeform";
+export type SessionNoteTemplateType = string;
 
-export interface SessionNoteTemplateSectionSpec {
-  key: string;
-  label: string;
-  placeholder: string;
-  rows?: number;
-}
+export type { NoteTemplate };
 
-export const SESSION_NOTE_TEMPLATES: Record<
-  SessionNoteTemplateType,
-  {
-    id: SessionNoteTemplateType;
-    label: string;
-    shortName: string;
-    description: string;
-    sections: SessionNoteTemplateSectionSpec[];
-  }
-> = {
-  SOAP: {
-    id: "SOAP",
-    label: "SOAP Note",
-    shortName: "SOAP",
-    description: "Standard medical & allied health Subjective, Objective, Assessment, Plan chart note",
-    sections: [
-      { key: "subjective", label: "Subjective (S)", placeholder: "Chief complaint, history of present illness, symptom onset, patient-reported updates...", rows: 3 },
-      { key: "objective", label: "Objective (O)", placeholder: "Exam findings, vitals, clinical observations, diagnostic/scale results...", rows: 3 },
-      { key: "assessment", label: "Assessment (A)", placeholder: "Clinical impression, differential or confirmed diagnosis, response to treatment...", rows: 3 },
-      { key: "plan", label: "Plan (P)", placeholder: "Medications, procedures, referrals, patient education, next follow-up date...", rows: 3 },
-    ],
-  },
-  DAP: {
-    id: "DAP",
-    label: "DAP Progress Note",
-    shortName: "DAP",
-    description: "Behavioral health & therapy note covering Data, Assessment, and Plan",
-    sections: [
-      { key: "data", label: "Data (D)", placeholder: "Session focus, client statements, affect/mood observations, homework review...", rows: 4 },
-      { key: "assessment", label: "Assessment (A)", placeholder: "Clinical formulation, progress toward treatment goals, risk screening...", rows: 3 },
-      { key: "plan", label: "Plan (P)", placeholder: "Interventions assigned, coping skills practice, next session cadence...", rows: 3 },
-    ],
-  },
-  BIRP: {
-    id: "BIRP",
-    label: "BIRP Note",
-    shortName: "BIRP",
-    description: "Structured Behavior, Intervention, Response, and Plan documentation",
-    sections: [
-      { key: "behavior", label: "Behavior (B)", placeholder: "Observed client presentation, demeanor, self-reported symptoms...", rows: 3 },
-      { key: "intervention", label: "Intervention (I)", placeholder: "Therapeutic or clinical modalities used (CBT, motivational interviewing, etc.)...", rows: 3 },
-      { key: "response", label: "Response (R)", placeholder: "How client engaged with or responded to the intervention during session...", rows: 3 },
-      { key: "plan", label: "Plan (P)", placeholder: "Action items, homework, care coordination, next appointment...", rows: 3 },
-    ],
-  },
-  Procedure: {
-    id: "Procedure",
-    label: "Procedure / Treatment Note",
-    shortName: "Procedure",
-    description: "Aesthetic, dental, or outpatient clinical procedure & post-care note",
-    sections: [
-      { key: "indication", label: "Indication & Informed Consent", placeholder: "Treatment area, clinical indication, consent verified, allergies/contraindications checked...", rows: 2 },
-      { key: "procedureNotes", label: "Procedure & Dosages / Units", placeholder: "Technique, anatomic sites, batch/lot numbers, energy/units administered...", rows: 4 },
-      { key: "findings", label: "Immediate Response & Tolerance", placeholder: "Patient tolerance, immediate skin/tissue response, adverse events (if any)...", rows: 2 },
-      { key: "postCare", label: "Aftercare & Follow-Up Plan", placeholder: "Post-procedure instructions provided, review interval...", rows: 2 },
-    ],
-  },
-  Freeform: {
-    id: "Freeform",
-    label: "General Clinical Note",
-    shortName: "Freeform",
-    description: "Flexible unstructured progress or consultation note",
-    sections: [
-      { key: "body", label: "Session Summary & Clinical Findings", placeholder: "Document the full consultation, clinical observations, and patient discussion...", rows: 7 },
-      { key: "followUp", label: "Follow-Up & Action Items", placeholder: "Recommended next steps, referrals, or patient tasks...", rows: 3 },
-    ],
-  },
-};
+export const SESSION_NOTE_TEMPLATES = Object.fromEntries(
+  SYSTEM_NOTE_TEMPLATES.map((t) => [t.id, t])
+) as Record<string, NoteTemplate>;
 
 export interface SessionNoteVitals {
   bloodPressure?: string;
@@ -123,10 +58,9 @@ export interface SessionNote {
   durationMinutes?: number;
   title: string;
   templateType: SessionNoteTemplateType;
+  templateName?: string;
   sections: Record<string, string>;
   vitals?: SessionNoteVitals;
-  icd10Codes: string[];
-  cptCodes: string[];
   status: "draft" | "signed";
   signedAt?: string;
   signedBy?: string;
@@ -151,19 +85,18 @@ const SEED_SESSION_NOTES: SessionNote[] = [
     durationMinutes: 45,
     title: "Initial Clinical Evaluation & Care Plan",
     templateType: "SOAP",
+    templateName: "SOAP Note",
     sections: {
       subjective:
         "Patient reports intermittent tension headaches over the past 3 weeks and persistent work-related anxiety affecting sleep onset.",
       objective:
         "Alert and oriented x3. Affect calm, cooperative. BP 118/76 mmHg, Pulse 72 bpm, SpO2 99%. No focal deficits observed.",
       assessment:
-        "Generalized anxiety disorder (moderate) with secondary tension-type sleep disturbance. Good candidate for structured CBT + relaxation protocol.",
+        "Generalized anxiety symptoms with secondary tension-type sleep disturbance. Good candidate for structured CBT and relaxation protocol.",
       plan:
-        "Initiated weekly CBT sessions. Recommended sleep hygiene guide via patient portal. Reassess symptom severity (GAD-7) in 2 weeks.",
+        "Initiated weekly CBT sessions. Recommended sleep hygiene guide via patient portal. Reassess symptom severity in 2 weeks.",
     },
     vitals: { bloodPressure: "118/76", pulse: "72", spo2: "99%", temperature: "98.4°F" },
-    icd10Codes: ["F41.1"],
-    cptCodes: ["90791"],
     status: "signed",
     signedAt: "2026-11-18T11:20:00.000Z",
     signedBy: "Dr. Akshita Sharma",
@@ -192,6 +125,7 @@ const SEED_SESSION_NOTES: SessionNote[] = [
     durationMinutes: 30,
     title: "Follow-Up Progress Review",
     templateType: "DAP",
+    templateName: "DAP Progress Note",
     sections: {
       data:
         "Patient reports improved sleep consistency (6.5–7 hrs/night) after adopting structured evening wind-down. Mild anticipatory stress remains prior to team meetings.",
@@ -200,8 +134,6 @@ const SEED_SESSION_NOTES: SessionNote[] = [
       plan:
         "Continue current therapy cadence. Introduced exposure hierarchy worksheet; follow-up booked in 14 days.",
     },
-    icd10Codes: ["F41.1"],
-    cptCodes: ["90834"],
     status: "draft",
     addendums: [],
     ehrSyncRecords: [],
@@ -274,11 +206,13 @@ export function saveSessionNote(
   const current = readAllNotesRaw();
   const existing = current.find((n) => n.id === note.id);
   const nowIso = new Date().toISOString();
+  const tpl = getNoteTemplateById(note.templateType);
 
   const merged: SessionNote = {
     addendums: existing?.addendums || [],
     ehrSyncRecords: existing?.ehrSyncRecords || [],
     createdAt: existing?.createdAt || nowIso,
+    templateName: note.templateName || tpl.name,
     ...note,
     updatedAt: nowIso,
   };
@@ -299,7 +233,7 @@ export function saveSessionNote(
         status: merged.status === "signed" ? "completed" : "pending",
         refId: merged.id,
         details: {
-          primary: `${merged.templateType} Note: ${merged.title}`,
+          primary: `${tpl.shortName} Note: ${merged.title}`,
           secondary: `${merged.providerName} · ${merged.status === "signed" ? "Signed & Locked" : "Saved as Draft"}`,
         },
         notes: buildSessionNotePlainSummary(merged),
@@ -347,11 +281,11 @@ export async function signAndLockSessionNote(
         clientName: updated.clientName,
         appointmentId: updated.appointmentId,
         providerName: updated.providerName,
-        templateType: updated.templateType,
+        templateType: updated.templateName || updated.templateType,
         title: updated.title,
         sections: updated.sections,
-        icd10Codes: updated.icd10Codes,
-        cptCodes: updated.cptCodes,
+        icd10Codes: [],
+        cptCodes: [],
         signedAt: updated.signedAt,
         signedBy: updated.signedBy,
       });
@@ -380,6 +314,7 @@ export async function signAndLockSessionNote(
 
   writeAllNotesRaw([updated, ...current.filter((n) => n.id !== updated.id)]);
 
+  const tpl = getNoteTemplateById(updated.templateType);
   try {
     appendActivity({
       clientId: String(updated.clientId),
@@ -392,7 +327,7 @@ export async function signAndLockSessionNote(
       status: "completed",
       refId: updated.id,
       details: {
-        primary: `Signed ${updated.templateType} Note: ${updated.title}`,
+        primary: `Signed ${tpl.shortName} Note: ${updated.title}`,
         secondary: `Signed by ${updated.signedBy}${syncedEhrs.length > 0 ? ` · Synced to ${syncedEhrs.join(", ")}` : ""}`,
       },
       notes: buildSessionNotePlainSummary(updated),
@@ -417,11 +352,11 @@ export async function syncExistingNoteToEhr(
       clientName: target.clientName,
       appointmentId: target.appointmentId,
       providerName: target.providerName,
-      templateType: target.templateType,
+      templateType: target.templateName || target.templateType,
       title: target.title,
       sections: target.sections,
-      icd10Codes: target.icd10Codes,
-      cptCodes: target.cptCodes,
+      icd10Codes: [],
+      cptCodes: [],
       signedAt: target.signedAt,
       signedBy: target.signedBy,
     },
@@ -491,18 +426,10 @@ export function publishVisitSummaryToPatient(noteId: string): SessionNote | null
   if (!target) return null;
 
   const docId = target.sharedDocumentId || `doc-visit-summary-${target.id}`;
-  const planSection =
-    target.sections.plan ||
-    target.sections.postCare ||
-    target.sections.followUp ||
-    target.sections.body ||
-    "Follow your clinician's care recommendations and reach out if symptoms worsen.";
-
-  const assessmentSummary =
-    target.sections.assessment ||
-    target.sections.indication ||
-    target.sections.findings ||
-    target.title;
+  const spec = getNoteTemplateById(target.templateType);
+  const sectionLines = spec.sections
+    .filter((s) => target.sections[s.key])
+    .map((s) => `${s.label}:\n${target.sections[s.key]}`);
 
   const summaryContent = [
     `AFTER-VISIT SUMMARY`,
@@ -510,12 +437,15 @@ export function publishVisitSummaryToPatient(noteId: string): SessionNote | null
     `Clinician: ${target.providerName}`,
     `Visit Date: ${new Date(target.sessionDate).toLocaleDateString()}`,
     ``,
-    `Summary / Focus:`,
-    assessmentSummary,
-    ``,
-    `Care Plan & Next Steps:`,
-    planSection,
-  ].join("\n");
+    ...sectionLines,
+  ].join("\n\n");
+
+  const planSnippet =
+    target.sections.plan ||
+    target.sections.postCare ||
+    target.sections.followUp ||
+    sectionLines[0] ||
+    "Visit summary shared with patient.";
 
   saveClientDocument({
     id: docId,
@@ -530,7 +460,7 @@ export function publishVisitSummaryToPatient(noteId: string): SessionNote | null
     uploadedDate: new Date().toISOString().slice(0, 16).replace("T", " "),
     uploadedBy: target.providerName,
     status: "Verified",
-    notes: planSection.slice(0, 160),
+    notes: planSnippet.slice(0, 160),
     generatedContent: summaryContent,
     showToPatient: true,
   });
@@ -547,7 +477,7 @@ export function publishVisitSummaryToPatient(noteId: string): SessionNote | null
 }
 
 export function buildSessionNotePlainSummary(note: SessionNote): string {
-  const spec = SESSION_NOTE_TEMPLATES[note.templateType];
+  const spec = getNoteTemplateById(note.templateType);
   const firstNonEmpty = spec.sections
     .map((s) => (note.sections[s.key] ? `${s.label}: ${note.sections[s.key]}` : ""))
     .filter(Boolean);
@@ -556,12 +486,11 @@ export function buildSessionNotePlainSummary(note: SessionNote): string {
 
 export function mapScribeSessionToSections(
   session: ScribeSession,
-  templateType: SessionNoteTemplateType
+  templateId: SessionNoteTemplateType
 ): {
   title: string;
   sections: Record<string, string>;
   vitals?: SessionNoteVitals;
-  icd10Codes: string[];
 } {
   const ed = session.extractedData || ({} as any);
   const medsText = (ed.medications || [])
@@ -589,68 +518,74 @@ export function mapScribeSessionToSections(
       }
     : undefined;
 
-  const icd10Codes = ed.icd10Code ? [String(ed.icd10Code)] : [];
+  const vitalsStr = vitals
+    ? `Vitals — ${[
+        vitals.bloodPressure && `BP ${vitals.bloodPressure}`,
+        vitals.pulse && `Pulse ${vitals.pulse}`,
+        vitals.temperature && `Temp ${vitals.temperature}`,
+        vitals.spo2 && `SpO2 ${vitals.spo2}`,
+      ]
+        .filter(Boolean)
+        .join(", ")}.`
+    : "";
 
-  let sections: Record<string, string> = {};
-  switch (templateType) {
-    case "SOAP":
-      sections = {
-        subjective: ed.chiefComplaint || "",
-        objective: vitals
-          ? `Vitals — ${[
-              vitals.bloodPressure && `BP ${vitals.bloodPressure}`,
-              vitals.pulse && `Pulse ${vitals.pulse}`,
-              vitals.temperature && `Temp ${vitals.temperature}`,
-              vitals.spo2 && `SpO2 ${vitals.spo2}`,
-            ]
-              .filter(Boolean)
-              .join(", ")}.`
-          : "",
-        assessment: ed.diagnosis || "",
-        plan: planStr,
-      };
-      break;
-    case "DAP":
-      sections = {
-        data: [ed.chiefComplaint, session.transcript?.fullText?.slice(0, 240)].filter(Boolean).join("\n"),
-        assessment: ed.diagnosis || "",
-        plan: planStr,
-      };
-      break;
-    case "BIRP":
-      sections = {
-        behavior: ed.chiefComplaint || "",
-        intervention: adviceText || ed.doctorNotes || "Clinical consultation & education.",
-        response: "Patient verbalized understanding and agreed with proposed plan.",
-        plan: planStr,
-      };
-      break;
-    case "Procedure":
-      sections = {
-        indication: ed.chiefComplaint || ed.diagnosis || "",
-        procedureNotes: ed.doctorNotes || "",
-        findings: ed.diagnosis || "",
-        postCare: [adviceText, ed.followUpDate || (ed.followUpDays ? `Follow-up in ${ed.followUpDays} days` : "")].filter(Boolean).join("\n"),
-      };
-      break;
-    case "Freeform":
-      sections = {
-        body: [
-          ed.chiefComplaint ? `Chief Complaint: ${ed.chiefComplaint}` : "",
-          ed.diagnosis ? `Assessment: ${ed.diagnosis}` : "",
-          ed.doctorNotes || "",
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        followUp: planStr,
-      };
-      break;
+  const tpl = getNoteTemplateById(templateId);
+  const sections: Record<string, string> = {};
+
+  if (tpl.id === "SOAP") {
+    sections.subjective = ed.chiefComplaint || "";
+    sections.objective = vitalsStr;
+    sections.assessment = ed.diagnosis || "";
+    sections.plan = planStr;
+  } else if (tpl.id === "DAP") {
+    sections.data = [ed.chiefComplaint, session.transcript?.fullText?.slice(0, 240)].filter(Boolean).join("\n");
+    sections.assessment = ed.diagnosis || "";
+    sections.plan = planStr;
+  } else if (tpl.id === "BIRP") {
+    sections.behavior = ed.chiefComplaint || "";
+    sections.intervention = adviceText || ed.doctorNotes || "Clinical consultation & education.";
+    sections.response = "Patient verbalized understanding and agreed with proposed plan.";
+    sections.plan = planStr;
+  } else if (tpl.id === "Procedure") {
+    sections.indication = ed.chiefComplaint || ed.diagnosis || "";
+    sections.procedureNotes = ed.doctorNotes || "";
+    sections.findings = ed.diagnosis || "";
+    sections.postCare = [
+      adviceText,
+      ed.followUpDate || (ed.followUpDays ? `Follow-up in ${ed.followUpDays} days` : ""),
+    ]
+      .filter(Boolean)
+      .join("\n");
+  } else if (tpl.id === "Freeform") {
+    sections.body = [
+      ed.chiefComplaint ? `Chief Complaint: ${ed.chiefComplaint}` : "",
+      ed.diagnosis ? `Assessment: ${ed.diagnosis}` : "",
+      ed.doctorNotes || "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    sections.followUp = planStr;
+  } else {
+    // Dynamic mapping for user/admin-created custom note templates via scribeHint or keyword match
+    tpl.sections.forEach((sec, idx) => {
+      const hint = (sec.scribeHint || sec.label || "").toLowerCase();
+      if (hint.includes("chief") || hint.includes("complaint") || hint.includes("symptom") || hint.includes("subjective")) {
+        sections[sec.key] = ed.chiefComplaint || "";
+      } else if (hint.includes("vital") || hint.includes("objective") || hint.includes("exam")) {
+        sections[sec.key] = vitalsStr;
+      } else if (hint.includes("diagnos") || hint.includes("assess") || hint.includes("finding")) {
+        sections[sec.key] = ed.diagnosis || "";
+      } else if (hint.includes("plan") || hint.includes("follow") || hint.includes("care") || hint.includes("advice")) {
+        sections[sec.key] = planStr;
+      } else if (idx === 0) {
+        sections[sec.key] = [ed.chiefComplaint, ed.diagnosis].filter(Boolean).join(" — ");
+      }
+    });
   }
 
   return {
-    title: session.title || ed.diagnosis || "AI Scribe Clinical Note",
+    title: session.title || ed.diagnosis || `${tpl.shortName} Clinical Note`,
     sections,
     vitals,
-    icd10Codes,
   };
 }

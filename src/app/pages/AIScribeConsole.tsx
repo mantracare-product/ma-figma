@@ -14,6 +14,8 @@ import {
   Settings as SettingsIcon,
   Send,
   Sparkles,
+  Copy,
+  Edit2,
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
@@ -29,12 +31,25 @@ import {
   issuePrescriptionDocument,
   SCRIBE_EVENT,
 } from "../../lib/scribeSessionStore";
+import {
+  NoteTemplate,
+  NOTE_TEMPLATES_EVENT,
+  getNoteTemplates,
+  duplicateNoteTemplate,
+  deleteNoteTemplate,
+} from "../../lib/noteTemplatesStore";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
+import NoteTemplateBuilderDrawer from "../components/clinical/NoteTemplateBuilderDrawer";
 
 export default function AIScribeConsole() {
   // Core Data Stores
   const [sessions, setSessions] = useState<ScribeSession[]>(getScribeSessions());
+  const [consoleMode, setConsoleMode] = useState<"sessions" | "templates">("sessions");
+  const [noteTemplates, setNoteTemplates] = useState<NoteTemplate[]>(() => getNoteTemplates());
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [isTemplateBuilderOpen, setIsTemplateBuilderOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<NoteTemplate | null>(null);
 
   // Search & Filter
   const [transcriptSearch, setTranscriptSearch] = useState("");
@@ -60,8 +75,17 @@ export default function AIScribeConsole() {
     const handleUpdate = () => {
       setSessions(getScribeSessions());
     };
+    const handleTemplatesUpdate = () => {
+      setNoteTemplates(getNoteTemplates());
+    };
     window.addEventListener(SCRIBE_EVENT, handleUpdate);
-    return () => window.removeEventListener(SCRIBE_EVENT, handleUpdate);
+    window.addEventListener(NOTE_TEMPLATES_EVENT, handleTemplatesUpdate);
+    window.addEventListener("storage", handleTemplatesUpdate);
+    return () => {
+      window.removeEventListener(SCRIBE_EVENT, handleUpdate);
+      window.removeEventListener(NOTE_TEMPLATES_EVENT, handleTemplatesUpdate);
+      window.removeEventListener("storage", handleTemplatesUpdate);
+    };
   }, []);
 
   // Close kebab menu on document click
@@ -183,42 +207,193 @@ export default function AIScribeConsole() {
         {/* ─── Search & Action Bar powered by PageTopBar ─────────────────────── */}
         <PageTopBar
           isBottomPanelAttached={true}
-          searchQuery={transcriptSearch}
+          modes={[
+            { id: "sessions", label: "Sessions" },
+            { id: "templates", label: "Note Templates" },
+          ]}
+          activeMode={consoleMode}
+          onModeChange={(m) => setConsoleMode(m as "sessions" | "templates")}
+          searchQuery={consoleMode === "sessions" ? transcriptSearch : templateSearch}
           onSearchChange={(val) => {
-            setTranscriptSearch(val);
-            setCurrentPage(1);
+            if (consoleMode === "sessions") {
+              setTranscriptSearch(val);
+              setCurrentPage(1);
+            } else {
+              setTemplateSearch(val);
+            }
           }}
-          searchPlaceholder="Search transcripts by patient name, keyword..."
-          filterPresets={[
-            { id: "all", label: "All Consultations", isActive: true, onClick: () => setTranscriptSearch("") },
-            { id: "completed", label: "Completed", onClick: () => setTranscriptSearch("completed") },
-            { id: "upcoming", label: "Upcoming", onClick: () => setTranscriptSearch("upcoming") },
-          ]}
-          filterFields={[
-            {
-              id: "patient",
-              label: "Patient Name",
-              type: "text",
-              placeholder: "Filter by patient name...",
-              value: transcriptSearch,
-              onChange: (v) => setTranscriptSearch(v),
-            },
-            {
-              id: "status",
-              label: "Status",
-              type: "select",
-              options: ["All", "Completed", "Upcoming", "In Progress"],
-            },
-          ]}
-          availableFilterFieldsToAdd={["Session", "Provider", "Date", "Tags"]}
-          primaryAction={{
-            label: "Add Scribe",
-            onClick: () => setIsNewConsultationOpen(true),
-          }}
+          searchPlaceholder={
+            consoleMode === "sessions"
+              ? "Search transcripts by patient name, keyword..."
+              : "Search note templates by name, badge, or specialty..."
+          }
+          filterPresets={
+            consoleMode === "sessions"
+              ? [
+                  { id: "all", label: "All Consultations", isActive: true, onClick: () => setTranscriptSearch("") },
+                  { id: "completed", label: "Completed", onClick: () => setTranscriptSearch("completed") },
+                  { id: "upcoming", label: "Upcoming", onClick: () => setTranscriptSearch("upcoming") },
+                ]
+              : undefined
+          }
+          filterFields={
+            consoleMode === "sessions"
+              ? [
+                  {
+                    id: "patient",
+                    label: "Patient Name",
+                    type: "text",
+                    placeholder: "Filter by patient name...",
+                    value: transcriptSearch,
+                    onChange: (v) => setTranscriptSearch(v),
+                  },
+                  {
+                    id: "status",
+                    label: "Status",
+                    type: "select",
+                    options: ["All", "Completed", "Upcoming", "In Progress"],
+                  },
+                ]
+              : undefined
+          }
+          availableFilterFieldsToAdd={
+            consoleMode === "sessions" ? ["Session", "Provider", "Date", "Tags"] : undefined
+          }
+          primaryAction={
+            consoleMode === "sessions"
+              ? {
+                  label: "Add Scribe",
+                  onClick: () => setIsNewConsultationOpen(true),
+                }
+              : {
+                  label: "New Template",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => {
+                    setEditingTemplate(null);
+                    setIsTemplateBuilderOpen(true);
+                  },
+                }
+          }
         />
 
-        {/* ─── Transcripts Table with TableComponent ─────────────────── */}
-        {(() => {
+        {/* ─── Transcripts OR Note Templates Table ─────────────────── */}
+        {consoleMode === "templates" ? (() => {
+          const filteredTemplates = noteTemplates.filter((t) => {
+            const q = templateSearch.toLowerCase().trim();
+            if (!q) return true;
+            return (
+              t.name.toLowerCase().includes(q) ||
+              t.shortName.toLowerCase().includes(q) ||
+              t.category.toLowerCase().includes(q) ||
+              t.description.toLowerCase().includes(q)
+            );
+          });
+
+          const templateColumns: TableColumn<NoteTemplate>[] = [
+            {
+              id: "name",
+              header: "TEMPLATE NAME",
+              align: "left",
+              render: (tpl) => (
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px] font-mono font-semibold shrink-0">
+                    {tpl.shortName}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="font-semibold text-xs text-slate-900 block truncate">
+                      {tpl.name}
+                    </span>
+                    <span className="text-[11px] text-slate-500 block truncate max-w-[260px]">
+                      {tpl.description}
+                    </span>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              id: "category",
+              header: "CATEGORY",
+              align: "left",
+              render: (tpl) => (
+                <span className="text-xs text-slate-700 font-medium">{tpl.category}</span>
+              ),
+            },
+            {
+              id: "sections",
+              header: "SECTIONS",
+              align: "center",
+              render: (tpl) => (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-100 text-slate-700">
+                  {tpl.sections.length} blocks
+                </span>
+              ),
+            },
+            {
+              id: "origin",
+              header: "TYPE",
+              align: "center",
+              render: (tpl) =>
+                tpl.isSystem ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                    System Baseline
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                    Custom
+                  </span>
+                ),
+            },
+          ];
+
+          const templateActions: TableRowAction<NoteTemplate>[] = [
+            {
+              label: "Edit Template",
+              icon: <Edit2 className="w-3.5 h-3.5" />,
+              onClick: (tpl) => {
+                setEditingTemplate(tpl);
+                setIsTemplateBuilderOpen(true);
+              },
+            },
+            {
+              label: "Duplicate",
+              icon: <Copy className="w-3.5 h-3.5" />,
+              onClick: (tpl) => {
+                const copy = duplicateNoteTemplate(tpl.id);
+                if (copy) {
+                  setNoteTemplates(getNoteTemplates());
+                  toast.success(`Duplicated "${tpl.name}"`);
+                }
+              },
+            },
+            {
+              label: "Delete Template",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              condition: (tpl) => !tpl.isSystem,
+              onClick: (tpl) => {
+                if (deleteNoteTemplate(tpl.id)) {
+                  setNoteTemplates(getNoteTemplates());
+                  toast.success(`Deleted "${tpl.name}"`);
+                }
+              },
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={filteredTemplates}
+              columns={templateColumns}
+              getRowId={(t) => t.id}
+              rowActions={templateActions}
+              onRowClick={(tpl) => {
+                setEditingTemplate(tpl);
+                setIsTemplateBuilderOpen(true);
+              }}
+              defaultRowsPerPage={15}
+              emptyMessage="No Note Templates Found. Click '+ New Template' to create one."
+            />
+          );
+        })() : (() => {
           const columns: TableColumn<ScribeSession>[] = [
             {
               id: "clientName",
@@ -381,6 +556,17 @@ export default function AIScribeConsole() {
             setWhatsAppTargetSession(session);
             setShowWhatsAppModal(true);
           }}
+        />
+
+        {/* ─── NOTE TEMPLATE BUILDER DRAWER ────────────────────────────────── */}
+        <NoteTemplateBuilderDrawer
+          isOpen={isTemplateBuilderOpen}
+          onClose={() => {
+            setIsTemplateBuilderOpen(false);
+            setEditingTemplate(null);
+          }}
+          initialTemplate={editingTemplate}
+          onSaved={() => setNoteTemplates(getNoteTemplates())}
         />
 
         {/* ─── WHATSAPP DIRECT SHARE MODAL ─────────────────────────────────── */}

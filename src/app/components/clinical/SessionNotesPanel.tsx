@@ -12,17 +12,24 @@ import {
   User,
   CheckCircle2,
   ExternalLink,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../ui/Button";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import SessionNoteEditorDrawer from "./SessionNoteEditorDrawer";
+import NoteTemplateBuilderDrawer from "./NoteTemplateBuilderDrawer";
 import { getScribeSessions, ScribeSession, SCRIBE_EVENT } from "../../../lib/scribeSessionStore";
 import { getEhrSessionNoteTargets, EhrSessionNotePushTarget } from "../../../lib/integrationsRegistry";
 import {
+  NoteTemplate,
+  NOTE_TEMPLATES_EVENT,
+  getNoteTemplates,
+  getNoteTemplateById,
+} from "../../../lib/noteTemplatesStore";
+import {
   SessionNote,
   SessionNoteTemplateType,
-  SESSION_NOTE_TEMPLATES,
   SESSION_NOTES_EVENT,
   getSessionNotes,
   deleteSessionNote,
@@ -62,6 +69,7 @@ export default function SessionNotesPanel({
       appointmentId: appointment?.id,
     })
   );
+  const [templates, setTemplates] = useState<NoteTemplate[]>(() => getNoteTemplates({ onlyEnabled: true }));
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(() => getScribeSessions());
   const [ehrTargets, setEhrTargets] = useState<EhrSessionNotePushTarget[]>(() => getEhrSessionNoteTargets());
 
@@ -74,6 +82,7 @@ export default function SessionNotesPanel({
   const [editingNote, setEditingNote] = useState<SessionNote | null>(null);
   const [prefillScribe, setPrefillScribe] = useState<ScribeSession | null>(null);
   const [showScribeModal, setShowScribeModal] = useState(false);
+  const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
   const reloadNotes = () => {
     setNotes(
@@ -91,22 +100,24 @@ export default function SessionNotesPanel({
 
   useEffect(() => {
     const onNotesUpdated = () => reloadNotes();
+    const onTemplatesUpdated = () => setTemplates(getNoteTemplates({ onlyEnabled: true }));
     const onScribeUpdated = () => setScribeSessions(getScribeSessions());
     const onIntegrationsUpdated = () => setEhrTargets(getEhrSessionNoteTargets());
 
     window.addEventListener(SESSION_NOTES_EVENT, onNotesUpdated);
+    window.addEventListener(NOTE_TEMPLATES_EVENT, onTemplatesUpdated);
     window.addEventListener(SCRIBE_EVENT, onScribeUpdated);
     window.addEventListener("mantra:integration_updated", onIntegrationsUpdated);
     window.addEventListener("storage", onNotesUpdated);
     return () => {
       window.removeEventListener(SESSION_NOTES_EVENT, onNotesUpdated);
+      window.removeEventListener(NOTE_TEMPLATES_EVENT, onTemplatesUpdated);
       window.removeEventListener(SCRIBE_EVENT, onScribeUpdated);
       window.removeEventListener("mantra:integration_updated", onIntegrationsUpdated);
       window.removeEventListener("storage", onNotesUpdated);
     };
   }, [client?.id, client?.name, appointment?.id]);
 
-  // AI Scribe sessions for this client/appointment not yet turned into a structured Session Note
   const unlinkedScribeSessions = useMemo(() => {
     const linkedIds = new Set(notes.map((n) => n.scribeSessionId).filter(Boolean));
     const cid = String(client?.id || "").toLowerCase();
@@ -135,9 +146,8 @@ export default function SessionNotesPanel({
         note.title.toLowerCase().includes(q) ||
         note.providerName.toLowerCase().includes(q) ||
         note.templateType.toLowerCase().includes(q) ||
-        sectionText.includes(q) ||
-        note.icd10Codes.some((c) => c.toLowerCase().includes(q)) ||
-        note.cptCodes.some((c) => c.toLowerCase().includes(q))
+        (note.templateName && note.templateName.toLowerCase().includes(q)) ||
+        sectionText.includes(q)
       );
     });
   }, [notes, statusFilter, templateFilter, searchQuery]);
@@ -207,11 +217,21 @@ export default function SessionNotesPanel({
           <p className="text-xs text-slate-500 mt-1">
             {connectedEhrs.length > 0
               ? `Connected EHR sync: ${connectedEhrs.map((t) => t.integrationName).join(", ")}`
-              : "Structured SOAP, DAP, BIRP, and procedure charting with AI Scribe prefill."}
+              : "Structured clinical charting with custom note templates and AI Scribe prefill."}
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTemplateBuilder(true)}
+            className="text-xs font-medium gap-1.5"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>New Template</span>
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -263,7 +283,7 @@ export default function SessionNotesPanel({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search notes, diagnosis, ICD-10, CPT, or clinician..."
+            placeholder="Search session notes, sections, or clinician..."
             className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
           />
         </div>
@@ -290,11 +310,11 @@ export default function SessionNotesPanel({
             className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer"
           >
             <option value="all">All Templates</option>
-            <option value="SOAP">SOAP Note</option>
-            <option value="DAP">DAP Note</option>
-            <option value="BIRP">BIRP Note</option>
-            <option value="Procedure">Procedure Note</option>
-            <option value="Freeform">General Note</option>
+            {templates.map((tpl) => (
+              <option key={tpl.id} value={tpl.id}>
+                {tpl.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -307,7 +327,7 @@ export default function SessionNotesPanel({
             {notes.length === 0 ? "No session notes recorded yet" : "No session notes match your filter"}
           </p>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Document structured clinical encounters (SOAP, DAP, BIRP, or procedure notes), link ICD-10/CPT codes, sign, and sync with connected EHRs.
+            Document structured clinical encounters, sign & lock notes, publish visit summaries, and sync with connected EHRs.
           </p>
           {notes.length === 0 && (
             <div className="pt-1">
@@ -327,7 +347,7 @@ export default function SessionNotesPanel({
       ) : (
         <div className="space-y-3">
           {filteredNotes.map((note) => {
-            const spec = SESSION_NOTE_TEMPLATES[note.templateType];
+            const spec = getNoteTemplateById(note.templateType);
             const isSigned = note.status === "signed";
             const visibleSections = spec.sections.filter(
               (s) => note.sections[s.key] && note.sections[s.key].trim().length > 0
@@ -344,7 +364,7 @@ export default function SessionNotesPanel({
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-slate-900 text-white">
-                        {note.templateType}
+                        {spec.shortName}
                       </span>
                       <h4 className="text-sm font-semibold text-slate-900 truncate">{note.title}</h4>
                       {isSigned ? (
@@ -442,47 +462,23 @@ export default function SessionNotesPanel({
                   </div>
                 )}
 
-                {/* Coding, Patient Share & EHR Sync Footer Strip */}
-                {(note.icd10Codes.length > 0 ||
-                  note.cptCodes.length > 0 ||
-                  note.ehrSyncRecords.length > 0 ||
-                  note.sharedToPatient) && (
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap text-[11px]">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {note.icd10Codes.map((code) => (
-                        <span
-                          key={code}
-                          className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-medium border border-blue-200/60"
-                        >
-                          ICD: {code}
-                        </span>
-                      ))}
-                      {note.cptCodes.map((code) => (
-                        <span
-                          key={code}
-                          className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-medium border border-slate-200"
-                        >
-                          CPT: {code}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {note.sharedToPatient && (
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                          <CheckCircle2 className="w-3 h-3" /> Summary Shared
-                        </span>
-                      )}
-                      {note.ehrSyncRecords.map((rec) => (
-                        <span
-                          key={rec.integrationId}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono border border-emerald-200/70"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {rec.integrationName} · {rec.externalNoteId}
-                        </span>
-                      ))}
-                    </div>
+                {/* Patient Share & EHR Sync Footer Strip */}
+                {(note.ehrSyncRecords.length > 0 || note.sharedToPatient) && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 flex-wrap text-[11px]">
+                    {note.sharedToPatient && (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        <CheckCircle2 className="w-3 h-3" /> Summary Shared
+                      </span>
+                    )}
+                    {note.ehrSyncRecords.map((rec) => (
+                      <span
+                        key={rec.integrationId}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono border border-emerald-200/70"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        {rec.integrationName} · {rec.externalNoteId}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
@@ -524,6 +520,13 @@ export default function SessionNotesPanel({
           setScribeSessions(getScribeSessions());
           handleOpenNew(newSession);
         }}
+      />
+
+      {/* Inline Custom Template Builder */}
+      <NoteTemplateBuilderDrawer
+        isOpen={showTemplateBuilder}
+        onClose={() => setShowTemplateBuilder(false)}
+        onSaved={() => setTemplates(getNoteTemplates({ onlyEnabled: true }))}
       />
     </div>
   );
