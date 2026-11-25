@@ -13,6 +13,7 @@ import {
   Sparkles,
   Check,
   Sliders,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import FieldRenderer, { FormField } from "../form-builder/FieldRenderer";
@@ -20,6 +21,7 @@ import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopi
 import { ScopingRule } from "../../context/FieldRegistryContext";
 import {
   NoteBlockInputType,
+  NoteSectionCondition,
   NoteTemplate,
   NoteTemplateSection,
   saveNoteTemplate,
@@ -160,7 +162,24 @@ function makeUniqueKey(baseLabel: string, existing: NoteTemplateSection[]): stri
   return `${base}_${counter}`;
 }
 
-function toRendererField(sec: NoteTemplateSection): FormField {
+function formatConditionSummary(
+  rule: NoteSectionCondition | undefined,
+  allSections: NoteTemplateSection[]
+): string | undefined {
+  if (!rule || !rule.dependsOnKey) return undefined;
+  const trigger = allSections.find((s) => s.key === rule.dependsOnKey);
+  const label = trigger?.label || rule.dependsOnKey;
+  if (rule.operator === "is_filled") return `Shown when "${label}" is filled`;
+  const opLabel =
+    rule.operator === "not_equals"
+      ? "≠"
+      : rule.operator === "contains"
+      ? "contains"
+      : "=";
+  return `Shown when "${label}" ${opLabel} "${rule.value || ""}"`;
+}
+
+function toRendererField(sec: NoteTemplateSection, allSections: NoteTemplateSection[]): FormField {
   const typeMap: Record<NoteBlockInputType, string> = {
     textarea: "textarea",
     text: "text",
@@ -181,6 +200,11 @@ function toRendererField(sec: NoteTemplateSection): FormField {
           value: opt,
         }));
 
+  const helpParts = [
+    formatConditionSummary(sec.conditionalRule, allSections),
+    sec.scribeHint ? `AI Scribe: ${sec.scribeHint}` : undefined,
+  ].filter(Boolean);
+
   return {
     id: sec.key,
     name: sec.label,
@@ -189,7 +213,7 @@ function toRendererField(sec: NoteTemplateSection): FormField {
     placeholder: sec.placeholder || "",
     required: Boolean(sec.required),
     essential: false,
-    helpText: sec.scribeHint ? `AI Scribe: ${sec.scribeHint}` : undefined,
+    helpText: helpParts.length > 0 ? helpParts.join(" · ") : undefined,
     options,
   };
 }
@@ -218,6 +242,13 @@ export default function NoteTemplateBuilderDrawer({
   const [draggedPaletteType, setDraggedPaletteType] = useState<NoteBlockInputType | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [isCanvasDropActive, setIsCanvasDropActive] = useState(false);
+
+  // Conditional logic modal state
+  const [conditionalModalKey, setConditionalModalKey] = useState<string | null>(null);
+  const [condDependsOn, setCondDependsOn] = useState<string>("");
+  const [condOperator, setCondOperator] =
+    useState<NoteSectionCondition["operator"]>("equals");
+  const [condValue, setCondValue] = useState<string>("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -277,6 +308,7 @@ export default function NoteTemplateBuilderDrawer({
     setDraggedFieldKey(null);
     setDraggedPaletteType(null);
     setDropTargetKey(null);
+    setConditionalModalKey(null);
   }, [isOpen, initialTemplate]);
 
   const selectedSection = useMemo(
@@ -284,7 +316,73 @@ export default function NoteTemplateBuilderDrawer({
     [sections, selectedKey]
   );
 
+  const conditionalTargetSection = useMemo(
+    () => sections.find((s) => s.key === conditionalModalKey) || null,
+    [sections, conditionalModalKey]
+  );
+
+  const triggerCandidates = useMemo(
+    () => sections.filter((s) => s.key !== conditionalModalKey),
+    [sections, conditionalModalKey]
+  );
+
+  const selectedTriggerSection = useMemo(
+    () => triggerCandidates.find((s) => s.key === condDependsOn) || null,
+    [triggerCandidates, condDependsOn]
+  );
+
   if (!isOpen) return null;
+
+  const openConditionalModal = (targetKey: string) => {
+    const target = sections.find((s) => s.key === targetKey);
+    const others = sections.filter((s) => s.key !== targetKey);
+    if (others.length === 0) {
+      toast.info("Add at least two blocks before configuring conditional logic");
+      setSelectedKey(targetKey);
+      return;
+    }
+    const existing = target?.conditionalRule;
+    const defaultDep =
+      existing?.dependsOnKey && others.some((s) => s.key === existing.dependsOnKey)
+        ? existing.dependsOnKey
+        : others[0].key;
+    setSelectedKey(targetKey);
+    setConditionalModalKey(targetKey);
+    setCondDependsOn(defaultDep);
+    setCondOperator(existing?.operator || "equals");
+    setCondValue(existing?.value || "");
+  };
+
+  const handleSaveConditionalRule = () => {
+    if (!conditionalModalKey || !condDependsOn) return;
+    if (condOperator !== "is_filled" && !condValue.trim()) {
+      toast.error("Please enter or choose a trigger value");
+      return;
+    }
+    const nextRule: NoteSectionCondition = {
+      dependsOnKey: condDependsOn,
+      operator: condOperator,
+      value: condOperator === "is_filled" ? undefined : condValue.trim(),
+    };
+    setSections((prev) =>
+      prev.map((sec) =>
+        sec.key === conditionalModalKey ? { ...sec, conditionalRule: nextRule } : sec
+      )
+    );
+    toast.success("Conditional visibility rule saved");
+    setConditionalModalKey(null);
+  };
+
+  const handleClearConditionalRule = () => {
+    if (!conditionalModalKey) return;
+    setSections((prev) =>
+      prev.map((sec) =>
+        sec.key === conditionalModalKey ? { ...sec, conditionalRule: undefined } : sec
+      )
+    );
+    toast.success("Conditional rule removed");
+    setConditionalModalKey(null);
+  };
 
   const addSectionFromType = (inputType: NoteBlockInputType, customLabel?: string, insertAtIndex?: number) => {
     const spec = ELEMENT_PALETTE.find((e) => e.inputType === inputType) || ELEMENT_PALETTE[0];
@@ -598,7 +696,7 @@ export default function NoteTemplateBuilderDrawer({
                   </div>
                 ) : (
                   sections.map((sec) => {
-                    const rendererField = toRendererField(sec);
+                    const rendererField = toRendererField(sec, sections);
                     return (
                       <FieldRenderer
                         key={sec.key}
@@ -627,7 +725,7 @@ export default function NoteTemplateBuilderDrawer({
                           e.stopPropagation();
                           handleReorderDrop(sec.key);
                         }}
-                        onConditionalLogic={() => setSelectedKey(sec.key)}
+                        onConditionalLogic={() => openConditionalModal(sec.key)}
                       />
                     );
                   })
@@ -881,6 +979,32 @@ export default function NoteTemplateBuilderDrawer({
                       className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 resize-none"
                     />
                   </div>
+
+                  {/* Conditional Logic Summary */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-[#64748B]">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Conditional Logic</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openConditionalModal(selectedSection.key)}
+                        className="text-xs font-medium text-[#2563EB] hover:underline cursor-pointer"
+                      >
+                        {selectedSection.conditionalRule ? "Edit Rule" : "Add Rule"}
+                      </button>
+                    </div>
+                    {selectedSection.conditionalRule ? (
+                      <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900">
+                        {formatConditionSummary(selectedSection.conditionalRule, sections)}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        Always visible unless a condition is configured.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Pinned Done Footer */}
@@ -1103,6 +1227,170 @@ export default function NoteTemplateBuilderDrawer({
           </div>
         </div>
       </div>
+
+      {/* ── CONDITIONAL LOGIC RULE MODAL ── */}
+      {conditionalTargetSection && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4"
+          style={{ zIndex: zIndex + 20 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setConditionalModalKey(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-xl border border-[#E2E8F0] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-2 min-w-0">
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="min-w-0">
+                  <h4
+                    className="text-sm font-bold text-[#0F172A] truncate"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Conditional Visibility
+                  </h4>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Block: {conditionalTargetSection.label || "Untitled Section"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConditionalModalKey(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Show <span className="font-semibold text-slate-800">{conditionalTargetSection.label}</span> in notes only when:
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-[#64748B]">
+                  Trigger Block
+                </label>
+                <select
+                  value={condDependsOn}
+                  onChange={(e) => {
+                    setCondDependsOn(e.target.value);
+                    setCondValue("");
+                  }}
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                >
+                  {triggerCandidates.map((sec) => (
+                    <option key={sec.key} value={sec.key}>
+                      {sec.label || sec.key}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-[#64748B]">
+                  Condition
+                </label>
+                <select
+                  value={condOperator}
+                  onChange={(e) =>
+                    setCondOperator(e.target.value as NoteSectionCondition["operator"])
+                  }
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                >
+                  <option value="equals">Equals</option>
+                  <option value="not_equals">Does not equal</option>
+                  <option value="contains">Contains text</option>
+                  <option value="is_filled">Has any value (is filled)</option>
+                </select>
+              </div>
+
+              {condOperator !== "is_filled" && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-[#64748B]">
+                    Expected Value
+                  </label>
+                  {selectedTriggerSection?.inputType === "yes_no" ? (
+                    <div className="flex gap-2">
+                      {["Yes", "No"].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setCondValue(opt)}
+                          className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                            condValue === opt
+                              ? "bg-[#0F172A] text-white border-[#0F172A]"
+                              : "bg-white text-slate-700 border-[#E2E8F0] hover:bg-slate-50"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (selectedTriggerSection?.inputType === "select" ||
+                      selectedTriggerSection?.inputType === "checkbox") &&
+                    (selectedTriggerSection.options || []).length > 0 ? (
+                    <select
+                      value={condValue}
+                      onChange={(e) => setCondValue(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                    >
+                      <option value="">Choose option...</option>
+                      {(selectedTriggerSection.options || []).map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={condValue}
+                      onChange={(e) => setCondValue(e.target.value)}
+                      placeholder="Enter expected value..."
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3.5 border-t border-[#E2E8F0] bg-slate-50/70 flex items-center justify-between gap-2">
+              {conditionalTargetSection.conditionalRule ? (
+                <button
+                  type="button"
+                  onClick={handleClearConditionalRule}
+                  className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
+                >
+                  Remove Rule
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConditionalModalKey(null)}
+                  className="h-8 px-3 rounded-lg border border-[#E2E8F0] bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveConditionalRule}
+                  className="h-8 px-3.5 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-semibold cursor-pointer"
+                >
+                  Save Rule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

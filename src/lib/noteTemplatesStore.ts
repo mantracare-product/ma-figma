@@ -5,6 +5,12 @@ const STORAGE_KEY = "mantra_note_templates_v1";
 
 export type NoteBlockInputType = "textarea" | "text" | "select" | "checkbox" | "yes_no";
 
+export interface NoteSectionCondition {
+  dependsOnKey: string;
+  operator: "equals" | "not_equals" | "contains" | "is_filled";
+  value?: string;
+}
+
 export interface NoteTemplateSection {
   key: string;
   label: string;
@@ -14,6 +20,37 @@ export interface NoteTemplateSection {
   required?: boolean;
   rows?: number;
   scribeHint?: string;
+  conditionalRule?: NoteSectionCondition;
+}
+
+export function evaluateNoteSectionCondition(
+  sec: NoteTemplateSection,
+  values: Record<string, string | undefined>
+): boolean {
+  const rule = sec.conditionalRule;
+  if (!rule || !rule.dependsOnKey) return true;
+  const raw = String(values[rule.dependsOnKey] || "").trim();
+  const target = String(rule.value || "").trim().toLowerCase();
+  const normalized = raw.toLowerCase();
+
+  switch (rule.operator) {
+    case "is_filled":
+      return raw.length > 0;
+    case "equals": {
+      if (!target) return raw.length > 0;
+      const tokens = normalized.split(",").map((t) => t.trim()).filter(Boolean);
+      return normalized === target || tokens.includes(target);
+    }
+    case "not_equals": {
+      if (!target) return raw.length === 0;
+      const tokens = normalized.split(",").map((t) => t.trim()).filter(Boolean);
+      return normalized !== target && !tokens.includes(target);
+    }
+    case "contains":
+      return target ? normalized.includes(target) : raw.length > 0;
+    default:
+      return true;
+  }
 }
 
 export interface NoteTemplate {

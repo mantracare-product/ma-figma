@@ -28,6 +28,7 @@ import { getEhrSessionNoteTargets, EhrSessionNotePushTarget } from "../../../lib
 import {
   NoteTemplate,
   NOTE_TEMPLATES_EVENT,
+  evaluateNoteSectionCondition,
   getNoteTemplates,
   getNoteTemplateById,
 } from "../../../lib/noteTemplatesStore";
@@ -268,7 +269,10 @@ export default function SessionNoteEditorDrawer({
       return;
     }
     const missingRequired = currentSpec.sections.find(
-      (sec) => sec.required && !String(sections[sec.key] || "").trim()
+      (sec) =>
+        evaluateNoteSectionCondition(sec, sections) &&
+        sec.required &&
+        !String(sections[sec.key] || "").trim()
     );
     if (missingRequired) {
       toast.error(`Please complete required section: "${missingRequired.label}"`);
@@ -558,7 +562,9 @@ export default function SessionNoteEditorDrawer({
                       <span className="text-[11px] text-slate-400">{currentSpec.description}</span>
                     </div>
 
-                    {currentSpec.sections.map((sec) => {
+                    {currentSpec.sections
+                      .filter((sec) => evaluateNoteSectionCondition(sec, sections))
+                      .map((sec) => {
                       const val = sections[sec.key] || "";
                       const inputType = sec.inputType || "textarea";
                       return (
