@@ -2078,17 +2078,18 @@ export default function ActivityTab({
             multiline={true}
           />
 
-          {/* Mark Date & Optional Time */}
+          {/* Date & Time */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <label
                 className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                Mark Date
+                Date
               </label>
               <input
                 type="date"
+                required
                 value={reminderDate}
                 onChange={(e) => setReminderDate(e.target.value)}
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
@@ -2101,10 +2102,11 @@ export default function ActivityTab({
                 className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                Time (Optional)
+                Time
               </label>
               <input
                 type="time"
+                required
                 value={reminderTime}
                 onChange={(e) => setReminderTime(e.target.value)}
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
@@ -2122,7 +2124,11 @@ export default function ActivityTab({
                   return;
                 }
                 if (!reminderDate) {
-                  toast.error("Please mark a reminder date");
+                  toast.error("Please select a reminder date");
+                  return;
+                }
+                if (!reminderTime) {
+                  toast.error("Please select a reminder time");
                   return;
                 }
                 if (!normalizedClientId) {
