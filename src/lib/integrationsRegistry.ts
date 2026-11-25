@@ -190,6 +190,16 @@ export const STANDARD_CAPABILITIES: Record<string, SyncCapability> = {
     direction: "two-way",
     syncedFields: ["Video Meeting URL", "Access Pin", "Duration Minutes"],
   },
+  "clinical.session_notes": {
+    id: "clinical.session_notes",
+    label: "Session notes & clinical charting sync",
+    description: "Push signed SOAP, DAP, BIRP & procedure notes to connected EHR charts and pull treatment history",
+    module: "clinical",
+    hasWorkflow: true,
+    defaultWorkflowName: "Signed Clinical Note Sync Workflow",
+    direction: "two-way",
+    syncedFields: ["Template Type", "Subjective / Assessment", "ICD-10 & CPT", "Plan & Follow-up", "Clinician Signature"],
+  },
 };
 
 // ── Integration Definitions ────────────────────────────────────────────────
@@ -242,6 +252,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["rcm.invoices"],
       STANDARD_CAPABILITIES["rcm.payments"],
       STANDARD_CAPABILITIES["clinical.forms"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
     ],
   },
 
@@ -290,6 +301,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["leads.client_sync"],
       STANDARD_CAPABILITIES["clinical.telehealth"],
       STANDARD_CAPABILITIES["clinical.forms"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
       STANDARD_CAPABILITIES["rcm.invoices"],
       STANDARD_CAPABILITIES["rcm.payments"],
     ],
@@ -350,6 +362,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["leads.call_leads"],
       STANDARD_CAPABILITIES["leads.client_sync"],
       STANDARD_CAPABILITIES["rcm.invoices"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
     ],
   },
 
@@ -373,6 +386,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["appointments.calendar_sync"],
       STANDARD_CAPABILITIES["leads.client_sync"],
       STANDARD_CAPABILITIES["rcm.invoices"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
     ],
   },
 
@@ -395,6 +409,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["appointments.calendar_sync"],
       STANDARD_CAPABILITIES["leads.client_sync"],
       STANDARD_CAPABILITIES["rcm.invoices"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
     ],
   },
 
@@ -423,6 +438,7 @@ export const INTEGRATIONS_REGISTRY: IntegrationDefinition[] = [
       STANDARD_CAPABILITIES["rcm.payments"],
       STANDARD_CAPABILITIES["clinical.forms"],
       STANDARD_CAPABILITIES["clinical.telehealth"],
+      STANDARD_CAPABILITIES["clinical.session_notes"],
     ],
   },
 
@@ -633,6 +649,24 @@ export function getDefaultFieldMappings(integrationId?: string): Record<string, 
       placeholderToken: "{notes}",
       incomingVariable: "notes || booking_notes",
       sampleValue: "First consultation and patch test",
+    },
+    {
+      id: "fm_session_note_body",
+      module: "clinical",
+      targetFieldKey: "session_note_assessment",
+      targetFieldLabel: "Session Note (Assessment & Plan)",
+      placeholderToken: "{session_note_plan}",
+      incomingVariable: isCliniko ? "treatment_note.content" : isHealthie ? "form_answer_group.answers" : "encounter.clinicalNotes",
+      sampleValue: "Follow-up in 14 days; continue prescribed topical regimen.",
+    },
+    {
+      id: "fm_cpt_codes",
+      module: "clinical",
+      targetFieldKey: "cpt_codes",
+      targetFieldLabel: "CPT / Procedure Codes",
+      placeholderToken: "{cpt_codes}",
+      incomingVariable: "billing.cpt_codes || service.code",
+      sampleValue: "99213",
     },
   ];
 
@@ -910,4 +944,135 @@ export async function runIntegrationManualSync(
 
   return { itemsCount, message };
 }
+
+export interface EhrSessionNotePushPayload {
+  noteId: string;
+  clientId: string;
+  clientName: string;
+  appointmentId?: string;
+  providerName: string;
+  templateType: string;
+  title: string;
+  sections: Record<string, string>;
+  icd10Codes: string[];
+  cptCodes: string[];
+  signedAt?: string;
+  signedBy?: string;
+}
+
+export interface EhrSessionNotePushTarget {
+  integrationId: string;
+  integrationName: string;
+  connected: boolean;
+  sessionNotesEnabled: boolean;
+  endpoint: string;
+}
+
+function getSessionNoteEndpointForIntegration(integrationId: string): string {
+  switch (integrationId) {
+    case "cliniko":
+      return "POST /v1/treatment_notes";
+    case "healthie":
+      return "POST /graphql (createFormAnswerGroup)";
+    case "phorest":
+      return "POST /api/business/{businessId}/client/{clientId}/note";
+    case "epic":
+      return "POST /api/FHIR/R4/DocumentReference";
+    case "athena":
+      return "POST /v1/{practiceId}/chart/encounter/note";
+    default:
+      return "POST /v1/clinical/session-notes";
+  }
+}
+
+export function getEhrSessionNoteTargets(): EhrSessionNotePushTarget[] {
+  return INTEGRATIONS_REGISTRY.filter((def) =>
+    def.capabilities.some((c) => c.id === "clinical.session_notes")
+  ).map((def) => {
+    const cfg = getStoredIntegrationConfig(def.id);
+    const feat = cfg.features?.["clinical.session_notes"];
+    return {
+      integrationId: def.id,
+      integrationName: def.name,
+      connected: Boolean(cfg.connected),
+      sessionNotesEnabled: feat ? Boolean(feat.enabled) : true,
+      endpoint: getSessionNoteEndpointForIntegration(def.id),
+    };
+  });
+}
+
+export async function pushSessionNoteToEhr(
+  note: EhrSessionNotePushPayload,
+  targetIntegrationIds?: string[]
+): Promise<{
+  syncedTargets: Array<{ integrationId: string; integrationName: string; syncedAt: string; externalNoteId: string; endpoint: string }>;
+  skippedCount: number;
+}> {
+  const candidates = getEhrSessionNoteTargets().filter((t) => {
+    if (targetIntegrationIds && targetIntegrationIds.length > 0) {
+      return targetIntegrationIds.includes(t.integrationId);
+    }
+    return t.connected && t.sessionNotesEnabled;
+  });
+
+  if (candidates.length === 0) {
+    return { syncedTargets: [], skippedCount: 1 };
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
+  const nowIso = new Date().toISOString();
+  const syncedTargets: Array<{
+    integrationId: string;
+    integrationName: string;
+    syncedAt: string;
+    externalNoteId: string;
+    endpoint: string;
+  }> = [];
+
+  for (const target of candidates) {
+    const current = getStoredIntegrationConfig(target.integrationId);
+    const externalNoteId = `${target.integrationId.toUpperCase()}-TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+    saveStoredIntegrationConfig(target.integrationId, {
+      ...current,
+      lastSyncAt: nowIso,
+      syncStatus: "success",
+    });
+
+    addSyncLog(target.integrationId, {
+      integrationId: target.integrationId,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      module: "Clinical",
+      action: "EHR Session Note Push",
+      status: "success",
+      itemsCount: 1,
+      message: `Synced ${note.templateType} note "${note.title}" for ${note.clientName}`,
+      endpoint: target.endpoint,
+      httpStatus: 201,
+      latencyMs: 124,
+      payload: {
+        externalNoteId,
+        noteId: note.noteId,
+        templateType: note.templateType,
+        clientName: note.clientName,
+        providerName: note.providerName,
+        icd10Codes: note.icd10Codes,
+        cptCodes: note.cptCodes,
+        signedAt: note.signedAt || nowIso,
+      },
+    });
+
+    syncedTargets.push({
+      integrationId: target.integrationId,
+      integrationName: target.integrationName,
+      syncedAt: nowIso,
+      externalNoteId,
+      endpoint: target.endpoint,
+    });
+  }
+
+  return { syncedTargets, skippedCount: 0 };
+}
+
 

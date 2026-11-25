@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import SessionNotesPanel from "../clinical/SessionNotesPanel";
+import { getSessionNotes, SESSION_NOTES_EVENT } from "../../../lib/sessionNotesStore";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
@@ -131,7 +133,14 @@ export default function AppointmentDetailDrawer({
   const { invoices } = useInvoices();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "invoices" | "calls">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "session-notes" | "documents" | "invoices" | "calls">("overview");
+  const [sessionNotesTick, setSessionNotesTick] = useState(0);
+
+  useEffect(() => {
+    const onNotesUpdated = () => setSessionNotesTick((t) => t + 1);
+    window.addEventListener(SESSION_NOTES_EVENT, onNotesUpdated);
+    return () => window.removeEventListener(SESSION_NOTES_EVENT, onNotesUpdated);
+  }, []);
 
   // Ensure Overview tab is active when drawer opens or appointment changes
   useEffect(() => {
@@ -829,6 +838,14 @@ export default function AppointmentDetailDrawer({
           {(
             [
               { id: "overview", label: "Overview", icon: <FileText className="w-3.5 h-3.5" /> },
+              {
+                id: "session-notes",
+                label: "Session Note",
+                icon: <FileText className="w-3.5 h-3.5" />,
+                count: getSessionNotes({
+                  appointmentId: String(effectiveAppt?.id || appointment?.id || ""),
+                }).length + (sessionNotesTick * 0),
+              },
               { id: "documents", label: "Documents", icon: <FileCheck className="w-3.5 h-3.5" />, count: 0 },
               { id: "invoices", label: "Invoices", icon: <DollarSign className="w-3.5 h-3.5" />, count: appointmentInvoices.length },
               { id: "calls", label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: clientCalls.length },
@@ -950,6 +967,31 @@ export default function AppointmentDetailDrawer({
                   )}
                 </AnimatePresence>
               </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              TAB: SESSION NOTES
+             ───────────────────────────────────────────────────────────── */}
+          {activeTab === "session-notes" && (
+            <div className="p-6">
+              <SessionNotesPanel
+                compact
+                client={{
+                  id: effectiveClientId,
+                  name: appointment.clientName || "Client",
+                  email: appointment.clientEmail || "",
+                  phone: appointment.clientPhone || "",
+                }}
+                appointment={{
+                  id: String(effectiveAppt?.id || appointment?.id || ""),
+                  title: appointment.title || "Consultation",
+                  date: effectiveAppt?.date || appointment.date,
+                  employeeName: effectiveAppt?.employeeName || appointment.employeeName,
+                }}
+                processId={appointmentProcess?.id}
+                processName={appointmentProcess?.name}
+              />
             </div>
           )}
 

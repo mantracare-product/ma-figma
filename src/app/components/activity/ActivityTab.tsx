@@ -8,6 +8,7 @@ import {
   Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope, BellRing, Check
 } from "lucide-react";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import SessionNoteEditorDrawer from "../clinical/SessionNoteEditorDrawer";
 import { EntityType, getStoredProcesses } from "../../../lib/useProcessStore";
 import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
 import { getScribeSessionById, ScribeSession, markScribeSessionFilledWithAi } from "../../../lib/scribeSessionStore";
@@ -141,7 +142,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   sms: "#1F2937", email: "#1F2937", stage_update: "#1F2937", stage_change: "#1F2937",
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
-  form_submitted: "#1F2937", note: "#1F2937", reminder: "#1F2937", scribe: "#1F2937",
+  form_submitted: "#1F2937", note: "#1F2937", session_note: "#1F2937", reminder: "#1F2937", scribe: "#1F2937",
   invoice_created: "#1F2937", document_generated: "#1F2937", payment_recorded: "#1F2937",
 };
 
@@ -157,7 +158,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_cancelled: "Appointment Cancelled",
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
-  form_submitted: "Form Submitted", note: "Note", reminder: "Reminder",
+  form_submitted: "Form Submitted", note: "Note", session_note: "Session Note", reminder: "Reminder",
   scribe: "Scribe Recorded",
   invoice_created: "Invoice Created",
   document_generated: "Document Generated",
@@ -233,6 +234,7 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;
+    case "session_note":      return <FileText className={cls} />;
     case "reminder":          return <BellRing className={cls} />;
     case "scribe":            return <Mic className={cls} />;
     case "website_message":
@@ -1569,6 +1571,7 @@ export default function ActivityTab({
 
   // Scribe Modal & Transcript Drawer states
   const [showScribeModal, setShowScribeModal] = useState(false);
+  const [showSessionNoteEditor, setShowSessionNoteEditor] = useState(false);
   const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(false);
   const [selectedTranscriptSession, setSelectedTranscriptSession] = useState<ScribeSession | null>(null);
 
@@ -2026,6 +2029,7 @@ export default function ActivityTab({
     { id: "sms", label: "SMS" },
     { id: "email", label: "Email" },
     { id: "appointment", label: "Appointment" },
+    { id: "session_note", label: "Session Note" },
     { id: "scribe", label: "Scribe" },
   ];
 
@@ -2083,6 +2087,10 @@ export default function ActivityTab({
                   onClick={() => {
                     if (tab.id === "scribe") {
                       setShowScribeModal(true);
+                      return;
+                    }
+                    if (tab.id === "session_note") {
+                      setShowSessionNoteEditor(true);
                       return;
                     }
                     setForcedPanel(null);
@@ -2903,6 +2911,26 @@ export default function ActivityTab({
         }}
         session={selectedTranscriptSession}
         zIndex={750}
+      />
+
+      {/* ── Session Note Editor Drawer ── */}
+      <SessionNoteEditorDrawer
+        isOpen={showSessionNoteEditor}
+        onClose={() => setShowSessionNoteEditor(false)}
+        client={{
+          id: normalizedClientId || "CL-001",
+          name: clientName || "Client",
+          email: clientEmail,
+          phone: clientPhone,
+        }}
+        appointment={
+          appointmentId
+            ? { id: String(appointmentId), title: "Appointment Session" }
+            : undefined
+        }
+        processId={processId}
+        processName={processName}
+        zIndex={740}
       />
     </div>
   );

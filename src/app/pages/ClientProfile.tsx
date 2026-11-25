@@ -65,6 +65,7 @@ import { getContactCategories } from "../../lib/contactCategoriesStore";
 import { Modal } from "../components/ui/Modal";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
+import SessionNotesPanel from "../components/clinical/SessionNotesPanel";
 import {
   ScribeSession,
   getScribeSessions,
@@ -950,7 +951,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "session-notes" | "invoices" | "documents" | "products">("overview");
   const [isActivityCollapsed, setIsActivityCollapsed] = useState(false);
 
   // Assign Process Multi-select & Stage state
@@ -2397,6 +2398,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "processes" as const, label: "Processes" },
                 { id: "forms" as const, label: "Forms" },
                 { id: "appointments" as const, label: "Appointments" },
+                { id: "session-notes" as const, label: "Session Notes" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "products" as const, label: "Product/Services" },
@@ -3808,6 +3810,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 {/* ── Documents Tab ── */}
           {activeProfileTab === "documents" && (
             <DocumentsTab client={client} entityType="client" />
+          )}
+
+          {/* ── Session Notes (EHR Chart) Tab ── */}
+          {activeProfileTab === "session-notes" && (
+            <SessionNotesPanel
+              client={{
+                id: String(client.id),
+                name: client.name,
+                email: client.email,
+                phone: client.phone,
+              }}
+            />
           )}
 
           {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
