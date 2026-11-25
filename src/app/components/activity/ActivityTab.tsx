@@ -33,6 +33,7 @@ import {
   isReminderOverdue,
 } from "../../../lib/reminderActions";
 import ReminderMentionInput, { renderTextWithMentions } from "./ReminderMentionInput";
+import DateTimePopoverPicker from "./DateTimePopoverPicker";
 import { useConversations } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
 import ConversationThreadDrawer from "../chats/ConversationThreadDrawer";
@@ -158,7 +159,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_cancelled: "Appointment Cancelled",
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
-  form_submitted: "Form Submitted", note: "Note", session_note: "Note", reminder: "Reminder",
+  form_submitted: "Form Submitted", note: "Note", session_note: "Note", reminder: "Activity",
   scribe: "Scribe Recorded",
   invoice_created: "Invoice Created",
   document_generated: "Document Generated",
@@ -1585,14 +1586,18 @@ export default function ActivityTab({
   const [actionText, setActionText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
 
-  // Reminder compose state
+  // Activity (reminder) compose state
   const getTodayDateStr = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
+  const getDefaultTimeStr = () => {
+    const nextHour = (new Date().getHours() + 1) % 24;
+    return `${String(nextHour).padStart(2, "0")}:00`;
+  };
   const [reminderNote, setReminderNote] = useState("");
   const [reminderDate, setReminderDate] = useState<string>(() => getTodayDateStr());
-  const [reminderTime, setReminderTime] = useState<string>("");
+  const [reminderTime, setReminderTime] = useState<string>(() => getDefaultTimeStr());
   const [reminderAssignees, setReminderAssignees] = useState<ReminderAssignee[]>([]);
 
   // Horizontal scroller state for Activity action pills
@@ -2023,7 +2028,7 @@ export default function ActivityTab({
 
   const ACTION_TABS = [
     { id: "comment", label: "Comment" },
-    { id: "reminder", label: "Reminder" },
+    { id: "reminder", label: "Activity" },
     { id: "whatsapp", label: "WhatsApp" },
     { id: "call", label: "Call" },
     { id: "sms", label: "SMS" },
@@ -2121,16 +2126,16 @@ export default function ActivityTab({
         </div>
       </div>
 
-      {/* ── Reminder compose panel ── */}
+      {/* ── Activity compose panel ── */}
       {activeActionTab === "reminder" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
               <BellRing className="w-4 h-4 text-[#1F2937]" />
-              <span>Set Reminder</span>
+              <span>Add Activity</span>
             </div>
             <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
-              {clientName || "Client"} · Team Reminder
+              {clientName || "Client"} · Team Activity
             </span>
           </div>
 
@@ -2157,66 +2162,38 @@ export default function ActivityTab({
               );
             }}
             showInsideMentionButton={true}
-            placeholder={`Add reminder notes for ${clientName || "client"}...`}
+            placeholder={`Things to do for ${clientName || "client"}...`}
             rows={2}
             multiline={true}
           />
 
-          {/* Date & Time */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label
-                className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Date
-              </label>
-              <input
-                type="date"
-                required
-                value={reminderDate}
-                onChange={(e) => setReminderDate(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+            <DateTimePopoverPicker
+              date={reminderDate}
+              time={reminderTime}
+              onChange={(nextDate, nextTime) => {
+                setReminderDate(nextDate);
+                setReminderTime(nextTime);
+              }}
+            />
 
-            <div>
-              <label
-                className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Time
-              </label>
-              <input
-                type="time"
-                required
-                value={reminderTime}
-                onChange={(e) => setReminderTime(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => {
                 if (!reminderNote.trim()) {
-                  toast.error("Please enter reminder notes");
+                  toast.error("Please enter activity notes");
                   return;
                 }
                 if (!reminderDate) {
-                  toast.error("Please select a reminder date");
+                  toast.error("Please select a date");
                   return;
                 }
                 if (!reminderTime) {
-                  toast.error("Please select a reminder time");
+                  toast.error("Please select a time");
                   return;
                 }
                 if (!normalizedClientId) {
-                  toast.error("Couldn't save this reminder — client context missing");
+                  toast.error("Couldn't save this activity — client context missing");
                   return;
                 }
                 const procPayload = getActiveProcessPayload();
@@ -2237,24 +2214,25 @@ export default function ActivityTab({
                   actor: user,
                 });
                 if (!created) {
-                  toast.error("Couldn't save this reminder — client context missing");
+                  toast.error("Couldn't save this activity — client context missing");
                   return;
                 }
                 setLiveActivity((prev) => [created as unknown as ActivityLogEntry, ...prev]);
                 const targetNames = (created.assignedMembers || []).map((m) => m.name).join(", ");
                 toast.success(
                   targetNames
-                    ? `Reminder set for ${targetNames}`
-                    : "Reminder added successfully"
+                    ? `Activity scheduled for ${targetNames}`
+                    : "Activity added successfully"
                 );
                 setReminderNote("");
                 setReminderAssignees([]);
-                setReminderTime("");
+                setReminderDate(getTodayDateStr());
+                setReminderTime(getDefaultTimeStr());
               }}
               className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <BellRing className="w-3.5 h-3.5" /> Set Reminder
+              <BellRing className="w-3.5 h-3.5" /> Save Activity
             </button>
           </div>
         </div>
