@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   AlignLeft,
@@ -198,7 +199,7 @@ export default function NoteTemplateBuilderDrawer({
   onClose,
   initialTemplate,
   isAdmin = false,
-  zIndex = 90,
+  zIndex = 800,
   onSaved,
 }: NoteTemplateBuilderDrawerProps) {
   const [name, setName] = useState("");
@@ -452,7 +453,7 @@ export default function NoteTemplateBuilderDrawer({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex justify-end transition-opacity"
       style={{ zIndex }}
@@ -540,17 +541,27 @@ export default function NoteTemplateBuilderDrawer({
               {/* Template Banner Card on Canvas */}
               <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-2xs">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2
-                        className="text-lg font-bold text-[#0F172A] truncate"
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Untitled Note Template"
+                        className="flex-1 min-w-[200px] text-lg font-bold text-[#0F172A] bg-transparent border-b border-transparent hover:border-slate-200 focus:border-[#2563EB] focus:outline-none py-0.5 transition-colors"
                         style={{ fontFamily: "DM Sans, sans-serif" }}
+                      />
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200/70 text-slate-600 border border-transparent focus:border-[#2563EB] focus:outline-none cursor-pointer shrink-0 transition-colors"
                       >
-                        {name || "Untitled Note Template"}
-                      </h2>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                        {category}
-                      </span>
+                        {NOTE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <input
                       type="text"
@@ -1092,6 +1103,7 @@ export default function NoteTemplateBuilderDrawer({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

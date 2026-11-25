@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Lock,
@@ -397,7 +398,7 @@ export default function SessionNoteEditorDrawer({
     setSections((prev) => ({ ...prev, [secKey]: nextList.join(", ") }));
   };
 
-  return (
+  return createPortal(
     <>
       <div
         className="fixed inset-0 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
@@ -942,12 +943,14 @@ export default function SessionNoteEditorDrawer({
       <NoteTemplateBuilderDrawer
         isOpen={showTemplateBuilder}
         onClose={() => setShowTemplateBuilder(false)}
+        zIndex={zIndex + 50}
         onSaved={(newTpl) => {
           setTemplates(getNoteTemplates({ onlyEnabled: true }));
           setTemplateType(newTpl.id);
           if (newTpl.includeVitals) setShowVitals(true);
         }}
       />
-    </>
+    </>,
+    document.body
   );
 }
