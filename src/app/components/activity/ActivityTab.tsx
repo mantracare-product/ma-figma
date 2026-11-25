@@ -1594,6 +1594,8 @@ export default function ActivityTab({
 
   // Horizontal scroller state for Activity action pills
   const actionTabsScrollRef = useRef<HTMLDivElement>(null);
+  const hoverScrollRafRef = useRef<number | null>(null);
+  const hoverScrollDirRef = useRef<"left" | "right" | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -1604,6 +1606,43 @@ export default function ActivityTab({
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
   };
 
+  const stopHoverScroll = () => {
+    hoverScrollDirRef.current = null;
+    if (hoverScrollRafRef.current !== null) {
+      cancelAnimationFrame(hoverScrollRafRef.current);
+      hoverScrollRafRef.current = null;
+    }
+  };
+
+  const startHoverScroll = (direction: "left" | "right") => {
+    if (hoverScrollDirRef.current === direction && hoverScrollRafRef.current !== null) return;
+    stopHoverScroll();
+    hoverScrollDirRef.current = direction;
+    let lastTime = performance.now();
+
+    const step = (now: number) => {
+      const el = actionTabsScrollRef.current;
+      if (!el || !hoverScrollDirRef.current) return;
+      const dt = Math.min(32, now - lastTime) / 1000;
+      lastTime = now;
+      const delta = (hoverScrollDirRef.current === "right" ? 1 : -1) * 220 * dt;
+      el.scrollLeft += delta;
+      updateActionTabsScroll();
+
+      const atEnd =
+        (hoverScrollDirRef.current === "right" &&
+          el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) ||
+        (hoverScrollDirRef.current === "left" && el.scrollLeft <= 1);
+      if (atEnd) {
+        stopHoverScroll();
+        return;
+      }
+      hoverScrollRafRef.current = requestAnimationFrame(step);
+    };
+
+    hoverScrollRafRef.current = requestAnimationFrame(step);
+  };
+
   useEffect(() => {
     updateActionTabsScroll();
     const el = actionTabsScrollRef.current;
@@ -1612,6 +1651,7 @@ export default function ActivityTab({
     ro?.observe(el);
     window.addEventListener("resize", updateActionTabsScroll);
     return () => {
+      stopHoverScroll();
       ro?.disconnect();
       window.removeEventListener("resize", updateActionTabsScroll);
     };
@@ -1620,7 +1660,34 @@ export default function ActivityTab({
   const scrollActionTabs = (direction: "left" | "right") => {
     const el = actionTabsScrollRef.current;
     if (!el) return;
+    stopHoverScroll();
     el.scrollBy({ left: direction === "left" ? -160 : 160, behavior: "smooth" });
+  };
+
+  const handleActionTabsMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = actionTabsScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth + 4) return;
+    const rect = el.getBoundingClientRect();
+    const edgeThreshold = 34;
+    const x = e.clientX - rect.left;
+    if (x >= rect.width - edgeThreshold && el.scrollLeft + el.clientWidth < el.scrollWidth - 2) {
+      startHoverScroll("right");
+    } else if (x <= edgeThreshold && el.scrollLeft > 2) {
+      startHoverScroll("left");
+    } else {
+      stopHoverScroll();
+    }
+  };
+
+  const handleActionTabsWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = actionTabsScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth + 4) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      stopHoverScroll();
+      el.scrollLeft += e.deltaY;
+      updateActionTabsScroll();
+    }
   };
 
   // Conversation Thread Drawer state
@@ -1982,12 +2049,18 @@ export default function ActivityTab({
             ))}
           </select>
         )}
-        <div className="relative flex-1 min-w-0 flex items-center">
+        <div
+          className="relative flex-1 min-w-0 flex items-center group"
+          onMouseMove={handleActionTabsMouseMove}
+          onMouseLeave={stopHoverScroll}
+        >
           {canScrollLeft && (
             <button
               type="button"
+              onMouseEnter={() => startHoverScroll("left")}
+              onMouseLeave={stopHoverScroll}
               onClick={() => scrollActionTabs("left")}
-              className="absolute left-0 z-10 w-6 h-7 flex items-center justify-center bg-gradient-to-r from-white via-white to-white/70 text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+              className="absolute left-0 z-10 w-7 h-8 flex items-center justify-start pl-0.5 bg-gradient-to-r from-white via-white/95 to-transparent text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
               aria-label="Scroll actions left"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -1996,9 +2069,10 @@ export default function ActivityTab({
           <div
             ref={actionTabsScrollRef}
             onScroll={updateActionTabsScroll}
-            className={`flex items-center gap-1.5 overflow-x-auto scrollbar-hide scroll-smooth py-0.5 w-full ${
-              canScrollLeft ? "pl-5" : ""
-            } ${canScrollRight ? "pr-5" : ""}`}
+            onWheel={handleActionTabsWheel}
+            className={`flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-0.5 w-full ${
+              canScrollLeft ? "pl-6" : ""
+            } ${canScrollRight ? "pr-6" : ""}`}
           >
             {ACTION_TABS.map((tab) => {
               const isActive = activeActionTab === tab.id;
@@ -2027,8 +2101,10 @@ export default function ActivityTab({
           {canScrollRight && (
             <button
               type="button"
+              onMouseEnter={() => startHoverScroll("right")}
+              onMouseLeave={stopHoverScroll}
               onClick={() => scrollActionTabs("right")}
-              className="absolute right-0 z-10 w-6 h-7 flex items-center justify-center bg-gradient-to-l from-white via-white to-white/70 text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+              className="absolute right-0 z-10 w-7 h-8 flex items-center justify-end pr-0.5 bg-gradient-to-l from-white via-white/95 to-transparent text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
               aria-label="Scroll actions right"
             >
               <ChevronRight className="w-3.5 h-3.5" />
