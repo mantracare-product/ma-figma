@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
   Bell,
+  BellRing,
   CheckSquare,
   MessageCircle,
   Receipt,
@@ -12,10 +13,31 @@ import {
   Info,
   Calendar,
   Sparkles,
+  Send,
+  ExternalLink,
 } from "lucide-react";
 import { useNotifications } from "../../../lib/notificationsStore";
 import { Tooltip } from "../ui/Tooltip";
 import { InAppNotification, NotificationType } from "../../../types/notification";
+import { useAuth } from "../../context/AuthContext";
+import { useTeamMembers } from "../../../lib/teamStore";
+import {
+  getAllReminders,
+  subscribeToAllReminders,
+  isReminderForMember,
+  ReminderActivityEntry,
+  ReminderAssignee,
+  formatTimestamp,
+} from "../../../lib/activityEngine";
+import {
+  toggleReminderDone,
+  addReminderComment,
+  extractMentionedMembers,
+  formatReminderDateDisplay,
+  isReminderOverdue,
+} from "../../../lib/reminderActions";
+import ReminderMentionInput, { renderTextWithMentions } from "../activity/ReminderMentionInput";
+import { toast } from "sonner";
 
 export interface NotificationDrawerProps {
   isOpen: boolean;
@@ -25,15 +47,37 @@ export interface NotificationDrawerProps {
 
 export default function NotificationDrawer({ isOpen, onClose, anchorRef }: NotificationDrawerProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { teamMembers } = useTeamMembers();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications();
   const popupRef = useRef<HTMLDivElement>(null);
 
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "reminders">("all");
+  const [reminders, setReminders] = useState<ReminderActivityEntry[]>(() => getAllReminders());
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentMentionsMap, setCommentMentionsMap] = useState<Record<string, ReminderAssignee[]>>({});
   const [showHowInfo, setShowHowInfo] = useState(false);
   const [isFooterDismissed, setIsFooterDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
     return sessionStorage.getItem("mantra_dismiss_push_footer") === "true";
   });
+
+  useEffect(() => {
+    setReminders(getAllReminders());
+    return subscribeToAllReminders(setReminders);
+  }, []);
+
+  const relevantReminders = reminders.filter((r) => {
+    const isForMe = isReminderForMember(r, user);
+    const isByMe =
+      (user?.id && r.createdById && String(user.id) === String(r.createdById)) ||
+      (user?.name && r.createdByName && user.name.toLowerCase() === r.createdByName.toLowerCase());
+    return isForMe || isByMe;
+  });
+
+  const pendingForMeCount = reminders.filter(
+    (r) => r.status !== "completed" && isReminderForMember(r, user)
+  ).length;
 
   // Close on outside click
   useEffect(() => {
@@ -77,6 +121,8 @@ export default function NotificationDrawer({ isOpen, onClose, anchorRef }: Notif
         return <MessageCircle className="w-4 h-4 text-emerald-600" />;
       case "billing":
         return <Receipt className="w-4 h-4 text-amber-600" />;
+      case "reminder":
+        return <BellRing className="w-4 h-4 text-amber-600" />;
       default:
         return <Bell className="w-4 h-4 text-slate-600" />;
     }
@@ -170,7 +216,7 @@ export default function NotificationDrawer({ isOpen, onClose, anchorRef }: Notif
         </div>
       </div>
 
-      {/* ── Subheader Filter Tabs: All / Unread only ── */}
+      {/* ── Subheader Filter Tabs: All / Unread / Reminders ── */}
       <div className="p-2 px-3 bg-slate-50/70 border-b border-gray-100 flex items-center gap-1.5">
         <button
           type="button"
@@ -203,11 +249,181 @@ export default function NotificationDrawer({ isOpen, onClose, anchorRef }: Notif
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setFilter("reminders")}
+          className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+            filter === "reminders"
+              ? "bg-[#1E293B] text-white shadow-2xs"
+              : "text-slate-600 hover:bg-slate-200/60"
+          }`}
+        >
+          <span>Reminders</span>
+          {pendingForMeCount > 0 && (
+            <span
+              className={`text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded-full ${
+                filter === "reminders" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"
+              }`}
+            >
+              {pendingForMeCount}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* ── Scrollable Notification List ── */}
+      {/* ── Scrollable Notification / Reminders List ── */}
       <div className="max-h-[380px] overflow-y-auto divide-y divide-gray-100">
-        {filtered.length === 0 ? (
+        {filter === "reminders" ? (
+          relevantReminders.length === 0 ? (
+            <div className="py-12 px-6 text-center space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 mx-auto flex items-center justify-center">
+                <BellRing className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-medium text-slate-600">No reminders yet</p>
+              <p className="text-[11px] text-slate-400">
+                Reminders assigned to you via @mention in client activity will appear here.
+              </p>
+            </div>
+          ) : (
+            relevantReminders.map((rem) => {
+              const isDone = rem.status === "completed";
+              const overdue = isReminderOverdue(rem.reminderDate, rem.reminderTime, rem.status);
+              const dateDisplay = formatReminderDateDisplay(rem.reminderDate, rem.reminderTime);
+              const isForMe = isReminderForMember(rem, user);
+              const draft = commentDrafts[rem.id] || "";
+              const comments = rem.comments || [];
+
+              const submitDrawerComment = () => {
+                const trimmed = draft.trim();
+                if (!trimmed) return;
+                const mentions = extractMentionedMembers(
+                  trimmed,
+                  teamMembers,
+                  commentMentionsMap[rem.id] || []
+                );
+                const updated = addReminderComment(rem.id, trimmed, user, mentions);
+                if (updated) {
+                  setReminders(getAllReminders());
+                  setCommentDrafts((prev) => ({ ...prev, [rem.id]: "" }));
+                  setCommentMentionsMap((prev) => ({ ...prev, [rem.id]: [] }));
+                  toast.success("Comment added to reminder");
+                }
+              };
+
+              return (
+                <div key={rem.id} className="p-3.5 px-4 space-y-2 bg-white hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isForMe && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 border border-blue-200/70">
+                            For you
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
+                            isDone
+                              ? "bg-emerald-50 text-emerald-700"
+                              : overdue
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {isDone ? "Done" : overdue ? "Overdue" : "Pending"}
+                        </span>
+                        {rem.clientName && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              if (rem.clientId) navigate(`/clients/${rem.clientId}`);
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[11px] font-bold text-slate-800 hover:text-[#1456f0] cursor-pointer truncate"
+                          >
+                            <span>{rem.clientName}</span>
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                          </button>
+                        )}
+                      </div>
+                      {dateDisplay && (
+                        <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{dateDisplay}</span>
+                          {rem.createdByName && <span>· by {rem.createdByName}</span>}
+                        </p>
+                      )}
+                    </div>
+
+                    {!isDone && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = toggleReminderDone(rem.id, user);
+                          if (updated) {
+                            setReminders(getAllReminders());
+                            toast.success("Reminder marked as done");
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer shrink-0 transition-colors bg-[#1E293B] text-white hover:bg-black"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>Mark Done</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <p className={`text-xs leading-snug ${isDone ? "line-through text-slate-400" : "text-slate-800"}`}>
+                    {renderTextWithMentions(rem.reminderNote, rem.assignedMembers, teamMembers)}
+                  </p>
+
+                  {comments.length > 0 && (
+                    <div className="space-y-1 pl-2 border-l-2 border-slate-200">
+                      {comments.slice(-2).map((c) => (
+                        <div key={c.id} className="text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-800">{c.authorName}: </span>
+                          <span>{renderTextWithMentions(c.text, c.mentions || rem.assignedMembers, teamMembers)}</span>
+                          <span className="text-[9px] text-slate-400 ml-1">({formatTimestamp(c.createdAt)})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <div className="flex-1 min-w-0">
+                      <ReminderMentionInput
+                        value={draft}
+                        onChange={(val) => setCommentDrafts((prev) => ({ ...prev, [rem.id]: val }))}
+                        teamMembers={teamMembers}
+                        currentUserId={user?.id}
+                        currentUserName={user?.name}
+                        onSelectMember={(member) => {
+                          setCommentMentionsMap((prev) => {
+                            const curr = prev[rem.id] || [];
+                            if (curr.some((m) => String(m.id) === String(member.id))) return prev;
+                            return { ...prev, [rem.id]: [...curr, member] };
+                          });
+                        }}
+                        placeholder="Add comment..."
+                        multiline={false}
+                        dropdownDirection="up"
+                        onSubmit={submitDrawerComment}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={submitDrawerComment}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-slate-700 cursor-pointer shrink-0"
+                      title="Post comment"
+                      aria-label="Post comment"
+                    >
+                      <Send className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )
+        ) : filtered.length === 0 ? (
           <div className="py-12 px-6 text-center space-y-2">
             <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
               <Bell className="w-5 h-5 text-slate-400" />

@@ -12,6 +12,7 @@
 
 export const ACTIVITY_ENGINE_EVENT = "activityEngine_updated";
 const STORAGE_KEY = "activityEngine_v1";
+const ACTIVITY_BROADCAST_CHANNEL = "mantra_activity_channel";
 
 // ─── Common base ──────────────────────────────────────────────────────────────
 
@@ -109,6 +110,39 @@ export interface NoteActivityEntry extends ActivityBase {
   category?: string;
 }
 
+export interface ReminderAssignee {
+  id: string;
+  name: string;
+  email?: string;
+  role?: string;
+}
+
+export interface ReminderComment {
+  id: string;
+  authorId?: string;
+  authorName: string;
+  authorRole?: string;
+  text: string;
+  mentions?: ReminderAssignee[];
+  createdAt: string;
+}
+
+export interface ReminderActivityEntry extends ActivityBase {
+  type: "reminder";
+  status: "pending" | "completed";
+  reminderNote: string;
+  reminderDate: string; // YYYY-MM-DD
+  reminderTime?: string; // HH:mm
+  createdById?: string;
+  createdByName?: string;
+  assignedMembers: ReminderAssignee[];
+  comments?: ReminderComment[];
+  completedById?: string;
+  completedByName?: string;
+  completedAt?: string;
+  updatedAt?: string;
+}
+
 export interface ScribeActivityEntry extends ActivityBase {
   type: "scribe";
   scribeSessionId: string;
@@ -140,6 +174,7 @@ export type ActivityEntry =
   | StageActivityEntry
   | FieldUpdateActivityEntry
   | NoteActivityEntry
+  | ReminderActivityEntry
   | ScribeActivityEntry
   | SystemActivityEntry;
 
@@ -184,6 +219,9 @@ export function isFieldUpdateEntry(e: ActivityEntry): e is FieldUpdateActivityEn
 export function isNoteEntry(e: ActivityEntry): e is NoteActivityEntry {
   return e.type === "note";
 }
+export function isReminderEntry(e: ActivityEntry): e is ReminderActivityEntry {
+  return e.type === "reminder";
+}
 export function isScribeEntry(e: ActivityEntry): e is ScribeActivityEntry {
   return e.type === "scribe";
 }
@@ -210,6 +248,13 @@ function writeAll(entries: ActivityEntry[]): void {
     sessionStorage.setItem(STORAGE_KEY, serialized);
     window.dispatchEvent(new Event(ACTIVITY_ENGINE_EVENT));
     window.dispatchEvent(new Event("storage"));
+    try {
+      if ("BroadcastChannel" in window) {
+        const bc = new BroadcastChannel(ACTIVITY_BROADCAST_CHANNEL);
+        bc.postMessage({ type: "ACTIVITY_UPDATED" });
+        bc.close();
+      }
+    } catch {}
   } catch {}
 }
 
@@ -354,9 +399,104 @@ export function subscribeToActivity(
   };
   window.addEventListener(ACTIVITY_ENGINE_EVENT, handler);
   window.addEventListener("storage", handler);
+  let bc: BroadcastChannel | null = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      bc = new BroadcastChannel(ACTIVITY_BROADCAST_CHANNEL);
+      bc.onmessage = handler;
+    }
+  } catch {}
   return () => {
     window.removeEventListener(ACTIVITY_ENGINE_EVENT, handler);
     window.removeEventListener("storage", handler);
+    try {
+      bc?.close();
+    } catch {}
+  };
+}
+
+/**
+ * Update an existing activity entry by ID (e.g. marking a reminder done or adding a comment).
+ */
+export function updateActivity(
+  entryId: string,
+  updater: (entry: ActivityEntry) => ActivityEntry
+): ActivityEntry | null {
+  if (!entryId) return null;
+  const all = readAll();
+  let updatedEntry: ActivityEntry | null = null;
+  const nextAll = all.map((entry) => {
+    if (entry.id === entryId) {
+      updatedEntry = updater(entry);
+      return updatedEntry;
+    }
+    return entry;
+  });
+  if (!updatedEntry) return null;
+  writeAll(nextAll);
+  return updatedEntry;
+}
+
+/**
+ * Return all reminder entries across all clients, newest first.
+ */
+export function getAllReminders(): ReminderActivityEntry[] {
+  return readAll()
+    .filter(isReminderEntry)
+    .sort((a, b) => {
+      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      if (diff !== 0) return diff;
+      return (b.seq ?? 0) - (a.seq ?? 0);
+    });
+}
+
+/**
+ * Check whether a reminder entry is assigned to (or mentions) a given team member.
+ */
+export function isReminderForMember(
+  reminder: ReminderActivityEntry,
+  member?: { id?: string | number; name?: string; email?: string } | null
+): boolean {
+  if (!member) return false;
+  const mId = member.id !== undefined ? String(member.id).trim().toLowerCase() : "";
+  const mName = (member.name || "").trim().toLowerCase();
+  const mEmail = (member.email || "").trim().toLowerCase();
+  return (reminder.assignedMembers || []).some((a) => {
+    const aId = a.id !== undefined ? String(a.id).trim().toLowerCase() : "";
+    const aName = (a.name || "").trim().toLowerCase();
+    const aEmail = (a.email || "").trim().toLowerCase();
+    return Boolean(
+      (mId && aId && mId === aId) ||
+      (mEmail && aEmail && mEmail === aEmail) ||
+      (mName && aName && mName === aName)
+    );
+  });
+}
+
+/**
+ * Subscribe to all reminders across clients (for notifications / member inbox).
+ */
+export function subscribeToAllReminders(
+  callback: (reminders: ReminderActivityEntry[]) => void
+): () => void {
+  const handler = () => {
+    callback(getAllReminders());
+  };
+  window.addEventListener(ACTIVITY_ENGINE_EVENT, handler);
+  window.addEventListener("storage", handler);
+  let bc: BroadcastChannel | null = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      bc = new BroadcastChannel(ACTIVITY_BROADCAST_CHANNEL);
+      bc.onmessage = handler;
+    }
+  } catch {}
+  return () => {
+    window.removeEventListener(ACTIVITY_ENGINE_EVENT, handler);
+    window.removeEventListener("storage", handler);
+    try {
+      bc?.close();
+    } catch {}
   };
 }
 

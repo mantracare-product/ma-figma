@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
-  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings,
-  Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope
+  MoreVertical, X, Clock, CalendarClock, ChevronLeft, ChevronRight, Send, FileText, Paperclip, Settings,
+  Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope, BellRing, Check
 } from "lucide-react";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import { EntityType, getStoredProcesses } from "../../../lib/useProcessStore";
@@ -17,7 +17,21 @@ import {
   formatDuration,
   formatTimestamp,
   markActivityFilledWithAi,
+  ReminderAssignee,
+  ReminderComment,
+  isReminderForMember,
 } from "../../../lib/activityEngine";
+import { useAuth } from "../../context/AuthContext";
+import { useTeamMembers } from "../../../lib/teamStore";
+import {
+  createReminderActivity,
+  toggleReminderDone,
+  addReminderComment,
+  extractMentionedMembers,
+  formatReminderDateDisplay,
+  isReminderOverdue,
+} from "../../../lib/reminderActions";
+import ReminderMentionInput, { renderTextWithMentions } from "./ReminderMentionInput";
 import { useConversations } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
 import ConversationThreadDrawer from "../chats/ConversationThreadDrawer";
@@ -41,7 +55,7 @@ export type ActivityType =
   | "field_update" | "appointment_booked" | "call" | "outbound_call"
   | "inbound_call" | "failed_call" | "stage_update" | "stage_change"
   | "process_completed" | "website_message" | "website" | "form_submitted" | "note"
-  | "scribe";
+  | "reminder" | "scribe";
 
 export interface ActivityLogEntry {
   id: string;
@@ -105,6 +119,18 @@ export interface ActivityLogEntry {
   appointmentTitle?: string;
   location?: string;
   notes?: string;
+  // Reminder-specific fields
+  reminderNote?: string;
+  reminderDate?: string;
+  reminderTime?: string;
+  createdById?: string;
+  createdByName?: string;
+  assignedMembers?: ReminderAssignee[];
+  comments?: ReminderComment[];
+  completedById?: string;
+  completedByName?: string;
+  completedAt?: string;
+  updatedAt?: string;
 }
 
 // ─── Static maps ──────────────────────────────────────────────────────────────
@@ -115,7 +141,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   sms: "#1F2937", email: "#1F2937", stage_update: "#1F2937", stage_change: "#1F2937",
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
-  form_submitted: "#1F2937", note: "#1F2937", scribe: "#1F2937",
+  form_submitted: "#1F2937", note: "#1F2937", reminder: "#1F2937", scribe: "#1F2937",
   invoice_created: "#1F2937", document_generated: "#1F2937", payment_recorded: "#1F2937",
 };
 
@@ -131,7 +157,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_cancelled: "Appointment Cancelled",
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
-  form_submitted: "Form Submitted", note: "Note",
+  form_submitted: "Form Submitted", note: "Note", reminder: "Reminder",
   scribe: "Scribe Recorded",
   invoice_created: "Invoice Created",
   document_generated: "Document Generated",
@@ -143,6 +169,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
 const STATUS_PILL: Record<string, { bg: string; color: string; label: string }> = {
   completed:  { bg: "#DCFCE7", color: "#16A34A", label: "Completed" },
   Completed:  { bg: "#DCFCE7", color: "#16A34A", label: "Completed" },
+  done:       { bg: "#DCFCE7", color: "#16A34A", label: "Done" },
   success:    { bg: "#DCFCE7", color: "#16A34A", label: "Success" },
   confirmed:  { bg: "#DCFCE7", color: "#16A34A", label: "Confirmed" },
   read:       { bg: "#DCFCE7", color: "#16A34A", label: "Read" },
@@ -151,6 +178,7 @@ const STATUS_PILL: Record<string, { bg: string; color: string; label: string }> 
   scheduled:  { bg: "#DBEAFE", color: "#2563EB", label: "Scheduled" },
   pending:    { bg: "#FEF3C7", color: "#D97706", label: "Pending" },
   Pending:    { bg: "#FEF3C7", color: "#D97706", label: "Pending" },
+  overdue:    { bg: "#FEE2E2", color: "#DC2626", label: "Overdue" },
   partial:    { bg: "#FEF3C7", color: "#D97706", label: "Partial" },
   no_answer:  { bg: "#FEF3C7", color: "#D97706", label: "No Answer" },
   voicemail:  { bg: "#FEF3C7", color: "#D97706", label: "Voicemail" },
@@ -205,6 +233,7 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;
+    case "reminder":          return <BellRing className={cls} />;
     case "scribe":            return <Mic className={cls} />;
     case "website_message":
     case "website":           return <Globe className={cls} />;
@@ -718,6 +747,157 @@ function ScribeBlock({
   );
 }
 
+function ReminderBlock({
+  entry,
+  onEntryUpdated,
+}: {
+  entry: ActivityLogEntry;
+  onEntryUpdated?: (updated: ActivityLogEntry) => void;
+}) {
+  const { user } = useAuth();
+  const { teamMembers } = useTeamMembers();
+  const [commentText, setCommentText] = useState("");
+  const [commentMentions, setCommentMentions] = useState<ReminderAssignee[]>([]);
+
+  const isDone = entry.status === "completed" || entry.status === "Completed" || entry.status === "done";
+  const assignees = entry.assignedMembers || [];
+  const comments = entry.comments || [];
+  const noteText = entry.reminderNote || entry.details?.primary || "";
+
+  const handleToggleDone = () => {
+    const updated = toggleReminderDone(entry.id, user);
+    if (updated) {
+      onEntryUpdated?.(updated as unknown as ActivityLogEntry);
+      toast.success(updated.status === "completed" ? "Reminder marked as done" : "Reminder reopened");
+    }
+  };
+
+  const handlePostComment = () => {
+    const trimmed = commentText.trim();
+    if (!trimmed) {
+      toast.error("Please enter a comment");
+      return;
+    }
+    const resolvedMentions = extractMentionedMembers(trimmed, teamMembers, commentMentions);
+    const updated = addReminderComment(entry.id, trimmed, user, resolvedMentions);
+    if (updated) {
+      onEntryUpdated?.(updated as unknown as ActivityLogEntry);
+      setCommentText("");
+      setCommentMentions([]);
+      toast.success("Comment added to reminder");
+    }
+  };
+
+  return (
+    <div className="mt-1 space-y-2.5">
+      {/* Note body with blue @mentions */}
+      <p
+        className={`text-xs leading-relaxed whitespace-pre-wrap ${
+          isDone ? "text-gray-500 line-through" : "text-gray-800 font-medium"
+        }`}
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {renderTextWithMentions(noteText, assignees, teamMembers)}
+      </p>
+
+      {/* Assigned members & creator row */}
+      <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] text-gray-500">
+        <div className="flex items-center gap-1.5 flex-wrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {assignees.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-gray-400">For:</span>
+              {assignees.map((m, idx) => (
+                <span key={String(m.id || m.name)} className="text-blue-600 font-semibold">
+                  @{m.name}
+                  {idx < assignees.length - 1 ? "," : ""}
+                </span>
+              ))}
+            </div>
+          )}
+          {entry.createdByName && (
+            <span className="text-[10px] text-gray-400">
+              · Set by {entry.createdByName}
+            </span>
+          )}
+        </div>
+
+        {/* Mark Done button (only when pending) */}
+        {!isDone && (
+          <button
+            type="button"
+            onClick={handleToggleDone}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer active:scale-95 bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <Check className="w-3.5 h-3.5" />
+            <span>Mark Done</span>
+          </button>
+        )}
+      </div>
+
+      {/* Comments thread */}
+      <div className="pt-2 border-t border-gray-100 space-y-2">
+        {comments.length > 0 && (
+          <div className="space-y-1.5">
+            {comments.map((cmt) => (
+              <div
+                key={cmt.id}
+                className="bg-gray-50/90 border border-gray-100 rounded-lg px-2.5 py-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-gray-800 truncate">
+                    {cmt.authorName}
+                  </span>
+                  <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                    {formatTimestamp(cmt.createdAt)}
+                  </span>
+                </div>
+                <p
+                  className="text-xs text-gray-700 mt-0.5 leading-snug break-words"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {renderTextWithMentions(cmt.text, cmt.mentions || assignees, teamMembers)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Inline comment input */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 min-w-0">
+            <ReminderMentionInput
+              value={commentText}
+              onChange={setCommentText}
+              teamMembers={teamMembers}
+              currentUserId={user?.id}
+              currentUserName={user?.name}
+              onSelectMember={(member) => {
+                setCommentMentions((prev) =>
+                  prev.some((m) => String(m.id) === String(member.id)) ? prev : [...prev, member]
+                );
+              }}
+              placeholder="Add a comment... (type @ to mention)"
+              multiline={false}
+              dropdownDirection="up"
+              onSubmit={handlePostComment}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handlePostComment}
+            className="px-2.5 py-1.5 bg-white hover:bg-gray-100 border border-gray-200 text-gray-800 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <Send className="w-3 h-3" />
+            <span>Comment</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main card component ──────────────────────────────────────────────────────
 
 interface ActivityCardProps {
@@ -744,6 +924,7 @@ interface ActivityCardProps {
     scribeSessionId?: string;
   }) => void;
   onViewTranscript?: (sessionId: string) => void;
+  onEntryUpdated?: (updated: ActivityLogEntry) => void;
   navigate: ReturnType<typeof useNavigate>;
 }
 
@@ -765,6 +946,7 @@ function ActivityCard({
   onOpenEmailThreadDrawer,
   onFillWithAi,
   onViewTranscript,
+  onEntryUpdated,
   navigate,
 }: ActivityCardProps) {
   const rawType = (entry as any).rawType || entry.type;
@@ -802,6 +984,7 @@ function ActivityCard({
   const iconBorder = isFailed ? "#EF4444" : isPending ? "#64748B" : "#374151";
 
   // Build kebab actions
+  const { user } = useAuth();
   const kebabActions: MenuAction[] = [];
 
   const isCallType = rawType === "call" || rawType === "outbound_call" || rawType === "inbound_call" || rawType === "failed_call" || (entry as any).callId;
@@ -953,9 +1136,28 @@ function ActivityCard({
     }
   }
 
+  if (rawType === "reminder") {
+    const isRemDone = entry.status === "completed" || entry.status === "Completed" || entry.status === "done";
+    if (!isRemDone) {
+      kebabActions.push({
+        label: "Mark as Done",
+        icon: <Check className="w-3.5 h-3.5" />,
+        onClick: () => {
+          const updated = toggleReminderDone(entry.id, user);
+          if (updated) {
+            onEntryUpdated?.(updated as unknown as ActivityLogEntry);
+            toast.success("Reminder marked as done");
+          }
+        },
+      });
+    }
+  }
+
   // Render type-specific content
   const renderContent = () => {
     const t = rawType || entry.type;
+    if (t === "reminder")
+      return <ReminderBlock entry={entry} onEntryUpdated={onEntryUpdated} />;
     if (t === "scribe")
       return (
         <ScribeBlock
@@ -1054,6 +1256,23 @@ function ActivityCard({
                   {entry.sourceStepName && (
                     <span className="text-[10px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
                       via {entry.sourceStepName}
+                    </span>
+                  )}
+                </>
+              ) : rawType === "reminder" ? (
+                <>
+                  <StatusPill
+                    status={
+                      entry.status === "completed" || entry.status === "Completed"
+                        ? "done"
+                        : isReminderOverdue(entry.reminderDate, entry.reminderTime, entry.status)
+                        ? "overdue"
+                        : "pending"
+                    }
+                  />
+                  {entry.reminderDate && (
+                    <span className="text-[10px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Due {formatReminderDateDisplay(entry.reminderDate, entry.reminderTime)}
                     </span>
                   )}
                 </>
@@ -1279,13 +1498,32 @@ export function mergeActivityEntries(
   existing: ActivityLogEntry[],
   incoming: ActivityLogEntry[]
 ): ActivityLogEntry[] {
-  const incomingIds = new Set(incoming.map((e) => e.id).filter(Boolean));
-  const incomingActionIds = new Set(incoming.map((e) => (e as any).clientActionId).filter(Boolean));
+  const existingById = new Map<string, ActivityLogEntry>();
+  existing.forEach((e) => {
+    if (e.id) existingById.set(e.id, e);
+  });
+
+  // Prefer whichever version of a matching entry is fresher (prevents stale parent props from reverting updates)
+  const resolvedIncoming = incoming.map((inc) => {
+    if (!inc.id) return inc;
+    const prev = existingById.get(inc.id);
+    if (!prev) return inc;
+    const prevUpdated = prev.updatedAt ? new Date(prev.updatedAt).getTime() : 0;
+    const incUpdated = inc.updatedAt ? new Date(inc.updatedAt).getTime() : 0;
+    if (prevUpdated > incUpdated) return prev;
+    if (prevUpdated === incUpdated && (prev.comments?.length || 0) > (inc.comments?.length || 0)) {
+      return prev;
+    }
+    return inc;
+  });
+
+  const incomingIds = new Set(resolvedIncoming.map((e) => e.id).filter(Boolean));
+  const incomingActionIds = new Set(resolvedIncoming.map((e) => (e as any).clientActionId).filter(Boolean));
 
   const existingKeep = existing.filter((e) => {
     if (e.id && incomingIds.has(e.id)) return false;
     if ((e as any).clientActionId && incomingActionIds.has((e as any).clientActionId)) return false;
-    const isDuplicate = incoming.some((inc) => {
+    const isDuplicate = resolvedIncoming.some((inc) => {
       if (inc.type !== e.type) return false;
       const tInc = new Date(inc.timestamp || inc.date || "").getTime();
       const tExist = new Date(e.timestamp || e.date || "").getTime();
@@ -1296,7 +1534,7 @@ export function mergeActivityEntries(
     return !isDuplicate;
   });
 
-  return [...incoming, ...existingKeep];
+  return [...resolvedIncoming, ...existingKeep];
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -1323,6 +1561,8 @@ export default function ActivityTab({
   onFillWithAi,
 }: ActivityTabProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { teamMembers } = useTeamMembers();
   const { findOrCreateConversationForClient, sendMessage, sendTemplate } = useConversations();
 
   const normalizedClientId = clientId ? String(clientId) : "";
@@ -1341,6 +1581,47 @@ export default function ActivityTab({
   const [activeActionTab, setActiveActionTab] = useState<string>("comment");
   const [actionText, setActionText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
+
+  // Reminder compose state
+  const getTodayDateStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [reminderNote, setReminderNote] = useState("");
+  const [reminderDate, setReminderDate] = useState<string>(() => getTodayDateStr());
+  const [reminderTime, setReminderTime] = useState<string>("");
+  const [reminderAssignees, setReminderAssignees] = useState<ReminderAssignee[]>([]);
+
+  // Horizontal scroller state for Activity action pills
+  const actionTabsScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateActionTabsScroll = () => {
+    const el = actionTabsScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateActionTabsScroll();
+    const el = actionTabsScrollRef.current;
+    if (!el) return;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateActionTabsScroll) : null;
+    ro?.observe(el);
+    window.addEventListener("resize", updateActionTabsScroll);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", updateActionTabsScroll);
+    };
+  }, []);
+
+  const scrollActionTabs = (direction: "left" | "right") => {
+    const el = actionTabsScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction === "left" ? -160 : 160, behavior: "smooth" });
+  };
 
   // Conversation Thread Drawer state
   const [showThreadDrawer, setShowThreadDrawer] = useState(false);
@@ -1672,6 +1953,7 @@ export default function ActivityTab({
 
   const ACTION_TABS = [
     { id: "comment", label: "Comment" },
+    { id: "reminder", label: "Reminder" },
     { id: "whatsapp", label: "WhatsApp" },
     { id: "call", label: "Call" },
     { id: "sms", label: "SMS" },
@@ -1685,12 +1967,12 @@ export default function ActivityTab({
   return (
     <div>
       {/* Top Filter Bar */}
-      <div className="flex items-center justify-start gap-2 mb-4 flex-wrap pb-3 border-b border-gray-100">
+      <div className="flex items-center justify-start gap-2 mb-4 pb-3 border-b border-gray-100">
         {processTabs && processTabs.length > 0 && onProcessTabChange && (
           <select
             value={activeProcessTab || "all"}
             onChange={(e) => onProcessTabChange(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer text-gray-700 transition-all"
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer text-gray-700 transition-all"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             {processTabs.map((p) => (
@@ -1700,34 +1982,193 @@ export default function ActivityTab({
             ))}
           </select>
         )}
-        <div
-          className="flex items-center gap-1.5 flex-wrap py-0.5 flex-1"
-        >
-          {ACTION_TABS.map((tab) => {
-            const isActive = activeActionTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  if (tab.id === "scribe") {
-                    setShowScribeModal(true);
-                    return;
-                  }
-                  setForcedPanel(null);
-                  setActiveActionTab(tab.id);
-                }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  isActive ? "bg-[#1F2937] text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+        <div className="relative flex-1 min-w-0 flex items-center">
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => scrollActionTabs("left")}
+              className="absolute left-0 z-10 w-6 h-7 flex items-center justify-center bg-gradient-to-r from-white via-white to-white/70 text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+              aria-label="Scroll actions left"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <div
+            ref={actionTabsScrollRef}
+            onScroll={updateActionTabsScroll}
+            className={`flex items-center gap-1.5 overflow-x-auto scrollbar-hide scroll-smooth py-0.5 w-full ${
+              canScrollLeft ? "pl-5" : ""
+            } ${canScrollRight ? "pr-5" : ""}`}
+          >
+            {ACTION_TABS.map((tab) => {
+              const isActive = activeActionTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    if (tab.id === "scribe") {
+                      setShowScribeModal(true);
+                      return;
+                    }
+                    setForcedPanel(null);
+                    setActiveActionTab(tab.id);
+                  }}
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                    isActive ? "bg-[#1F2937] text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => scrollActionTabs("right")}
+              className="absolute right-0 z-10 w-6 h-7 flex items-center justify-center bg-gradient-to-l from-white via-white to-white/70 text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+              aria-label="Scroll actions right"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ── Reminder compose panel ── */}
+      {activeActionTab === "reminder" && (
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <BellRing className="w-4 h-4 text-[#1F2937]" />
+              <span>Set Reminder</span>
+            </div>
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
+              {clientName || "Client"} · Team Reminder
+            </span>
+          </div>
+
+          <ReminderMentionInput
+            value={reminderNote}
+            onChange={(val) => {
+              setReminderNote(val);
+              const synced = extractMentionedMembers(val, teamMembers, reminderAssignees);
+              setReminderAssignees(synced);
+            }}
+            teamMembers={teamMembers}
+            currentUserId={user?.id}
+            currentUserName={user?.name}
+            onSelectMember={(member) => {
+              setReminderAssignees((prev) =>
+                prev.some((m) => String(m.id) === String(member.id)) ? prev : [...prev, member]
+              );
+            }}
+            assignedMembers={reminderAssignees}
+            onRemoveMember={(m) => {
+              setReminderAssignees((prev) => prev.filter((item) => String(item.id) !== String(m.id)));
+              setReminderNote((prev) =>
+                prev.replace(new RegExp(`@${m.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s?`, "gi"), "").trimStart()
+              );
+            }}
+            showInsideMentionButton={true}
+            placeholder={`Add reminder notes for ${clientName || "client"}...`}
+            rows={2}
+            multiline={true}
+          />
+
+          {/* Mark Date & Optional Time */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label
+                className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Mark Date
+              </label>
+              <input
+                type="date"
+                value={reminderDate}
+                onChange={(e) => setReminderDate(e.target.value)}
+                className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
+
+            <div>
+              <label
+                className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Time (Optional)
+              </label>
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => setReminderTime(e.target.value)}
+                className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/15 focus:border-[#1F2937] transition-all text-gray-800"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (!reminderNote.trim()) {
+                  toast.error("Please enter reminder notes");
+                  return;
+                }
+                if (!reminderDate) {
+                  toast.error("Please mark a reminder date");
+                  return;
+                }
+                if (!normalizedClientId) {
+                  toast.error("Couldn't save this reminder — client context missing");
+                  return;
+                }
+                const procPayload = getActiveProcessPayload();
+                const resolvedAssignees = extractMentionedMembers(
+                  reminderNote,
+                  teamMembers,
+                  reminderAssignees
+                );
+                const created = createReminderActivity({
+                  clientId: normalizedClientId,
+                  clientName,
+                  processId: procPayload.processId,
+                  processName: procPayload.processName,
+                  note: reminderNote,
+                  date: reminderDate,
+                  time: reminderTime || undefined,
+                  assignedMembers: resolvedAssignees,
+                  actor: user,
+                });
+                if (!created) {
+                  toast.error("Couldn't save this reminder — client context missing");
+                  return;
+                }
+                setLiveActivity((prev) => [created as unknown as ActivityLogEntry, ...prev]);
+                const targetNames = (created.assignedMembers || []).map((m) => m.name).join(", ");
+                toast.success(
+                  targetNames
+                    ? `Reminder set for ${targetNames}`
+                    : "Reminder added successfully"
+                );
+                setReminderNote("");
+                setReminderAssignees([]);
+                setReminderTime("");
+              }}
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <BellRing className="w-3.5 h-3.5" /> Set Reminder
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Comment compose panel (Default action card) ── */}
       {activeActionTab === "comment" && (
@@ -2258,6 +2699,11 @@ export default function ActivityTab({
                     } else {
                       toast.error("Transcript session details not found");
                     }
+                  }}
+                  onEntryUpdated={(updated) => {
+                    setLiveActivity((prev) =>
+                      prev.map((item) => (item.id === updated.id ? updated : item))
+                    );
                   }}
                   navigate={navigate}
                 />

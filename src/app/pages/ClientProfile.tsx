@@ -42,6 +42,7 @@ import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../compone
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
 import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
+import { ACTIVITY_ENGINE_EVENT } from "../../lib/activityEngine";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
 import { useClients, getStoredClients, saveStoredClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
@@ -1753,6 +1754,28 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     });
   }, [client, selectedProcesses, drawerProcessStages, processLogsVersion]);
 
+  const [activityVersion, setActivityVersion] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setActivityVersion((v) => v + 1);
+    window.addEventListener(ACTIVITY_ENGINE_EVENT, bump);
+    window.addEventListener("storage", bump);
+    let bc: BroadcastChannel | null = null;
+    try {
+      if ("BroadcastChannel" in window) {
+        bc = new BroadcastChannel("mantra_activity_channel");
+        bc.onmessage = bump;
+      }
+    } catch {}
+    return () => {
+      window.removeEventListener(ACTIVITY_ENGINE_EVENT, bump);
+      window.removeEventListener("storage", bump);
+      try {
+        bc?.close();
+      } catch {}
+    };
+  }, []);
+
   const drawerActivityItems = useMemo(() => {
     if (!client || client.id === "new") return [];
     const findProcessId = (heading: string) => {
@@ -1987,7 +2010,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       });
 
     return [...toChronologicalOrder(rawList)].reverse();
-  }, [client?.id, drawerClientProcesses, isNewClient]);
+  }, [client?.id, drawerClientProcesses, isNewClient, activityVersion]);
 
   const getDrawerActivityCount = (processId: string) => {
     if (processId === "all") return drawerActivityItems.length;
