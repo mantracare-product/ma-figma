@@ -49,7 +49,7 @@ export function sendBrowserNotification(
   try {
     const notif = new Notification(title, {
       body: options?.body || "",
-      icon: options?.icon || "/favicon.ico",
+      icon: options?.icon || "/favicon.png",
       tag: options?.tag,
       silent: false,
     });
