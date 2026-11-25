@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
-  MoreVertical, X, Clock, CalendarClock, ChevronLeft, ChevronRight, Send, FileText, Paperclip, Settings,
-  Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope, BellRing, Check
+  MoreVertical, X, Clock, CalendarClock, ChevronLeft, ChevronRight, ChevronDown, Send, FileText, Paperclip, Settings,
+  Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope, BellRing, Check, Users
 } from "lucide-react";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import SessionNoteEditorDrawer from "../clinical/SessionNoteEditorDrawer";
@@ -805,14 +805,13 @@ function ReminderBlock({
 
       {/* Assigned members & creator row */}
       <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] text-gray-500">
-        <div className="flex items-center gap-1.5 flex-wrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+        <div className="flex items-center gap-2 flex-wrap" style={{ fontFamily: "Outfit, sans-serif" }}>
           {assignees.length > 0 && (
-            <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-gray-400">For:</span>
-              {assignees.map((m, idx) => (
+              {assignees.map((m) => (
                 <span key={String(m.id || m.name)} className="text-blue-600 font-semibold">
                   @{m.name}
-                  {idx < assignees.length - 1 ? "," : ""}
                 </span>
               ))}
             </div>
@@ -1599,6 +1598,19 @@ export default function ActivityTab({
   const [reminderDate, setReminderDate] = useState<string>(() => getTodayDateStr());
   const [reminderTime, setReminderTime] = useState<string>(() => getDefaultTimeStr());
   const [reminderAssignees, setReminderAssignees] = useState<ReminderAssignee[]>([]);
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const memberDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMemberDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (memberDropdownRef.current && !memberDropdownRef.current.contains(e.target as Node)) {
+        setShowMemberDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [showMemberDropdown]);
 
   // Horizontal scroller state for Activity action pills
   const actionTabsScrollRef = useRef<HTMLDivElement>(null);
@@ -2134,17 +2146,90 @@ export default function ActivityTab({
               <BellRing className="w-4 h-4 text-[#1F2937]" />
               <span>Add Activity</span>
             </div>
-            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
-              {clientName || "Client"} · Team Activity
-            </span>
+
+            {/* Select team member dropdown */}
+            <div ref={memberDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setShowMemberDropdown((v) => !v)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-gray-200 hover:border-gray-300 text-gray-700 shadow-2xs cursor-pointer transition-colors"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Users className="w-3.5 h-3.5 text-gray-500" />
+                <span className="max-w-[160px] truncate">
+                  {reminderAssignees.length === 0
+                    ? "Select team member"
+                    : reminderAssignees.length === 1
+                    ? reminderAssignees[0].name
+                    : `${reminderAssignees[0].name} +${reminderAssignees.length - 1}`}
+                </span>
+                <ChevronDown className="w-3 h-3 text-gray-400" />
+              </button>
+
+              {showMemberDropdown && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-xl border border-gray-200 shadow-xl py-1.5 z-[130]"
+                  style={{ boxShadow: "0 12px 30px rgba(15, 23, 42, 0.14)" }}
+                >
+                  <div className="px-3 py-1 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Select Team Member
+                  </div>
+                  <div className="max-h-52 overflow-y-auto py-1">
+                    {teamMembers
+                      .filter((m) => m.status !== false)
+                      .map((member) => {
+                        const isSelected = reminderAssignees.some(
+                          (a) =>
+                            String(a.id) === String(member.id) ||
+                            (a.name && a.name.toLowerCase() === member.name.toLowerCase())
+                        );
+                        return (
+                          <button
+                            key={String(member.id)}
+                            type="button"
+                            onClick={() => {
+                              setReminderAssignees((prev) => {
+                                if (isSelected) {
+                                  return prev.filter((a) => String(a.id) !== String(member.id));
+                                }
+                                return [
+                                  ...prev,
+                                  {
+                                    id: String(member.id),
+                                    name: member.name,
+                                    email: member.email,
+                                    role: member.role,
+                                  },
+                                ];
+                              });
+                            }}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                              isSelected ? "bg-blue-50/80 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate">{member.name}</p>
+                              {(member.role || member.department || member.email) && (
+                                <p className="text-[10px] text-gray-400 truncate">
+                                  {member.role || member.department || member.email}
+                                </p>
+                              )}
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <ReminderMentionInput
             value={reminderNote}
             onChange={(val) => {
               setReminderNote(val);
-              const synced = extractMentionedMembers(val, teamMembers, reminderAssignees);
-              setReminderAssignees(synced);
             }}
             teamMembers={teamMembers}
             currentUserId={user?.id}
@@ -2197,11 +2282,13 @@ export default function ActivityTab({
                   return;
                 }
                 const procPayload = getActiveProcessPayload();
-                const resolvedAssignees = extractMentionedMembers(
-                  reminderNote,
-                  teamMembers,
-                  reminderAssignees
-                );
+                const mentionedInText = extractMentionedMembers(reminderNote, teamMembers);
+                const assigneeMap = new Map<string, ReminderAssignee>();
+                [...reminderAssignees, ...mentionedInText].forEach((m) => {
+                  const key = String(m.id || m.email || m.name).toLowerCase();
+                  if (!assigneeMap.has(key)) assigneeMap.set(key, m);
+                });
+                const resolvedAssignees = Array.from(assigneeMap.values());
                 const created = createReminderActivity({
                   clientId: normalizedClientId,
                   clientName,
@@ -2226,6 +2313,7 @@ export default function ActivityTab({
                 );
                 setReminderNote("");
                 setReminderAssignees([]);
+                setShowMemberDropdown(false);
                 setReminderDate(getTodayDateStr());
                 setReminderTime(getDefaultTimeStr());
               }}

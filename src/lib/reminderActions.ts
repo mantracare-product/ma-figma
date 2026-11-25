@@ -108,7 +108,7 @@ export function createReminderActivity(params: {
         ];
 
   const dateDisplay = formatReminderDateDisplay(params.date, params.time);
-  const assigneeNames = assignees.map((m) => `@${m.name}`).join(", ");
+  const assigneeNames = assignees.map((m) => `@${m.name}`).join(" ");
 
   const created = appendActivity({
     type: "reminder",
