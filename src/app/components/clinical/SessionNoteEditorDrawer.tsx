@@ -414,7 +414,7 @@ export default function SessionNoteEditorDrawer({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-semibold text-slate-900 truncate">
-                    {initialNote ? "Session Note" : "New Session Note"}
+                    {initialNote ? "Note" : "New Note"}
                   </h2>
                   <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-semibold">
                     {currentSpec.shortName}

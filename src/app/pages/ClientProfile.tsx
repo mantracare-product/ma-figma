@@ -2398,7 +2398,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "processes" as const, label: "Processes" },
                 { id: "forms" as const, label: "Forms" },
                 { id: "appointments" as const, label: "Appointments" },
-                { id: "session-notes" as const, label: "Session Notes" },
+                { id: "session-notes" as const, label: "Notes" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "products" as const, label: "Product/Services" },

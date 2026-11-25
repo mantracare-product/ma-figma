@@ -840,7 +840,7 @@ export default function AppointmentDetailDrawer({
               { id: "overview", label: "Overview", icon: <FileText className="w-3.5 h-3.5" /> },
               {
                 id: "session-notes",
-                label: "Session Note",
+                label: "Notes",
                 icon: <FileText className="w-3.5 h-3.5" />,
                 count: getSessionNotes({
                   appointmentId: String(effectiveAppt?.id || appointment?.id || ""),

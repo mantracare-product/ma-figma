@@ -158,7 +158,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_cancelled: "Appointment Cancelled",
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
-  form_submitted: "Form Submitted", note: "Note", session_note: "Session Note", reminder: "Reminder",
+  form_submitted: "Form Submitted", note: "Note", session_note: "Note", reminder: "Reminder",
   scribe: "Scribe Recorded",
   invoice_created: "Invoice Created",
   document_generated: "Document Generated",
@@ -2029,7 +2029,7 @@ export default function ActivityTab({
     { id: "sms", label: "SMS" },
     { id: "email", label: "Email" },
     { id: "appointment", label: "Appointment" },
-    { id: "session_note", label: "Session Note" },
+    { id: "session_note", label: "Note" },
     { id: "scribe", label: "Scribe" },
   ];
 
