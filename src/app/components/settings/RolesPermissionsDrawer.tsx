@@ -16,6 +16,7 @@ import { X, ChevronDown, ArrowRight, ArrowLeft, ShieldAlert } from "lucide-react
 import { toast } from "sonner";
 import { getStoredProcesses, Process } from "../../../lib/useProcessStore";
 import { getContactCategories } from "../../../lib/contactCategoriesStore";
+import { CHANNEL_LABELS } from "../../../constants/channels";
 import type {
   ActionScope,
   Action,
@@ -46,6 +47,7 @@ export const ROLE_PERMISSION_MODULES: RoleModuleItem[] = [
   { id: "tasks", label: "Tasks" },
   { id: "processes", label: "Processes" },
   { id: "calls", label: "Calls" },
+  { id: "chats", label: "Chats" },
   { id: "clients", label: "Clients" },
   { id: "dashboard", label: "Dashboard" },
   { id: "documentTemplates", label: "Document Templates" },
@@ -197,7 +199,7 @@ export interface StagePermissionState {
   level: ScopeLevelOption;
 }
 
-export const MODULE_WORKFLOW_KEYS = ["processes", "appointments", "billings", "tasks", "clients", "contacts"];
+export const MODULE_WORKFLOW_KEYS = ["processes", "appointments", "billings", "tasks", "clients", "contacts", "chats"];
 
 export function getModuleWorkflows(moduleId: string, allProcesses: Process[]): WorkflowItem[] {
   if (moduleId === "processes") {
@@ -328,6 +330,14 @@ export function getModuleWorkflows(moduleId: string, allProcesses: Process[]): W
     return cats.map((cat) => ({
       id: `cat-${cat.toLowerCase().replace(/\s+/g, "-")}`,
       name: cat,
+      isCategory: true,
+    }));
+  }
+
+  if (moduleId === "chats") {
+    return Object.entries(CHANNEL_LABELS).map(([channelKey, label]) => ({
+      id: `chat-${channelKey}`,
+      name: label,
       isCategory: true,
     }));
   }
@@ -722,6 +732,7 @@ export function RolesPermissionsDrawer({
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
     appointments: true,
     contacts: true,
+    chats: true,
     processes: true,
     billings: true,
     tasks: false,
@@ -1419,9 +1430,13 @@ export function RolesPermissionsDrawer({
                                       isExpanded
                                         ? mod.id === "contacts"
                                           ? "Collapse categories"
+                                          : mod.id === "chats"
+                                          ? "Collapse channels"
                                           : "Collapse pipelines"
                                         : mod.id === "contacts"
                                         ? "Expand categories"
+                                        : mod.id === "chats"
+                                        ? "Expand channels"
                                         : "Expand pipelines"
                                     }
                                   >
@@ -1437,7 +1452,15 @@ export function RolesPermissionsDrawer({
                                 <span className="truncate">{mod.label}</span>
                                 {showExpand && (
                                   <span className="text-[10px] text-slate-400 font-normal">
-                                    ({pipelines.length} {mod.id === "contacts" ? "categories" : pipelines.length === 1 ? "pipeline" : "pipelines"})
+                                    ({pipelines.length}{" "}
+                                    {mod.id === "contacts"
+                                      ? "categories"
+                                      : mod.id === "chats"
+                                      ? "channels"
+                                      : pipelines.length === 1
+                                      ? "pipeline"
+                                      : "pipelines"}
+                                    )
                                   </span>
                                 )}
                               </div>
