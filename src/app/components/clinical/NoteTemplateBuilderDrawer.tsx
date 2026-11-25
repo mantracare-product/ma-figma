@@ -1,68 +1,196 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   X,
+  AlignLeft,
+  Type,
+  ChevronDown,
+  ListChecks,
+  CircleDot,
+  Activity,
   Plus,
   Trash2,
-  ArrowUp,
-  ArrowDown,
-  FileText,
-  Check,
   Sparkles,
-  Lock,
+  Check,
+  Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "../ui/Button";
+import FieldRenderer, { FormField } from "../form-builder/FieldRenderer";
+import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
+import { ScopingRule } from "../../context/FieldRegistryContext";
 import {
+  NoteBlockInputType,
   NoteTemplate,
   NoteTemplateSection,
-  NoteBlockInputType,
   saveNoteTemplate,
 } from "../../../lib/noteTemplatesStore";
-import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
-import type { ScopingRule } from "../../context/FieldRegistryContext";
 
 export interface NoteTemplateBuilderDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   initialTemplate?: NoteTemplate | null;
   isAdmin?: boolean;
+  zIndex?: number;
   onSaved?: (template: NoteTemplate) => void;
 }
 
-const BLOCK_TYPES: { value: NoteBlockInputType; label: string }[] = [
-  { value: "textarea", label: "Long Text (Paragraph)" },
-  { value: "text", label: "Short Text Line" },
-  { value: "select", label: "Dropdown Options" },
-  { value: "checkbox", label: "Multi-Select Checklist" },
-  { value: "yes_no", label: "Yes / No" },
+const ELEMENT_PALETTE: Array<{
+  inputType: NoteBlockInputType;
+  label: string;
+  defaultTitle: string;
+  placeholder: string;
+  icon: React.ComponentType<{ className?: string }>;
+  options?: string[];
+  rows?: number;
+}> = [
+  {
+    inputType: "textarea",
+    label: "Long Text",
+    defaultTitle: "Clinical Narrative",
+    placeholder: "Document detailed clinical findings, observations, or narrative...",
+    icon: AlignLeft,
+    rows: 4,
+  },
+  {
+    inputType: "text",
+    label: "Short Text",
+    defaultTitle: "Short Entry",
+    placeholder: "Enter brief note...",
+    icon: Type,
+  },
+  {
+    inputType: "select",
+    label: "Dropdown",
+    defaultTitle: "Clinical Selection",
+    placeholder: "Select an option...",
+    icon: ChevronDown,
+    options: ["Within Normal Limits", "Mild Improvement", "Needs Follow-up"],
+  },
+  {
+    inputType: "checkbox",
+    label: "Checkboxes",
+    defaultTitle: "Interventions Used",
+    placeholder: "Select all that apply",
+    icon: ListChecks,
+    options: ["Counseling", "Psychoeducation", "Skills Training", "Care Coordination"],
+  },
+  {
+    inputType: "yes_no",
+    label: "Yes / No",
+    defaultTitle: "Safety / Screening Check",
+    placeholder: "Select Yes or No",
+    icon: CircleDot,
+  },
 ];
 
-const SCRIBE_HINTS = [
-  { value: "", label: "No AI Scribe Auto-Fill" },
-  { value: "chiefComplaint", label: "Chief Complaint / Symptoms" },
-  { value: "vitals", label: "Vitals & Exam Findings" },
-  { value: "diagnosis", label: "Assessment / Clinical Impression" },
-  { value: "plan", label: "Care Plan / Medications / Follow-up" },
-  { value: "doctorNotes", label: "Procedure / Clinician Remarks" },
+const QUICK_CLINICAL_PRESETS: Array<{
+  label: string;
+  inputType: NoteBlockInputType;
+  placeholder: string;
+  scribeHint: string;
+  options?: string[];
+  rows?: number;
+}> = [
+  {
+    label: "Chief Complaint",
+    inputType: "text",
+    placeholder: "Primary reason for visit...",
+    scribeHint: "Reason for encounter and presenting concern",
+  },
+  {
+    label: "Subjective",
+    inputType: "textarea",
+    placeholder: "Patient-reported symptoms, history, and interval changes...",
+    scribeHint: "Patient quotes, symptoms, onset, severity",
+    rows: 3,
+  },
+  {
+    label: "Objective",
+    inputType: "textarea",
+    placeholder: "Clinical exam findings, appearance, affect, and observations...",
+    scribeHint: "Clinician observations and exam findings",
+    rows: 3,
+  },
+  {
+    label: "Assessment",
+    inputType: "textarea",
+    placeholder: "Clinical formulation, progress, and diagnostic impression...",
+    scribeHint: "Clinical impression and progress synthesis",
+    rows: 3,
+  },
+  {
+    label: "Plan",
+    inputType: "textarea",
+    placeholder: "Next steps, interventions, referrals, and follow-up timing...",
+    scribeHint: "Action plan, instructions, and follow-up",
+    rows: 3,
+  },
+  {
+    label: "Follow-up Interval",
+    inputType: "select",
+    placeholder: "Choose follow-up cadence...",
+    scribeHint: "Recommended return timeframe",
+    options: ["1 week", "2 weeks", "4 weeks", "3 months", "PRN / As needed"],
+  },
 ];
 
-const CATEGORY_OPTIONS = [
-  "Medical & Allied Health",
-  "Behavioral Health",
-  "Aesthetics & Procedures",
-  "Ophthalmology",
-  "Physical Therapy",
-  "General",
+const NOTE_CATEGORIES = [
+  "Clinical Progress",
+  "Therapy & Behavioral",
+  "Procedure / Treatment",
+  "Intake & Assessment",
+  "Specialty",
   "Custom",
 ];
 
-function slugifyKey(label: string, fallbackIndex: number): string {
+function slugifyKey(label: string): string {
   const base = label
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-  return base || `section_${fallbackIndex + 1}`;
+    .replace(/^_+|_+$/g, "");
+  return base || `section_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function makeUniqueKey(baseLabel: string, existing: NoteTemplateSection[]): string {
+  const base = slugifyKey(baseLabel);
+  if (!existing.some((s) => s.key === base)) return base;
+  let counter = 2;
+  while (existing.some((s) => s.key === `${base}_${counter}`)) counter += 1;
+  return `${base}_${counter}`;
+}
+
+function toRendererField(sec: NoteTemplateSection): FormField {
+  const typeMap: Record<NoteBlockInputType, string> = {
+    textarea: "textarea",
+    text: "text",
+    select: "select",
+    checkbox: "checkbox",
+    yes_no: "radio",
+  };
+  const resolvedType = typeMap[sec.inputType || "textarea"] || "textarea";
+  const options =
+    sec.inputType === "yes_no"
+      ? [
+          { id: `${sec.key}_yes`, label: "Yes", value: "Yes" },
+          { id: `${sec.key}_no`, label: "No", value: "No" },
+        ]
+      : (sec.options || []).map((opt, idx) => ({
+          id: `${sec.key}_opt_${idx}`,
+          label: opt,
+          value: opt,
+        }));
+
+  return {
+    id: sec.key,
+    name: sec.label,
+    label: sec.label || "Untitled Section",
+    type: resolvedType,
+    placeholder: sec.placeholder || "",
+    required: Boolean(sec.required),
+    essential: false,
+    helpText: sec.scribeHint ? `AI Scribe: ${sec.scribeHint}` : undefined,
+    options,
+  };
 }
 
 export default function NoteTemplateBuilderDrawer({
@@ -70,530 +198,898 @@ export default function NoteTemplateBuilderDrawer({
   onClose,
   initialTemplate,
   isAdmin = false,
+  zIndex = 90,
   onSaved,
 }: NoteTemplateBuilderDrawerProps) {
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
-  const [category, setCategory] = useState("Medical & Allied Health");
+  const [category, setCategory] = useState("Custom");
   const [description, setDescription] = useState("");
   const [includeVitals, setIncludeVitals] = useState(false);
   const [sections, setSections] = useState<NoteTemplateSection[]>([]);
   const [scopingRules, setScopingRules] = useState<ScopingRule[]>([]);
-  const [optionsDraft, setOptionsDraft] = useState<Record<number, string>>({});
+
+  // FormBuilder-style interaction state
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"elements" | "template">("elements");
+  const [previewValues, setPreviewValues] = useState<Record<string, any>>({});
+  const [draggedFieldKey, setDraggedFieldKey] = useState<string | null>(null);
+  const [draggedPaletteType, setDraggedPaletteType] = useState<NoteBlockInputType | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [isCanvasDropActive, setIsCanvasDropActive] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-
     if (initialTemplate) {
-      setName(initialTemplate.name);
-      setShortName(initialTemplate.shortName);
-      setCategory(initialTemplate.category || "Medical & Allied Health");
+      setName(initialTemplate.name || "");
+      setShortName(initialTemplate.shortName || "");
+      setCategory(initialTemplate.category || "Custom");
       setDescription(initialTemplate.description || "");
       setIncludeVitals(Boolean(initialTemplate.includeVitals));
-      setSections(initialTemplate.sections.map((s) => ({ ...s })));
-      setScopingRules(initialTemplate.scopingRules || []);
-      const optMap: Record<number, string> = {};
-      initialTemplate.sections.forEach((s, idx) => {
-        if (s.options?.length) optMap[idx] = s.options.join(", ");
-      });
-      setOptionsDraft(optMap);
+      setSections(
+        (initialTemplate.sections || []).map((sec) => ({
+          ...sec,
+          inputType: sec.inputType || "textarea",
+          options: sec.options ? [...sec.options] : undefined,
+        }))
+      );
+      setScopingRules(initialTemplate.scopingRules ? [...initialTemplate.scopingRules] : []);
     } else {
-      setName("");
-      setShortName("");
-      setCategory("Medical & Allied Health");
+      setName("Untitled Note Template");
+      setShortName("CUSTOM");
+      setCategory("Clinical Progress");
       setDescription("");
       setIncludeVitals(false);
       setSections([
         {
           key: "clinical_focus",
-          label: "Session Focus & History",
-          inputType: "textarea",
-          placeholder: "Reason for visit and relevant clinical history...",
-          rows: 3,
+          label: "Clinical Focus / Chief Complaint",
+          inputType: "text",
+          placeholder: "Primary reason for visit...",
           required: true,
-          scribeHint: "chiefComplaint",
+          scribeHint: "Reason for encounter",
         },
         {
-          key: "clinical_observations",
-          label: "Observations & Assessment",
+          key: "session_summary",
+          label: "Session Narrative",
           inputType: "textarea",
-          placeholder: "Findings, client response, and clinical impression...",
-          rows: 3,
-          scribeHint: "diagnosis",
+          rows: 4,
+          placeholder: "Document observations, clinical discussion, and patient response...",
+          required: false,
+          scribeHint: "Main clinical discussion and observations",
         },
         {
-          key: "care_plan",
-          label: "Care Plan & Next Steps",
+          key: "plan",
+          label: "Assessment & Next Steps",
           inputType: "textarea",
-          placeholder: "Interventions, patient instructions, and follow-up schedule...",
           rows: 3,
-          scribeHint: "plan",
+          placeholder: "Clinical impression and follow-up plan...",
+          required: false,
+          scribeHint: "Plan and follow-up actions",
         },
       ]);
       setScopingRules([]);
-      setOptionsDraft({});
     }
+    setSelectedKey(null);
+    setSidebarTab("elements");
+    setPreviewValues({});
+    setDraggedFieldKey(null);
+    setDraggedPaletteType(null);
+    setDropTargetKey(null);
   }, [isOpen, initialTemplate]);
+
+  const selectedSection = useMemo(
+    () => sections.find((s) => s.key === selectedKey) || null,
+    [sections, selectedKey]
+  );
 
   if (!isOpen) return null;
 
-  const isEditingSystem = Boolean(initialTemplate?.isSystem);
+  const addSectionFromType = (inputType: NoteBlockInputType, customLabel?: string, insertAtIndex?: number) => {
+    const spec = ELEMENT_PALETTE.find((e) => e.inputType === inputType) || ELEMENT_PALETTE[0];
+    const label = customLabel || spec.defaultTitle;
+    const key = makeUniqueKey(label, sections);
+    const newSec: NoteTemplateSection = {
+      key,
+      label,
+      inputType,
+      placeholder: spec.placeholder,
+      required: false,
+      rows: inputType === "textarea" ? spec.rows || 4 : undefined,
+      options: spec.options ? [...spec.options] : undefined,
+      scribeHint: "",
+    };
 
-  const handleAddSection = () => {
-    setSections((prev) => [
-      ...prev,
-      {
-        key: `custom_section_${Date.now()}`,
-        label: `Section ${prev.length + 1}`,
-        inputType: "textarea",
-        placeholder: "Enter guidance placeholder...",
-        rows: 3,
-      },
-    ]);
+    setSections((prev) => {
+      if (insertAtIndex !== undefined && insertAtIndex >= 0 && insertAtIndex <= prev.length) {
+        const next = [...prev];
+        next.splice(insertAtIndex, 0, newSec);
+        return next;
+      }
+      return [...prev, newSec];
+    });
+    setSelectedKey(key);
   };
 
-  const handleUpdateSection = (idx: number, patch: Partial<NoteTemplateSection>) => {
+  const addSectionFromPreset = (preset: (typeof QUICK_CLINICAL_PRESETS)[number]) => {
+    const key = makeUniqueKey(preset.label, sections);
+    const newSec: NoteTemplateSection = {
+      key,
+      label: preset.label,
+      inputType: preset.inputType,
+      placeholder: preset.placeholder,
+      required: false,
+      rows: preset.rows,
+      options: preset.options ? [...preset.options] : undefined,
+      scribeHint: preset.scribeHint,
+    };
+    setSections((prev) => [...prev, newSec]);
+    setSelectedKey(key);
+  };
+
+  const updateSelectedSection = (patch: Partial<NoteTemplateSection>) => {
+    if (!selectedSection) return;
     setSections((prev) =>
-      prev.map((sec, i) => {
-        if (i !== idx) return sec;
-        const next = { ...sec, ...patch };
-        if (patch.label !== undefined && !isEditingSystem) {
-          next.key = slugifyKey(patch.label, idx);
-        }
-        return next;
-      })
+      prev.map((sec) => (sec.key === selectedSection.key ? { ...sec, ...patch } : sec))
     );
   };
 
-  const handleMoveSection = (idx: number, dir: -1 | 1) => {
-    const targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= sections.length) return;
-    const next = [...sections];
-    const [moved] = next.splice(idx, 1);
-    next.splice(targetIdx, 0, moved);
-    setSections(next);
+  const handleDuplicateSection = (targetKey: string) => {
+    const idx = sections.findIndex((s) => s.key === targetKey);
+    if (idx === -1) return;
+    const source = sections[idx];
+    const newLabel = `${source.label} (Copy)`;
+    const newKey = makeUniqueKey(newLabel, sections);
+    const copy: NoteTemplateSection = {
+      ...source,
+      key: newKey,
+      label: newLabel,
+      options: source.options ? [...source.options] : undefined,
+    };
+    setSections((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+    setSelectedKey(newKey);
   };
 
-  const handleRemoveSection = (idx: number) => {
-    if (sections.length <= 1) {
-      toast.error("A note template must have at least one section");
+  const handleDeleteSection = (targetKey: string) => {
+    setSections((prev) => prev.filter((s) => s.key !== targetKey));
+    if (selectedKey === targetKey) {
+      setSelectedKey(null);
+    }
+  };
+
+  const handleReorderDrop = (targetKey: string) => {
+    if (draggedPaletteType) {
+      const targetIdx = sections.findIndex((s) => s.key === targetKey);
+      addSectionFromType(draggedPaletteType, undefined, targetIdx >= 0 ? targetIdx : undefined);
+      setDraggedPaletteType(null);
+      setDropTargetKey(null);
       return;
     }
-    setSections((prev) => prev.filter((_, i) => i !== idx));
+
+    if (!draggedFieldKey || draggedFieldKey === targetKey) {
+      setDraggedFieldKey(null);
+      setDropTargetKey(null);
+      return;
+    }
+
+    setSections((prev) => {
+      const fromIdx = prev.findIndex((s) => s.key === draggedFieldKey);
+      const toIdx = prev.findIndex((s) => s.key === targetKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+    setDraggedFieldKey(null);
+    setDropTargetKey(null);
+  };
+
+  const handleCanvasDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsCanvasDropActive(false);
+    setDropTargetKey(null);
+    if (draggedPaletteType) {
+      addSectionFromType(draggedPaletteType);
+      setDraggedPaletteType(null);
+    }
+    setDraggedFieldKey(null);
   };
 
   const handleSave = () => {
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       toast.error("Please enter a template name");
       return;
     }
-    if (sections.some((s) => !s.label.trim())) {
-      toast.error("Every section must have a heading label");
+    const cleanSections = sections
+      .map((s) => ({
+        ...s,
+        label: s.label.trim() || "Untitled Section",
+        options:
+          s.inputType === "select" || s.inputType === "checkbox"
+            ? (s.options || []).map((o) => o.trim()).filter(Boolean)
+            : undefined,
+      }))
+      .filter((s) => s.label.length > 0);
+
+    if (cleanSections.length === 0) {
+      toast.error("Add at least one block to the template canvas");
       return;
     }
 
-    const cleanShort = (shortName.trim() || name.trim().split(/\s+/)[0]).slice(0, 14);
-    const finalizedSections: NoteTemplateSection[] = sections.map((s, idx) => {
-      const needsOpts = s.inputType === "select" || s.inputType === "checkbox";
-      const parsedOpts = needsOpts
-        ? (optionsDraft[idx] !== undefined
-            ? optionsDraft[idx].split(",")
-            : s.options || []
-          )
-            .map((o) => o.trim())
-            .filter(Boolean)
-        : undefined;
+    const derivedShort =
+      shortName.trim() ||
+      trimmedName
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w.slice(0, 4))
+        .join("")
+        .toUpperCase();
 
-      return {
-        ...s,
-        key: s.key || slugifyKey(s.label, idx),
-        label: s.label.trim(),
-        options: parsedOpts,
-      };
-    });
-
-    const saved = saveNoteTemplate({
-      id: initialTemplate?.id || `tpl-note-${Date.now()}`,
-      name: name.trim(),
-      shortName: cleanShort,
-      category,
-      description: description.trim() || "Custom session note template",
+    const templateToSave: NoteTemplate = {
+      id: initialTemplate?.id || `tpl_${Date.now()}`,
+      name: trimmedName,
+      shortName: derivedShort,
+      category: category.trim() || "Custom",
+      description: description.trim() || "Custom clinical session note template.",
       includeVitals,
-      sections: finalizedSections,
-      isSystem: initialTemplate?.isSystem || false,
+      sections: cleanSections,
+      isSystem: initialTemplate?.isSystem,
       enabled: initialTemplate?.enabled ?? true,
-      createdBy: isAdmin ? "Admin System" : initialTemplate?.createdBy || "Workspace User",
+      createdBy: initialTemplate?.createdBy || (isAdmin ? "Admin" : "Provider"),
+      updatedAt: new Date().toISOString(),
       scopingRules: isAdmin ? scopingRules : initialTemplate?.scopingRules,
-    });
+    };
 
+    const saved = saveNoteTemplate(templateToSave);
     toast.success(`Saved note template "${saved.name}"`);
     onSaved?.(saved);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[760] overflow-hidden bg-slate-900/45 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
-      <div className="w-full md:w-[68vw] md:min-w-[720px] md:max-w-[1140px] bg-white h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-250 ease-out">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-slate-900 truncate">
-                  {initialTemplate ? `Edit Template: ${initialTemplate.name}` : "Create Session Note Template"}
-                </h2>
-                {isEditingSystem && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
-                    <Lock className="w-3 h-3" /> System Baseline
-                  </span>
+    <div
+      className="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex justify-end transition-opacity"
+      style={{ zIndex }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:w-[76vw] md:min-w-[820px] md:max-w-[1260px] h-full bg-[#F8FAFC] shadow-2xl border-l border-[#E2E8F0] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── TOP HEADER BAR (FormBuilder style) ── */}
+        <div className="h-[64px] shrink-0 bg-white border-b border-[#E2E8F0] px-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Note Template Name..."
+              className="text-base font-bold text-[#0F172A] bg-transparent border border-transparent hover:border-[#E2E8F0] focus:border-[#2563EB] focus:bg-white rounded-lg px-2.5 py-1 focus:outline-none min-w-[200px] max-w-[320px] truncate transition-colors"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            />
+            <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600 shrink-0">
+              {shortName.trim() || "NOTE"}
+            </span>
+            <span className="hidden md:inline text-xs text-slate-400 shrink-0">
+              {sections.length} {sections.length === 1 ? "block" : "blocks"}
+              {includeVitals ? " · Vitals included" : ""}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedKey(null);
+                setSidebarTab((prev) => (prev === "template" ? "elements" : "template"));
+              }}
+              className={`h-9 px-3 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                sidebarTab === "template" && !selectedSection
+                  ? "border-[#2563EB] bg-blue-50 text-[#2563EB]"
+                  : "border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {isAdmin ? "Template & Scoping" : "Template Details"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              className="h-9 px-4 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Save Template</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── MAIN WORKSPACE: LEFT CANVAS + RIGHT 320px SIDEBAR ── */}
+        <div className="flex-1 min-h-0 flex gap-5 p-5 overflow-hidden">
+          {/* LEFT: NOTE CANVAS (Matches FormBuilder Form Canvas) */}
+          <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1">
+            <div className="max-w-3xl mx-auto space-y-4 pb-8">
+              {/* Template Banner Card on Canvas */}
+              <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-2xs">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2
+                        className="text-lg font-bold text-[#0F172A] truncate"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {name || "Untitled Note Template"}
+                      </h2>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {category}
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Add a brief description for clinicians using this template..."
+                      className="w-full text-xs text-slate-500 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-[#2563EB] focus:outline-none py-0.5"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dashed Drop Canvas */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsCanvasDropActive(true);
+                }}
+                onDragLeave={() => setIsCanvasDropActive(false)}
+                onDrop={handleCanvasDrop}
+                className={`border-2 border-dashed rounded-xl p-4 bg-white transition-colors min-h-[340px] space-y-3 ${
+                  isCanvasDropActive ? "border-[#2563EB] bg-blue-50/30" : "border-gray-300"
+                }`}
+              >
+                {sections.length === 0 ? (
+                  <div className="h-[280px] flex flex-col items-center justify-center text-center px-6">
+                    <p className="text-sm font-medium text-slate-600" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Your note template canvas is empty
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Click or drag elements from the right panel to add sections
+                    </p>
+                  </div>
+                ) : (
+                  sections.map((sec) => {
+                    const rendererField = toRendererField(sec);
+                    return (
+                      <FieldRenderer
+                        key={sec.key}
+                        field={rendererField}
+                        isSelected={selectedKey === sec.key}
+                        isDropTarget={dropTargetKey === sec.key}
+                        fieldValue={previewValues[sec.key]}
+                        onFieldClick={() => setSelectedKey(sec.key)}
+                        onFieldChange={(val) =>
+                          setPreviewValues((prev) => ({ ...prev, [sec.key]: val }))
+                        }
+                        onDuplicate={() => handleDuplicateSection(sec.key)}
+                        onDelete={() => handleDeleteSection(sec.key)}
+                        onDragStart={(e) => {
+                          setDraggedFieldKey(sec.key);
+                          setDraggedPaletteType(null);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (dropTargetKey !== sec.key) setDropTargetKey(sec.key);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleReorderDrop(sec.key);
+                        }}
+                        onConditionalLogic={() => setSelectedKey(sec.key)}
+                      />
+                    );
+                  })
+                )}
+
+                {/* Optional Vitals Preview Card inside Canvas */}
+                {includeVitals && (
+                  <div className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/70 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-600 shrink-0">
+                        <Activity className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-800">
+                          Vitals Strip Enabled
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          Captures BP, Heart Rate, Temp, SpO2, and Pain (0–10) in Session Note drawer
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIncludeVitals(false)}
+                      className="text-[11px] font-medium text-slate-500 hover:text-red-600 px-2 py-1 rounded hover:bg-white cursor-pointer shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Configure note blocks, input types, and AI Scribe auto-fill hints for clinical encounters.
-              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* 2-Column Body */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* LEFT (~62%): Metadata + Sections Builder */}
-            <div className="lg:col-span-7 space-y-5">
-              {/* Metadata Card */}
-              <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Template Settings
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2 space-y-1">
-                    <label className="text-xs font-medium text-slate-700">Template Name *</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => {
-                        setName(e.target.value);
-                        if (!shortName && !initialTemplate) {
-                          setShortName(e.target.value.trim().split(/\s+/)[0].slice(0, 10));
-                        }
-                      }}
-                      placeholder="e.g. Dermatology Consultation, Couples Intake..."
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                    />
+          {/* RIGHT: FIXED 320px SIDEBAR (Exact FormBuilder right panel) */}
+          <div className="w-[320px] shrink-0 h-full bg-white border border-[#E2E8F0] rounded-xl shadow-2xs flex flex-col overflow-hidden">
+            {selectedSection ? (
+              /* ── FIELD PROPERTIES INSPECTOR ── */
+              <div className="flex flex-col h-full">
+                <div className="shrink-0 p-3.5 border-b border-[#E2E8F0] bg-slate-50/70 flex items-center justify-between">
+                  <div className="min-w-0 pr-2">
+                    <h3
+                      className="text-xs font-bold text-[#0F172A] truncate"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {selectedSection.label || "Untitled Section"}
+                    </h3>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase">
+                      {selectedSection.inputType || "textarea"} properties
+                    </span>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-700">Short Badge</label>
-                    <input
-                      type="text"
-                      value={shortName}
-                      maxLength={14}
-                      onChange={(e) => setShortName(e.target.value)}
-                      placeholder="e.g. DERM"
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedKey(null)}
+                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition-colors cursor-pointer shrink-0"
+                    title="Close Properties"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-700">Specialty / Category</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
+                <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-4">
+                  {/* Label */}
+                  <div>
+                    <label
+                      className="block text-xs font-medium text-[#64748B] mb-1.5"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {CATEGORY_OPTIONS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
+                      Section Label
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedSection.label}
+                      onChange={(e) => updateSelectedSection({ label: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </div>
+
+                  {/* Block Input Type */}
+                  <div>
+                    <label
+                      className="block text-xs font-medium text-[#64748B] mb-1.5"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Field Type
+                    </label>
+                    <select
+                      value={selectedSection.inputType || "textarea"}
+                      onChange={(e) => {
+                        const nextType = e.target.value as NoteBlockInputType;
+                        updateSelectedSection({
+                          inputType: nextType,
+                          options:
+                            nextType === "select" || nextType === "checkbox"
+                              ? selectedSection.options && selectedSection.options.length > 0
+                                ? selectedSection.options
+                                : ["Option 1", "Option 2", "Option 3"]
+                              : undefined,
+                          rows: nextType === "textarea" ? selectedSection.rows || 4 : undefined,
+                        });
+                      }}
+                      className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="textarea">Long Text / Narrative</option>
+                      <option value="text">Short Text</option>
+                      <option value="select">Dropdown Select</option>
+                      <option value="checkbox">Checkboxes</option>
+                      <option value="yes_no">Yes / No</option>
                     </select>
                   </div>
 
-                  <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={includeVitals}
-                        onChange={(e) => setIncludeVitals(e.target.checked)}
-                        className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                      />
-                      <span>Show Vitals strip automatically</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-700">Description</label>
-                  <input
-                    type="text"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Brief clinical purpose for your team..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
-              </div>
-
-              {/* Admin Scoping Rules when launched from Admin */}
-              {isAdmin && (
-                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Industry & Location Scoping
-                  </h3>
-                  <AdminScopingRulesEditor
-                    rules={scopingRules}
-                    onChange={setScopingRules}
-                  />
-                </div>
-              )}
-
-              {/* Sections Builder */}
-              <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Note Sections ({sections.length})
-                  </h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddSection}
-                    className="text-xs font-semibold gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Section</span>
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {sections.map((sec, idx) => {
-                    const needsOpts = sec.inputType === "select" || sec.inputType === "checkbox";
-                    const optString = optionsDraft[idx] ?? (sec.options ? sec.options.join(", ") : "");
-                    return (
-                      <div
-                        key={sec.key + idx}
-                        className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5"
+                  {/* Placeholder */}
+                  {selectedSection.inputType !== "checkbox" && selectedSection.inputType !== "yes_no" && (
+                    <div>
+                      <label
+                        className="block text-xs font-medium text-[#64748B] mb-1.5"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-mono text-slate-400">#{idx + 1}</span>
-                          <div className="flex items-center gap-1">
+                        Placeholder
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedSection.placeholder}
+                        onChange={(e) => updateSelectedSection({ placeholder: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Options Editor for select / checkbox */}
+                  {(selectedSection.inputType === "select" ||
+                    selectedSection.inputType === "checkbox") && (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label
+                          className="text-xs font-medium text-[#64748B]"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          Options
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateSelectedSection({
+                              options: [
+                                ...(selectedSection.options || []),
+                                `Option ${(selectedSection.options?.length || 0) + 1}`,
+                              ],
+                            })
+                          }
+                          className="text-xs font-medium text-[#2563EB] hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" /> Add
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        {(selectedSection.options || []).map((opt, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={opt}
+                              onChange={(e) => {
+                                const next = [...(selectedSection.options || [])];
+                                next[idx] = e.target.value;
+                                updateSelectedSection({ options: next });
+                              }}
+                              className="flex-1 px-2.5 py-1.5 border border-[#E2E8F0] rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                            />
                             <button
                               type="button"
-                              disabled={idx === 0}
-                              onClick={() => handleMoveSection(idx, -1)}
-                              className="p-1 rounded hover:bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
-                              title="Move up"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === sections.length - 1}
-                              onClick={() => handleMoveSection(idx, 1)}
-                              className="p-1 rounded hover:bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
-                              title="Move down"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSection(idx)}
-                              className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
-                              title="Delete section"
+                              onClick={() => {
+                                const next = (selectedSection.options || []).filter((_, i) => i !== idx);
+                                updateSelectedSection({ options: next });
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-slate-600">Heading Label *</label>
-                            <input
-                              type="text"
-                              value={sec.label}
-                              onChange={(e) => handleUpdateSection(idx, { label: e.target.value })}
-                              placeholder="e.g. Subjective (S)"
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-slate-600">Block Type</label>
-                            <select
-                              value={sec.inputType || "textarea"}
-                              onChange={(e) =>
-                                handleUpdateSection(idx, { inputType: e.target.value as NoteBlockInputType })
-                              }
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                            >
-                              {BLOCK_TYPES.map((bt) => (
-                                <option key={bt.value} value={bt.value}>
-                                  {bt.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        {needsOpts ? (
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-slate-600">
-                              Choices (comma separated)
-                            </label>
-                            <input
-                              type="text"
-                              value={optString}
-                              onChange={(e) => setOptionsDraft((prev) => ({ ...prev, [idx]: e.target.value }))}
-                              placeholder="e.g. Calm, Anxious, Cooperative, Flat Affect"
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-slate-600">Prompt / Placeholder</label>
-                            <input
-                              type="text"
-                              value={sec.placeholder}
-                              onChange={(e) => handleUpdateSection(idx, { placeholder: e.target.value })}
-                              placeholder="Prompt text shown inside empty field..."
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                            />
-                          </div>
-                        )}
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-0.5">
-                          <div className="flex items-center gap-1.5 flex-1">
-                            <Sparkles className="w-3 h-3 text-slate-400 shrink-0" />
-                            <select
-                              value={sec.scribeHint || ""}
-                              onChange={(e) => handleUpdateSection(idx, { scribeHint: e.target.value })}
-                              className="px-2 py-1 rounded border border-slate-200 bg-white text-[11px] text-slate-600 focus:outline-none"
-                            >
-                              {SCRIBE_HINTS.map((h) => (
-                                <option key={h.value} value={h.value}>
-                                  {h.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(sec.required)}
-                              onChange={(e) => handleUpdateSection(idx, { required: e.target.checked })}
-                              className="w-3.5 h-3.5 rounded border-slate-300 text-slate-900"
-                            />
-                            <span>Required</span>
-                          </label>
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                    </div>
+                  )}
 
-            {/* RIGHT (~38%): Live Clinician Preview */}
-            <div className="lg:col-span-5">
-              <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 sticky top-0">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div>
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
-                      Live Chart Preview
-                    </span>
-                    <h4 className="text-sm font-semibold text-slate-900 mt-0.5">
-                      {name.trim() || "Untitled Note Template"}
-                    </h4>
+                  {/* Rows for Textarea */}
+                  {(selectedSection.inputType || "textarea") === "textarea" && (
+                    <div>
+                      <label
+                        className="block text-xs font-medium text-[#64748B] mb-1.5"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Editor Height (Rows)
+                      </label>
+                      <select
+                        value={selectedSection.rows || 4}
+                        onChange={(e) => updateSelectedSection({ rows: Number(e.target.value) })}
+                        className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                      >
+                        <option value={2}>Compact (2 rows)</option>
+                        <option value={3}>Standard (3 rows)</option>
+                        <option value={4}>Medium (4 rows)</option>
+                        <option value={6}>Expanded (6 rows)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Required Toggle */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div>
+                      <span
+                        className="block text-xs font-medium text-[#0F172A]"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Required to Sign
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Clinician must fill before locking
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelectedSection({ required: !selectedSection.required })
+                      }
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                        selectedSection.required ? "bg-[#0F172A]" : "bg-slate-200"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          selectedSection.required ? "translate-x-5" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px] font-mono font-semibold">
-                    {shortName.trim() || "NOTE"}
-                  </span>
+
+                  {/* AI Scribe Mapping Hint */}
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-[#64748B]">
+                      <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                      <span>AI Scribe Auto-Fill Hint</span>
+                    </label>
+                    <textarea
+                      value={selectedSection.scribeHint || ""}
+                      onChange={(e) => updateSelectedSection({ scribeHint: e.target.value })}
+                      rows={2}
+                      placeholder="Describe what AI Scribe should extract into this section..."
+                      className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                  {sections.map((sec, idx) => {
-                    const opts = (optionsDraft[idx] ?? (sec.options ? sec.options.join(", ") : ""))
-                      .split(",")
-                      .map((o) => o.trim())
-                      .filter(Boolean);
-                    return (
-                      <div key={sec.key + idx} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs font-semibold text-slate-800">
-                          <span>
-                            {sec.label || "Untitled Section"}
-                            {sec.required && <span className="text-rose-500 ml-0.5">*</span>}
-                          </span>
-                          {sec.scribeHint && (
-                            <span className="text-[10px] font-normal text-slate-400">AI Scribe mapped</span>
-                          )}
-                        </div>
-
-                        {sec.inputType === "select" ? (
-                          <div className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-400">
-                            {opts.length > 0 ? `Select: ${opts.join(" / ")}` : "Dropdown choices..."}
-                          </div>
-                        ) : sec.inputType === "checkbox" ? (
-                          <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {(opts.length > 0 ? opts : ["Option A", "Option B"]).map((opt) => (
-                              <span
-                                key={opt}
-                                className="px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 text-[11px] text-slate-600"
-                              >
-                                {opt}
-                              </span>
-                            ))}
-                          </div>
-                        ) : sec.inputType === "yes_no" ? (
-                          <div className="flex gap-2">
-                            <span className="px-3 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600">
-                              Yes
-                            </span>
-                            <span className="px-3 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600">
-                              No
-                            </span>
-                          </div>
-                        ) : sec.inputType === "text" ? (
-                          <div className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-400">
-                            {sec.placeholder || "Short answer..."}
-                          </div>
-                        ) : (
-                          <div className="px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-400 min-h-[56px]">
-                            {sec.placeholder || "Paragraph clinical text..."}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                {/* Pinned Done Footer */}
+                <div className="shrink-0 p-3 border-t border-[#E2E8F0] bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedKey(null)}
+                    className="w-full h-10 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg transition-colors text-[13px] font-medium flex items-center justify-center cursor-pointer shadow-2xs"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Done
+                  </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+            ) : (
+              /* ── ELEMENTS PALETTE & TEMPLATE SETTINGS ── */
+              <div className="flex flex-col h-full">
+                {/* Sidebar Sub-Tabs */}
+                <div className="shrink-0 grid grid-cols-2 border-b border-[#E2E8F0] bg-slate-50/70 p-1 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarTab("elements")}
+                    className={`py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      sidebarTab === "elements"
+                        ? "bg-white text-[#0F172A] shadow-2xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Elements
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarTab("template")}
+                    className={`py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      sidebarTab === "template"
+                        ? "bg-white text-[#0F172A] shadow-2xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {isAdmin ? "Details & Rules" : "Template Details"}
+                  </button>
+                </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-end gap-2.5 shrink-0">
-          <Button type="button" variant="outline" onClick={onClose} className="text-xs font-medium">
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" onClick={handleSave} className="text-xs font-semibold gap-1.5">
-            <Check className="w-3.5 h-3.5" />
-            <span>{initialTemplate ? "Save Template" : "Create Template"}</span>
-          </Button>
+                {sidebarTab === "elements" ? (
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
+                    <div>
+                      <h3
+                        className="text-xs font-bold text-[#0F172A]"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        Note Elements
+                      </h3>
+                      <p
+                        className="text-[11px] text-[#64748B] mt-0.5"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Click or drag elements to canvas
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        {ELEMENT_PALETTE.map((item) => (
+                          <button
+                            key={item.inputType}
+                            type="button"
+                            draggable
+                            onDragStart={() => {
+                              setDraggedPaletteType(item.inputType);
+                              setDraggedFieldKey(null);
+                            }}
+                            onClick={() => addSectionFromType(item.inputType)}
+                            className="group flex flex-col items-center gap-1.5 p-2.5 bg-white border border-[#E2E8F0] rounded-lg hover:border-[#2563EB] hover:shadow-2xs hover:bg-blue-50/20 transition-all cursor-grab active:cursor-grabbing text-center"
+                          >
+                            <div className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-[#64748B] group-hover:bg-blue-100 group-hover:text-[#2563EB] transition-colors">
+                              <item.icon className="w-3.5 h-3.5" />
+                            </div>
+                            <span
+                              className="text-[11px] font-medium leading-tight truncate w-full text-[#0F172A]"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {item.label}
+                            </span>
+                          </button>
+                        ))}
+
+                        {/* Vitals Strip toggle tile */}
+                        <button
+                          type="button"
+                          onClick={() => setIncludeVitals((v) => !v)}
+                          className={`group flex flex-col items-center gap-1.5 p-2.5 border rounded-lg transition-all cursor-pointer text-center ${
+                            includeVitals
+                              ? "border-[#2563EB] bg-blue-50/40"
+                              : "border-[#E2E8F0] bg-white hover:border-[#2563EB] hover:bg-blue-50/20"
+                          }`}
+                        >
+                          <div
+                            className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                              includeVitals
+                                ? "bg-blue-100 text-[#2563EB]"
+                                : "bg-slate-50 text-[#64748B] group-hover:bg-blue-100 group-hover:text-[#2563EB]"
+                            }`}
+                          >
+                            <Activity className="w-3.5 h-3.5" />
+                          </div>
+                          <span
+                            className="text-[11px] font-medium leading-tight truncate w-full text-[#0F172A]"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {includeVitals ? "Vitals: On" : "Vitals Strip"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Clinical Section Presets (analogous to Existing Fields) */}
+                    <div className="pt-4 border-t border-[#E2E8F0] space-y-2">
+                      <span
+                        className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748B]"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        QUICK SECTION PRESETS
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {QUICK_CLINICAL_PRESETS.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => addSectionFromPreset(preset)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#E2E8F0] bg-slate-50/80 hover:bg-blue-50/50 hover:border-[#2563EB] text-[11px] font-medium text-slate-700 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3 text-slate-400" />
+                            <span>{preset.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+                        Short Badge
+                      </label>
+                      <input
+                        type="text"
+                        value={shortName}
+                        onChange={(e) => setShortName(e.target.value)}
+                        placeholder="e.g. SOAP, PT, ORTHO"
+                        className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+                        Category
+                      </label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                      >
+                        {NOTE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        rows={3}
+                        placeholder="When clinicians should use this template..."
+                        className="w-full px-2.5 py-1.5 border border-[#E2E8F0] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div>
+                        <span className="block text-xs font-medium text-[#0F172A]">
+                          Include Vitals Strip
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Show BP, HR, Temp, SpO2, Pain fields
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIncludeVitals((v) => !v)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                          includeVitals ? "bg-[#0F172A]" : "bg-slate-200"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            includeVitals ? "translate-x-5" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="pt-3 border-t border-slate-200">
+                        <AdminScopingRulesEditor
+                          rules={scopingRules}
+                          onChange={setScopingRules}
+                          showHeader={true}
+                          allowEntities={true}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
