@@ -11,7 +11,7 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 | Step Catalog & Allowed Triggers | Registers `create_contact` and `duplicate_process`; removes `create_client` | [AddAutomationDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/AddAutomationDrawer.tsx) |
 | Visual Flow Canvas | Registers `"create-contact"` and `"duplicate-process"` node types, styles, icons, labels, subtitles, and bidirectional `stepKey` mapping; removes `"create-client"` | [FlowBuilderTab.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/FlowBuilderTab.tsx) |
 | Step Drawer Shell | Forwards `sourceProcessId` and `sourceProcessName` context props | [StepDetailDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepDetailDrawer.tsx) |
-| Parameter Configuration UI | Renders the Contact Type selector + Required/Optional contact fields (`create_contact`), shared vs. unique field resolution (`duplicate_process`), and removes the old `create_client` form | [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx) |
+| Parameter Configuration UI | Renders Contact Type + Required/Optional contact fields (`create_contact`), shared vs. unique field resolution (`duplicate_process`), inline icon-only field pickers (`renderInputTrailingIcons`), and removes `create_client` | [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx) |
 | Contact Categories Store | Supplies dynamic Contact Type options (`getContactCategories`, `CONTACT_CATEGORIES_EVENT`) | [contactCategoriesStore.ts](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/lib/contactCategoriesStore.ts) |
 | Process Field Definitions | Supplies process/stage field metadata (`processIds`, `required`, `requiredStages`) via `useFieldRegistry()` | [FieldRegistryContext.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/context/FieldRegistryContext.tsx) |
 
@@ -34,7 +34,7 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
   - Defaults to `params.contactType || contactCategories[0] || "Lead"`.
 - **Contact Parameter Fields (`params.processFields`, scoped from `"client"` Field Registry):**
   - Dynamically pulls Contact (`"client"` module) fields filtered by organization scope (`scopedClientFields`) and selected Contact Type (`!f.contactCategories || f.contactCategories.length === 0 || f.contactCategories.includes(selectedContactType)`), excluding `contact_type` and `processes`.
-  - **Required Fields (`Must be filled`):** Renders core contact fields (`name`, `phone`) plus any fields marked `required: true` in Contact Field Settings, each with static input + **Select Field** token picker (`assignProcessFieldToken`).
+  - **Required Fields (`Must be filled`):** Renders core contact fields (`name`, `phone`) plus any fields marked `required: true` in Contact Field Settings, each with static input + inline field-picker icon (`<Sliders />` inside the input container calling `assignProcessFieldToken`).
   - **Optional Fields (`N optional` expandable section):** Renders all remaining matching contact fields (`email`, `location`, `country`, `status`, `company`, `role`, `language`, `responsible`, category-specific fields such as `lead_source`, `account_tier`, etc., and custom Contact fields).
   - Unmapped/blank fields automatically fall back to matching values from the trigger payload at runtime.
 
@@ -46,9 +46,9 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 
 ### 2.4 Acceptance Criteria — Create Contact
 - [ ] **AC-CC-1 (Catalog & Category Placement):** Under **Action > Create CRM Entities** in the Flow Builder palette and **Create CRM Entities / CRM & Data** in the step catalog, **Create Contact** is selectable and **Create Client** is no longer listed.
-- [ ] **AC-CC-2 (Contact Type & Field Parameters UI):** Opening the **Create Contact** step drawer displays the **Contact Type** selector followed by the **Required Fields** section and collapsible **Optional Fields** section using the same card + **Select Field** layout as process nodes.
+- [ ] **AC-CC-2 (Contact Type & Field Parameters UI):** Opening the **Create Contact** step drawer displays the **Contact Type** selector followed by the **Required Fields** section and collapsible **Optional Fields** section using the shared card layout (`renderFieldCardsList`) with the inline `<Sliders />` field-picker icon inside each input.
 - [ ] **AC-CC-3 (Dynamic Contact Categories & Field Scoping):** Changing **Contact Type** dynamically filters `contactCategories`-scoped Contact fields (e.g., Lead vs. Client vs. Supplier vs. Vendor fields) alongside common fields (`Name`, `Phone`, `Email`, `Location`, `Country`, etc.), and updates when `CONTACT_CATEGORIES_EVENT` fires.
-- [ ] **AC-CC-4 (Persistence & Variable Mapping):** Values entered directly or mapped via **Select Field** (`{{field_key}}`) persist in `params.processFields`, **Contact Type** persists in `params.contactType` (updating the canvas subtitle to `Type: <contactType> (from trigger)`), and unmapped fields fall back to trigger data.
+- [ ] **AC-CC-4 (Persistence & Variable Mapping):** Values entered directly or mapped via the inline field-picker icon (`{{field_key}}`) persist in `params.processFields`, **Contact Type** persists in `params.contactType` (updating the canvas subtitle to `Type: <contactType> (from trigger)`), and unmapped fields fall back to trigger data.
 - [ ] **AC-CC-5 (Legacy Create Client Removed):** `create_client` / `create-client` no longer appears in the catalog, Flow Builder palette, or parameter renderer.
 
 ---
@@ -79,7 +79,7 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
    - Any target field whose `key` is also present in `sourceProcFields` is displayed as a pill inside the **Copied Shared Fields** card with an `<N> auto-copied` count badge.
 5. **Unique Target Process Fields (`renderProcessFieldsCardList` with `onlyFieldKeys`)**:
    - Filters target process fields to only keys **not** present in the source process (`!sourceFieldKeys.has(f.key)`).
-   - Renders those unique fields using the standard **Required Fields** and collapsible **Optional Fields** cards (supporting static values, dynamic variable picker, and `Select Field` mapping modal).
+   - Renders those unique fields using the standard **Required Fields** and collapsible **Optional Fields** cards (supporting static values and the inline field-picker icon opening `SelectFieldsMultiModal`).
    - If all target process fields also exist in the source process (`uniqueProcessFields.length === 0`), displays a message stating that all fields match the source process and will copy automatically.
 
 ### 3.3 Expected Runtime Behavior
@@ -92,14 +92,26 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 - [ ] **AC-DP-1 (Catalog & Category Placement):** **Duplicate Process** appears under **Action > Create CRM Entities** in the Flow Builder sidebar and catalog.
 - [ ] **AC-DP-2 (Process & Stage Selection):** User can select any valid target **Process** and a **Stage** within that process; changing the target process automatically updates the stage dropdown to the newly selected process's stages and sets the first stage by default.
 - [ ] **AC-DP-3 (Shared Field Detection):** Fields belonging to both the source (trigger) process and the selected target process appear in the **Copied Shared Fields** summary card with an accurate `auto-copied` count, and are **excluded** from manual input cards below.
-- [ ] **AC-DP-4 (Unique Field Filtering):** Only fields present in the target process and absent from the source process appear under **Required Fields** and **Optional Fields**, using the existing field card layout (including stage-specific required rules via `requiredStages`, `VariablePickerButton`, and `Select Field` modal).
+- [ ] **AC-DP-4 (Unique Field Filtering):** Only fields present in the target process and absent from the source process appear under **Required Fields** and **Optional Fields**, using the shared field card layout (including stage-specific required rules via `requiredStages` and the inline field-picker icon inside each input).
 - [ ] **AC-DP-5 (All-Shared Edge Case):** When the selected target process has no unique fields relative to the source process (e.g., identical field sets or duplicating into the same process), no redundant manual field forms are shown and an explanatory notice confirms all fields copy automatically.
 - [ ] **AC-DP-6 (Global Trigger Fallback):** When editing a global automation without a locked `sourceProcessId`, the **Source Process (from Trigger)** selector is available and recalculates shared vs. unique fields immediately on change.
 - [ ] **AC-DP-7 (Canvas Subtitle):** Selecting a target process and stage updates the Flow Builder node subtitle to `Duplicate to <processName> • <stageName>`.
 
 ---
 
-## 4. Verification Status (Static & Build Checks)
-- **TypeScript (`npx tsc --noEmit`):** `0` errors across `AddAutomationDrawer.tsx`, `FlowBuilderTab.tsx`, `StepDetailDrawer.tsx`, and `StepParametersFields.tsx` (verified after `create_client` removal; only 3 unrelated pre-existing errors remain in `NoteTemplateBuilderDrawer.tsx`, `AdminFormTemplates.tsx`, and `AIScribeConsole.tsx`).
-- **Vite Production Build (`npx vite build`):** Passed cleanly (`3860 modules transformed`, exit code `0`).
+## 4. Inline Field-Picker Pattern Across Automation Step Inputs
+
+- **UI Pattern (`renderInputTrailingIcons` in [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx)):**
+  - The legacy **Select Field** text capsule button is removed from field headers and labels across Automation step parameters.
+  - Each mapped text input (`renderFieldCardsList` used by **Create Contact**, **Create Process**, **Duplicate Process**, **Update to Stage**, **Create Appointment**, and **Generate Invoice**; `Value` in **Field Update**; and `Appointment Title` in **Create Appointment**) renders an icon-only `<Sliders />` button (`title="Select Field"`, `aria-label="Select Field"`) inside the right side of the `<div className="relative flex items-center">` input container alongside the clear `<X />` button when populated.
+- **Acceptance Criteria:**
+  - [ ] **AC-UI-1 (No Select Field Capsules):** No `<span>Select Field</span>` capsule pills appear above or beside Automation parameter inputs in `StepParametersFields.tsx`.
+  - [ ] **AC-UI-2 (Inline Input Icons Only):** Clicking the `<Sliders />` icon inside the input opens the Field Registry picker modal and inserts the chosen field token into that input without colliding with text or the clear `<X />` icon.
+
+---
+
+## 5. Verification Status (Static & Build Checks)
+- **Inline Capsule Removal Check (`git grep -n "<span>Select Field</span>" src/app/components/process/`):** `0` remaining occurrences.
+- **TypeScript (`npx tsc --noEmit`):** `0` errors across `AddAutomationDrawer.tsx`, `FlowBuilderTab.tsx`, `StepDetailDrawer.tsx`, and `StepParametersFields.tsx` (only 3 unrelated pre-existing errors remain in `NoteTemplateBuilderDrawer.tsx`, `AdminFormTemplates.tsx`, and `AIScribeConsole.tsx`).
+- **Vite Production Build (`npx vite build`):** Passed cleanly (`3860 modules transformed`, built in `18.95s`, exit code `0`).
 - **UI Interactive / Runtime Execution:** Requires manual QA pass in the browser Automation Builder UI (Flow Builder & Step Catalog) and backend workflow execution verification against the acceptance criteria above.
