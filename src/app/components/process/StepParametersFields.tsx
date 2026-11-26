@@ -2046,37 +2046,23 @@ export default function StepParametersFields({
     });
   };
 
-  const renderProcessFieldsCardList = (
-    proc: any,
-    targetModule: "process" | "appointment" | "invoice",
-    currentStageVal?: string,
-    options?: {
-      onlyFieldKeys?: Set<string>;
-      emptyRequiredText?: string;
-    }
-  ) => {
-    if (!proc) return null;
-
-    const allProcFields = getMatchingProcessFields(proc, targetModule);
-    const matchingProcFields = options?.onlyFieldKeys
-      ? allProcFields.filter((f) => options.onlyFieldKeys!.has(f.key))
-      : allProcFields;
-
-    const requiredFields = matchingProcFields.filter((f) => {
-      if (f.required) return true;
-      if (f.requiredStages && currentStageVal) {
-        if (f.requiredStages.includes(currentStageVal) || f.requiredStages.includes("*")) return true;
-      }
-      if (targetModule === "process" && ["deal_name", "title", "client_name"].includes(f.key)) {
-        return true;
-      }
-      return false;
-    });
-
-    const otherFields = matchingProcFields.filter(
-      (f) => !requiredFields.some((rf) => rf.key === f.key)
-    );
-
+  const renderFieldCardsList = ({
+    requiredFields,
+    otherFields,
+    emptyRequiredText,
+    requiredTooltip = "Mandatory fields that must be populated when enrolling into or moving to this stage.",
+    optionalTooltip = "Optionally populate or update additional workflow fields when this action executes.",
+    requiredPlaceholder = (f: any) => `Enter value or click "Select Field" for ${f.label.toLowerCase()}...`,
+    optionalPlaceholder = (f: any) => `Optional value for ${f.label.toLowerCase()}...`,
+  }: {
+    requiredFields: any[];
+    otherFields: any[];
+    emptyRequiredText?: string;
+    requiredTooltip?: string;
+    optionalTooltip?: string;
+    requiredPlaceholder?: (f: any) => string;
+    optionalPlaceholder?: (f: any) => string;
+  }) => {
     const processFieldValues: Record<string, any> = params.processFields || {};
 
     const handleFieldValueChange = (fieldKey: string, val: any) => {
@@ -2142,11 +2128,7 @@ export default function StepParametersFields({
               type="text"
               value={val}
               onChange={(e) => handleFieldValueChange(f.key, e.target.value)}
-              placeholder={
-                isRequired
-                  ? `Enter value or click "Select Field" for ${f.label.toLowerCase()}...`
-                  : `Optional value for ${f.label.toLowerCase()}...`
-              }
+              placeholder={isRequired ? requiredPlaceholder(f) : optionalPlaceholder(f)}
               className={`w-full pl-3 pr-8 py-2 text-xs border rounded-lg bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none transition-all ${
                 isRequired && !val
                   ? "border-amber-300/80 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -2183,7 +2165,7 @@ export default function StepParametersFields({
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200/70 leading-none">
                 Must be filled
               </span>
-              <InfoTooltip text="Mandatory fields that must be populated when enrolling into or moving to this stage." />
+              <InfoTooltip text={requiredTooltip} />
             </div>
             <span className="text-[11px] text-slate-400 font-semibold">
               {requiredFields.length} field{requiredFields.length === 1 ? "" : "s"}
@@ -2192,7 +2174,7 @@ export default function StepParametersFields({
 
           {requiredFields.length === 0 ? (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
-              {options?.emptyRequiredText || "No mandatory required fields configured for this workflow."}
+              {emptyRequiredText || "No mandatory required fields configured for this workflow."}
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -2220,7 +2202,7 @@ export default function StepParametersFields({
                   {otherFields.length} optional
                 </span>
                 <div onClick={(e) => e.stopPropagation()}>
-                  <InfoTooltip text="Optionally populate or update additional workflow fields when this action executes." />
+                  <InfoTooltip text={optionalTooltip} />
                 </div>
               </div>
               <ChevronDown
@@ -2239,6 +2221,44 @@ export default function StepParametersFields({
         )}
       </div>
     );
+  };
+
+  const renderProcessFieldsCardList = (
+    proc: any,
+    targetModule: "process" | "appointment" | "invoice",
+    currentStageVal?: string,
+    options?: {
+      onlyFieldKeys?: Set<string>;
+      emptyRequiredText?: string;
+    }
+  ) => {
+    if (!proc) return null;
+
+    const allProcFields = getMatchingProcessFields(proc, targetModule);
+    const matchingProcFields = options?.onlyFieldKeys
+      ? allProcFields.filter((f) => options.onlyFieldKeys!.has(f.key))
+      : allProcFields;
+
+    const requiredFields = matchingProcFields.filter((f) => {
+      if (f.required) return true;
+      if (f.requiredStages && currentStageVal) {
+        if (f.requiredStages.includes(currentStageVal) || f.requiredStages.includes("*")) return true;
+      }
+      if (targetModule === "process" && ["deal_name", "title", "client_name"].includes(f.key)) {
+        return true;
+      }
+      return false;
+    });
+
+    const otherFields = matchingProcFields.filter(
+      (f) => !requiredFields.some((rf) => rf.key === f.key)
+    );
+
+    return renderFieldCardsList({
+      requiredFields,
+      otherFields,
+      emptyRequiredText: options?.emptyRequiredText,
+    });
   };
 
   if (stepKey === "automation_overview") {
@@ -5515,9 +5535,21 @@ export default function StepParametersFields({
               );
             })()}
 
-            {/* ───────────── CREATE CONTACT (From Trigger) ───────────── */}
+            {/* ───────────── CREATE CONTACT (CRM Entity) ───────────── */}
             {(stepKey === "create_contact" || stepKey === "create-contact") && (() => {
               const selectedContactType = params.contactType || contactCategories[0] || "Lead";
+              const categoryContactFields = scopedClientFields.filter((f: any) => {
+                if (f.key === "contact_type" || f.key === "processes") return false;
+                if (!f.contactCategories || f.contactCategories.length === 0) return true;
+                return f.contactCategories.includes(selectedContactType);
+              });
+              const requiredContactFields = categoryContactFields.filter(
+                (f: any) => f.required || ["name", "phone"].includes(f.key)
+              );
+              const optionalContactFields = categoryContactFields.filter(
+                (f: any) => !requiredContactFields.some((rf: any) => rf.key === f.key)
+              );
+
               return (
                 <div className="space-y-4">
                   {renderField(
@@ -5534,12 +5566,23 @@ export default function StepParametersFields({
                       ))}
                     </select>
                   )}
+
                   <div className="p-3 bg-sky-50/70 border border-sky-200/80 rounded-xl flex items-start gap-2.5 text-xs text-slate-600">
                     <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
                     <span>
-                      All other contact details (Name, Email, Phone, and related fields) are taken automatically from the trigger.
+                      Map contact parameters below or click <strong>Select Field</strong>. Any fields left blank fall back to the trigger payload automatically.
                     </span>
                   </div>
+
+                  {renderFieldCardsList({
+                    requiredFields: requiredContactFields,
+                    otherFields: optionalContactFields,
+                    emptyRequiredText: `No mandatory required fields configured for ${selectedContactType} contacts.`,
+                    requiredTooltip: "Primary contact fields (or fields marked required in Contact Field Settings). Leave blank to auto-fill from trigger.",
+                    optionalTooltip: "Additional contact details (Email, Phone, Location, Country, and category-specific fields).",
+                    requiredPlaceholder: (f: any) => `Enter ${f.label.toLowerCase()}, click "Select Field", or leave blank for trigger...`,
+                    optionalPlaceholder: (f: any) => `Optional ${f.label.toLowerCase()} (or "Select Field" / trigger auto-fill)...`,
+                  })}
                 </div>
               );
             })()}
