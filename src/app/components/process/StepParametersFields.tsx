@@ -2046,13 +2046,48 @@ export default function StepParametersFields({
     });
   };
 
+  const renderInputTrailingIcons = ({
+    onOpenPicker,
+    hasValue,
+    onClear,
+    clearTitle = "Clear field value",
+  }: {
+    onOpenPicker: () => void;
+    hasValue: boolean;
+    onClear: () => void;
+    clearTitle?: string;
+  }) => (
+    <div className="absolute right-2 flex items-center gap-0.5">
+      {hasValue ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+          title={clearTitle}
+          aria-label={clearTitle}
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onOpenPicker}
+        className="text-blue-600 hover:text-blue-700 p-1 rounded-md hover:bg-blue-50 transition-colors cursor-pointer"
+        title="Select Field"
+        aria-label="Select Field"
+      >
+        <Sliders className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+
   const renderFieldCardsList = ({
     requiredFields,
     otherFields,
     emptyRequiredText,
     requiredTooltip = "Mandatory fields that must be populated when enrolling into or moving to this stage.",
     optionalTooltip = "Optionally populate or update additional workflow fields when this action executes.",
-    requiredPlaceholder = (f: any) => `Enter value or click "Select Field" for ${f.label.toLowerCase()}...`,
+    requiredPlaceholder = (f: any) => `Enter value or select field for ${f.label.toLowerCase()}...`,
     optionalPlaceholder = (f: any) => `Optional value for ${f.label.toLowerCase()}...`,
   }: {
     requiredFields: any[];
@@ -2110,15 +2145,6 @@ export default function StepParametersFields({
               <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200/80 font-mono">
                 {f.inputType || "text"}
               </span>
-              <button
-                type="button"
-                onClick={() => handleOpenFieldModal(f.key)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                title="Select field from registry modal"
-              >
-                <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                <span>Select Field</span>
-              </button>
             </div>
           </div>
 
@@ -2129,22 +2155,17 @@ export default function StepParametersFields({
               value={val}
               onChange={(e) => handleFieldValueChange(f.key, e.target.value)}
               placeholder={isRequired ? requiredPlaceholder(f) : optionalPlaceholder(f)}
-              className={`w-full pl-3 pr-8 py-2 text-xs border rounded-lg bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none transition-all ${
+              className={`w-full pl-3 ${val ? "pr-16" : "pr-9"} py-2 text-xs border rounded-lg bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none transition-all ${
                 isRequired && !val
                   ? "border-amber-300/80 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               }`}
             />
-            {val ? (
-              <button
-                type="button"
-                onClick={() => handleFieldValueChange(f.key, "")}
-                className="absolute right-2 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Clear field value"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            ) : null}
+            {renderInputTrailingIcons({
+              onOpenPicker: () => handleOpenFieldModal(f.key),
+              hasValue: Boolean(val),
+              onClear: () => handleFieldValueChange(f.key, ""),
+            })}
           </div>
         </div>
       );
@@ -2765,46 +2786,31 @@ export default function StepParametersFields({
                             </select>
                           </div>
 
-                          {/* Value: By default static, and if Select Field is clicked, opens that modal */}
+                          {/* Value: Static input with inline field-picker icon inside input container */}
                           {!isClearOp ? (
                             <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <label className="text-[11px] font-semibold text-slate-700">
-                                  Value
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setTargetFieldUpdateIndex(index);
-                                    setFieldModalMode("fieldUpdateValueToken");
-                                    setIsFieldRegistryModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                                  title="Select field from registry modal"
-                                >
-                                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>Select Field</span>
-                                </button>
-                              </div>
+                              <label className="block text-[11px] font-semibold text-slate-700">
+                                Value
+                              </label>
 
                               <div className="relative flex items-center">
                                 <input
                                   type="text"
                                   value={block.updateValue ?? ""}
                                   onChange={(e) => handleBlockChange(index, { updateValue: e.target.value })}
-                                  placeholder={`Enter value or click "Select Field" for ${block.fieldLabel || "value"}...`}
-                                  className="w-full pl-3 pr-8 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-slate-800"
+                                  placeholder={`Enter value or select field for ${block.fieldLabel || "value"}...`}
+                                  className={`w-full pl-3 ${block.updateValue ? "pr-16" : "pr-9"} py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-slate-800`}
                                 />
-                                {block.updateValue ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleBlockChange(index, { updateValue: "" })}
-                                    className="absolute right-2 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
-                                    title="Clear value"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : null}
+                                {renderInputTrailingIcons({
+                                  onOpenPicker: () => {
+                                    setTargetFieldUpdateIndex(index);
+                                    setFieldModalMode("fieldUpdateValueToken");
+                                    setIsFieldRegistryModalOpen(true);
+                                  },
+                                  hasValue: Boolean(block.updateValue),
+                                  onClear: () => handleBlockChange(index, { updateValue: "" }),
+                                  clearTitle: "Clear value",
+                                })}
                               </div>
                             </div>
                           ) : (
@@ -5383,27 +5389,25 @@ export default function StepParametersFields({
 
                   {/* Appointment Title */}
                   {renderField(
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-700">Appointment Title</span>
-                      <button
-                        type="button"
-                        onClick={() => {
+                    "Appointment Title",
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={params.title ?? ""}
+                        onChange={(e) => onChange({ title: e.target.value })}
+                        placeholder="e.g. Initial Consultation - {{client_name}}"
+                        className={`w-full pl-3.5 ${params.title ? "pr-16" : "pr-9"} py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500`}
+                      />
+                      {renderInputTrailingIcons({
+                        onOpenPicker: () => {
                           setTargetProcessFieldKey("title");
                           setFieldModalMode("assignProcessFieldToken");
                           setIsFieldRegistryModalOpen(true);
-                        }}
-                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                      >
-                        Select Field
-                      </button>
-                    </div>,
-                    <input
-                      type="text"
-                      value={params.title ?? ""}
-                      onChange={(e) => onChange({ title: e.target.value })}
-                      placeholder="e.g. Initial Consultation - {{client_name}}"
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                    />
+                        },
+                        hasValue: Boolean(params.title),
+                        onClear: () => onChange({ title: "" }),
+                      })}
+                    </div>
                   )}
 
                   {/* Logical Date & Time Scheduling */}
@@ -5570,7 +5574,7 @@ export default function StepParametersFields({
                   <div className="p-3 bg-sky-50/70 border border-sky-200/80 rounded-xl flex items-start gap-2.5 text-xs text-slate-600">
                     <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
                     <span>
-                      Map contact parameters below or click <strong>Select Field</strong>. Any fields left blank fall back to the trigger payload automatically.
+                      Map contact parameters below or use the field picker icon inside each input. Any fields left blank fall back to the trigger payload automatically.
                     </span>
                   </div>
 
@@ -5580,8 +5584,8 @@ export default function StepParametersFields({
                     emptyRequiredText: `No mandatory required fields configured for ${selectedContactType} contacts.`,
                     requiredTooltip: "Primary contact fields (or fields marked required in Contact Field Settings). Leave blank to auto-fill from trigger.",
                     optionalTooltip: "Additional contact details (Email, Phone, Location, Country, and category-specific fields).",
-                    requiredPlaceholder: (f: any) => `Enter ${f.label.toLowerCase()}, click "Select Field", or leave blank for trigger...`,
-                    optionalPlaceholder: (f: any) => `Optional ${f.label.toLowerCase()} (or "Select Field" / trigger auto-fill)...`,
+                    requiredPlaceholder: (f: any) => `Enter ${f.label.toLowerCase()}, pick a field, or leave blank for trigger...`,
+                    optionalPlaceholder: (f: any) => `Optional ${f.label.toLowerCase()} (pick a field or trigger auto-fill)...`,
                   })}
                 </div>
               );
