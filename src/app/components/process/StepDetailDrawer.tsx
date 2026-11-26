@@ -15,6 +15,8 @@ export interface StepDetailDrawerProps {
   stepAllowedTriggers?: Record<string, Array<string>>;
   processes: any[];
   scopingRules?: ScopingRule[];
+  sourceProcessId?: string;
+  sourceProcessName?: string;
 
   stepTrigger: string;
   onStepTriggerChange: (t: any) => void;
@@ -63,6 +65,8 @@ export default function StepDetailDrawer({
   stepAllowedTriggers = {},
   processes,
   scopingRules = [],
+  sourceProcessId,
+  sourceProcessName,
   stepTrigger,
   onStepTriggerChange,
   context = "stage",
@@ -430,6 +434,8 @@ export default function StepDetailDrawer({
               processes={processes}
               stepTrigger={stepTrigger}
               scopingRules={scopingRules}
+              sourceProcessId={sourceProcessId}
+              sourceProcessName={sourceProcessName}
               isAdmin={isAdmin}
             />
           )}

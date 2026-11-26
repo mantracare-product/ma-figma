@@ -28,6 +28,7 @@ import { AdminControlAccordion } from "../../pages/admin/components/AdminControl
 import { SelectFieldsModal } from "../help/FieldManager";
 import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { getStoredDepartments } from "../../../lib/departmentStore";
+import { getContactCategories, CONTACT_CATEGORIES_EVENT } from "../../../lib/contactCategoriesStore";
 
 const STANDARD_CALL_FIELDS = [
   { key: "call_status", label: "Call Status", module: "call" },
@@ -95,6 +96,8 @@ interface StepParametersFieldsProps {
   processes?: ProcessOption[];
   stepTrigger?: string;
   scopingRules?: ScopingRule[];
+  sourceProcessId?: string;
+  sourceProcessName?: string;
   isAdmin?: boolean;
 }
 
@@ -105,6 +108,8 @@ export default function StepParametersFields({
   processes = [],
   stepTrigger,
   scopingRules = [],
+  sourceProcessId,
+  sourceProcessName,
   isAdmin = false,
 }: StepParametersFieldsProps) {
   const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
@@ -146,6 +151,13 @@ export default function StepParametersFields({
     const handleUpdate = () => setTeamMembers(getStoredTeamMembers());
     window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
     return () => window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+  }, []);
+
+  const [contactCategories, setContactCategories] = useState<string[]>(() => getContactCategories());
+  useEffect(() => {
+    const handleCategoriesUpdate = () => setContactCategories(getContactCategories());
+    window.addEventListener(CONTACT_CATEGORIES_EVENT, handleCategoriesUpdate);
+    return () => window.removeEventListener(CONTACT_CATEGORIES_EVENT, handleCategoriesUpdate);
   }, []);
 
   const availableDepartments = useMemo(() => {
@@ -2020,20 +2032,35 @@ export default function StepParametersFields({
   };
 
 
-  const renderProcessFieldsCardList = (
+  const getMatchingProcessFields = (
     proc: any,
-    targetModule: "process" | "appointment" | "invoice",
-    currentStageVal?: string
+    targetModule: "process" | "appointment" | "invoice"
   ) => {
-    if (!proc) return null;
-
+    if (!proc) return [];
     const allModFields = getAllFields(targetModule);
-    const matchingProcFields = allModFields.filter((f) => {
+    return allModFields.filter((f) => {
       if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all") || f.processIds.includes("*")) {
         return true;
       }
       return proc && (f.processIds.includes(proc.id) || f.processIds.includes(proc.name));
     });
+  };
+
+  const renderProcessFieldsCardList = (
+    proc: any,
+    targetModule: "process" | "appointment" | "invoice",
+    currentStageVal?: string,
+    options?: {
+      onlyFieldKeys?: Set<string>;
+      emptyRequiredText?: string;
+    }
+  ) => {
+    if (!proc) return null;
+
+    const allProcFields = getMatchingProcessFields(proc, targetModule);
+    const matchingProcFields = options?.onlyFieldKeys
+      ? allProcFields.filter((f) => options.onlyFieldKeys!.has(f.key))
+      : allProcFields;
 
     const requiredFields = matchingProcFields.filter((f) => {
       if (f.required) return true;
@@ -2165,7 +2192,7 @@ export default function StepParametersFields({
 
           {requiredFields.length === 0 ? (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
-              No mandatory required fields configured for this workflow.
+              {options?.emptyRequiredText || "No mandatory required fields configured for this workflow."}
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -4645,8 +4672,9 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {/* ASSIGN PROCESS ACTION STEP */}
-            {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process") && (() => {
+            {/* ASSIGN PROCESS & DUPLICATE PROCESS ACTION STEPS */}
+            {(stepKey === "assign_process" || stepKey === "assign-process" || stepKey === "create_process" || stepKey === "create-process" || stepKey === "duplicate_process" || stepKey === "duplicate-process") && (() => {
+              const isDuplicate = stepKey === "duplicate_process" || stepKey === "duplicate-process";
               const clientProcesses = effectiveProcesses.filter(
                 (p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes"
               );
@@ -4654,16 +4682,90 @@ export default function StepParametersFields({
                 ? clientProcesses
                 : getStoredProcesses().filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
 
-              const selectedProcId = params.processId || effectiveClientProcesses[0]?.id || "";
-              const selectedProc = effectiveClientProcesses.find((p: any) => p.id === selectedProcId) || effectiveClientProcesses[0];
+              const contextSourceProc = effectiveClientProcesses.find(
+                (p: any) =>
+                  (sourceProcessId && p.id === sourceProcessId) ||
+                  (sourceProcessName && sourceProcessName !== "Process" && p.name === sourceProcessName)
+              );
+              const selectedSourceProcId = params.sourceProcessId ?? contextSourceProc?.id ?? "";
+              const activeSourceProc = effectiveClientProcesses.find(
+                (p: any) => p.id === selectedSourceProcId
+              ) || contextSourceProc || null;
+
+              const defaultTargetProc = isDuplicate && activeSourceProc
+                ? (effectiveClientProcesses.find((p: any) => p.id !== activeSourceProc.id) || effectiveClientProcesses[0])
+                : effectiveClientProcesses[0];
+
+              const selectedProcId = params.processId || defaultTargetProc?.id || "";
+              const selectedProc = effectiveClientProcesses.find((p: any) => p.id === selectedProcId) || defaultTargetProc;
               const stages = selectedProc?.stages || [];
               const currentStageVal = params.stageId || stages[0]?.id || stages[0]?.name || "";
 
+              const targetProcFields = isDuplicate && selectedProc
+                ? getMatchingProcessFields(selectedProc, "process")
+                : [];
+              const sourceProcFields = isDuplicate
+                ? (activeSourceProc
+                    ? getMatchingProcessFields(activeSourceProc, "process")
+                    : getAllFields("process").filter(
+                        (f) => !f.processIds || f.processIds.length === 0 || f.processIds.includes("all") || f.processIds.includes("*")
+                      ))
+                : [];
+              const sourceFieldKeys = new Set(sourceProcFields.map((f) => f.key));
+              const sharedProcessFields = isDuplicate
+                ? targetProcFields.filter((f) => sourceFieldKeys.has(f.key))
+                : [];
+              const uniqueProcessFields = isDuplicate
+                ? targetProcFields.filter((f) => !sourceFieldKeys.has(f.key))
+                : [];
+              const uniqueFieldKeys = new Set(uniqueProcessFields.map((f) => f.key));
+
               return (
                 <div className="space-y-4">
+                  {/* Source process context / override for Duplicate Process */}
+                  {isDuplicate && (
+                    contextSourceProc && !params.sourceProcessId ? (
+                      <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                            Duplicating From (Trigger Process)
+                          </span>
+                          <span className="text-xs font-semibold text-slate-800 truncate block">
+                            {contextSourceProc.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 shrink-0">
+                          Source
+                        </span>
+                      </div>
+                    ) : (
+                      renderField(
+                        "Source Process (from Trigger)",
+                        <select
+                          value={selectedSourceProcId}
+                          onChange={(e) => {
+                            const src = effectiveClientProcesses.find((p: any) => p.id === e.target.value);
+                            onChange({
+                              sourceProcessId: e.target.value,
+                              sourceProcessName: src?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          <option value="">Trigger Process (Common / Global Fields)</option>
+                          {effectiveClientProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    )
+                  )}
+
                   {/* 1. Choose Process */}
                   {renderField(
-                    "Choose Process",
+                    isDuplicate ? "Choose Target Process" : "Choose Process",
                     <select
                       value={selectedProcId}
                       onChange={(e) => {
@@ -4692,7 +4794,7 @@ export default function StepParametersFields({
 
                   {/* 2. Choose Stage */}
                   {selectedProc && renderField(
-                    "Choose Stage",
+                    isDuplicate ? "Choose Target Stage" : "Choose Stage",
                     <select
                       value={currentStageVal}
                       onChange={(e) => {
@@ -4718,8 +4820,66 @@ export default function StepParametersFields({
                     </select>
                   )}
 
-                  {/* 3. Process Fields Mapping Hierarchy */}
-                  {selectedProc && renderProcessFieldsCardList(selectedProc, "process", currentStageVal)}
+                  {/* 3. Duplicate Process: Auto-copied shared fields + Unique fields to fill */}
+                  {isDuplicate && selectedProc && (
+                    <div className="space-y-4">
+                      <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Copy className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span
+                              className="text-xs font-bold text-slate-800 uppercase tracking-wider"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              Copied Shared Fields
+                            </span>
+                            <InfoTooltip text="Fields present in both the trigger process and the target process are automatically copied over." />
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                            {sharedProcessFields.length} auto-copied
+                          </span>
+                        </div>
+                        {sharedProcessFields.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic">
+                            No shared fields detected between source and target processes.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {sharedProcessFields.map((sf) => (
+                              <span
+                                key={sf.key}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200/80 text-[11px] font-medium text-slate-700"
+                              >
+                                <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                {sf.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {uniqueProcessFields.length === 0 ? (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
+                          All fields for {selectedProc.name} already match the source process and will be copied automatically.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-600">
+                              Unique Fields for {selectedProc.name} ({uniqueProcessFields.length})
+                            </span>
+                          </div>
+                          {renderProcessFieldsCardList(selectedProc, "process", currentStageVal, {
+                            onlyFieldKeys: uniqueFieldKeys,
+                            emptyRequiredText: `No unique required fields for ${selectedProc.name}.`,
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3b. Standard Process Fields Mapping Hierarchy */}
+                  {!isDuplicate && selectedProc && renderProcessFieldsCardList(selectedProc, "process", currentStageVal)}
                 </div>
               );
             })()}
@@ -5355,166 +5515,31 @@ export default function StepParametersFields({
               );
             })()}
 
-            {/* ───────────── CREATE CLIENT (CRM Entity) ───────────── */}
-            {(stepKey === "create_client" || stepKey === "create-client") && (() => {
+            {/* ───────────── CREATE CONTACT (From Trigger) ───────────── */}
+            {(stepKey === "create_contact" || stepKey === "create-contact") && (() => {
+              const selectedContactType = params.contactType || contactCategories[0] || "Lead";
               return (
                 <div className="space-y-4">
-                  {/* Client Full Name */}
                   {renderField(
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-700">Client / Contact Name *</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetProcessFieldKey("name");
-                          setFieldModalMode("assignProcessFieldToken");
-                          setIsFieldRegistryModalOpen(true);
-                        }}
-                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                      >
-                        Select Field
-                      </button>
-                    </div>,
-                    <input
-                      type="text"
-                      value={params.name ?? params.clientName ?? ""}
-                      onChange={(e) => onChange({ name: e.target.value, clientName: e.target.value })}
-                      placeholder="e.g. John Doe or {{lead_name}}"
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  )}
-
-                  {/* Phone & Email */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      {renderField(
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-700">Phone Number</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTargetProcessFieldKey("phone");
-                              setFieldModalMode("assignProcessFieldToken");
-                              setIsFieldRegistryModalOpen(true);
-                            }}
-                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                          >
-                            Select Field
-                          </button>
-                        </div>,
-                        <input
-                          type="tel"
-                          value={params.phone ?? ""}
-                          onChange={(e) => onChange({ phone: e.target.value })}
-                          placeholder="+1 (555) 000-0000"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      )}
-                    </div>
-                    <div>
-                      {renderField(
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-700">Email Address</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTargetProcessFieldKey("email");
-                              setFieldModalMode("assignProcessFieldToken");
-                              setIsFieldRegistryModalOpen(true);
-                            }}
-                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                          >
-                            Select Field
-                          </button>
-                        </div>,
-                        <input
-                          type="email"
-                          value={params.email ?? ""}
-                          onChange={(e) => onChange({ email: e.target.value })}
-                          placeholder="client@example.com"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Contact Type & Lead Source */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      {renderField(
-                        "Contact Type",
-                        <select
-                          value={params.contactType || "Lead"}
-                          onChange={(e) => onChange({ contactType: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="Lead">Lead</option>
-                          <option value="Prospect">Prospect</option>
-                          <option value="Client">Client</option>
-                          <option value="Patient">Patient</option>
-                          <option value="Customer">Customer</option>
-                          <option value="VIP">VIP</option>
-                        </select>
-                      )}
-                    </div>
-                    <div>
-                      {renderField(
-                        "Lead Source",
-                        <select
-                          value={params.leadSource || "Website"}
-                          onChange={(e) => onChange({ leadSource: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="Website">Website Form</option>
-                          <option value="Inbound Call">Inbound Call</option>
-                          <option value="Referral">Referral</option>
-                          <option value="Ad Campaign">Ad Campaign</option>
-                          <option value="Social Media">Social Media</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Company / Organization */}
-                  {renderField(
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-700">Company / Organization</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetProcessFieldKey("company");
-                          setFieldModalMode("assignProcessFieldToken");
-                          setIsFieldRegistryModalOpen(true);
-                        }}
-                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                      >
-                        Select Field
-                      </button>
-                    </div>,
-                    <input
-                      type="text"
-                      value={params.company ?? ""}
-                      onChange={(e) => onChange({ company: e.target.value })}
-                      placeholder="e.g. Acme Corp or {{company_name}}"
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  )}
-
-                  {/* Responsible Person / Assigned To */}
-                  {renderField(
-                    "Responsible Person",
+                    "Contact Type",
                     <select
-                      value={params.assignedTo || ""}
-                      onChange={(e) => onChange({ assignedTo: e.target.value })}
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:border-blue-500"
+                      value={selectedContactType}
+                      onChange={(e) => onChange({ contactType: e.target.value })}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
                     >
-                      <option value="">Select team member...</option>
-                      {availableEmployees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      {contactCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
                       ))}
                     </select>
                   )}
+                  <div className="p-3 bg-sky-50/70 border border-sky-200/80 rounded-xl flex items-start gap-2.5 text-xs text-slate-600">
+                    <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                    <span>
+                      All other contact details (Name, Email, Phone, and related fields) are taken automatically from the trigger.
+                    </span>
+                  </div>
                 </div>
               );
             })()}

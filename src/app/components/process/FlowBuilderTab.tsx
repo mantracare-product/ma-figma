@@ -5,7 +5,7 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronUp, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
-  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode,
+  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode, Copy,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -79,7 +79,7 @@ const getStepFirstNodeId = (step: WorkflowStep): string => {
 type NodeType =
   | "start" | "end" | "overview"
   | "condition" | "wait" | "parallel" | "empty-branch"
-  | "create-appointment" | "create-client" | "create-process"
+  | "create-appointment" | "create-contact" | "create-process" | "duplicate-process"
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
@@ -159,8 +159,9 @@ export interface TriggerCatalogItem {
 // ─── Reverse mapping: NodeType → stepKey ─────────────────────────────────────
 const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "create-appointment": "create_appointment",
-  "create-client": "create_client",
+  "create-contact": "create_contact",
   "create-process": "create_process",
+  "duplicate-process": "duplicate_process",
   "condition": "condition",
   "wait": "wait",
   "call-transfer": "callaction",
@@ -194,8 +195,9 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
 
 const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "create-appointment": "calendar",
-  "create-client": "user",
+  "create-contact": "user",
   "create-process": "workflow",
+  "duplicate-process": "copy",
   "condition": "split",
   "wait": "clock",
   "call-transfer": "phonecall",
@@ -252,16 +254,22 @@ const NODE_CATEGORIES = [
         desc: "Create and schedule a new appointment record in CRM",
       },
       {
-        type: "create-client" as NodeType,
-        label: "Create Client",
+        type: "create-contact" as NodeType,
+        label: "Create Contact",
         icon: <User className="w-4 h-4" />,
-        desc: "Create a new contact or client record in CRM",
+        desc: "Create a new contact from trigger data with chosen contact type",
       },
       {
         type: "create-process" as NodeType,
         label: "Create Process",
         icon: <Workflow className="w-4 h-4" />,
         desc: "Create and enroll a record into a process workflow",
+      },
+      {
+        type: "duplicate-process" as NodeType,
+        label: "Duplicate Process",
+        icon: <Copy className="w-4 h-4" />,
+        desc: "Duplicate process into target process & stage, copying shared fields",
       },
     ],
   },
@@ -405,8 +413,9 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
 
 const NODE_STYLE: Record<string, { bg: string; border: string; text: string; icon?: string }> = {
   "create-appointment": { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-400", text: "text-teal-700 dark:text-teal-400" },
-  "create-client":      { bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-400", text: "text-blue-700 dark:text-blue-400" },
+  "create-contact":     { bg: "bg-sky-50 dark:bg-sky-900/20", border: "border-sky-400", text: "text-sky-700 dark:text-sky-400" },
   "create-process":     { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+  "duplicate-process":  { bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-400", text: "text-indigo-700 dark:text-indigo-400" },
   start:                 { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
   end:                   { bg: "bg-red-50 dark:bg-red-900/20",     border: "border-red-400",     text: "text-red-700 dark:text-red-400" },
   condition:             { bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-400", text: "text-violet-700 dark:text-violet-400" },
@@ -442,8 +451,9 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
 
 function getNodeIcon(type: NodeType) {
   if (type === "create-appointment") return <Calendar className="w-4 h-4" />;
-  if (type === "create-client") return <User className="w-4 h-4" />;
+  if (type === "create-contact") return <User className="w-4 h-4" />;
   if (type === "create-process") return <Workflow className="w-4 h-4" />;
+  if (type === "duplicate-process") return <Copy className="w-4 h-4" />;
   if (type === "assign-process" || (type as string) === "assign_process") return <Workflow className="w-4 h-4" />;
   if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
   if (type === "generate-document") return <FileText className="w-4 h-4" />;
@@ -455,8 +465,9 @@ function getNodeIcon(type: NodeType) {
 
 function getNodeLabel(type: NodeType) {
   if (type === "create-appointment") return "Create Appointment";
-  if (type === "create-client") return "Create Client";
+  if (type === "create-contact") return "Create Contact";
   if (type === "create-process") return "Create Process";
+  if (type === "duplicate-process") return "Duplicate Process";
   if (type === "assign-process" || (type as string) === "assign_process") return "Assign Process";
   if (type === "generate-document") return "Generate Document";
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
@@ -535,8 +546,9 @@ function getNodeSubtitle(
       ? `Appt: ${node.config.serviceName}${timing ? ` • ${timing}` : ""}`
       : (timing ? `Appt • ${timing}` : "Create & schedule appointment");
   }
-  if (node.type === "create-client") return node.config?.name || node.config?.clientName ? `Client: ${node.config.name || node.config.clientName}` : "Create new CRM client record";
+  if (node.type === "create-contact") return node.config?.contactType ? `Type: ${node.config.contactType} (from trigger)` : "Create contact from trigger";
   if (node.type === "create-process") return node.config?.processName ? `Enroll in ${node.config.processName}` : "Create & enroll in process";
+  if (node.type === "duplicate-process") return node.config?.processName ? `Duplicate to ${node.config.processName}${node.config?.stageName ? ` • ${node.config.stageName}` : ""}` : "Duplicate into target process";
   if (node.type === "condition") {
     const cases = node.config?.cases || [];
     if (cases.length > 0) {
@@ -645,10 +657,12 @@ const PORT_LABEL: Record<string, string> = {
 const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   create_appointment: "create-appointment",
   "create-appointment": "create-appointment",
-  create_client: "create-client",
-  "create-client": "create-client",
+  create_contact: "create-contact",
+  "create-contact": "create-contact",
   create_process: "create-process",
   "create-process": "create-process",
+  duplicate_process: "duplicate-process",
+  "duplicate-process": "duplicate-process",
   wait: "wait",
   delay: "wait",
   condition: "condition",
@@ -3264,6 +3278,8 @@ export default function FlowBuilderTab({
               stepAllowedTriggers={stepAllowedTriggers}
               processes={effectiveProcesses}
               scopingRules={scopingRules}
+              sourceProcessId={startNode?.config?.triggerProcessId || startNode?.config?.processId || (currentProcessId && currentProcessId !== "all" ? currentProcessId : undefined)}
+              sourceProcessName={startNode?.config?.triggerProcessName || startNode?.config?.processName || processName}
               stepTrigger={drawerTrigger}
               onStepTriggerChange={setDrawerTrigger}
               executionType={drawerExecType}

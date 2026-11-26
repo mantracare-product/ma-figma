@@ -47,6 +47,7 @@ import {
   FileCode,
   Split,
   Volume2,
+  Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import FlowBuilderTab from "./FlowBuilderTab";
@@ -91,6 +92,8 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   send_payment: ["stage", "incall", "inchat", "postcall"],
   processmovement: ["stage", "inchat", "postcall"],
   assign_process: ["stage", "inchat", "postcall"],
+  duplicate_process: ["stage", "inchat", "postcall"],
+  create_contact: ["stage", "incall", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
@@ -137,9 +140,9 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     cats: ["all", "crm", "workflow"],
   },
   {
-    key: "create_client",
-    name: "Create Client",
-    desc: "Create a new contact or client record in CRM.",
+    key: "create_contact",
+    name: "Create Contact",
+    desc: "Create a new contact from trigger data with selected contact type.",
     iconKey: "usercheck",
     cats: ["all", "crm", "data"],
   },
@@ -148,6 +151,13 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     name: "Create Process",
     desc: "Create and enroll a record into a process workflow.",
     iconKey: "gitbranch",
+    cats: ["all", "crm", "workflow"],
+  },
+  {
+    key: "duplicate_process",
+    name: "Duplicate Process",
+    desc: "Duplicate trigger process into a target process and stage, copying shared fields.",
+    iconKey: "copy",
     cats: ["all", "crm", "workflow"],
   },
   // Logic & Wait & Conditions
@@ -296,6 +306,7 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   creditcard: <CreditCard className="w-4 h-4 text-white" />,
   layers: <Layers className="w-4 h-4 text-white" />,
   parallel: <Layers className="w-4 h-4 text-white" />,
+  copy: <Copy className="w-4 h-4 text-white" />,
 };
 
 function getTriggerIcon(type: EventTriggerType | "stage") {
@@ -1131,6 +1142,8 @@ export default function AddAutomationDrawer({
             stepAllowedTriggers={stepAllowedTriggers}
             processes={effectiveProcesses}
             scopingRules={drawerScopingRules}
+            sourceProcessId={stageRef?.processId || (currentProcessId && currentProcessId !== "all" ? currentProcessId : undefined)}
+            sourceProcessName={stageRef?.processName || processName}
             stepTrigger={stepTrigger}
             onStepTriggerChange={setStepTrigger}
             executionType={executionType}
