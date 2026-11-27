@@ -232,17 +232,17 @@ export default function AdminAutomations() {
     setIsAddAutomationDrawerOpen(true);
   };
 
-  // Table Columns
+  // Table Columns: Name, Trigger, Admin Scope, Activity, Last Updated, Status (consistent grey/black)
   const ruleColumns: TableColumn<AutomationRule>[] = [
     {
       id: "name",
-      header: "Rule Name",
+      header: "Name",
       align: "left",
-      width: "36%",
+      width: "28%",
       render: (rule) => (
-        <div className="flex flex-col py-0.5">
+        <div className="flex flex-col py-0.5 min-w-0">
           <span
-            className="font-bold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm"
+            className="font-semibold text-gray-900 hover:text-black transition-colors cursor-pointer text-xs sm:text-sm truncate"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             {rule.name}
@@ -257,20 +257,29 @@ export default function AdminAutomations() {
     },
     {
       id: "trigger",
-      header: "Trigger Event",
+      header: "Trigger",
       align: "left",
-      width: "24%",
+      width: "20%",
       render: (rule) => {
         const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
           (e) => e.event === rule.trigger.event
         );
+        const trigParams = rule.trigger.params || {};
+        const stageName = trigParams.stageName || trigParams.triggerStageName;
+        const primaryLabel = stageName
+          ? `Stage: ${stageName}`
+          : catalogEvt?.label || rule.trigger.label || rule.trigger.event || "Custom Trigger";
         return (
-          <span className="inline-flex items-center gap-1.5 text-xs text-gray-700 font-medium">
-            <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="truncate">
-              {catalogEvt?.label || rule.trigger.label || rule.trigger.event || "Custom Trigger"}
+          <div className="flex flex-col py-0.5 min-w-0">
+            <span className="text-xs font-medium text-gray-900 truncate">
+              {primaryLabel}
             </span>
-          </span>
+            {stageName && (catalogEvt?.label || rule.trigger.label) && (
+              <span className="text-[11px] text-gray-500 truncate">
+                {catalogEvt?.label || rule.trigger.label}
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -278,7 +287,7 @@ export default function AdminAutomations() {
       id: "scope",
       header: "Admin Scope",
       align: "left",
-      width: "20%",
+      width: "16%",
       render: (rule) => {
         const hasCustomRules = rule.scopingRules && rule.scopingRules.length > 0;
         const categories = hasCustomRules
@@ -289,30 +298,61 @@ export default function AdminAutomations() {
 
         if (categories.length === 0 || categories.includes("All")) {
           return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-              <Globe className="w-3 h-3 text-gray-500" />
-              <span>All Orgs (Global)</span>
+            <span className="text-xs font-medium text-gray-700">
+              All Orgs (Global)
             </span>
           );
         }
 
         return (
-          <div className="flex items-center gap-1 flex-wrap">
-            {categories.slice(0, 2).map((cat, idx) => (
-              <span
-                key={idx}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
-              >
-                <Globe className="w-2.5 h-2.5 text-blue-500" />
-                <span>{cat}</span>
-              </span>
-            ))}
-            {categories.length > 2 && (
-              <span className="text-[10px] text-gray-500 font-semibold">
-                +{categories.length - 2}
-              </span>
-            )}
+          <span className="text-xs font-medium text-gray-800 truncate">
+            {categories.join(", ")}
+          </span>
+        );
+      },
+    },
+    {
+      id: "activity",
+      header: "Activity",
+      align: "left",
+      width: "15%",
+      render: (rule) => {
+        const runCount = (rule as any).runCount ?? (rule.lastRunAt ? 1 : 0);
+        return (
+          <div className="flex flex-col py-0.5">
+            <span className="text-xs font-semibold text-gray-900 tabular-nums">
+              {runCount} {runCount === 1 ? "run" : "runs"}
+            </span>
+            <span className="text-[11px] text-gray-500">
+              {rule.lastRunAt
+                ? `Last: ${new Date(rule.lastRunAt).toLocaleDateString([], {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}`
+                : "Never executed"}
+            </span>
           </div>
+        );
+      },
+    },
+    {
+      id: "updatedAt",
+      header: "Last Updated",
+      align: "left",
+      width: "12%",
+      render: (rule) => {
+        const ts = rule.updatedAt || rule.createdAt;
+        return (
+          <span className="text-xs text-gray-700 font-medium tabular-nums">
+            {ts
+              ? new Date(ts).toLocaleDateString([], {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "—"}
+          </span>
         );
       },
     },
@@ -320,40 +360,27 @@ export default function AdminAutomations() {
       id: "status",
       header: "Status",
       align: "center",
-      width: "10%",
+      width: "9%",
       render: (rule) => (
         <button
           type="button"
+          role="switch"
+          aria-checked={rule.enabled}
+          aria-label={rule.enabled ? "Disable automation" : "Enable automation"}
           onClick={(e) => {
             e.stopPropagation();
             toggleRule(rule.id);
           }}
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition-colors ${
-            rule.enabled
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-              : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
+            rule.enabled ? "bg-gray-900" : "bg-gray-200 hover:bg-gray-300"
           }`}
         >
-          {rule.enabled ? "Active" : "Paused"}
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs transition-transform ${
+              rule.enabled ? "translate-x-[18px]" : "translate-x-[3px]"
+            }`}
+          />
         </button>
-      ),
-    },
-    {
-      id: "lastRunAt",
-      header: "Last Run",
-      align: "left",
-      width: "10%",
-      render: (rule) => (
-        <span className="text-xs text-gray-500 font-mono">
-          {rule.lastRunAt
-            ? new Date(rule.lastRunAt).toLocaleDateString([], {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "—"}
-        </span>
       ),
     },
   ];

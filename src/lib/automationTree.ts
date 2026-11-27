@@ -624,27 +624,30 @@ export function connectStepsInTree(
   // 3. Remove toStep from its current position
   const treeWithoutTo = deleteStepFromTree(steps, toId);
 
-  // 4. Handle connecting from 'start'
+  // 4. Handle connecting from 'start' (preserves existing parallel branches from start)
   if (fromId === "start") {
-    return [stepToMove, ...treeWithoutTo];
+    stepToMove.connectAfterId = "start";
+    return [...treeWithoutTo, stepToMove];
   }
 
-  // 5. Handle connecting from a Parallel branch port (e.g. 'branch-0', 'branch-1')
+  // 5. Handle connecting from a Parallel/Condition branch port (e.g. 'branch-0', 'branch-1')
   if (fromPort && fromPort.startsWith("branch-")) {
     const branchIdx = parseInt(fromPort.replace("branch-", ""), 10) || 0;
     const tree = cloneWorkflowTree(treeWithoutTo);
     const pCtx = findStepInTree(tree, fromId);
     if (pCtx && isParallelStep(pCtx.step) && pCtx.step.branches && pCtx.step.branches[branchIdx]) {
+      stepToMove.connectAfterId = fromId;
       pCtx.step.branches[branchIdx].steps = pCtx.step.branches[branchIdx].steps || [];
-      pCtx.step.branches[branchIdx].steps.unshift(stepToMove);
+      pCtx.step.branches[branchIdx].steps.push(stepToMove);
       return tree;
     }
   }
 
-  // 6. Connect from a step (insert immediately after fromId in that sequence/branch)
+  // 6. Connect from a step (supports parallel children under fromId via connectAfterId)
   const tree = cloneWorkflowTree(treeWithoutTo);
   const fromCtx = findStepInTree(tree, fromId);
   if (fromCtx) {
+    stepToMove.connectAfterId = fromId;
     if (fromCtx.parentBranch) {
       fromCtx.parentSequence.splice(fromCtx.index + 1, 0, stepToMove);
       return tree;
@@ -655,6 +658,7 @@ export function connectStepsInTree(
         fromCtx.step.branches &&
         fromCtx.step.branches.length > 0
       ) {
+        delete stepToMove.connectAfterId;
         fromCtx.step.branches[0].steps = fromCtx.step.branches[0].steps || [];
         fromCtx.step.branches[0].steps.push(stepToMove);
         return tree;

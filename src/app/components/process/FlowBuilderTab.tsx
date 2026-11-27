@@ -5,7 +5,7 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronUp, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
-  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode, Copy,
+  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode, Copy, CheckSquare,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -79,7 +79,7 @@ const getStepFirstNodeId = (step: WorkflowStep): string => {
 type NodeType =
   | "start" | "end" | "overview"
   | "condition" | "wait" | "parallel" | "empty-branch"
-  | "create-appointment" | "create-contact" | "create-process" | "duplicate-process"
+  | "create-appointment" | "create-contact" | "create-process" | "duplicate-process" | "create-task"
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
@@ -141,6 +141,7 @@ interface FlowBuilderTabProps {
   onScopingRulesChange?: (rules: ScopingRule[]) => void;
   initialStepIdToConfigure?: string;
   hideHowItWorks?: boolean;
+  hideCanvasSave?: boolean;
   initialHasChosenTrigger?: boolean;
 }
 
@@ -162,6 +163,7 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "create-contact": "create_contact",
   "create-process": "create_process",
   "duplicate-process": "duplicate_process",
+  "create-task": "create_task",
   "condition": "condition",
   "wait": "wait",
   "call-transfer": "callaction",
@@ -198,6 +200,7 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "create-contact": "user",
   "create-process": "workflow",
   "duplicate-process": "copy",
+  "create-task": "checksquare",
   "condition": "split",
   "wait": "clock",
   "call-transfer": "phonecall",
@@ -237,9 +240,7 @@ const NODE_CATEGORIES = [
     nodes: [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
-      { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run two automations simultaneously in parallel" },
       { type: "update-stage" as NodeType, label: "Update to stage", icon: <Workflow className="w-4 h-4" />, desc: "Update stage for process, appointment, or invoice" },
-      { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate workflow execution" },
     ],
   },
   {
@@ -270,6 +271,12 @@ const NODE_CATEGORIES = [
         label: "Duplicate Process",
         icon: <Copy className="w-4 h-4" />,
         desc: "Duplicate process into target process & stage, copying shared fields",
+      },
+      {
+        type: "create-task" as NodeType,
+        label: "Create Task",
+        icon: <CheckSquare className="w-4 h-4" />,
+        desc: "Create and assign a new task in CRM Tasks",
       },
     ],
   },
@@ -416,6 +423,7 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "create-contact":     { bg: "bg-sky-50 dark:bg-sky-900/20", border: "border-sky-400", text: "text-sky-700 dark:text-sky-400" },
   "create-process":     { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "duplicate-process":  { bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-400", text: "text-indigo-700 dark:text-indigo-400" },
+  "create-task":        { bg: "bg-fuchsia-50 dark:bg-fuchsia-900/20", border: "border-fuchsia-400", text: "text-fuchsia-700 dark:text-fuchsia-400" },
   start:                 { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
   end:                   { bg: "bg-red-50 dark:bg-red-900/20",     border: "border-red-400",     text: "text-red-700 dark:text-red-400" },
   condition:             { bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-400", text: "text-violet-700 dark:text-violet-400" },
@@ -449,34 +457,214 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "idle-messages":       { bg: "bg-sky-50 dark:bg-sky-900/20", border: "border-sky-400", text: "text-sky-700 dark:text-sky-400" },
 };
 
-function getNodeIcon(type: NodeType) {
-  if (type === "create-appointment") return <Calendar className="w-4 h-4" />;
-  if (type === "create-contact") return <User className="w-4 h-4" />;
-  if (type === "create-process") return <Workflow className="w-4 h-4" />;
-  if (type === "duplicate-process") return <Copy className="w-4 h-4" />;
-  if (type === "assign-process" || (type as string) === "assign_process") return <Workflow className="w-4 h-4" />;
-  if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
-  if (type === "generate-document") return <FileText className="w-4 h-4" />;
-  if (type === "send-payment") return <CreditCard className="w-4 h-4" />;
-  if (type === "send-invoice") return <FileText className="w-4 h-4" />;
+interface CrystalNodeTheme {
+  orbGradient: string;
+  orbStyle: string;
+  cardSurface: string;
+  badgeStyle: { backgroundColor: string; color: string };
+  dotColor: string;
+  portColor: string;
+  roleLabel: string;
+}
+
+function getCrystalTriggerTheme(triggerType?: string): CrystalNodeTheme {
+  const baseCard =
+    "bg-white border-slate-200/90 shadow-[0_6px_20px_-6px_rgba(15,23,42,0.10),0_1px_4px_rgba(15,23,42,0.04)]";
+  switch (triggerType) {
+    case "process":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #818cf8 0%, #4338ca 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#eef2ff", color: "#4338ca" },
+        dotColor: "#4f46e5",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "client":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #34d399 0%, #047857 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#ecfdf5", color: "#047857" },
+        dotColor: "#059669",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "appointment":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #c084fc 0%, #7e22ce 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#faf5ff", color: "#7e22ce" },
+        dotColor: "#9333ea",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "call":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #60a5fa 0%, #1d4ed8 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#eff6ff", color: "#1d4ed8" },
+        dotColor: "#2563eb",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "invoice":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #fbbf24 0%, #d97706 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#fffbeb", color: "#b45309" },
+        dotColor: "#d97706",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "stage":
+    default:
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #fb923c 0%, #ea580c 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#fff7ed", color: "#c2410c" },
+        dotColor: "#ea580c",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+  }
+}
+
+function resolveCanonicalType(rawType: string, stepKey?: string): NodeType {
+  if (rawType === "start" || rawType === "end" || rawType === "empty-branch" || rawType === "overview") {
+    return rawType as NodeType;
+  }
+  const normalized = (typeof STEP_KEY_TO_NODE_TYPE !== "undefined"
+    ? STEP_KEY_TO_NODE_TYPE[rawType] || (stepKey ? STEP_KEY_TO_NODE_TYPE[stepKey] : undefined)
+    : undefined);
+  return (normalized || rawType) as NodeType;
+}
+
+function getCrystalNodeTheme(type: string, triggerType?: string, stepKey?: string): CrystalNodeTheme {
+  const cType = resolveCanonicalType(type, stepKey);
+  const baseCard =
+    "bg-white border-slate-200/90 shadow-[0_6px_20px_-6px_rgba(15,23,42,0.10),0_1px_4px_rgba(15,23,42,0.04)]";
+
+  if (cType === "start") {
+    return getCrystalTriggerTheme(triggerType);
+  }
+
+  const NODE_PALETTE: Record<string, { orb: string; badgeBg: string; badgeText: string; dot: string; role?: string }> = {
+    condition:               { orb: "linear-gradient(135deg, #22d3ee 0%, #0891b2 100%)", badgeBg: "#ecfeff", badgeText: "#0e7490", dot: "#06b6d4", role: "LOGIC" },
+    wait:                    { orb: "linear-gradient(135deg, #64748b 0%, #334155 100%)", badgeBg: "#f1f5f9", badgeText: "#334155", dot: "#475569", role: "DELAY" },
+    "update-stage":          { orb: "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)", badgeBg: "#f5f3ff", badgeText: "#6d28d9", dot: "#7c3aed" },
+    "create-appointment":    { orb: "linear-gradient(135deg, #2dd4bf 0%, #0f766e 100%)", badgeBg: "#f0fdfa", badgeText: "#0f766e", dot: "#0d9488" },
+    "create-contact":        { orb: "linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)", badgeBg: "#f0f9ff", badgeText: "#0369a1", dot: "#0284c7" },
+    "create-process":        { orb: "linear-gradient(135deg, #c084fc 0%, #9333ea 100%)", badgeBg: "#faf5ff", badgeText: "#7e22ce", dot: "#9333ea" },
+    "duplicate-process":     { orb: "linear-gradient(135deg, #818cf8 0%, #4338ca 100%)", badgeBg: "#eef2ff", badgeText: "#4338ca", dot: "#4f46e5" },
+    "create-task":           { orb: "linear-gradient(135deg, #ec4899 0%, #9333ea 100%)", badgeBg: "#fdf4ff", badgeText: "#86198f", dot: "#c026d3" },
+    "generate-invoice":      { orb: "linear-gradient(135deg, #e879f9 0%, #a21caf 100%)", badgeBg: "#fdf4ff", badgeText: "#a21caf", dot: "#c026d3" },
+    "generate-document":     { orb: "linear-gradient(135deg, #60a5fa 0%, #1e40af 100%)", badgeBg: "#eff6ff", badgeText: "#1e40af", dot: "#2563eb" },
+    "send-email":            { orb: "linear-gradient(135deg, #f472b6 0%, #db2777 100%)", badgeBg: "#fdf2f8", badgeText: "#be185d", dot: "#db2777" },
+    "send-sms":              { orb: "linear-gradient(135deg, #4ade80 0%, #15803d 100%)", badgeBg: "#f0fdf4", badgeText: "#15803d", dot: "#16a34a" },
+    "send-whatsapp":         { orb: "linear-gradient(135deg, #10b981 0%, #047857 100%)", badgeBg: "#ecfdf5", badgeText: "#047857", dot: "#059669" },
+    "field-update":          { orb: "linear-gradient(135deg, #fbbf24 0%, #d97706 100%)", badgeBg: "#fffbeb", badgeText: "#b45309", dot: "#d97706" },
+    "assign-responsible":    { orb: "linear-gradient(135deg, #fb7185 0%, #e11d48 100%)", badgeBg: "#fff1f2", badgeText: "#be123c", dot: "#e11d48" },
+    webhook:                 { orb: "linear-gradient(135deg, #fb923c 0%, #ea580c 100%)", badgeBg: "#fff7ed", badgeText: "#c2410c", dot: "#ea580c" },
+    api:                     { orb: "linear-gradient(135deg, #a3e635 0%, #4d7c0f 100%)", badgeBg: "#f7fee7", badgeText: "#4d7c0f", dot: "#65a30d" },
+    "send-payment":          { orb: "linear-gradient(135deg, #22c55e 0%, #166534 100%)", badgeBg: "#f0fdf4", badgeText: "#166534", dot: "#15803d" },
+    "send-invoice":          { orb: "linear-gradient(135deg, #8b5cf6 0%, #4c1d95 100%)", badgeBg: "#f5f3ff", badgeText: "#5b21b6", dot: "#6d28d9" },
+    "move-stage":            { orb: "linear-gradient(135deg, #a855f7 0%, #6b21a8 100%)", badgeBg: "#faf5ff", badgeText: "#6b21a8", dot: "#7e22ce" },
+    "move-process":          { orb: "linear-gradient(135deg, #d946ef 0%, #86198f 100%)", badgeBg: "#fdf4ff", badgeText: "#86198f", dot: "#a21caf" },
+    "move-new-process":      { orb: "linear-gradient(135deg, #6366f1 0%, #312e81 100%)", badgeBg: "#eef2ff", badgeText: "#312e81", dot: "#4338ca" },
+    "book-appointment":      { orb: "linear-gradient(135deg, #14b8a6 0%, #115e59 100%)", badgeBg: "#f0fdfa", badgeText: "#115e59", dot: "#0f766e" },
+    "reschedule-appointment":{ orb: "linear-gradient(135deg, #f59e0b 0%, #92400e 100%)", badgeBg: "#fffbeb", badgeText: "#92400e", dot: "#b45309" },
+    "cancel-appointment":    { orb: "linear-gradient(135deg, #f87171 0%, #b91c1c 100%)", badgeBg: "#fef2f2", badgeText: "#b91c1c", dot: "#dc2626" },
+    "fetch-availability":    { orb: "linear-gradient(135deg, #06b6d4 0%, #155e75 100%)", badgeBg: "#ecfeff", badgeText: "#155e75", dot: "#0891b2" },
+    "fetch-field-value":     { orb: "linear-gradient(135deg, #0ea5e9 0%, #075985 100%)", badgeBg: "#f0f9ff", badgeText: "#075985", dot: "#0369a1" },
+    "call-transfer":         { orb: "linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%)", badgeBg: "#eff6ff", badgeText: "#1e3a8a", dot: "#1d4ed8" },
+    "call-transfer-human":   { orb: "linear-gradient(135deg, #ec4899 0%, #9d174d 100%)", badgeBg: "#fdf2f8", badgeText: "#9d174d", dot: "#be185d" },
+    "call-transfer-ai":      { orb: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)", badgeBg: "#eef2ff", badgeText: "#4338ca", dot: "#4f46e5" },
+    "call-hangup":           { orb: "linear-gradient(135deg, #ef4444 0%, #991b1b 100%)", badgeBg: "#fef2f2", badgeText: "#991b1b", dot: "#b91c1c" },
+    "idle-messages":         { orb: "linear-gradient(135deg, #7dd3fc 0%, #0369a1 100%)", badgeBg: "#f0f9ff", badgeText: "#0369a1", dot: "#0284c7" },
+    parallel:                { orb: "linear-gradient(135deg, #a855f7 0%, #581c87 100%)", badgeBg: "#faf5ff", badgeText: "#6b21a8", dot: "#7e22ce", role: "LOGIC" },
+    end:                     { orb: "linear-gradient(135deg, #f43f5e 0%, #881337 100%)", badgeBg: "#fff1f2", badgeText: "#9f1239", dot: "#be123c", role: "END" },
+  };
+
+  const entry = NODE_PALETTE[cType] || {
+    orb: "linear-gradient(135deg, #64748b 0%, #1e293b 100%)",
+    badgeBg: "#f1f5f9",
+    badgeText: "#334155",
+    dot: "#475569",
+  };
+
+  return {
+    orbGradient: "",
+    orbStyle: entry.orb,
+    cardSurface: baseCard,
+    badgeStyle: { backgroundColor: entry.badgeBg, color: entry.badgeText },
+    dotColor: entry.dot,
+    portColor: "#94a3b8",
+    roleLabel: entry.role || "ACTION",
+  };
+}
+
+function CrystalOrbIcon({
+  gradient,
+  orbStyle,
+  children,
+  size = "md",
+}: {
+  gradient?: string;
+  orbStyle?: string;
+  children: React.ReactNode;
+  size?: "sm" | "md";
+}) {
+  const sizeCls = size === "sm" ? "w-9 h-9" : "w-10 h-10";
+  return (
+    <div
+      className={`${sizeCls} rounded-full ${gradient ? `bg-gradient-to-br ${gradient}` : ""} flex items-center justify-center shrink-0 text-white shadow-[0_4px_12px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.55)] ring-1 ring-white/40 relative overflow-hidden`}
+      style={orbStyle ? { background: orbStyle } : undefined}
+    >
+      <span className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2.5 rounded-full bg-white/35 blur-[0.5px]" />
+      <span className="relative z-10 flex items-center justify-center text-white [&_svg]:text-white">{children}</span>
+    </div>
+  );
+}
+
+function getNodeIcon(type: NodeType, stepKey?: string) {
+  const cType = resolveCanonicalType(type, stepKey);
+  if (cType === "create-appointment") return <Calendar className="w-4 h-4" />;
+  if (cType === "create-contact") return <User className="w-4 h-4" />;
+  if (cType === "create-process") return <Workflow className="w-4 h-4" />;
+  if (cType === "duplicate-process") return <Copy className="w-4 h-4" />;
+  if (cType === "create-task") return <CheckSquare className="w-4 h-4" />;
+  if (cType === "assign-process" || (cType as string) === "assign_process") return <Workflow className="w-4 h-4" />;
+  if (cType === "generate-invoice") return <FileText className="w-4 h-4" />;
+  if (cType === "generate-document") return <FileText className="w-4 h-4" />;
+  if (cType === "send-payment") return <CreditCard className="w-4 h-4" />;
+  if (cType === "send-invoice") return <FileText className="w-4 h-4" />;
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
-  return all.find((n) => n.type === type)?.icon ?? <GitBranch className="w-4 h-4" />;
+  return all.find((n) => n.type === cType)?.icon ?? <GitBranch className="w-4 h-4" />;
 }
 
 function getNodeLabel(type: NodeType) {
-  if (type === "create-appointment") return "Create Appointment";
-  if (type === "create-contact") return "Create Contact";
-  if (type === "create-process") return "Create Process";
-  if (type === "duplicate-process") return "Duplicate Process";
-  if (type === "assign-process" || (type as string) === "assign_process") return "Assign Process";
-  if (type === "generate-document") return "Generate Document";
+  const cType = resolveCanonicalType(type);
+  if (cType === "create-appointment") return "Create Appointment";
+  if (cType === "create-contact") return "Create Contact";
+  if (cType === "create-process") return "Create Process";
+  if (cType === "duplicate-process") return "Duplicate Process";
+  if (cType === "create-task") return "Create Task";
+  if (cType === "assign-process" || (cType as string) === "assign_process") return "Assign Process";
+  if (cType === "generate-document") return "Generate Document";
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
-  return all.find((n) => n.type === type)?.label ?? type;
+  return all.find((n) => n.type === cType)?.label ?? cType;
 }
 
 function getNodeDesc(type: NodeType): string {
+  const cType = resolveCanonicalType(type);
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
-  return all.find((n) => n.type === type)?.desc ?? "";
+  return all.find((n) => n.type === cType)?.desc ?? "";
 }
 
 function getNodeSubtitle(
@@ -486,13 +674,14 @@ function getNodeSubtitle(
   processName: string,
   activeTriggerItem?: TriggerCatalogItem
 ): string {
-  if (node.type === "start") {
+  const canonicalType = resolveCanonicalType(node.type, node.stepKey);
+  if (canonicalType === "start") {
     return node.config?.triggerDescription || activeTriggerItem?.desc || (node.config?.scope === "global" ? (node.config?.triggerEvent || "Rule entry point") : `Process: ${stageName ? stageName : processName}`);
   }
-  if (node.type === "end") {
+  if (canonicalType === "end") {
     return "Terminate workflow execution";
   }
-  if (node.type === "generate-invoice") {
+  if (canonicalType === "generate-invoice") {
     if (node.config?.billFor === "choose") {
       return `Custom (${(node.config?.selectedServices || []).length} items)`;
     }
@@ -546,9 +735,10 @@ function getNodeSubtitle(
       ? `Appt: ${node.config.serviceName}${timing ? ` • ${timing}` : ""}`
       : (timing ? `Appt • ${timing}` : "Create & schedule appointment");
   }
-  if (node.type === "create-contact") return node.config?.contactType ? `Type: ${node.config.contactType} (from trigger)` : "Create contact from trigger";
-  if (node.type === "create-process") return node.config?.processName ? `Enroll in ${node.config.processName}` : "Create & enroll in process";
-  if (node.type === "duplicate-process") return node.config?.processName ? `Duplicate to ${node.config.processName}${node.config?.stageName ? ` • ${node.config.stageName}` : ""}` : "Duplicate into target process";
+  if (canonicalType === "create-contact") return node.config?.contactType ? `Type: ${node.config.contactType}` : "Select contact type";
+  if (canonicalType === "create-process") return node.config?.processName ? `Enroll in ${node.config.processName}` : "Create & enroll in process";
+  if (canonicalType === "duplicate-process") return node.config?.processName ? `Duplicate to ${node.config.processName}${node.config?.stageName ? ` • ${node.config.stageName}` : ""}` : "Duplicate into target process";
+  if (canonicalType === "create-task") return node.config?.taskTitle ? node.config.taskTitle : "Create follow-up task";
   if (node.type === "condition") {
     const cases = node.config?.cases || [];
     if (cases.length > 0) {
@@ -566,13 +756,23 @@ function getNodeSubtitle(
     return `Wait ${node.config?.delayValue ?? node.config?.duration ?? 5} ${node.config?.delayUnit ?? node.config?.unit ?? "minutes"}`;
   }
   if (node.type === "send-email") {
-    return node.config?.subject ? `Subject: ${node.config.subject}` : "Send an email";
+    return node.config?.emailTemplateName
+      ? `Template: ${node.config.emailTemplateName}`
+      : node.config?.subject
+      ? `Subject: ${node.config.subject}`
+      : "Select email template";
   }
   if (node.type === "send-sms") {
-    return node.config?.smsMessage ? node.config.smsMessage : "Send an SMS notification";
+    return node.config?.smsTemplateName
+      ? `Template: ${node.config.smsTemplateName}`
+      : node.config?.smsMessage
+      ? node.config.smsMessage
+      : "Select SMS template";
   }
   if (node.type === "send-whatsapp") {
-    return node.config?.whatsappMessage || "Send WhatsApp message";
+    return node.config?.whatsappTemplateName
+      ? `Template: ${node.config.whatsappTemplateName}`
+      : node.config?.whatsappMessage || "Select WhatsApp template";
   }
   if (node.type === "call-transfer" || node.type === "call-transfer-human" || node.type === "call-transfer-ai") {
     return node.config?.callActionPhoneNumber ? `${node.config.callActionCountryCode || ""} ${node.config.callActionPhoneNumber}` : "Transfer active call";
@@ -596,32 +796,44 @@ function getNodeSubtitle(
     return "Update record attributes";
   }
   if (node.type === "assign-responsible") {
-    const filterMode = node.config?.assignmentFilter || node.config?.assignmentMode;
-    if (filterMode === "all_users") {
-      const priority = node.config?.distributionPriority === "random" ? "Random" : "Round Robin";
+    const scopeMode = node.config?.assignScope || node.config?.assignmentFilter || node.config?.assignmentMode;
+    const priority = node.config?.distributionPriority === "random" ? "Random" : "Round Robin";
+    if (scopeMode === "user") {
+      const count = Array.isArray(node.config?.selectedUsers) ? node.config.selectedUsers.length : 0;
+      return count > 0 ? `${count} User${count > 1 ? "s" : ""} • ${priority}` : `All Users • ${priority}`;
+    }
+    if (scopeMode === "department") {
+      const deptCount = Array.isArray(node.config?.selectedDepartments) ? node.config.selectedDepartments.length : 0;
+      return deptCount > 0 ? `${deptCount} Dept${deptCount > 1 ? "s" : ""} • ${priority}` : `Department • ${priority}`;
+    }
+    if (scopeMode === "all_users") {
       return `All Users (${priority})`;
     }
-    if (filterMode === "role") {
+    if (scopeMode === "role") {
       return `Role: ${node.config?.assignedRole || "Target Role"}`;
     }
-    if (filterMode === "entity") {
+    if (scopeMode === "entity") {
       return `Entity: ${node.config?.entityAssigneeLabel || node.config?.entityAssignee || "Entity Responsible"}`;
     }
     return node.config?.assigneeName ? `To: ${node.config.assigneeName}` : "Assign team member";
   }
-  if (node.type === "book-appointment") {
+  const typeNorm = canonicalType;
+  if (typeNorm === "webhook" || typeNorm === "api") {
+    return node.config?.webhookUrl ? `POST ${node.config.webhookUrl}` : "Send data payload via webhook";
+  }
+  if (typeNorm === "book-appointment") {
     return "Schedule a new appointment";
   }
-  if (node.type === "reschedule-appointment") {
+  if (typeNorm === "reschedule-appointment") {
     return "Reschedule existing appointment";
   }
-  if (node.type === "cancel-appointment") {
+  if (typeNorm === "cancel-appointment") {
     return "Cancel appointment";
   }
   if (node.config?.description) {
     return node.config.description;
   }
-  return getNodeDesc(node.type);
+  return getNodeDesc(canonicalType) || "Double-click to configure";
 }
 
 function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) {
@@ -663,6 +875,8 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   "create-process": "create-process",
   duplicate_process: "duplicate-process",
   "duplicate-process": "duplicate-process",
+  create_task: "create-task",
+  "create-task": "create-task",
   wait: "wait",
   delay: "wait",
   condition: "condition",
@@ -767,6 +981,7 @@ export default function FlowBuilderTab({
   onScopingRulesChange,
   initialStepIdToConfigure,
   hideHowItWorks = false,
+  hideCanvasSave = false,
   initialHasChosenTrigger,
 }: FlowBuilderTabProps) {
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
@@ -923,13 +1138,13 @@ export default function FlowBuilderTab({
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const NODE_W = 200;
-  const NODE_H = 70; // approximate, condition nodes are taller
+  const NODE_W = 248;
+  const NODE_H = 92; // crystal card height aligned with port anchor points
 
   const BASE_X = 300;
   const BASE_Y = 220;
-  const LANE_X_SPACING = 280;
-  const NODE_Y_SPACING = 140;
+  const LANE_X_SPACING = 300;
+  const NODE_Y_SPACING = 172;
 
   const focusTriggersCategory = () => {
     setHasChosenTrigger(false);
@@ -1031,7 +1246,7 @@ export default function FlowBuilderTab({
         const existing = prevMap.get(n.id);
         return {
           ...n,
-          type: n.type as NodeType,
+          type: resolveCanonicalType(n.type, n.stepKey),
           x: existing ? existing.x : n.x,
           y: existing ? existing.y : n.y,
         };
@@ -1149,7 +1364,22 @@ export default function FlowBuilderTab({
     toast.success("Branch removed");
   };
 
+  const getParentConnectIdForNewNode = (): string | undefined => {
+    if (selectedBranchId && selectedId === selectedBranchId) {
+      return findBranchInTree(workflowSteps, selectedBranchId)?.parallelStep.id;
+    }
+    if (selectedId && !selectedId.startsWith("empty-") && selectedId !== selectedBranchId) {
+      return selectedId;
+    }
+    return undefined;
+  };
+
   const addNode = (type: NodeType) => {
+    if (drawingConn) {
+      setDrawingConn(null);
+      isConnDraggingRef.current = false;
+    }
+
     if (type === "parallel") {
       addParallelBranchNode();
       return;
@@ -1189,6 +1419,8 @@ export default function FlowBuilderTab({
         }
       ];
 
+      const parentConnectId = getParentConnectIdForNewNode();
+
       const newStep: WorkflowStep = {
         id: newStepId,
         name: getNodeLabel(type),
@@ -1200,6 +1432,7 @@ export default function FlowBuilderTab({
         executionType: "wait",
         delayValue: 0,
         delayUnit: "Minute",
+        ...(parentConnectId ? { connectAfterId: parentConnectId } : {}),
         branches: initialBranches,
         params: {
           cases: initialCases,
@@ -1246,6 +1479,8 @@ export default function FlowBuilderTab({
         .find(n => n.type === type);
 
       const newStepId = `wait-${Date.now()}`;
+      const parentConnectId = getParentConnectIdForNewNode();
+
       const newStep: WorkflowStep = {
         id: newStepId,
         name: "Wait / Delay",
@@ -1256,6 +1491,7 @@ export default function FlowBuilderTab({
         executionType: "wait",
         delayValue: 5,
         delayUnit: "minutes",
+        ...(parentConnectId ? { connectAfterId: parentConnectId } : {}),
         params: {
           delayValue: 5,
           delayUnit: "minutes",
@@ -1307,6 +1543,8 @@ export default function FlowBuilderTab({
         .find(n => n.type === type);
 
       const newStepId = `${stepKey}-${Date.now()}`;
+      const parentConnectId = getParentConnectIdForNewNode();
+
       const newStep: WorkflowStep = {
         id: newStepId,
         name: getNodeLabel(type),
@@ -1317,6 +1555,7 @@ export default function FlowBuilderTab({
         executionType: "wait",
         delayValue: 0,
         delayUnit: "Minute",
+        ...(parentConnectId ? { connectAfterId: parentConnectId } : {}),
         params: {},
       };
 
@@ -1779,7 +2018,7 @@ export default function FlowBuilderTab({
     };
 
     const layout = computeTreeCanvasLayout(workflowSteps, startNodeConfig, 400, 80);
-    setNodes(layout.nodes.map((n) => ({ ...n, type: n.type as NodeType })));
+    setNodes(layout.nodes.map((n) => ({ ...n, type: resolveCanonicalType(n.type, n.stepKey) })));
     setConnections(layout.connections);
     toast.success("Flow tidied up! Parallel branches connected and running independently.");
   };
@@ -2237,22 +2476,9 @@ export default function FlowBuilderTab({
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Select Trigger Header & Search */}
             <div className="p-3 border-b border-border flex-shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Select Trigger</span>
-                  <InfoTooltip text="Choose a trigger event to start your automation flow. Each automation starts with one trigger." />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHasChosenTrigger(true);
-                    setOpenActionCategoryId("crm-entities");
-                  }}
-                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  title="Proceed to add actions"
-                >
-                  <span>Proceed to Actions →</span>
-                </button>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Select Trigger</span>
+                <InfoTooltip text="Choose a trigger event to start your automation flow. Each automation starts with one trigger." />
               </div>
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -2267,9 +2493,10 @@ export default function FlowBuilderTab({
             </div>
 
             {/* Trigger Category Cards List */}
-            <div ref={sidebarRef} className="flex-1 overflow-y-auto p-2.5 space-y-2">
+            <div ref={sidebarRef} className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
               {filteredTriggerCategories.map((cat) => {
                 const isActiveCategory = activeTriggerItem?.triggerType === cat.type;
+                const catTheme = getCrystalTriggerTheme(cat.type);
                 return (
                   <button
                     key={cat.id}
@@ -2300,38 +2527,32 @@ export default function FlowBuilderTab({
                         },
                       });
                     }}
-                    className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
+                    className={`w-full text-left flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer group ${
                       isActiveCategory
-                        ? "bg-blue-50/80 border-blue-400 text-blue-900 shadow-2xs"
-                        : "bg-card border-border/80 hover:bg-muted/40 hover:border-border text-foreground/90"
+                        ? "bg-slate-50 border-slate-400 shadow-[0_4px_14px_rgba(15,23,42,0.08)]"
+                        : "bg-white border-slate-200/90 hover:border-slate-300 shadow-[0_2px_8px_rgba(15,23,42,0.03)] hover:shadow-[0_6px_16px_rgba(15,23,42,0.06)]"
                     }`}
                   >
-                    <div
-                      className={`w-9 h-9 rounded-full border flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform ${
-                        isActiveCategory
-                          ? "bg-blue-100 border-blue-300 text-blue-600"
-                          : "bg-blue-50/80 border-blue-100/80 text-blue-600"
-                      }`}
-                    >
-                      {cat.icon}
+                    <div className="group-hover:scale-105 transition-transform">
+                      <CrystalOrbIcon orbStyle={catTheme.orbStyle} size="md">
+                        {cat.icon}
+                      </CrystalOrbIcon>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <p className={`text-xs font-semibold truncate ${isActiveCategory ? "text-blue-700" : "text-foreground group-hover:text-blue-600 transition-colors"}`}>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <p className="text-[13px] font-semibold text-slate-900 truncate leading-tight">
                           {cat.label}
                         </p>
-                        {isActiveCategory ? (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 leading-none">
+                        {isActiveCategory && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0"
+                            style={catTheme.badgeStyle}
+                          >
                             Selected
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 group-hover:text-blue-600 transition-colors">
-                            <span>Configure</span>
-                            <ChevronRight className="w-3 h-3" />
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                      <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug mt-0.5">
                         {cat.desc}
                       </p>
                     </div>
@@ -2348,7 +2569,7 @@ export default function FlowBuilderTab({
                   setHasChosenTrigger(true);
                   setOpenActionCategoryId("crm-entities");
                 }}
-                className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] active:scale-[0.99] text-white font-semibold text-xs flex items-center justify-center gap-2 border border-slate-700/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_rgba(24,30,37,0.20)] transition-all cursor-pointer"
               >
                 <span>Proceed to Add Actions</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -2362,22 +2583,9 @@ export default function FlowBuilderTab({
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Add Actions Header & Search */}
             <div className="p-3 border-b border-border flex-shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Add Actions</span>
-                  <InfoTooltip text="Click any action below to add it to your workflow canvas." />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHasChosenTrigger(false);
-                    if (sidebarRef.current) sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  title="Return to trigger selection"
-                >
-                  <span>← Change Trigger</span>
-                </button>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Add Actions</span>
+                <InfoTooltip text="Click any action below to add it to your workflow canvas." />
               </div>
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -2414,38 +2622,54 @@ export default function FlowBuilderTab({
                     </button>
 
                     {isCatOpen && (
-                      <div className="pb-3 px-2.5 space-y-2">
-                        {cat.nodes.map((node) => (
-                          <button
-                            key={node.type}
-                            type="button"
-                            onClick={() => addNode(node.type)}
-                            className="w-full text-left flex items-start gap-2.5 p-2.5 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 transition-all cursor-pointer shadow-2xs group"
-                          >
-                            <div className="w-9 h-9 rounded-full bg-blue-50/80 border border-blue-100/80 flex items-center justify-center shrink-0 mt-0.5 text-blue-600 group-hover:scale-105 transition-transform">
-                              {node.icon}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-1">
-                                <p className="text-xs font-semibold text-foreground group-hover:text-blue-600 transition-colors truncate">
+                      <div className="pb-3 px-2.5 space-y-2.5">
+                        {cat.nodes.map((node) => {
+                          const nodeTheme = getCrystalNodeTheme(node.type);
+                          return (
+                            <button
+                              key={node.type}
+                              type="button"
+                              onClick={() => addNode(node.type)}
+                              className="w-full text-left flex items-center gap-3 p-3 rounded-lg border border-slate-200/90 bg-white hover:border-slate-300 shadow-[0_2px_8px_rgba(15,23,42,0.03)] hover:shadow-[0_6px_18px_rgba(15,23,42,0.07)] transition-all cursor-pointer group"
+                            >
+                              <div className="group-hover:scale-105 transition-transform">
+                                <CrystalOrbIcon orbStyle={nodeTheme.orbStyle} size="md">
+                                  {node.icon}
+                                </CrystalOrbIcon>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-semibold text-slate-900 leading-tight truncate">
                                   {node.label}
                                 </p>
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 group-hover:text-blue-600 transition-colors">
-                                  <span>+ Add</span>
-                                  <ChevronRight className="w-3 h-3" />
-                                </span>
+                                <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug mt-0.5">
+                                  {node.desc}
+                                </p>
                               </div>
-                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                                {node.desc}
-                              </p>
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 );
               })}
+            </div>
+
+            {/* Change Trigger Footer */}
+            <div className="p-3 border-t border-border bg-card/60 flex flex-col gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setHasChosenTrigger(false);
+                  if (sidebarRef.current) sidebarRef.current.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="w-full py-2.5 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 font-semibold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all cursor-pointer"
+              >
+                <span>← Change Trigger</span>
+              </button>
+              <p className="text-[10px] text-center text-muted-foreground truncate">
+                Trigger: <span className="font-semibold text-foreground">{activeTriggerItem?.label || (isGlobalScope ? (triggerLabel || "Select Trigger") : `On Entry: ${stageName}`)}</span>
+              </p>
             </div>
           </div>
         )}
@@ -2453,87 +2677,6 @@ export default function FlowBuilderTab({
 
       {/* ── CENTER: Canvas ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card flex-shrink-0">
-          {/* Context badges */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={focusTriggersCategory}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 rounded-lg font-medium cursor-pointer transition-colors"
-              title="Click to view and choose triggers in left sidebar"
-            >
-              <Zap className="w-3.5 h-3.5 shrink-0" />
-              <span>Trigger: {activeTriggerItem?.label || (isGlobalScope ? (triggerLabel || "Select Trigger") : `On Entry: ${stageName}`)}</span>
-            </button>
-            {!isGlobalScope && (
-              <>
-                <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-lg font-medium">
-                  🏷 {processName}
-                </span>
-                <span className="text-xs px-2 py-1 bg-secondary/10 text-secondary rounded-lg font-medium">
-                  📍 {stageName}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center gap-1">
-            <button onClick={undo} disabled={!history.length} title="Undo" className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors">
-              <Undo2 className="w-4 h-4" />
-            </button>
-            <button onClick={redo} disabled={!future.length} title="Redo" className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors">
-              <Redo2 className="w-4 h-4" />
-            </button>
-            <div className="w-px h-4 bg-border mx-1" />
-            <button onClick={() => setZoom((z) => Math.min(2, z * 1.2))} title="Zoom In" className="p-1.5 rounded hover:bg-muted transition-colors">
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <span className="text-xs text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom((z) => Math.max(0.25, z * 0.8))} title="Zoom Out" className="p-1.5 rounded hover:bg-muted transition-colors">
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <button onClick={fitToScreen} title="Fit to Screen" className="p-1.5 rounded hover:bg-muted transition-colors">
-              <Maximize2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={tidyUpFlow}
-              title="Tidy up the flow layout"
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-secondary/80 hover:bg-secondary text-secondary-foreground transition-all shadow-xs border border-border cursor-pointer hover:border-primary/50"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span>Tidy Up</span>
-            </button>
-            <button
-              onClick={() => setIsHandToolActive(!isHandToolActive)}
-              title="Hand Tool (Space to temporarily activate)"
-              className={`p-1.5 rounded transition-colors ${
-                isHandToolActive
-                  ? "bg-primary/10 text-primary"
-                  : "hover:bg-muted text-muted-foreground"
-              }`}
-            >
-              <Hand className="w-4 h-4" />
-            </button>
-            {!hideHowItWorks && (
-              <>
-                <div className="w-px h-4 bg-border mx-1" />
-                <HowItWorksButton label="How Flow Builder Works" onClick={() => setShowFlowBuilderHelp(true)} />
-              </>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={onSave}
-              className="h-7 text-xs cursor-pointer"
-            >
-              <Save className="w-3 h-3 mr-1" />
-              Save
-            </Button>
-          </div>
-        </div>
-
         {/* Canvas area */}
         <div
           ref={canvasRef}
@@ -2545,6 +2688,63 @@ export default function FlowBuilderTab({
           onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
         >
+          {/* Floating Canvas Controls Bar (Undo, Redo, Zoom, Max View, Tidy Up, Hand Tool) */}
+          <div
+            className="absolute top-3.5 right-4 z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-[0_4px_16px_rgba(15,23,42,0.08)] pointer-events-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button onClick={undo} disabled={!history.length} title="Undo" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 disabled:opacity-30 transition-colors cursor-pointer">
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button onClick={redo} disabled={!future.length} title="Redo" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 disabled:opacity-30 transition-colors cursor-pointer">
+              <Redo2 className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+            <button onClick={() => setZoom((z) => Math.min(2, z * 1.2))} title="Zoom In" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer">
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-slate-600 font-medium w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.max(0.25, z * 0.8))} title="Zoom Out" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer">
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button onClick={fitToScreen} title="Max View / Fit to Screen" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer">
+              <Maximize2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsHandToolActive(!isHandToolActive)}
+              title="Hand Tool (Space to temporarily activate)"
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isHandToolActive
+                  ? "bg-slate-900 text-white"
+                  : "hover:bg-slate-100 text-slate-600"
+              }`}
+            >
+              <Hand className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+            <button
+              onClick={tidyUpFlow}
+              title="Tidy up the flow layout"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white border border-slate-700/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_rgba(24,30,37,0.20)] transition-all cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Tidy Up</span>
+            </button>
+            {!hideCanvasSave && onSave && (
+              <>
+                <div className="w-px h-4 bg-slate-200 mx-0.5" />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={onSave}
+                  className="h-7 text-xs cursor-pointer"
+                >
+                  <Save className="w-3 h-3 mr-1" />
+                  Save
+                </Button>
+              </>
+            )}
+          </div>
           {/* Active connection mode banner */}
           {drawingConn && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-card/95 backdrop-blur-md text-foreground border border-primary/40 px-3.5 py-1.5 rounded-full shadow-lg text-xs font-medium pointer-events-auto">
@@ -2573,25 +2773,23 @@ export default function FlowBuilderTab({
                 if (!fromNode || !toNode) return null;
                 const from = getPortXY(conn.fromId, conn.fromPort, false);
                 const to = getPortXY(conn.toId, "default", true);
-                const fromBranchIdx = parseInt((conn.fromPort || "").replace("branch-", ""), 10);
-                const isElseConn = !isNaN(fromBranchIdx) && fromNode?.config?.branches?.[fromBranchIdx]?.name === "Else";
-                const color = isElseConn ? "#d97706" : (PORT_COLOR[conn.fromPort] || "#6366f1");
                 const label = PORT_LABEL[conn.fromPort] || "";
                 const midX = (from.x + to.x) / 2;
                 const midY = (from.y + to.y) / 2;
                 const isHovered = hoveredConnId === conn.id;
+                const threadColor = isHovered ? "#64748b" : "#94a3b8";
                 return (
                   <g key={conn.id}>
                     <path
                       d={bezierPath(from.x, from.y, to.x, to.y)}
                       fill="none"
-                      stroke={isHovered ? "#8b5cf6" : color}
-                      strokeWidth={isHovered ? 3 : 2}
-                      strokeOpacity={isHovered ? 1 : 0.75}
+                      stroke={threadColor}
+                      strokeWidth={isHovered ? 2.5 : 1.75}
+                      strokeOpacity={isHovered ? 1 : 0.85}
                       markerEnd="url(#arrow)"
                     />
                     {label && (
-                      <text x={midX} y={midY - 14} textAnchor="middle" fontSize={9} fontWeight="600" fill={color}>
+                      <text x={midX} y={midY - 14} textAnchor="middle" fontSize={9} fontWeight="600" fill="#64748b">
                         {label}
                       </text>
                     )}
@@ -2612,7 +2810,7 @@ export default function FlowBuilderTab({
               {/* Arrow marker */}
               <defs>
                 <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
+                  <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8" />
                 </marker>
               </defs>
 
@@ -2621,15 +2819,15 @@ export default function FlowBuilderTab({
                 <path
                   d={bezierPath(drawingConn.x, drawingConn.y, mousePos.x, mousePos.y)}
                   fill="none"
-                  stroke="#6366f1"
+                  stroke="#94a3b8"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  opacity={0.6}
+                  opacity={0.75}
                 />
               )}
             </svg>
 
-            {/* Connection Actions: [+] to insert node between, [Trash] to delete connection only */}
+            {/* Connection Actions: clean white [+] to insert node between, [Trash] to delete connection only */}
             {connections.map((conn) => {
               const fromNode = nodes.find((n) => n.id === conn.fromId);
               const toNode = nodes.find((n) => n.id === conn.toId);
@@ -2656,12 +2854,8 @@ export default function FlowBuilderTab({
                   onMouseLeave={() => setHoveredConnId(null)}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border shadow-sm transition-all backdrop-blur-md ${
-                    isHovered
-                      ? "bg-card border-primary ring-2 ring-primary/25 shadow-md scale-110"
-                      : "bg-card/95 border-border hover:border-primary/50"
-                  }`}>
-                    {/* Plus button: Insert step between */}
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white border border-slate-200 shadow-sm transition-all">
+                    {/* Plus button: clean white, no blue accent */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -2669,22 +2863,22 @@ export default function FlowBuilderTab({
                         setInsertBetweenConn({ conn, x: midX, y: midY });
                         setInsertSearch("");
                       }}
-                      className="w-5 h-5 flex items-center justify-center rounded-full text-primary hover:bg-primary/15 transition-colors cursor-pointer"
+                      className="w-5 h-5 flex items-center justify-center rounded-full bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
                       title="Add a node between these steps (+)"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
 
-                    <span className="w-px h-3 bg-border/80" />
+                    <span className="w-px h-3 bg-slate-200" />
 
-                    {/* Delete connection button: deletes connection only, keeping both nodes */}
+                    {/* Delete connection button: clean white */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteConnection(conn.id);
                       }}
-                      className="w-5 h-5 flex items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                      className="w-5 h-5 flex items-center justify-center rounded-full bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
                       title="Delete connection (keeps nodes)"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -2828,13 +3022,12 @@ export default function FlowBuilderTab({
                     } else if (node.type !== "empty-branch") {
                       setSelectedBranchId(null);
                     }
-                    if (node.type !== "empty-branch") {
-                      openConfig(node);
-                    }
                   }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    openConfig(node);
+                    if (node.type !== "empty-branch") {
+                      openConfig(node);
+                    }
                   }}
                 >
                   {/* Input port (top) */}
@@ -2876,14 +3069,14 @@ export default function FlowBuilderTab({
                     >
                       <div
                         style={{
-                          width: isTargetNode ? 16 : 13,
-                          height: isTargetNode ? 16 : 13,
+                          width: isTargetNode ? 14 : 11,
+                          height: isTargetNode ? 14 : 11,
                           borderRadius: "50%",
-                          background: isTargetNode ? "#6366f1" : "white",
-                          border: `2px solid #6366f1`,
+                          background: isTargetNode ? "#94a3b8" : "white",
+                          border: `1.5px solid ${isTargetNode ? "#64748b" : "#94a3b8"}`,
                           transition: "all 0.15s ease",
                         }}
-                        className={isTargetNode ? "ring-4 ring-primary/40 animate-pulse scale-125 shadow-md" : "hover:scale-125"}
+                        className={isTargetNode ? "ring-2 ring-slate-300 shadow-sm scale-110" : "hover:scale-125"}
                       />
                     </div>
                   )}
@@ -2959,92 +3152,110 @@ export default function FlowBuilderTab({
                         </div>
                       );
                     })()
-                  ) : (
+                  ) : (() => {
+                    const resolvedTriggerType = node.config?.triggerType || activeTriggerItem?.triggerType || triggerType;
+                    const crystalTheme = getCrystalNodeTheme(node.type, resolvedTriggerType, node.stepKey);
+                    const nodeTitle = isStart
+                      ? (node.label || activeTriggerItem?.label || (node.config?.scope === "global" ? "Event Trigger" : `On Entry: ${stageName}`))
+                      : isEnd
+                      ? "End"
+                      : node.label;
+                    const subtitleText = getNodeSubtitle(node, effectiveProcesses, stageName, processName, activeTriggerItem);
+
+                    return (
                     <div
-                      className={`rounded-2xl border-2 ${style.bg} ${style.border} shadow-sm transition-all select-none ${
+                      className={`relative rounded-lg border transition-all select-none overflow-hidden ${crystalTheme.cardSurface} ${
                         isTargetNode
-                          ? "ring-2 ring-primary ring-offset-2 border-primary bg-primary/10 shadow-lg cursor-pointer scale-[1.02]"
+                          ? "ring-1 ring-slate-400 border-slate-400 shadow-md cursor-pointer scale-[1.01]"
                           : isStart
-                          ? "cursor-pointer hover:border-emerald-500"
-                          : "cursor-move"
+                          ? "cursor-pointer hover:shadow-[0_10px_24px_-6px_rgba(15,23,42,0.14)]"
+                          : "cursor-move hover:shadow-[0_10px_24px_-6px_rgba(15,23,42,0.14)]"
                       } ${
-                        isSelected ? "ring-2 ring-primary ring-offset-2 shadow-md" : "hover:shadow-md"
+                        isSelected ? "ring-1 ring-slate-400 border-slate-400" : ""
                       }`}
                       style={{ minHeight: NODE_H }}
-                      onClick={isStart && !isTargetNode ? focusTriggersCategory : undefined}
                     >
-                      <div className="px-3.5 py-3 flex items-start gap-2.5">
-                        <div className={`flex-shrink-0 mt-0.5 ${style.text}`}>
-                          {isStart ? (
-                            getTriggerIconComponent(node.config?.triggerIconKey || activeTriggerItem?.iconKey || triggerIconKey, node.config?.triggerType || activeTriggerItem?.triggerType || triggerType)
-                          ) : isEnd ? (
-                            <XCircle className="w-4 h-4" />
-                          ) : (
-                            getNodeIcon(node.type)
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className={`text-xs font-semibold truncate ${style.text}`}>
-                              {isStart
-                                ? (node.label || activeTriggerItem?.label || (node.config?.scope === "global" ? "Event Trigger" : `On Entry: ${stageName}`))
-                                : isEnd
-                                ? "END"
-                                : node.label}
+                      {/* Specular crystal top shine */}
+                      <div className="pointer-events-none absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+
+                      <div className="px-3.5 py-3 space-y-2.5">
+                        {/* Header row: Glossy Orb + Title + Delete */}
+                        <div className="flex items-center gap-2.5">
+                          <CrystalOrbIcon orbStyle={crystalTheme.orbStyle} size="sm">
+                            {isStart ? (
+                              getTriggerIconComponent(node.config?.triggerIconKey || activeTriggerItem?.iconKey || triggerIconKey, node.config?.triggerType || activeTriggerItem?.triggerType || triggerType)
+                            ) : isEnd ? (
+                              <XCircle className="w-4 h-4" />
+                            ) : (
+                              getNodeIcon(node.type, node.stepKey)
+                            )}
+                          </CrystalOrbIcon>
+
+                          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                            <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">
+                              {nodeTitle}
                             </p>
-                            {node.config?.conditionsEnabled && (
+                            {node.config?.conditionsEnabled && node.type !== "condition" && (
                               <span
                                 title="Conditions are active for this step"
-                                className="flex-shrink-0 text-[9px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 leading-none"
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 leading-none shrink-0"
                               >
                                 COND
                               </span>
                             )}
                           </div>
 
-                          {/* Subtitle / context description matching trigger node UI */}
-                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                            {getNodeSubtitle(node, effectiveProcesses, stageName, processName, activeTriggerItem)}
-                          </p>
-                          {node.type === "parallel" && (
-                            <div className="mt-1 flex items-center justify-end">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddBranch(node.id);
-                                }}
-                                className="w-5 h-5 rounded-md bg-purple-100 hover:bg-purple-200 text-purple-700 flex items-center justify-center cursor-pointer transition-colors shadow-2xs shrink-0"
-                                title="Add branch"
-                                aria-label="Add branch"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          {/* Delete btn */}
+                          {!isStart && !node.config?.syntheticFor && (!node.config?.autoGenerated || onWorkflowStepsChange) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteNode(node.id);
+                              }}
+                              className="flex-shrink-0 p-1 rounded bg-white text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="Delete node"
+                              aria-label="Delete node"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           )}
                         </div>
 
-                        {/* Delete btn - always accessible to delete mistake nodes */}
-                        {!isStart && !node.config?.syntheticFor && (!node.config?.autoGenerated || onWorkflowStepsChange) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteNode(node.id);
-                            }}
-                            className="flex-shrink-0 p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Delete node"
-                            aria-label="Delete node"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {/* Crystal context pill */}
+                        <div className="flex items-center justify-between gap-2">
+                          {subtitleText && (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50/90 border border-slate-200/75 max-w-full min-w-0">
+                              <span
+                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: crystalTheme.dotColor }}
+                              />
+                              <span className="text-[11px] font-medium text-slate-700 truncate">
+                                {subtitleText}
+                              </span>
+                            </div>
+                          )}
+                          {node.type === "parallel" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddBranch(node.id);
+                              }}
+                              className="w-6 h-6 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200/70 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                              title="Add branch"
+                              aria-label="Add branch"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Start node proceed to action hint */}
                       {isStart && !hasChosenTrigger && (
                         <div
-                          className="px-3 pb-2 text-[10px] text-blue-600 font-semibold cursor-pointer hover:underline flex items-center gap-1"
+                          className="px-3.5 pb-2.5 text-[10px] text-slate-600 hover:text-slate-900 font-semibold cursor-pointer hover:underline flex items-center gap-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             setHasChosenTrigger(true);
@@ -3055,41 +3266,40 @@ export default function FlowBuilderTab({
                           <span>+ Proceed to Add Actions →</span>
                         </div>
                       )}
-                      {/* Config hint */}
-                      {!isStart && !isEnd && isSelected && node.type !== "parallel" && (
-                        <div
-                          className="px-3 pb-2 text-[10px] text-muted-foreground cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => openConfig(node)}
-                        >
-                          Double-click to configure →
-                        </div>
-                      )}
                       {node.type === "parallel" && isSelected && (
-                        <div className="px-3 pb-2 text-[10px] text-purple-600 font-medium">
+                        <div className="px-3.5 pb-2.5 text-[10px] text-violet-600 font-medium">
                           Select a branch below, then click an action from sidebar to add to it →
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Output ports (bottom) */}
                   {!isEnd && (
-                    <div style={{ position: "absolute", bottom: -12, left: 0, width: "100%", display: "flex", justifyContent: "space-evenly", zIndex: 20 }}>
+                    <div style={{ position: "absolute", bottom: -13, left: 0, width: "100%", height: 26, pointerEvents: "none", zIndex: 20 }}>
                       {ports.map((p, i) => {
                         const isSourceActive = drawingConn?.fromId === node.id && drawingConn?.fromPort === p.port;
+                        const isBranchSelected = Boolean(p.branchId && selectedBranchId === p.branchId);
+                        const isHighlighted = isSourceActive || isBranchSelected;
+                        const leftPct = ports.length === 1 ? "50%" : `${((i + 1) / (ports.length + 1)) * 100}%`;
                         return (
                           <div
                             key={p.port}
                             data-port={p.port}
-                            title={p.label || "Click or drag to connect"}
+                            title={p.label ? `${p.label} — Click to select branch or drag to connect an action` : "Click or drag to connect"}
                             style={{
+                              position: "absolute",
+                              left: leftPct,
+                              top: 0,
+                              transform: "translateX(-50%)",
                               width: 26,
                               height: 26,
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                               cursor: "crosshair",
-                              position: "relative",
+                              pointerEvents: "auto",
                             }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -3101,10 +3311,14 @@ export default function FlowBuilderTab({
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              const wasSamePort = drawingConn?.fromId === node.id && drawingConn?.fromPort === p.port;
                               if (p.branchId) {
                                 setSelectedBranchId(p.branchId);
                                 setSelectedId(p.branchId);
-                                toast.info(`Selected ${p.label}. Click an action from sidebar to add to this branch.`);
+                                if (wasSamePort && isBranchSelected) {
+                                  setDrawingConn(null);
+                                }
+                                toast.info(`Selected ${p.label}. Click an action from sidebar or drag to connect.`);
                               } else {
                                 setSelectedId(node.id);
                                 const stepCtx = findStepInTree(workflowSteps, node.id);
@@ -3113,7 +3327,7 @@ export default function FlowBuilderTab({
                                 } else {
                                   setSelectedBranchId(null);
                                 }
-                                if (drawingConn?.fromId === node.id && drawingConn?.fromPort === p.port) {
+                                if (wasSamePort) {
                                   setDrawingConn(null);
                                 }
                               }
@@ -3121,27 +3335,31 @@ export default function FlowBuilderTab({
                           >
                             <div
                               style={{
-                                width: isSourceActive ? 16 : 13,
-                                height: isSourceActive ? 16 : 13,
+                                width: isHighlighted ? 13 : 11,
+                                height: isHighlighted ? 13 : 11,
                                 borderRadius: "50%",
-                                background: isSourceActive ? (p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1")) : "white",
-                                border: `2px solid ${p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1")}`,
+                                background: isHighlighted ? "#1e293b" : "white",
+                                border: `1.5px solid ${isHighlighted ? "#0f172a" : "#94a3b8"}`,
                                 transition: "all 0.15s ease",
                               }}
-                              className={isSourceActive ? "ring-4 ring-primary/40 shadow-md scale-110" : "hover:scale-125"}
+                              className={isHighlighted ? "ring-2 ring-slate-300 shadow-sm scale-110" : "hover:scale-125 hover:border-slate-600"}
                             />
                             {p.label && (
-                              <span style={{
-                                position: "absolute",
-                                top: 22,
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                                fontSize: 8,
-                                fontWeight: 700,
-                                color: p.label === "Else" ? "#d97706" : (PORT_COLOR[p.port] || "#6366f1"),
-                                whiteSpace: "nowrap",
-                                pointerEvents: "none",
-                              }}>
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  top: 23,
+                                  left: "50%",
+                                  transform: "translateX(-50%)",
+                                  whiteSpace: "nowrap",
+                                  pointerEvents: "none",
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-semibold leading-none border shadow-2xs transition-colors ${
+                                  isHighlighted
+                                    ? "bg-slate-900 text-white border-slate-900"
+                                    : "bg-white/95 text-slate-600 border-slate-200/90"
+                                }`}
+                              >
                                 {p.label}
                               </span>
                             )}

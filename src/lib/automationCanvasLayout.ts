@@ -25,10 +25,10 @@ export interface LayoutResult {
   height: number;
 }
 
-export const NODE_WIDTH = 220;
-export const NODE_HEIGHT = 70;
-export const H_GAP = 60;
-export const V_GAP = 70;
+export const NODE_WIDTH = 248;
+export const NODE_HEIGHT = 92;
+export const H_GAP = 52;
+export const V_GAP = 68;
 export const MIN_BRANCH_COL_WIDTH = NODE_WIDTH + H_GAP;
 
 /**
@@ -96,7 +96,7 @@ export function computeTreeCanvasLayout(
   let prevPort = "default";
 
   /**
-   * Layout a sequence of steps vertically along a central X coordinate.
+   * Layout a set of steps allowing both sequential chains and multi-child parallel fan-out via connectAfterId.
    */
   function layoutSequence(
     seqSteps: WorkflowStep[],
@@ -106,28 +106,90 @@ export function computeTreeCanvasLayout(
     incomingPort: string,
     branchContext?: { parallelId: string; branchId: string; branchIndex: number }
   ): { maxY: number; lastNodeId: string | null } {
-    let yCursor = startY;
-    let lastId: string | null = incomingNodeId;
-    let currPort = incomingPort;
+    if (!seqSteps || seqSteps.length === 0) {
+      return { maxY: startY, lastNodeId: incomingNodeId };
+    }
+
+    const seqIds = new Set(seqSteps.map((s) => s.id));
+    const entryParentKey = incomingNodeId || "__branch_root__";
+    const childrenByParent = new Map<string, WorkflowStep[]>();
+    const disconnectedSteps: WorkflowStep[] = [];
+
+    const addChild = (parentId: string, child: WorkflowStep) => {
+      const list = childrenByParent.get(parentId) || [];
+      list.push(child);
+      childrenByParent.set(parentId, list);
+    };
 
     for (let i = 0; i < seqSteps.length; i++) {
-      const step = seqSteps[i];
+      const s = seqSteps[i];
+      if (s.connectAfterId === "none") {
+        disconnectedSteps.push(s);
+        continue;
+      }
+      if (s.connectAfterId) {
+        if (s.connectAfterId === incomingNodeId || seqIds.has(s.connectAfterId)) {
+          addChild(s.connectAfterId, s);
+        } else {
+          // Unknown external parent inside this scope -> attach to entry parent
+          addChild(entryParentKey, s);
+        }
+      } else {
+        const implicitParent = i === 0 ? entryParentKey : seqSteps[i - 1].id;
+        addChild(implicitParent, s);
+      }
+    }
+
+    const widthCache = new Map<string, number>();
+    const measureStepWidth = (step: WorkflowStep, seen = new Set<string>()): number => {
+      if (widthCache.has(step.id)) return widthCache.get(step.id)!;
+      if (seen.has(step.id)) return MIN_BRANCH_COL_WIDTH;
+      seen.add(step.id);
+
+      let selfW = MIN_BRANCH_COL_WIDTH;
+      if (isParallelStep(step)) {
+        selfW = getStepSubtreeWidth(step);
+      }
+      const kids = childrenByParent.get(step.id) || [];
+      let kidsW = 0;
+      if (kids.length > 0) {
+        kidsW = kids.reduce((acc, k) => acc + measureStepWidth(k, new Set(seen)), 0);
+      }
+      const total = Math.max(selfW, kidsW, MIN_BRANCH_COL_WIDTH);
+      widthCache.set(step.id, total);
+      return total;
+    };
+
+    const placed = new Set<string>();
+    let globalMaxY = startY;
+    let lastPlacedId: string | null = incomingNodeId;
+
+    const placeNodeAndChildren = (
+      step: WorkflowStep,
+      nodeCenterX: number,
+      nodeY: number,
+      parentConnFromId: string | null,
+      parentConnPort: string
+    ): number => {
+      if (placed.has(step.id)) return nodeY;
+      placed.add(step.id);
+      lastPlacedId = step.id;
+
+      let subtreeBottomY = nodeY + NODE_HEIGHT;
 
       if (isParallelStep(step)) {
-        // Parallel Branches or Condition Cases node
         const isCondition = step.stepKey === "condition";
         const branches = step.branches || [];
         const branchWidths = branches.map((b) => getBranchSubtreeWidth(b));
         const totalParallelWidth = branchWidths.reduce((a, b) => a + b, 0);
 
-        // Place parallel or condition node centered
         const parallelNode: LayoutNode = {
           id: step.id,
           type: isCondition ? "condition" : "parallel",
           label: step.name || (isCondition ? "Condition" : "Parallel Branches"),
           stepKey: step.stepKey || (isCondition ? "condition" : "parallel"),
-          x: centerX,
-          y: yCursor,
+          x: nodeCenterX,
+          y: nodeY,
           config: {
             ...(step.params || {}),
             branchCount: branches.length,
@@ -143,82 +205,34 @@ export function computeTreeCanvasLayout(
         };
         nodes.push(parallelNode);
 
-        // Connect from predecessor
-        if (lastId) {
+        if (parentConnFromId) {
           connections.push({
-            id: `conn-${lastId}-${parallelNode.id}`,
-            fromId: lastId,
-            fromPort: currPort,
+            id: `conn-${parentConnFromId}-${parallelNode.id}`,
+            fromId: parentConnFromId,
+            fromPort: parentConnPort,
             toId: parallelNode.id,
           });
         }
 
-        // Layout branches side by side under the parallel/condition node
-        const branchTopY = yCursor + NODE_HEIGHT + V_GAP;
-        let branchLeft = centerX - totalParallelWidth / 2;
-        let maxBranchY = branchTopY;
+        const branchTopY = nodeY + NODE_HEIGHT + V_GAP;
+        let branchLeft = nodeCenterX - totalParallelWidth / 2;
+        let maxBranchY = nodeY + NODE_HEIGHT;
 
         for (let bIdx = 0; bIdx < branches.length; bIdx++) {
           const branch = branches[bIdx];
           const bWidth = branchWidths[bIdx];
           const branchCenterX = branchLeft + bWidth / 2;
           const branchPort = `branch-${bIdx}`;
-          const isElse = branch.name === "Else" || branch.id === "else" || branch.id.endsWith("-else");
-          const defaultBranchName = isElse ? "Else" : isCondition ? `Case ${bIdx + 1}` : `Branch ${bIdx + 1}`;
-          const branchName = branch.name || defaultBranchName;
 
-          if (!branch.steps || branch.steps.length === 0) {
-            // Empty branch placeholder
-            const placeholderId = `empty-${branch.id}`;
-            const placeholderNode: LayoutNode = {
-              id: placeholderId,
-              type: "empty-branch",
-              label: branchName,
-              x: branchCenterX,
-              y: branchTopY,
-              config: {
-                branchId: branch.id,
-                parallelId: step.id,
-                sourceParallelStepId: step.id,
-                branchIndex: bIdx,
-                branchName: branchName,
-                isConditionCase: isCondition,
-                isElse: isElse,
-              },
-            };
-            nodes.push(placeholderNode);
-
-            // Connect parallel node port -> placeholder
-            connections.push({
-              id: `conn-${step.id}-${placeholderId}`,
-              fromId: step.id,
-              fromPort: branchPort,
-              toId: placeholderId,
-            });
-
-            if (branchTopY + NODE_HEIGHT > maxBranchY) {
-              maxBranchY = branchTopY + NODE_HEIGHT;
-            }
-          } else {
-            // First step in branch connects directly from parallel branch port
-            const firstChild = branch.steps[0];
-            connections.push({
-              id: `conn-${step.id}-${firstChild.id}`,
-              fromId: step.id,
-              fromPort: branchPort,
-              toId: firstChild.id,
-            });
-
-            // Layout branch sequence
+          if (branch.steps && branch.steps.length > 0) {
             const res = layoutSequence(
               branch.steps,
               branchCenterX,
               branchTopY,
-              "", // already connected first child
-              "default",
+              step.id,
+              branchPort,
               { parallelId: step.id, branchId: branch.id, branchIndex: bIdx }
             );
-
             if (res.maxY > maxBranchY) {
               maxBranchY = res.maxY;
             }
@@ -226,20 +240,15 @@ export function computeTreeCanvasLayout(
 
           branchLeft += bWidth;
         }
-
-        yCursor = maxBranchY + V_GAP;
-        lastId = null; // No auto-join after parallel group
-        currPort = "default";
+        subtreeBottomY = maxBranchY;
       } else {
-        // Regular step node
-        const nodeType = step.stepKey || "step";
         const regularNode: LayoutNode = {
           id: step.id,
-          type: nodeType,
+          type: step.stepKey || "step",
           label: step.name,
           stepKey: step.stepKey,
-          x: centerX,
-          y: yCursor,
+          x: nodeCenterX,
+          y: nodeY,
           config: {
             ...(step.params || {}),
             autoGenerated: true,
@@ -252,23 +261,68 @@ export function computeTreeCanvasLayout(
         };
         nodes.push(regularNode);
 
-        // Connect from predecessor in this sequence
-        if (lastId) {
+        if (parentConnFromId) {
           connections.push({
-            id: `conn-${lastId}-${step.id}`,
-            fromId: lastId,
-            fromPort: currPort,
+            id: `conn-${parentConnFromId}-${step.id}`,
+            fromId: parentConnFromId,
+            fromPort: parentConnPort,
             toId: step.id,
           });
         }
-
-        lastId = step.id;
-        currPort = "default";
-        yCursor += NODE_HEIGHT + V_GAP;
       }
+
+      const kids = childrenByParent.get(step.id) || [];
+      if (kids.length > 0 && !isParallelStep(step)) {
+        const kidTopY = subtreeBottomY + V_GAP;
+        if (kids.length === 1) {
+          subtreeBottomY = placeNodeAndChildren(kids[0], nodeCenterX, kidTopY, step.id, "default");
+        } else {
+          const kidWidths = kids.map((k) => measureStepWidth(k));
+          const totalKidWidth = kidWidths.reduce((a, b) => a + b, 0);
+          let leftX = nodeCenterX - totalKidWidth / 2;
+          let deepestY = subtreeBottomY;
+          kids.forEach((kid, idx) => {
+            const w = kidWidths[idx];
+            const bottom = placeNodeAndChildren(kid, leftX + w / 2, kidTopY, step.id, "default");
+            if (bottom > deepestY) deepestY = bottom;
+            leftX += w;
+          });
+          subtreeBottomY = deepestY;
+        }
+      }
+
+      if (subtreeBottomY > globalMaxY) globalMaxY = subtreeBottomY;
+      return subtreeBottomY;
+    };
+
+    const rootKids = childrenByParent.get(entryParentKey) || [];
+    const rootConnFromId = incomingNodeId || null;
+    if (rootKids.length === 1) {
+      placeNodeAndChildren(rootKids[0], centerX, startY, rootConnFromId, incomingPort);
+    } else if (rootKids.length > 1) {
+      const rootWidths = rootKids.map((k) => measureStepWidth(k));
+      const totalWidth = rootWidths.reduce((a, b) => a + b, 0);
+      let leftX = centerX - totalWidth / 2;
+      rootKids.forEach((kid, idx) => {
+        const w = rootWidths[idx];
+        placeNodeAndChildren(kid, leftX + w / 2, startY, rootConnFromId, incomingPort);
+        leftX += w;
+      });
     }
 
-    return { maxY: yCursor, lastNodeId: lastId };
+    // Place any disconnected or cyclic leftover steps cleanly below without incoming connection
+    const remaining = [...disconnectedSteps, ...seqSteps.filter((s) => !placed.has(s.id))];
+    remaining.forEach((step, idx) => {
+      placeNodeAndChildren(
+        step,
+        centerX + idx * MIN_BRANCH_COL_WIDTH,
+        globalMaxY + V_GAP,
+        null,
+        "default"
+      );
+    });
+
+    return { maxY: globalMaxY, lastNodeId: lastPlacedId };
   }
 
   // Layout the main sequence

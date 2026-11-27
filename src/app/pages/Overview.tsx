@@ -672,9 +672,9 @@ export default function Overview() {
   const successRate = totalCalls > 0 ? `${((completedCalls / totalCalls) * 100).toFixed(1)}%` : "0.0%";
   const avgDuration = isFresh ? "0m 00s" : "0m 14s";
 
-  // Most recent tasks for banner (maximum 2)
+  // Most recent tasks for banner (maximum 3)
   const displayedTasks = useMemo(() => {
-    return tasks.slice(0, 2);
+    return tasks.slice(0, 3);
   }, [tasks]);
 
   // Current active tab object
@@ -830,23 +830,19 @@ export default function Overview() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full">
+      <PageHeader
+        title="Overview Analytics"
+        subtitle="Track call performance, automation health, active tasks, and team notifications"
+        badge={
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            Analytics
+          </span>
+        }
+      />
+      <div className="px-10 sm:px-12 pt-4 pb-7.5 sm:pt-5 sm:pb-8 w-full">
         {/* Strict 6-Column Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-start">
-          {/* ROW 1: Page Header (Col-span 6) */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-6">
-            <PageHeader
-              title="Overview Analytics"
-              subtitle="Track call performance, automation health, active tasks, and team notifications"
-              badge={
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-                  Analytics
-                </span>
-              }
-            />
-          </div>
-
-          {/* FULL-WIDTH ACTIVE TASKS BANNER (Most recent tasks, maximum 2) */}
+          {/* FULL-WIDTH ACTIVE TASKS BANNER (Most recent tasks, maximum 3) */}
           <div className="col-span-1 md:col-span-2 lg:col-span-6 bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3 mb-3.5">
               <div className="flex items-center gap-2.5">
@@ -880,13 +876,13 @@ export default function Overview() {
               </Link>
             </div>
 
-            {/* Tasks List: Maximum 2 tasks */}
+            {/* Tasks List: Maximum 3 tasks in a single row */}
             {displayedTasks.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-400 italic">
                 No active tasks.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                 {displayedTasks.map((task) => {
                   const allItems = task.checklists?.flatMap((c) => c.items) || [];
                   const completedItems = allItems.filter((i) => i.isCompleted);
@@ -898,9 +894,9 @@ export default function Overview() {
                     <div
                       key={task.id}
                       onClick={() => navigate(targetUrl)}
-                      className="p-3.5 rounded-2xl bg-slate-50/70 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200/60 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                      className="p-3.5 rounded-2xl bg-slate-50/70 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200/60 transition-all cursor-pointer flex items-center justify-between gap-3 group min-w-0"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {totalItems > 0 ? (
                           <div className="shrink-0 flex items-center">
                             <CircularProgressRing
@@ -923,7 +919,7 @@ export default function Overview() {
                           </div>
                         )}
 
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             {task.isImportant && (
                               <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />

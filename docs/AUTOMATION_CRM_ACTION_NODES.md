@@ -1,6 +1,6 @@
-# Automation Builder: Create Contact & Duplicate Process Nodes
+# Automation Builder: CRM Action, Messaging & Assignment Nodes
 
-Specification, expected behavior, and acceptance criteria for the new CRM Action nodes added under **Action > Create CRM Entities** in the Automation Builder (alongside the removal of the legacy **Create Client** node).
+Specification, expected behavior, and acceptance criteria for the CRM Action nodes added under **Action > Create CRM Entities** in the Automation Builder (`Create Contact`, `Duplicate Process`, `Create Task`, alongside removal of legacy `Create Client`), plus updated **Communication** (`Send WhatsApp`, `Send SMS`, `Send Email`) and **Assign Responsible** nodes.
 
 ---
 
@@ -8,10 +8,11 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 
 | Area | Details | Source |
 | :--- | :--- | :--- |
-| Step Catalog & Allowed Triggers | Registers `create_contact` and `duplicate_process`; removes `create_client` | [AddAutomationDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/AddAutomationDrawer.tsx) |
-| Visual Flow Canvas | Registers `"create-contact"` and `"duplicate-process"` node types, styles, icons, labels, subtitles, and bidirectional `stepKey` mapping; removes `"create-client"` | [FlowBuilderTab.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/FlowBuilderTab.tsx) |
+| Step Catalog & Allowed Triggers | Registers `create_contact`, `duplicate_process`, and `create_task`; removes `create_client` | [AddAutomationDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/AddAutomationDrawer.tsx) |
+| Visual Flow Canvas | Registers `"create-contact"`, `"duplicate-process"`, and `"create-task"` node types, styles, icons, labels, subtitles, and bidirectional `stepKey` mapping; removes `"create-client"` | [FlowBuilderTab.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/FlowBuilderTab.tsx) |
 | Step Drawer Shell | Forwards `sourceProcessId` and `sourceProcessName` context props | [StepDetailDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepDetailDrawer.tsx) |
-| Parameter Configuration UI | Renders Contact Type + Required/Optional contact fields (`create_contact`), shared vs. unique field resolution (`duplicate_process`), inline icon-only field pickers (`renderInputTrailingIcons`), and removes `create_client` | [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx) |
+| Parameter Configuration UI | Renders Contact Type + Required/Optional contact fields (`create_contact`), shared vs. unique field resolution (`duplicate_process`), Task creation (`create_task`), template-only WhatsApp/SMS/Email messaging with connected accounts, multi-select Assign Responsible dropdowns (`Round Robin` / `Random`), and inline icon-only field pickers (`renderInputTrailingIcons`) | [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx) |
+| Messaging Templates Store | Provides shared `getStoredSmsTemplates()` and `getStoredEmailTemplates()` backed by `localStorage` | [messagingTemplatesStore.ts](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/lib/messagingTemplatesStore.ts) |
 | Contact Categories Store | Supplies dynamic Contact Type options (`getContactCategories`, `CONTACT_CATEGORIES_EVENT`) | [contactCategoriesStore.ts](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/lib/contactCategoriesStore.ts) |
 | Process Field Definitions | Supplies process/stage field metadata (`processIds`, `required`, `requiredStages`) via `useFieldRegistry()` | [FieldRegistryContext.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/context/FieldRegistryContext.tsx) |
 
@@ -99,7 +100,53 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 
 ---
 
-## 4. Inline Field-Picker Pattern Across Automation Step Inputs
+## 4. Node 3: Create Task (`create_task` / `create-task`)
+
+### 4.1 Catalog & Canvas Metadata
+- **Step Key / Node Type:** `create_task` (catalog) / `create-task` (Flow Builder canvas)
+- **Category:** `Action > Create CRM Entities` (`crm-entities` in Flow Builder; `["all", "crm", "workflow"]` in catalog)
+- **Allowed Triggers:** `["stage", "incall", "inchat", "postcall"]`
+- **Canvas Visuals:** Unique magenta-violet crystal orb (`CheckSquare` icon)
+- **Dynamic Node Subtitle:** Configured `taskTitle`, or default `"Create follow-up task"`.
+
+### 4.2 Configurable Parameters (Matching Task Module `TaskQuickCreateDrawer`)
+- **Task Title & Task Description (`params.taskTitle`, `params.taskDescription`):** Grouped in a shared bordered section with inline `<Sliders />` field-picker icons inside both the Task Title input and Task Description textarea containers supporting trigger field tokens (`{{client_name}}`, etc.).
+- **Task Responsible (`params.responsibleSource`: `"custom" | "inherit"`, `params.responsibleType`: `"team" | "contact"`):** Dropdown selector (**Assignment Source**) switching between **Custom** and **Inherit from Previous Node**:
+  - **Custom:** Assign via **Team Members** (`Role` filter + multi-select `Select Members` + **Assignment Strategy**: `Round Robin` or `Assign All Selected`) or **Contacts** (`Category` filter + multi-select `Select Contacts`, defaulting to triggering Contact).
+  - **Inherit from Previous Node:** Automatically inherits the responsible assignee set by a preceding node (such as `Assign Responsible`) or falls back to the trigger record owner.
+- **Mark Required Toggle (`params.isRequired`):** Toggle switch synced with the **Mark Required** toggle in [TaskQuickCreateDrawer.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/tasks/TaskQuickCreateDrawer.tsx) (`TaskEntity.isRequired`).
+- **Workflow Pipeline (`params.workflowId`, `params.workflowName`):** Bordered selector pulling from Task module pipelines (`entityType === "task"` via `DEFAULT_TASK_PROCESSES`, e.g., Clinical & Operational Tasks, Compliance & Credentialing, Patient Care Follow-up).
+- **Schedule:** Relative **Deadline Offset** (`deadlineOffsetValue`, `deadlineOffsetUnit`) plus **Target Time** (`deadlineTime`).
+- **Repeat (Recurrence):** Enable toggle, `Every` (`repeatInterval` + `repeatUnit`), `End Recurrence` (`never` / `count` / `date`), and `Skip weekends`.
+- **Observers (`params.observerSource`: `"custom" | "inherit"`, `params.observerDistribution`: `"round_robin" | "all"`):** Dropdown selector (**Observer Source**) for `Custom` vs `Inherit from Previous Node`, plus Role filter, multi-select `Select Observer Members` (`selectedObserverMemberIds`), and **Observer Strategy** (`Round Robin` or `Assign All Selected`).
+- **Task Studio Deliverables (`params.studioItems`):** Add, reorder (`up` / `down`), and remove checklist deliverable items with title, description, important flag, and full resource types (`None`, `File`, `Image`, `Video`, `URL`, `HTML Block`) supporting Direct Upload (max 1MB) or Online URL plus live preview.
+
+### 4.3 Acceptance Criteria — Create Task
+- [ ] **AC-CT-1 (Catalog & Canvas Placement):** **Create Task** appears under **Create CRM Entities** in both Flow Builder sidebar and step catalog.
+- [ ] **AC-CT-2 (Task Configuration):** User can set title (including dynamic field tokens), description, link scope, assignee, relative due time, and priority.
+
+---
+
+## 5. Communication Nodes (Template-Only) & Assign Responsible Updates
+
+### 5.1 Communication Nodes (`whatsapp`, `sms`, `email`)
+- **Send WhatsApp (`whatsapp` / `send-whatsapp`):**
+  - **Connected Account (`params.whatsappConnectedAccount`):** Dropdown of WhatsApp Business numbers from `getStoredWhatsAppNumbers()`.
+  - **Template (`params.whatsappTemplate`):** Template-only selector from `getStoredTemplates()` with read-only body preview. **Select Source**, **Campaign**, and **Website Chat Notification Message** are removed.
+- **Send SMS (`sms` / `send-sms`):**
+  - **Connected Account (`params.smsConnectedAccount`):** Dropdown of SMS-capable phone numbers from `getStoredPhoneNumbers()`.
+  - **Template (`params.smsTemplate`):** Template-only selector from `getStoredSmsTemplates()` with read-only body preview. Free-form message and Website Chat Notification Message are removed.
+- **Send Email (`email` / `send-email`):**
+  - **Connected Account (`params.emailConnectedAccount`):** Dropdown of mailbox accounts from `getStoredMailboxAccounts()`.
+  - **Template (`params.emailTemplate`):** Template selector from `getStoredEmailTemplates()` with read-only Subject + Body preview. Manual Template Mode, Subject, and Body editor are removed.
+
+### 5.2 Assign Responsible (`assignhuman` / `assign-responsible`)
+- Uses clean searchable **MultiSelectDropdown** pickers (`Departments` + `Roles`, or `Team Members`) instead of card blocks and sequence priority controls.
+- **Distribution Method:** Supports **Round Robin** and **Random** only (**Strict Priority** removed).
+
+---
+
+## 6. Inline Field-Picker Pattern Across Automation Step Inputs
 
 - **UI Pattern (`renderInputTrailingIcons` in [StepParametersFields.tsx](file:///C:/Users/Mantra/.gemini/antigravity/scratch/ma-figma/src/app/components/process/StepParametersFields.tsx)):**
   - The legacy **Select Field** text capsule button is removed from field headers and labels across Automation step parameters.
@@ -110,8 +157,8 @@ Specification, expected behavior, and acceptance criteria for the new CRM Action
 
 ---
 
-## 5. Verification Status (Static & Build Checks)
+## 7. Verification Status (Static & Build Checks)
 - **Inline Capsule Removal Check (`git grep -n "<span>Select Field</span>" src/app/components/process/`):** `0` remaining occurrences.
-- **TypeScript (`npx tsc --noEmit`):** `0` errors across `AddAutomationDrawer.tsx`, `FlowBuilderTab.tsx`, `StepDetailDrawer.tsx`, and `StepParametersFields.tsx` (only 3 unrelated pre-existing errors remain in `NoteTemplateBuilderDrawer.tsx`, `AdminFormTemplates.tsx`, and `AIScribeConsole.tsx`).
-- **Vite Production Build (`npx vite build`):** Passed cleanly (`3860 modules transformed`, built in `18.95s`, exit code `0`).
+- **TypeScript (`npx tsc --noEmit`):** `0` errors across `AddAutomationDrawer.tsx`, `FlowBuilderTab.tsx`, `StepDetailDrawer.tsx`, `StepParametersFields.tsx`, and `messagingTemplatesStore.ts` (only 3 unrelated pre-existing errors remain in `NoteTemplateBuilderDrawer.tsx`, `AdminFormTemplates.tsx`, and `AIScribeConsole.tsx`).
+- **Vite Production Build (`npx vite build`):** Passed cleanly (`3861` modules transformed, built in `23.11s`, exit code `0`).
 - **UI Interactive / Runtime Execution:** Requires manual QA pass in the browser Automation Builder UI (Flow Builder & Step Catalog) and backend workflow execution verification against the acceptance criteria above.

@@ -780,6 +780,7 @@ export default function TaskQuickCreateDrawer({
   });
   const [deadlineTime, setDeadlineTime] = useState("17:00");
   const [isImportant, setIsImportant] = useState(false);
+  const [isRequired, setIsRequired] = useState(false);
 
   // Settings: Repeat
   const [repeatEnabled, setRepeatEnabled] = useState(false);
@@ -892,6 +893,7 @@ export default function TaskQuickCreateDrawer({
       setTitle(taskToEdit.title || "");
       setDescription(taskToEdit.description || "");
       setIsImportant(Boolean(taskToEdit.isImportant));
+      setIsRequired(Boolean(taskToEdit.isRequired));
 
       if (taskToEdit.workflowId) {
         setSelectedPipelineId(taskToEdit.workflowId);
@@ -985,6 +987,7 @@ export default function TaskQuickCreateDrawer({
       setTitle("");
       setDescription("");
       setIsImportant(false);
+      setIsRequired(false);
       setRepeatEnabled(false);
       setSelectedObserverMemberIds([]);
       setAdminScopingRules([]);
@@ -1415,6 +1418,7 @@ export default function TaskQuickCreateDrawer({
         workflowId: selectedPipeline.id,
         workflowName: selectedPipeline.name,
         isImportant,
+        isRequired,
         scopeLevel: isAdmin ? "admin" : responsibleType === "contact" ? "portal" : "client",
         assignee: primaryAssignee,
         assignees: allAssignees,
@@ -1476,6 +1480,7 @@ export default function TaskQuickCreateDrawer({
             workflowId: selectedPipeline.id,
             workflowName: selectedPipeline.name,
             isImportant,
+            isRequired,
             scopeLevel: isAdmin ? "admin" : r.type === "contact" ? "portal" : "client",
             assignee: indivAssignee,
             assignees: [indivAssignee],
@@ -1539,6 +1544,7 @@ export default function TaskQuickCreateDrawer({
       workflowId: selectedPipeline.id,
       workflowName: selectedPipeline.name,
       isImportant,
+      isRequired,
       scopeLevel: isAdmin ? "admin" : responsibleType === "contact" ? "portal" : "client",
       assignee: primaryAssignee,
       assignees: allAssignees,
@@ -2044,6 +2050,39 @@ export default function TaskQuickCreateDrawer({
               {isAdmin ? "Task Parameters" : "Task Parameters & Schedule"}
             </h3>
 
+            {/* Mark Required Toggle */}
+            <div
+              onClick={() => setIsRequired((prev) => !prev)}
+              className="flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 rounded-2xl border border-slate-200/80 shadow-xs transition-colors cursor-pointer select-none"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-sm font-bold text-[#222222] block" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Mark Required
+                </span>
+                <span className="text-xs text-slate-500">
+                  Require completion of this task before stage or workflow progression
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isRequired}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsRequired((prev) => !prev);
+                }}
+                className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                  isRequired ? "bg-slate-900" : "bg-slate-200"
+                }`}
+              >
+                <div
+                  className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
+                    isRequired ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
             {/* Row A: Schedule (Client only) */}
             {!isAdmin && (
               <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
@@ -2516,12 +2555,19 @@ export default function TaskQuickCreateDrawer({
                     </p>
                   </div>
 
-                  {isImportant && (
-                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold shrink-0">
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                      <span>Important</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isRequired && (
+                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900 text-white text-xs font-semibold shrink-0">
+                        <span>Required</span>
+                      </div>
+                    )}
+                    {isImportant && (
+                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold shrink-0">
+                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        <span>Important</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Metadata: Schedule & Progress */}

@@ -12,6 +12,7 @@ import {
   ChevronUp,
   ChevronDown,
   Clock,
+  CheckSquare,
   Edit,
   Pencil,
   Check,
@@ -48,6 +49,8 @@ import {
   Split,
   Volume2,
   Copy,
+  Play,
+  Save,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import FlowBuilderTab from "./FlowBuilderTab";
@@ -94,6 +97,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   assign_process: ["stage", "inchat", "postcall"],
   duplicate_process: ["stage", "inchat", "postcall"],
   create_contact: ["stage", "incall", "inchat", "postcall"],
+  create_task: ["stage", "incall", "inchat", "postcall"],
   update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
@@ -160,6 +164,13 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     iconKey: "copy",
     cats: ["all", "crm", "workflow"],
   },
+  {
+    key: "create_task",
+    name: "Create Task",
+    desc: "Create and assign a new task in CRM Tasks.",
+    iconKey: "checksquare",
+    cats: ["all", "crm", "workflow"],
+  },
   // Logic & Wait & Conditions
   {
     key: "wait",
@@ -178,26 +189,12 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     isCondition: true,
   },
   {
-    key: "parallel",
-    name: "Parallel Branches",
-    desc: "Run two or more branches simultaneously in parallel.",
-    iconKey: "layers",
-    cats: ["all", "workflow"],
-  },
-  {
     key: "update_to_stage",
     name: "Update to stage",
     desc: "Update the stage for a process, appointment, or invoice.",
     iconKey: "gitbranch",
     cats: ["all", "workflow"],
     isMoveToStage: true,
-  },
-  {
-    key: "endworkflow",
-    name: "End Workflow",
-    desc: "Conclude this workflow execution.",
-    iconKey: "x",
-    cats: ["all", "workflow"],
   },
 
   // Records
@@ -307,6 +304,7 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   layers: <Layers className="w-4 h-4 text-white" />,
   parallel: <Layers className="w-4 h-4 text-white" />,
   copy: <Copy className="w-4 h-4 text-white" />,
+  checksquare: <CheckSquare className="w-4 h-4 text-white" />,
 };
 
 function getTriggerIcon(type: EventTriggerType | "stage") {
@@ -927,18 +925,21 @@ export default function AddAutomationDrawer({
           className="relative h-screen bg-white shadow-2xl flex flex-col z-50 border-l border-gray-200 outline-none w-[88vw] min-w-[85vw] max-w-[1550px]"
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
+          {/* Floating Half-Capsule Close Button flush with left edge of drawer */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 -left-10 w-10 h-10 rounded-l-full bg-[#1E293B] hover:bg-slate-900 text-white shadow-lg flex items-center justify-center transition-colors cursor-pointer z-50"
+            title="Close (Esc)"
+            aria-label="Close drawer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-3.5 border-b border-gray-200 bg-white">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                  {effectiveScope === "stage" ? (
-                    <GitBranch className="w-4.5 h-4.5" />
-                  ) : (
-                    <Zap className="w-4.5 h-4.5" />
-                  )}
-                </div>
-
+              <div className="flex items-start min-w-0 flex-1">
                 <div className="min-w-0 flex-1">
                   {/* Title Row + Single Pencil Icon */}
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1028,20 +1029,25 @@ export default function AddAutomationDrawer({
                 </div>
               </div>
 
-              {/* Top Right: How Flow Builder Works & Close Button */}
-              <div className="flex items-center gap-2.5 shrink-0">
-                <HowItWorksButton
-                  label="How Flow Builder Works"
-                  onClick={() => setShowFlowBuilderHelp(true)}
-                />
-                <div className="w-px h-5 bg-gray-200" />
+              {/* Top Right: Text How Flow Builder Works & Save Button */}
+              <div className="flex items-center gap-4 shrink-0">
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
-                  title="Close (Esc)"
+                  onClick={() => setShowFlowBuilderHelp(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline transition-colors cursor-pointer shrink-0"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  <X className="w-5 h-5 text-gray-500" />
+                  <Play className="w-3 h-3 fill-current" />
+                  <span>How Flow Builder Works</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveAutomation("active")}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white text-xs font-semibold border border-slate-700/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_rgba(24,30,37,0.20)] transition-all cursor-pointer shrink-0"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save</span>
                 </button>
               </div>
             </div>
@@ -1128,6 +1134,7 @@ export default function AddAutomationDrawer({
                 initialStepIdToConfigure={initialStepIdToConfigure}
                 onSave={() => handleSaveAutomation("active")}
                 hideHowItWorks={true}
+                hideCanvasSave={true}
                 initialHasChosenTrigger={Boolean((initialAutomation?.steps && initialAutomation.steps.length > 0) || (workflowSteps && workflowSteps.length > 0) || initialStepIdToConfigure)}
               />
             </div>
@@ -1179,7 +1186,7 @@ export default function AddAutomationDrawer({
           bullets={[
             "Each lane shows steps in the order they run",
             "Drag a node's bottom port to another node's top port to change what runs next",
-            "Select a step, then add a Condition, Wait, or Parallel Branch from the left panel to modify it",
+            "Select a node and add multiple actions from it to run parallel automations",
             "Double-click any node to open its full configuration",
             "Nodes sync with your automation steps automatically — edit here or in the step drawer",
           ]}

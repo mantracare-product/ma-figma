@@ -4,7 +4,7 @@ import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, Users, Shield, Layers, PhoneForwarded, Phone, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
   ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Workflow, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap, CornerDownRight,
-  Building2, ChevronUp, CheckSquare, Square, Hash, ArrowUpDown
+  Building2, ChevronUp, CheckSquare, Square, Hash, ArrowUpDown, Search, Upload, FileText, FileCode, Link as LinkIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ConditionCase, ConditionCaseRule } from "../../types/workflow";
@@ -15,7 +15,12 @@ import { InfoTooltip } from "../help/InfoTooltip";
 import { useFieldRegistry, isFieldMatchingOrg, ScopingRule, ALL_MODULES, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
-import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
+import { getStoredWhatsAppNumbers } from "../../../lib/useWhatsAppNumbers";
+import { getStoredPhoneNumbers } from "../../../lib/telephonyAdminStore";
+import { getStoredMailboxAccounts } from "../../../lib/mailboxStore";
+import { getStoredSmsTemplates, getStoredEmailTemplates } from "../../../lib/messagingTemplatesStore";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, DEFAULT_TASK_PROCESSES, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
+import { initialClients } from "../../../data/canonicalClients";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredServices } from "../../../lib/servicesStore";
 import {
@@ -99,6 +104,179 @@ interface StepParametersFieldsProps {
   sourceProcessId?: string;
   sourceProcessName?: string;
   isAdmin?: boolean;
+}
+
+interface MultiSelectOption {
+  value: string;
+  label: string;
+  sublabel?: string;
+}
+
+function MultiSelectDropdown({
+  label,
+  placeholder,
+  options,
+  selectedValues,
+  onChange,
+  allSelectedFallbackText,
+}: {
+  label: string;
+  placeholder: string;
+  options: MultiSelectOption[];
+  selectedValues: string[];
+  onChange: (next: string[]) => void;
+  allSelectedFallbackText?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(q) ||
+        (opt.sublabel && opt.sublabel.toLowerCase().includes(q))
+    );
+  }, [options, query]);
+
+  const selectedOptions = options.filter((o) => selectedValues.includes(o.value));
+
+  const toggleVal = (val: string) => {
+    onChange(
+      selectedValues.includes(val)
+        ? selectedValues.filter((v) => v !== val)
+        : [...selectedValues, val]
+    );
+  };
+
+  return (
+    <div ref={containerRef} className="relative space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[13px] font-medium text-slate-700">{label}</label>
+        {options.length > 0 && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <button
+              type="button"
+              onClick={() => onChange(options.map((o) => o.value))}
+              className="text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
+            >
+              Select All
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="w-full min-h-[38px] px-3 py-1.5 rounded-[8px] border border-slate-200 hover:border-slate-300 bg-white text-left flex items-center justify-between gap-2 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          {selectedOptions.length === 0 ? (
+            <span className="text-[13px] text-slate-400 truncate">
+              {allSelectedFallbackText || placeholder}
+            </span>
+          ) : (
+            selectedOptions.map((opt) => (
+              <span
+                key={opt.value}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200"
+              >
+                <span className="truncate max-w-[160px]">{opt.label}</span>
+                <span
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleVal(opt.value);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Remove"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              </span>
+            ))
+          )}
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-[8px] shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50/70">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${label.toLowerCase()}...`}
+              className="w-full text-xs bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1 divide-y divide-slate-50">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-400">
+                No matching options
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selectedValues.includes(opt.value);
+                return (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-2.5 px-2.5 py-2 hover:bg-slate-50 rounded-[6px] cursor-pointer transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleVal(opt.value)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-slate-900 accent-slate-900 cursor-pointer shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-medium text-slate-800 block truncate">
+                        {opt.label}
+                      </span>
+                      {opt.sublabel && (
+                        <span className="text-[10px] text-slate-400 block truncate">
+                          {opt.sublabel}
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function StepParametersFields({
@@ -205,8 +383,14 @@ export default function StepParametersFields({
       [caseKey]: !prev[caseKey],
     }));
   };
-  const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
-  const [whatsappCampaigns, setWhatsappCampaigns] = useState<any[]>([]);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>(() => getStoredTemplates());
+  const [whatsappNumbers, setWhatsappNumbers] = useState<any[]>(() => getStoredWhatsAppNumbers());
+  const [smsTemplates, setSmsTemplates] = useState<any[]>(() => getStoredSmsTemplates());
+  const [smsNumbers, setSmsNumbers] = useState<any[]>(() =>
+    getStoredPhoneNumbers().filter((p) => p.capabilities?.includes("sms"))
+  );
+  const [emailTemplates, setEmailTemplates] = useState<any[]>(() => getStoredEmailTemplates());
+  const [mailboxAccounts, setMailboxAccounts] = useState<any[]>(() => getStoredMailboxAccounts());
 
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
@@ -235,6 +419,8 @@ export default function StepParametersFields({
     | "assignProcessFieldToken"
     | "fieldUpdateValueToken"
     | "aiTriggerPromptToken"
+    | "createTaskTitleToken"
+    | "createTaskDescToken"
   >("monitoredFields");
   const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
   const [targetCaseIndex, setTargetCaseIndex] = useState<number | null>(null);
@@ -385,7 +571,7 @@ export default function StepParametersFields({
           <select
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] font-normal text-slate-900 focus:border-slate-400 outline-none cursor-pointer ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           >
@@ -407,7 +593,7 @@ export default function StepParametersFields({
             type="date"
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -420,7 +606,7 @@ export default function StepParametersFields({
             type="datetime-local"
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -433,7 +619,7 @@ export default function StepParametersFields({
             type="time"
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -447,7 +633,7 @@ export default function StepParametersFields({
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
             placeholder={placeholder}
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -465,7 +651,7 @@ export default function StepParametersFields({
               value={value ?? ""}
               onChange={(e) => onValChange(e.target.value)}
               placeholder="0.00"
-              className={`w-full pl-7 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+              className={`w-full h-9 pl-7 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-slate-400 outline-none ${
                 extraTrailingAction ? "pr-9" : "pr-3"
               }`}
             />
@@ -480,7 +666,7 @@ export default function StepParametersFields({
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
             placeholder="name@example.com"
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -494,7 +680,7 @@ export default function StepParametersFields({
             value={value ?? ""}
             onChange={(e) => onValChange(e.target.value)}
             placeholder="+1 (555) 000-0000"
-            className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+            className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-slate-400 outline-none ${
               extraTrailingAction ? "pr-9" : ""
             }`}
           />
@@ -507,7 +693,7 @@ export default function StepParametersFields({
           value={value ?? ""}
           onChange={(e) => onValChange(e.target.value)}
           placeholder={placeholder}
-          className={`w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:border-blue-500 outline-none ${
+          className={`w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-slate-400 outline-none ${
             extraTrailingAction ? "pr-9" : ""
           }`}
         />
@@ -818,6 +1004,18 @@ export default function StepParametersFields({
         });
         setTargetFieldUpdateIndex(null);
       }
+    } else if (fieldModalMode === "createTaskTitleToken") {
+      if (selectedKeys.length > 0) {
+        const token = `{{${selectedKeys[0]}}}`;
+        const cur = params.taskTitle || "";
+        onChange({ taskTitle: cur ? `${cur} ${token}` : token });
+      }
+    } else if (fieldModalMode === "createTaskDescToken") {
+      if (selectedKeys.length > 0) {
+        const token = `{{${selectedKeys[0]}}}`;
+        const cur = params.taskDescription || "";
+        onChange({ taskDescription: cur ? `${cur} ${token}` : token });
+      }
     } else if (fieldModalMode === "assignProcessFieldToken" || fieldModalMode === "aiTriggerPromptToken") {
       if (targetProcessFieldKey && selectedKeys.length > 0) {
         const chosenKey = selectedKeys[0];
@@ -846,7 +1044,21 @@ export default function StepParametersFields({
     if (stepKey === "whatsapp" || stepKey === "send-whatsapp") {
       try {
         setWhatsappTemplates(getStoredTemplates());
-        setWhatsappCampaigns(JSON.parse(localStorage.getItem("whatsappCampaigns") || "[]"));
+        setWhatsappNumbers(getStoredWhatsAppNumbers());
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (stepKey === "sms" || stepKey === "send-sms") {
+      try {
+        setSmsTemplates(getStoredSmsTemplates());
+        setSmsNumbers(getStoredPhoneNumbers().filter((p) => p.capabilities?.includes("sms")));
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (stepKey === "email" || stepKey === "send-email") {
+      try {
+        setEmailTemplates(getStoredEmailTemplates());
+        setMailboxAccounts(getStoredMailboxAccounts());
       } catch (e) {
         console.error(e);
       }
@@ -933,19 +1145,12 @@ export default function StepParametersFields({
   const callActionReason = params.callActionReason ?? "";
   const callActionVoiceResponse = params.callActionVoiceResponse ?? "";
 
+  const whatsappConnectedAccount = params.whatsappConnectedAccount ?? "";
   const whatsappTemplate = params.whatsappTemplate ?? "";
-  // Coerce legacy chatbot source to template
-  const whatsappSource = (params.whatsappSource === "chatbot" ? "template" : params.whatsappSource) ?? "template";
-  const whatsappCampaignId = params.whatsappCampaignId ?? "";
-  const websiteNotificationMessage = params.websiteNotificationMessage ?? "";
-  const smsMessage = params.smsMessage ?? "";
+  const smsTemplate = params.smsTemplate ?? "";
   const smsConnectedAccount = params.smsConnectedAccount ?? "";
   const emailConnectedAccount = params.emailConnectedAccount ?? "";
-  const showCustomEmail = params.showCustomEmail ?? false;
-  const emailSubject = params.emailSubject ?? "";
-  const emailRichBody = params.emailRichBody ?? "";
-  const emailHtmlBody = params.emailHtmlBody ?? "";
-  const htmlBodyViewMode = params.htmlBodyViewMode ?? "code";
+  const emailTemplate = params.emailTemplate ?? "";
 
   const crmName = params.crmName ?? "";
   const crmField = params.crmField ?? "";
@@ -1000,10 +1205,10 @@ export default function StepParametersFields({
   const idleHangupMessageStage = params.idleHangupMessageStage ?? "";
   const idleHangupDelayStage = params.idleHangupDelayStage ?? 60;
 
-  // Render method helper
+  // Render method helper matching WhatsApp Agent clean label + spacing
   const renderField = (label: React.ReactNode, element: React.ReactNode) => (
     <div className="space-y-1.5">
-      <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+      <label className="block text-[13px] font-medium text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
         {label}
       </label>
       {element}
@@ -1457,208 +1662,184 @@ export default function StepParametersFields({
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
           <div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-              <Split className="w-4 h-4 text-blue-600" />
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-900">
+              <Split className="w-4 h-4 text-slate-600" />
               <span>Condition Cases</span>
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Each case branches execution independently. Unmatched runs flow to Else.
+            <p className="text-xs text-slate-500 mt-0.5">
+              Each case branches execution from its dot. Unmatched runs flow to Else.
             </p>
           </div>
           <button
             type="button"
             onClick={handleAddCase}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white text-xs font-semibold border border-slate-700/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_1px_4px_rgba(24,30,37,0.16)] transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Case</span>
           </button>
         </div>
 
-        {/* Case Cards List */}
+        {/* Case Sections (flat, always open — no dropdown wrapper) */}
         <div className="space-y-4">
           {conditionCases.map((caseItem, caseIndex) => {
             const caseNumber = caseIndex + 1;
             const caseKey = caseItem.id || `case-${caseIndex}`;
-            const isCollapsed = Boolean(collapsedCases[caseKey]);
 
             return (
               <div
                 key={caseKey}
-                className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden"
+                className="border border-slate-200 rounded-[10px] bg-white overflow-hidden"
               >
-                {/* Collapsible Case Header */}
-                <div
-                  onClick={() => toggleCaseCollapse(caseKey)}
-                  className="flex items-center justify-between gap-2 p-3 bg-slate-50/80 border-b border-slate-200/70 cursor-pointer select-none hover:bg-slate-100/80 transition-colors"
-                >
+                {/* Clean Case Header */}
+                <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50/70 border-b border-slate-200/80">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <button
-                      type="button"
-                      className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-transform"
-                      aria-label={isCollapsed ? "Expand case" : "Collapse case"}
-                    >
-                      <ChevronDown
-                        className={`w-4 h-4 transition-transform duration-200 ${
-                          isCollapsed ? "-rotate-90" : "rotate-0"
-                        }`}
-                      />
-                    </button>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-white text-slate-700 border border-slate-200 shrink-0 shadow-2xs">
-                      CASE {caseNumber}
+                    <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                      Case {caseNumber}
                     </span>
                     <input
                       type="text"
                       value={caseItem.name || `Case ${caseNumber}`}
-                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => handleRenameCase(caseIndex, e.target.value)}
                       placeholder={`Case ${caseNumber} Name...`}
-                      className="px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg focus:border-blue-500 focus:bg-white outline-none w-44 truncate"
+                      className="px-2.5 py-1 text-[13px] font-medium text-slate-900 bg-white border border-slate-200 rounded-[6px] focus:border-slate-400 outline-none w-44 truncate"
                     />
-                    <span className="text-[11px] text-slate-500 font-medium ml-1">
+                    <span className="text-[11px] text-slate-400 font-medium">
                       • {caseItem.conditions.length} condition{caseItem.conditions.length === 1 ? "" : "s"}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {/* Delete Case button */}
-                    {conditionCases.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCase(caseIndex)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title={`Delete Case ${caseNumber}`}
-                        aria-label={`Delete Case ${caseNumber}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  {conditionCases.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCase(caseIndex)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-[6px] transition-colors cursor-pointer shrink-0"
+                      title={`Delete Case ${caseNumber}`}
+                      aria-label={`Delete Case ${caseNumber}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Collapsible Content */}
-                {!isCollapsed && (
-                  <div className="p-4 space-y-3.5 bg-white">
-                    {/* Conditions in this Case */}
-                    <div className="space-y-3">
-                  {caseItem.conditions.map((cond, condIdx) => {
-                    const fieldDef = getFieldDefByKey(cond.field);
-                    const operators = getOperatorsForField(fieldDef);
-                    const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
-                    const isDynamic = cond.valueType === "dynamic" && Boolean(cond.dynamicField);
-                    const dynamicFieldDef = cond.dynamicField ? getFieldDefByKey(cond.dynamicField) : null;
-                    const isNotLast = condIdx < caseItem.conditions.length - 1;
+                {/* Case Body */}
+                <div className="p-4 space-y-3.5 bg-white">
+                  <div className="space-y-3">
+                    {caseItem.conditions.map((cond, condIdx) => {
+                      const fieldDef = getFieldDefByKey(cond.field);
+                      const operators = getOperatorsForField(fieldDef);
+                      const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
+                      const isDynamic = cond.valueType === "dynamic" && Boolean(cond.dynamicField);
+                      const dynamicFieldDef = cond.dynamicField ? getFieldDefByKey(cond.dynamicField) : null;
+                      const isNotLast = condIdx < caseItem.conditions.length - 1;
 
-                    return (
-                      <React.Fragment key={cond.id || `cond-${condIdx}`}>
-                        <div className="border border-slate-200 rounded-xl bg-slate-50/40 p-3.5 space-y-3">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-bold text-slate-700">
-                                Condition #{condIdx + 1}
-                              </span>
+                      return (
+                        <React.Fragment key={cond.id || `cond-${condIdx}`}>
+                          <div className={`space-y-3 ${condIdx > 0 ? "pt-3 border-t border-slate-100" : ""}`}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xs font-semibold text-slate-800">
+                                  Condition #{condIdx + 1}
+                                </span>
 
-                              {/* Condition Mode Selector (Field vs Intent) */}
-                              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleUpdateConditionInCase(caseIndex, condIdx, {
-                                      kind: "field",
-                                      field: "",
-                                      fieldLabel: "",
-                                      operator: "Equal To",
-                                    });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer ${
-                                    cond.kind !== "intent"
-                                      ? "bg-white text-blue-700 shadow-2xs"
-                                      : "text-slate-600 hover:text-slate-900"
-                                  }`}
-                                >
-                                  Standard Field
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleUpdateConditionInCase(caseIndex, condIdx, {
-                                      kind: "intent",
-                                      field: "caller_intent",
-                                      fieldLabel: "Caller Intent",
-                                      operator: "Matches Intent",
-                                    });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center gap-1 ${
-                                    cond.kind === "intent"
-                                      ? "bg-purple-600 text-white shadow-2xs"
-                                      : "text-purple-700 hover:bg-purple-50"
-                                  }`}
-                                  title="Evaluate caller natural language intent from conversation"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>Caller Intent</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {caseItem.conditions.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveConditionFromCase(caseIndex, condIdx)}
-                                className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer font-medium"
-                              >
-                                <Trash2 className="w-3 h-3" /> Remove
-                              </button>
-                            )}
-                          </div>
-
-                          {/* If Intent Condition */}
-                          {cond.kind === "intent" ? (
-                            <div className="space-y-2 p-1">
-                              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                                Caller Intent Prompt
-                              </label>
-                              <textarea
-                                rows={4}
-                                value={cond.intentPrompt || cond.value || ""}
-                                onChange={(e) =>
-                                  handleUpdateConditionInCase(caseIndex, condIdx, {
-                                    intentPrompt: e.target.value,
-                                    value: e.target.value,
-                                  })
-                                }
-                                placeholder="Describe what the caller intends or asks during the call (e.g. Caller wants to reschedule or cancel appointment, or asking about prescription refill)..."
-                                className="w-full px-3.5 py-2.5 text-xs border border-purple-200 bg-white rounded-xl focus:outline-none focus:border-purple-500 text-slate-800 resize-y transition-all shadow-2xs font-medium"
-                              />
-                            </div>
-                          ) : (
-                            <>
-                              {/* Primary Field Selection as a Dropdown */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                                    Primary Field (Dropdown)
-                                  </label>
+                                {/* Neutral Mode Segmented Toggle */}
+                                <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-[7px] border border-slate-200/80">
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setTargetCaseIndex(caseIndex);
-                                      setTargetCaseConditionIndex(condIdx);
-                                      setFieldModalMode("caseConditionSingle");
-                                      setIsFieldRegistryModalOpen(true);
+                                      handleUpdateConditionInCase(caseIndex, condIdx, {
+                                        kind: "field",
+                                        field: "",
+                                        fieldLabel: "",
+                                        operator: "Equal To",
+                                      });
                                     }}
-                                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer flex items-center gap-1"
-                                    title="Open Field Registry Browser"
+                                    className={`px-2 py-0.5 text-[11px] font-medium rounded-[5px] transition-all cursor-pointer ${
+                                      cond.kind !== "intent"
+                                        ? "bg-white text-slate-900 shadow-2xs"
+                                        : "text-slate-500 hover:text-slate-800"
+                                    }`}
                                   >
-                                    <Sliders className="w-3.5 h-3.5" />
-                                    <span>Browse Registry</span>
+                                    Standard Field
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleUpdateConditionInCase(caseIndex, condIdx, {
+                                        kind: "intent",
+                                        field: "caller_intent",
+                                        fieldLabel: "Caller Intent",
+                                        operator: "Matches Intent",
+                                      });
+                                    }}
+                                    className={`px-2 py-0.5 text-[11px] font-medium rounded-[5px] transition-all cursor-pointer flex items-center gap-1 ${
+                                      cond.kind === "intent"
+                                        ? "bg-white text-slate-900 shadow-2xs"
+                                        : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                    title="Evaluate caller natural language intent from conversation"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-slate-500" />
+                                    <span>Caller Intent</span>
                                   </button>
                                 </div>
+                              </div>
 
-                                <div className="relative">
+                              {caseItem.conditions.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveConditionFromCase(caseIndex, condIdx)}
+                                  className="text-xs text-slate-400 hover:text-rose-600 flex items-center gap-1 cursor-pointer font-medium transition-colors"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Remove
+                                </button>
+                              )}
+                            </div>
+
+                            {cond.kind === "intent" ? (
+                              <div className="space-y-1.5">
+                                <label className="text-[13px] font-medium text-slate-700 flex items-center gap-1.5">
+                                  <span>Caller Intent Prompt</span>
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  value={cond.intentPrompt || cond.value || ""}
+                                  onChange={(e) =>
+                                    handleUpdateConditionInCase(caseIndex, condIdx, {
+                                      intentPrompt: e.target.value,
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Describe what the caller intends or asks during the call (e.g. Caller wants to reschedule or cancel appointment)..."
+                                  className="w-full px-3 py-2 text-[13px] border border-slate-200 bg-white rounded-[8px] focus:outline-none focus:border-slate-400 text-slate-900 placeholder:text-slate-400 resize-y transition-colors"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                {/* Primary Field */}
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[13px] font-medium text-slate-700">
+                                      Primary Field
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setTargetCaseIndex(caseIndex);
+                                        setTargetCaseConditionIndex(condIdx);
+                                        setFieldModalMode("caseConditionSingle");
+                                        setIsFieldRegistryModalOpen(true);
+                                      }}
+                                      className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer flex items-center gap-1 transition-colors"
+                                      title="Open Field Registry Browser"
+                                    >
+                                      <Sliders className="w-3.5 h-3.5" />
+                                      <span>Browse Registry</span>
+                                    </button>
+                                  </div>
+
                                   <select
                                     value={cond.field || ""}
                                     onChange={(e) => {
@@ -1692,204 +1873,202 @@ export default function StepParametersFields({
                                         fieldSource: found?.module || "field",
                                       });
                                     }}
-                                    className="w-full h-10 px-3 pr-8 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-800 hover:border-slate-300 focus:border-blue-500 outline-none transition-all cursor-pointer shadow-2xs"
+                                    className="w-full h-9 px-3 text-[13px] font-normal rounded-[8px] border border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:border-slate-400 outline-none transition-colors cursor-pointer"
                                   >
                                     <option value="">Select field...</option>
-                                    <optgroup label="✨ Caller Intent">
-                                      <option value="__intent_condition__">🎯 Caller Intent Condition (Prompt Match)</option>
+                                    <optgroup label="Caller Intent">
+                                      <option value="__intent_condition__">Caller Intent Condition (Prompt Match)</option>
                                     </optgroup>
-                                    <optgroup label="📞 Call Session Fields">
+                                    <optgroup label="Call Session Fields">
                                       {STANDARD_CALL_FIELDS.map((f) => (
                                         <option key={f.key} value={f.key}>
                                           {f.label} ({f.key})
                                         </option>
                                       ))}
                                     </optgroup>
-                                    <optgroup label="👤 Client Fields">
+                                    <optgroup label="Client Fields">
                                       {STANDARD_CLIENT_FIELDS.map((f) => (
                                         <option key={f.key} value={f.key}>
                                           {f.label} ({f.key})
                                         </option>
                                       ))}
                                     </optgroup>
-                                    <optgroup label="📅 Appointment Fields">
+                                    <optgroup label="Appointment Fields">
                                       {STANDARD_APPT_FIELDS.map((f) => (
                                         <option key={f.key} value={f.key}>
                                           {f.label} ({f.key})
                                         </option>
                                       ))}
                                     </optgroup>
-                                    <optgroup label="🧾 Invoice Fields">
+                                    <optgroup label="Invoice Fields">
                                       {STANDARD_INVOICE_FIELDS.map((f) => (
                                         <option key={f.key} value={f.key}>
                                           {f.label} ({f.key})
                                         </option>
                                       ))}
                                     </optgroup>
-                                    <optgroup label="⚡ More Fields">
-                                      <option value="__browse_all__">🔍 Browse All Custom Fields & Registry...</option>
+                                    <optgroup label="More Fields">
+                                      <option value="__browse_all__">Browse All Custom Fields & Registry...</option>
                                     </optgroup>
                                   </select>
                                 </div>
-                              </div>
 
-                              {/* Operator */}
-                              <div>
-                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                  Operator
-                                </label>
-                                <select
-                                  value={cond.operator || "Equal To"}
-                                  onChange={(e) => handleUpdateConditionInCase(caseIndex, condIdx, { operator: e.target.value })}
-                                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
-                                >
-                                  {operators.map((op) => (
-                                    <option key={op.value} value={op.value}>
-                                      {op.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {/* Comparison Value (Matching Field Type by Default) */}
-                              {!isNullaryOp && (
-                                <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                                      Comparison Value
+                                {/* Operator & Comparison Value */}
+                                <div className={isNullaryOp ? "space-y-1.5" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+                                  <div>
+                                    <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                                      Operator
                                     </label>
-                                    {isDynamic && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleUpdateConditionInCase(caseIndex, condIdx, {
-                                            valueType: "static",
-                                            dynamicField: "",
-                                            dynamicFieldLabel: "",
-                                            dynamicFieldSource: "",
-                                          })
-                                        }
-                                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                                      >
-                                        Clear field
-                                      </button>
-                                    )}
+                                    <select
+                                      value={cond.operator || "Equal To"}
+                                      onChange={(e) => handleUpdateConditionInCase(caseIndex, condIdx, { operator: e.target.value })}
+                                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] font-normal text-slate-900 hover:border-slate-300 focus:border-slate-400 outline-none cursor-pointer"
+                                    >
+                                      {operators.map((op) => (
+                                        <option key={op.value} value={op.value}>
+                                          {op.label}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </div>
 
-                                  {isDynamic && cond.dynamicField ? (
-                                    <div className="w-full flex items-center justify-between px-3.5 py-2 text-xs border border-blue-200 rounded-xl bg-blue-50/40 text-left">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                                          {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
-                                        </span>
-                                        <span className="font-semibold text-slate-900 truncate">
-                                          {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
-                                        </span>
-                                        <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
+                                  {!isNullaryOp && (
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-[13px] font-medium text-slate-700">
+                                          Comparison Value
+                                        </label>
+                                        {isDynamic && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleUpdateConditionInCase(caseIndex, condIdx, {
+                                                valueType: "static",
+                                                dynamicField: "",
+                                                dynamicFieldLabel: "",
+                                                dynamicFieldSource: "",
+                                              })
+                                            }
+                                            className="text-[11px] text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                                          >
+                                            Clear
+                                          </button>
+                                        )}
                                       </div>
-                                      <div className="flex items-center gap-1 shrink-0 ml-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setTargetCaseIndex(caseIndex);
-                                            setTargetCaseConditionIndex(condIdx);
-                                            setFieldModalMode("caseConditionDynamic");
-                                            setIsFieldRegistryModalOpen(true);
-                                          }}
-                                          className="p-1 rounded text-blue-600 hover:text-blue-700 hover:bg-blue-100/60 cursor-pointer transition-colors"
-                                          title="Select field"
-                                          aria-label="Select field"
-                                        >
-                                          <Sliders className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleUpdateConditionInCase(caseIndex, condIdx, {
-                                              valueType: "static",
-                                              dynamicField: "",
-                                              dynamicFieldLabel: "",
-                                              dynamicFieldSource: "",
-                                            })
-                                          }
-                                          className="p-1 rounded text-rose-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
-                                          title="Remove dynamic field"
-                                          aria-label="Remove dynamic field"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+
+                                      {isDynamic && cond.dynamicField ? (
+                                        <div className="w-full h-9 flex items-center justify-between px-3 text-xs border border-slate-200 rounded-[8px] bg-slate-50 text-left">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-white border border-slate-200 text-slate-600">
+                                              {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
+                                            </span>
+                                            <span className="font-medium text-slate-900 truncate">
+                                              {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setTargetCaseIndex(caseIndex);
+                                                setTargetCaseConditionIndex(condIdx);
+                                                setFieldModalMode("caseConditionDynamic");
+                                                setIsFieldRegistryModalOpen(true);
+                                              }}
+                                              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 cursor-pointer transition-colors"
+                                              title="Select field"
+                                              aria-label="Select field"
+                                            >
+                                              <Sliders className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUpdateConditionInCase(caseIndex, condIdx, {
+                                                  valueType: "static",
+                                                  dynamicField: "",
+                                                  dynamicFieldLabel: "",
+                                                  dynamicFieldSource: "",
+                                                })
+                                              }
+                                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                                              title="Remove dynamic field"
+                                              aria-label="Remove dynamic field"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        renderFieldValueInput(
+                                          cond.field,
+                                          cond.fieldSource || fieldDef?.module,
+                                          cond.value,
+                                          (newVal) => handleUpdateConditionInCase(caseIndex, condIdx, { value: newVal, valueType: "static" }),
+                                          "Enter value...",
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setTargetCaseIndex(caseIndex);
+                                              setTargetCaseConditionIndex(condIdx);
+                                              setFieldModalMode("caseConditionDynamic");
+                                              setIsFieldRegistryModalOpen(true);
+                                            }}
+                                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                                            title="Compare with another CRM field"
+                                            aria-label="Compare with another CRM field"
+                                          >
+                                            <Sliders className="w-3.5 h-3.5" />
+                                          </button>
+                                        )
+                                      )}
                                     </div>
-                                  ) : (
-                                    renderFieldValueInput(
-                                      cond.field,
-                                      cond.fieldSource || fieldDef?.module,
-                                      cond.value,
-                                      (newVal) => handleUpdateConditionInCase(caseIndex, condIdx, { value: newVal, valueType: "static" }),
-                                      "Enter value...",
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setTargetCaseIndex(caseIndex);
-                                          setTargetCaseConditionIndex(condIdx);
-                                          setFieldModalMode("caseConditionDynamic");
-                                          setIsFieldRegistryModalOpen(true);
-                                        }}
-                                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                                        title="Compare with another CRM field"
-                                        aria-label="Compare with another CRM field"
-                                      >
-                                        <Sliders className="w-3.5 h-3.5" />
-                                      </button>
-                                    )
                                   )}
                                 </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {/* Match Dropdown between conditions */}
-                        {isNotLast && (
-                          <div className="flex items-center gap-2 my-2.5 justify-center">
-                            <div className="h-px bg-slate-200 flex-1" />
-                            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Match
-                              </span>
-                              <select
-                                value={cond.logicOp || caseItem.matchLogic || "AND"}
-                                onChange={(e) => {
-                                  const op = e.target.value as "AND" | "OR";
-                                  handleToggleConditionLogicOp(caseIndex, condIdx, op);
-                                }}
-                                className="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer"
-                              >
-                                <option value="AND">ALL (AND)</option>
-                                <option value="OR">ANY (OR)</option>
-                              </select>
-                            </div>
-                            <div className="h-px bg-slate-200 flex-1" />
+                              </>
+                            )}
                           </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
 
-                {/* Case Actions */}
-                <div className="pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => handleAddConditionToCase(caseIndex, "field")}
-                    className="w-full py-2.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Condition</span>
-                  </button>
-                </div>
+                          {/* Match logic between conditions */}
+                          {isNotLast && (
+                            <div className="flex items-center gap-2 my-2 justify-center">
+                              <div className="h-px bg-slate-200 flex-1" />
+                              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-[7px] px-2.5 py-1">
+                                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                  Match
+                                </span>
+                                <select
+                                  value={cond.logicOp || caseItem.matchLogic || "AND"}
+                                  onChange={(e) => {
+                                    const op = e.target.value as "AND" | "OR";
+                                    handleToggleConditionLogicOp(caseIndex, condIdx, op);
+                                  }}
+                                  className="text-xs font-semibold text-slate-800 bg-transparent border-none outline-none cursor-pointer"
+                                >
+                                  <option value="AND">ALL (AND)</option>
+                                  <option value="OR">ANY (OR)</option>
+                                </select>
+                              </div>
+                              <div className="h-px bg-slate-200 flex-1" />
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
-                )}
+
+                  {/* Clean Add Condition Action */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => handleAddConditionToCase(caseIndex, "field")}
+                      className="w-full py-2 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-[8px] flex items-center justify-center gap-1.5 font-medium cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Add Condition</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -1899,7 +2078,7 @@ export default function StepParametersFields({
         <button
           type="button"
           onClick={handleAddCase}
-          className="w-full py-2.5 text-xs font-semibold border-2 border-dashed border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+          className="w-full py-2 text-xs font-medium border border-dashed border-slate-300 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400 rounded-[8px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
         >
           <Plus className="w-3.5 h-3.5 text-slate-500" />
           <span>Add Another Case</span>
@@ -2051,13 +2230,15 @@ export default function StepParametersFields({
     hasValue,
     onClear,
     clearTitle = "Clear field value",
+    alignTop = false,
   }: {
     onOpenPicker: () => void;
     hasValue: boolean;
     onClear: () => void;
     clearTitle?: string;
+    alignTop?: boolean;
   }) => (
-    <div className="absolute right-2 flex items-center gap-0.5">
+    <div className={`absolute right-2 ${alignTop ? "top-2" : ""} flex items-center gap-0.5`}>
       {hasValue ? (
         <button
           type="button"
@@ -2121,31 +2302,25 @@ export default function StepParametersFields({
       return (
         <div
           key={f.key}
-          className={`p-3.5 bg-white border rounded-xl space-y-2.5 transition-all shadow-2xs hover:shadow-xs ${
-            isRequired
-              ? "border-slate-200/90 hover:border-blue-300"
-              : "border-slate-200/80 hover:border-slate-300"
-          }`}
+          className="p-3.5 bg-white border border-slate-200 rounded-lg space-y-2 transition-colors hover:border-slate-300"
         >
           {/* Card Header */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1 min-w-0">
               <span
-                className="text-xs font-bold text-slate-800 truncate"
+                className="text-[13px] font-medium text-slate-800 truncate"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {f.label}
               </span>
               {isRequired && (
-                <span className="text-red-500 font-bold text-xs" title="Mandatory field">*</span>
+                <span className="text-red-500 font-semibold text-xs" title="Mandatory field">*</span>
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200/80 font-mono">
-                {f.inputType || "text"}
-              </span>
-            </div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-slate-100 text-slate-500 font-mono shrink-0">
+              {f.inputType || "text"}
+            </span>
           </div>
 
           {/* Card Input */}
@@ -2155,11 +2330,7 @@ export default function StepParametersFields({
               value={val}
               onChange={(e) => handleFieldValueChange(f.key, e.target.value)}
               placeholder={isRequired ? requiredPlaceholder(f) : optionalPlaceholder(f)}
-              className={`w-full pl-3 ${val ? "pr-16" : "pr-9"} py-2 text-xs border rounded-lg bg-slate-50/40 hover:bg-white focus:bg-white focus:outline-none transition-all ${
-                isRequired && !val
-                  ? "border-amber-300/80 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              }`}
+              className={`w-full h-10 pl-3 ${val ? "pr-16" : "pr-9"} py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors`}
             />
             {renderInputTrailingIcons({
               onOpenPicker: () => handleOpenFieldModal(f.key),
@@ -2172,29 +2343,29 @@ export default function StepParametersFields({
     };
 
     return (
-      <div className="space-y-4 pt-1">
+      <div className="space-y-5 pt-1">
         {/* REQUIRED FIELDS SECTION */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between pb-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span
                 className="text-xs font-bold text-slate-800 uppercase tracking-wider"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 Required Fields
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200/70 leading-none">
-                Must be filled
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 leading-none">
+                Required
               </span>
               <InfoTooltip text={requiredTooltip} />
             </div>
-            <span className="text-[11px] text-slate-400 font-semibold">
-              {requiredFields.length} field{requiredFields.length === 1 ? "" : "s"}
+            <span className="text-[11px] text-slate-400 font-medium">
+              {requiredFields.length} {requiredFields.length === 1 ? "field" : "fields"}
             </span>
           </div>
 
           {requiredFields.length === 0 ? (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
+            <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg text-xs text-slate-500">
               {emptyRequiredText || "No mandatory required fields configured for this workflow."}
             </div>
           ) : (
@@ -2204,40 +2375,27 @@ export default function StepParametersFields({
           )}
         </div>
 
-        {/* OPTIONAL FIELDS DROPDOWN */}
+        {/* OPTIONAL FIELDS SECTION (Rendered cleanly without dropdown accordion) */}
         {otherFields.length > 0 && (
-          <div className="pt-3 border-t border-slate-200/80 space-y-2.5">
-            <button
-              type="button"
-              onClick={() => setOptionalFieldsExpanded(!optionalFieldsExpanded)}
-              className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer group select-none"
-            >
-              <div className="flex items-center gap-2 min-w-0">
+          <div className="pt-4 border-t border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between pb-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <span
-                  className="text-xs font-bold text-slate-800 uppercase tracking-wider group-hover:text-blue-600 transition-colors"
+                  className="text-xs font-bold text-slate-800 uppercase tracking-wider"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   Optional Fields
                 </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 leading-none">
-                  {otherFields.length} optional
-                </span>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <InfoTooltip text={optionalTooltip} />
-                </div>
+                <InfoTooltip text={optionalTooltip} />
               </div>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 shrink-0 ${
-                  optionalFieldsExpanded ? "rotate-180" : ""
-                }`}
-              />
-            </button>
+              <span className="text-[11px] text-slate-400 font-medium">
+                {otherFields.length} optional
+              </span>
+            </div>
 
-            {optionalFieldsExpanded && (
-              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1 pt-1">
-                {otherFields.map((f) => renderFieldCard(f, false))}
-              </div>
-            )}
+            <div className="space-y-2.5">
+              {otherFields.map((f) => renderFieldCard(f, false))}
+            </div>
           </div>
         )}
       </div>
@@ -2378,23 +2536,9 @@ export default function StepParametersFields({
         </div>
       )}
 
-      {/* ───────────── PARAMETERS FIELDS ACCORDION (For other steps) ───────────── */}
+      {/* ───────────── PARAMETERS FIELDS (Rendered directly without outer accordion wrapper) ───────────── */}
       {stepKey !== "condition" && stepKey !== "trigger_config" && (
-        <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-          <div
-            onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
-            className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
-          >
-            <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              Parameters
-            </span>
-            <ChevronDown
-              className={`w-4 h-4 text-muted-foreground transition-transform ${parametersSectionExpanded ? "rotate-180" : ""}`}
-            />
-          </div>
-
-        {parametersSectionExpanded && (
-          <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+        <div className="w-full space-y-4">
             {(stepKey === "wait" || stepKey === "delay") && (() => {
               const delayVal = params.delayValue ?? params.duration ?? 5;
               const delayUnit = (params.delayUnit ?? params.unit ?? "minutes").toLowerCase();
@@ -2835,6 +2979,975 @@ export default function StepParametersFields({
               );
             })()}
 
+            {(stepKey === "create_task" || stepKey === "create-task") && (() => {
+              const taskTitle = params.taskTitle ?? "";
+              const taskDescription = params.taskDescription ?? "";
+              const taskIsRequired = Boolean(params.isRequired ?? params.taskIsRequired);
+              const responsibleSource: "custom" | "inherit" =
+                params.responsibleSource === "inherit" ? "inherit" : "custom";
+              const responsibleType: "team" | "contact" =
+                params.responsibleType === "contact" ? "contact" : "team";
+              const responsibleDistribution: "round_robin" | "all" =
+                params.responsibleDistribution === "all" ? "all" : "round_robin";
+
+              // Role & member filters (matching TaskQuickCreateDrawer)
+              const roleSet = Array.from(
+                new Set([
+                  "All Roles",
+                  ...(teamMembers.map((m) => m.role).filter(Boolean) as string[]),
+                  ...availableRoles,
+                ])
+              );
+              const selectedRoleFilter = params.selectedRoleFilter ?? "All Roles";
+              const selectedTeamMemberIds: string[] = Array.isArray(params.selectedTeamMemberIds)
+                ? params.selectedTeamMemberIds
+                : [];
+              const filteredTaskMembers =
+                selectedRoleFilter === "All Roles"
+                  ? teamMembers
+                  : teamMembers.filter((m) => m.role === selectedRoleFilter);
+
+              // Contact category & contacts filters
+              const taskContactCats = ["All Categories", ...contactCategories];
+              const selectedContactCategory = params.selectedContactCategory ?? "All Categories";
+              const selectedContactIds: string[] = Array.isArray(params.selectedContactIds)
+                ? params.selectedContactIds
+                : [];
+              const filteredTaskContacts =
+                selectedContactCategory === "All Categories"
+                  ? initialClients
+                  : initialClients.filter(
+                      (c) =>
+                        (c.contactType || c.contact_type || "Client").toLowerCase() ===
+                        selectedContactCategory.toLowerCase()
+                    );
+
+              // Task Workflow Pipelines (entityType === "task" -> DEFAULT_TASK_PROCESSES)
+              const storeTaskPipelines = effectiveProcesses.filter((p: any) => p.entityType === "task");
+              const taskPipelines =
+                storeTaskPipelines.length > 0 ? storeTaskPipelines : DEFAULT_TASK_PROCESSES;
+              const selectedWorkflowId = params.workflowId || taskPipelines[0]?.id || "";
+
+              // Schedule settings (relative deadline offset + target time)
+              const deadlineOffsetValue = params.deadlineOffsetValue ?? params.taskDueValue ?? 1;
+              const deadlineOffsetUnit = params.deadlineOffsetUnit ?? params.taskDueUnit ?? "days";
+              const deadlineTime = params.deadlineTime ?? "17:00";
+
+              // Repeat / Recurrence settings
+              const repeatEnabled = Boolean(params.repeatEnabled);
+              const repeatInterval = params.repeatInterval ?? 1;
+              const repeatUnit: "days" | "weeks" | "months" | "years" =
+                params.repeatUnit || "weeks";
+              const repeatStopRule: "never" | "count" | "date" =
+                params.repeatStopRule || "never";
+              const repeatStopCount = params.repeatStopCount ?? 5;
+              const repeatStopDate = params.repeatStopDate ?? "";
+              const repeatSkipWeekends = params.repeatSkipWeekends ?? true;
+
+              // Observers settings
+              const observerSource: "custom" | "inherit" =
+                params.observerSource === "inherit" ? "inherit" : "custom";
+              const observerDistribution: "round_robin" | "all" =
+                params.observerDistribution === "all" ? "all" : "round_robin";
+              const observerRoleFilter = params.observerRoleFilter ?? "All Roles";
+              const selectedObserverMemberIds: string[] = Array.isArray(params.selectedObserverMemberIds)
+                ? params.selectedObserverMemberIds
+                : [];
+              const filteredTaskObservers =
+                observerRoleFilter === "All Roles"
+                  ? teamMembers
+                  : teamMembers.filter((m) => m.role === observerRoleFilter);
+
+              // Task Studio / Deliverables items
+              const studioItems: Array<{
+                id: string;
+                title: string;
+                description?: string;
+                isImportant?: boolean;
+                resourceType?: "none" | "file" | "image" | "video" | "url" | "html";
+                resourceSource?: "upload" | "url";
+                resourceValue?: string;
+                resourceName?: string;
+                resourceSize?: string;
+              }> = Array.isArray(params.studioItems) ? params.studioItems : [];
+
+              const updateStudioItem = (idx: number, patch: Record<string, any>) => {
+                const next = studioItems.map((it, i) => (i === idx ? { ...it, ...patch } : it));
+                onChange({ studioItems: next });
+              };
+
+              const handleStudioItemFileUpload = (idx: number, file: File) => {
+                const MAX_UPLOAD_BYTES = 1024 * 1024;
+                if (file.size > MAX_UPLOAD_BYTES) {
+                  toast.error(
+                    `File size exceeds 1MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please choose a smaller file.`
+                  );
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataUrl = reader.result as string;
+                  const sizeStr =
+                    file.size > 1024 * 1024
+                      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+                      : `${Math.round(file.size / 1024)} KB`;
+                  updateStudioItem(idx, {
+                    resourceValue: dataUrl,
+                    resourceName: file.name,
+                    resourceSize: sizeStr,
+                  });
+                  toast.success(`Attached "${file.name}"`);
+                };
+                reader.onerror = () => {
+                  toast.error("Failed to read file");
+                };
+                reader.readAsDataURL(file);
+              };
+
+              const addStudioItem = () => {
+                const nextNum = studioItems.length + 1;
+                onChange({
+                  studioItems: [
+                    ...studioItems,
+                    {
+                      id: `task-deliv-${Date.now()}-${nextNum}`,
+                      title: `Task Deliverable ${nextNum}`,
+                      description: "",
+                      isImportant: false,
+                      resourceType: "none",
+                      resourceSource: "upload",
+                      resourceValue: "",
+                      resourceName: "",
+                      resourceSize: "",
+                    },
+                  ],
+                });
+              };
+
+              const removeStudioItem = (idx: number) => {
+                onChange({
+                  studioItems: studioItems.filter((_, i) => i !== idx),
+                });
+              };
+
+              const moveStudioItem = (idx: number, direction: "up" | "down") => {
+                const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+                if (targetIdx < 0 || targetIdx >= studioItems.length) return;
+                const next = [...studioItems];
+                const [moved] = next.splice(idx, 1);
+                next.splice(targetIdx, 0, moved);
+                onChange({ studioItems: next });
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* 1. Task Title & Task Description (Unified bordered container) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="block text-[13px] font-medium text-slate-700">
+                        Task Title <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          value={taskTitle}
+                          onChange={(e) => onChange({ taskTitle: e.target.value })}
+                          placeholder="e.g. Verify Patient Insurance Eligibility for {{client_name}}"
+                          className={`w-full h-9 pl-3 ${taskTitle ? "pr-16" : "pr-9"} text-[13px] border border-slate-200 rounded-[8px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors`}
+                        />
+                        {renderInputTrailingIcons({
+                          onOpenPicker: () => {
+                            setFieldModalMode("createTaskTitleToken");
+                            setIsFieldRegistryModalOpen(true);
+                          },
+                          hasValue: Boolean(taskTitle),
+                          onClear: () => onChange({ taskTitle: "" }),
+                          clearTitle: "Clear task title",
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[13px] font-medium text-slate-700">Task Description</label>
+                      <div className="relative">
+                        <textarea
+                          rows={3}
+                          value={taskDescription}
+                          onChange={(e) => onChange({ taskDescription: e.target.value })}
+                          placeholder="Provide background context, clinical objectives, and deliverables instructions..."
+                          className={`w-full pl-3 ${taskDescription ? "pr-16" : "pr-9"} py-2 text-[13px] border border-slate-200 rounded-[8px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors resize-y`}
+                        />
+                        {renderInputTrailingIcons({
+                          onOpenPicker: () => {
+                            setFieldModalMode("createTaskDescToken");
+                            setIsFieldRegistryModalOpen(true);
+                          },
+                          hasValue: Boolean(taskDescription),
+                          onClear: () => onChange({ taskDescription: "" }),
+                          clearTitle: "Clear task description",
+                          alignTop: true,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Task Responsible (Custom | Inherit from Previous Node) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Task Responsible</span>
+                    </label>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Assignment Source
+                      </label>
+                      <select
+                        value={responsibleSource}
+                        onChange={(e) => onChange({ responsibleSource: e.target.value })}
+                        className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                      >
+                        <option value="custom">Custom</option>
+                        <option value="inherit">Inherit from Previous Node</option>
+                      </select>
+                    </div>
+
+                    {responsibleSource === "inherit" ? (
+                      <div className="px-3 py-2.5 rounded-[8px] border border-slate-200 bg-slate-50/80 text-xs text-slate-600 leading-relaxed">
+                        Inherits the responsible assignee automatically from the previous node (for example, an{" "}
+                        <span className="font-semibold text-slate-800">Assign Responsible</span> step) or falls back to the triggering record owner.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-slate-600">Assignee Type</span>
+                          <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-[7px] border border-slate-200/80">
+                            {[
+                              { id: "team", label: "Team Members" },
+                              { id: "contact", label: "Contacts" },
+                            ].map((tab) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => onChange({ responsibleType: tab.id })}
+                                className={`px-2.5 py-0.5 text-[11px] font-medium rounded-[5px] transition-all cursor-pointer ${
+                                  responsibleType === tab.id
+                                    ? "bg-white text-slate-900 shadow-2xs"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {responsibleType === "team" ? (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <label className="block text-[13px] font-medium text-slate-700">Role</label>
+                              <select
+                                value={selectedRoleFilter}
+                                onChange={(e) =>
+                                  onChange({
+                                    selectedRoleFilter: e.target.value,
+                                    selectedTeamMemberIds: [],
+                                  })
+                                }
+                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                              >
+                                {roleSet.map((r) => (
+                                  <option key={r} value={r}>
+                                    {r}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <MultiSelectDropdown
+                              label="Select Members"
+                              placeholder="+ Click to select team members..."
+                              options={filteredTaskMembers.map((m) => ({
+                                value: String(m.id),
+                                label: m.name,
+                                sublabel: m.role,
+                              }))}
+                              selectedValues={selectedTeamMemberIds}
+                              onChange={(nextIds) => {
+                                const names = nextIds
+                                  .map((id) => teamMembers.find((m) => String(m.id) === id)?.name)
+                                  .filter(Boolean);
+                                onChange({
+                                  selectedTeamMemberIds: nextIds,
+                                  taskAssigneeName: names[0] || "",
+                                });
+                              }}
+                              allSelectedFallbackText={
+                                selectedRoleFilter !== "All Roles"
+                                  ? `All ${selectedRoleFilter} members (${filteredTaskMembers.length} members)`
+                                  : "Select team members (or leave blank for Role-wide)"
+                              }
+                            />
+
+                            {/* Distribution Strategy: Round Robin vs Assign All Selected */}
+                            <div className="space-y-1.5">
+                              <label className="block text-[13px] font-medium text-slate-700">
+                                Assignment Strategy
+                              </label>
+                              <select
+                                value={responsibleDistribution}
+                                onChange={(e) => onChange({ responsibleDistribution: e.target.value })}
+                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                              >
+                                <option value="round_robin">Round Robin — Rotate evenly across selected members</option>
+                                <option value="all">Assign All Selected — Create individual tasks per member</option>
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <label className="block text-[13px] font-medium text-slate-700">Category</label>
+                              <select
+                                value={selectedContactCategory}
+                                onChange={(e) =>
+                                  onChange({
+                                    selectedContactCategory: e.target.value,
+                                    selectedContactIds: [],
+                                  })
+                                }
+                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                              >
+                                {taskContactCats.map((cat) => (
+                                  <option key={cat} value={cat}>
+                                    {cat}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <MultiSelectDropdown
+                              label="Select Contacts"
+                              placeholder="Trigger contact (or pick specific contacts)..."
+                              options={filteredTaskContacts.map((c) => ({
+                                value: c.id,
+                                label: c.name,
+                                sublabel: c.contactType || c.contact_type || "Client",
+                              }))}
+                              selectedValues={selectedContactIds}
+                              onChange={(nextIds) => onChange({ selectedContactIds: nextIds })}
+                              allSelectedFallbackText={
+                                selectedContactCategory !== "All Categories"
+                                  ? `All ${selectedContactCategory} contacts (${filteredTaskContacts.length} contacts)`
+                                  : "Triggering Contact (or pick specific contacts)"
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mark Required Toggle */}
+                  <div
+                    onClick={() =>
+                      onChange({
+                        isRequired: !taskIsRequired,
+                        taskIsRequired: !taskIsRequired,
+                      })
+                    }
+                    className="flex items-center justify-between p-3.5 border border-slate-200 rounded-[10px] bg-white hover:bg-slate-50/70 transition-colors cursor-pointer select-none"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <span className="text-[13px] font-semibold text-slate-900 block">
+                        Mark Required
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Require completion of this task before advancing stage or workflow
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={taskIsRequired}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onChange({
+                          isRequired: !taskIsRequired,
+                          taskIsRequired: !taskIsRequired,
+                        });
+                      }}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                        taskIsRequired ? "bg-slate-900" : "bg-slate-200"
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
+                          taskIsRequired ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* 4. Workflow Pipeline (from Task Workflows / DEFAULT_TASK_PROCESSES) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-2">
+                    <label className="block text-[13px] font-semibold text-slate-900">
+                      Workflow Pipeline <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedWorkflowId}
+                      onChange={(e) => {
+                        const wf = taskPipelines.find((p: any) => p.id === e.target.value);
+                        onChange({
+                          workflowId: e.target.value,
+                          workflowName: wf?.name || "",
+                        });
+                      }}
+                      className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      {taskPipelines.map((pipe: any) => (
+                        <option key={pipe.id} value={pipe.id}>
+                          {pipe.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 5. Schedule (Deadline Offset & Target Time) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Schedule</span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-slate-600">Deadline Offset</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            value={deadlineOffsetValue}
+                            onChange={(e) => {
+                              const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                              onChange({ deadlineOffsetValue: v, taskDueValue: v });
+                            }}
+                            className="w-20 h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                          />
+                          <select
+                            value={deadlineOffsetUnit}
+                            onChange={(e) =>
+                              onChange({
+                                deadlineOffsetUnit: e.target.value,
+                                taskDueUnit: e.target.value,
+                              })
+                            }
+                            className="flex-1 h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                          >
+                            <option value="hours">Hours</option>
+                            <option value="days">Days</option>
+                            <option value="weeks">Weeks</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-slate-600">Target Time</label>
+                        <input
+                          type="time"
+                          value={deadlineTime}
+                          onChange={(e) => onChange({ deadlineTime: e.target.value })}
+                          className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 6. Repeat (Recurrence) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <div
+                      onClick={() => onChange({ repeatEnabled: !repeatEnabled })}
+                      className="flex items-center justify-between cursor-pointer select-none"
+                    >
+                      <div>
+                        <span className="text-[13px] font-semibold text-slate-900 block">Repeat (Recurrence)</span>
+                        <span className="text-[11px] text-slate-500">Auto-create recurring task instances on schedule</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={repeatEnabled}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onChange({ repeatEnabled: !repeatEnabled });
+                        }}
+                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                          repeatEnabled ? "bg-slate-900" : "bg-slate-200"
+                        }`}
+                      >
+                        <div
+                          className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
+                            repeatEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {repeatEnabled && (
+                      <div className="space-y-3 pt-2 border-t border-slate-100">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-xs font-medium text-slate-600">Every</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={repeatInterval}
+                              onChange={(e) =>
+                                onChange({ repeatInterval: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                              }
+                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-xs font-medium text-slate-600">Unit</label>
+                            <select
+                              value={repeatUnit}
+                              onChange={(e) => onChange({ repeatUnit: e.target.value })}
+                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                            >
+                              <option value="days">Days</option>
+                              <option value="weeks">Weeks</option>
+                              <option value="months">Months</option>
+                              <option value="years">Years</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-slate-600">End Recurrence</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(["never", "count", "date"] as const).map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => onChange({ repeatStopRule: r })}
+                                className={`py-1.5 rounded-[7px] text-xs font-medium capitalize border transition-colors cursor-pointer ${
+                                  repeatStopRule === r
+                                    ? "bg-slate-900 text-white border-slate-900"
+                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                }`}
+                              >
+                                {r}
+                              </button>
+                            ))}
+                          </div>
+
+                          {repeatStopRule === "count" && (
+                            <input
+                              type="number"
+                              min={1}
+                              value={repeatStopCount}
+                              onChange={(e) =>
+                                onChange({ repeatStopCount: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                              }
+                              placeholder="Stop after occurrences..."
+                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] mt-1.5"
+                            />
+                          )}
+
+                          {repeatStopRule === "date" && (
+                            <input
+                              type="date"
+                              value={repeatStopDate}
+                              onChange={(e) => onChange({ repeatStopDate: e.target.value })}
+                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] mt-1.5"
+                            />
+                          )}
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={repeatSkipWeekends}
+                            onChange={(e) => onChange({ repeatSkipWeekends: e.target.checked })}
+                            className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900 cursor-pointer"
+                          />
+                          <span>Skip weekends when scheduling occurrences</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 7. Observers (Custom / Inherit + Round Robin) */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span>Observers</span>
+                    </label>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Observer Source
+                      </label>
+                      <select
+                        value={observerSource}
+                        onChange={(e) => onChange({ observerSource: e.target.value })}
+                        className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                      >
+                        <option value="custom">Custom</option>
+                        <option value="inherit">Inherit from Previous Node</option>
+                      </select>
+                    </div>
+
+                    {observerSource === "inherit" ? (
+                      <div className="px-3 py-2.5 rounded-[8px] border border-slate-200 bg-slate-50/80 text-xs text-slate-600 leading-relaxed">
+                        Inherits observers automatically from the previous workflow node or triggering record participants.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="block text-[13px] font-medium text-slate-700">Role</label>
+                          <select
+                            value={observerRoleFilter}
+                            onChange={(e) =>
+                              onChange({
+                                observerRoleFilter: e.target.value,
+                                selectedObserverMemberIds: [],
+                              })
+                            }
+                            className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                          >
+                            {roleSet.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <MultiSelectDropdown
+                          label="Select Observer Members"
+                          placeholder="+ Click to select observers..."
+                          options={filteredTaskObservers.map((m) => ({
+                            value: String(m.id),
+                            label: m.name,
+                            sublabel: m.role,
+                          }))}
+                          selectedValues={selectedObserverMemberIds}
+                          onChange={(nextIds) => onChange({ selectedObserverMemberIds: nextIds })}
+                          allSelectedFallbackText={
+                            observerRoleFilter !== "All Roles"
+                              ? `All ${observerRoleFilter} members (${filteredTaskObservers.length} observers)`
+                              : "+ Click to select observers..."
+                          }
+                        />
+
+                        <div className="space-y-1.5">
+                          <label className="block text-[13px] font-medium text-slate-700">
+                            Observer Strategy
+                          </label>
+                          <select
+                            value={observerDistribution}
+                            onChange={(e) => onChange({ observerDistribution: e.target.value })}
+                            className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                          >
+                            <option value="round_robin">Round Robin — Rotate observer evenly across selected members</option>
+                            <option value="all">Assign All Selected — Add all selected members as observers</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 8. Task Studio / Deliverables */}
+                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[13px] font-semibold text-slate-900 block">
+                          Task Studio Deliverables
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Checklist deliverables and resources included on the created task
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addStudioItem}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[7px] border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Deliverable</span>
+                      </button>
+                    </div>
+
+                    {studioItems.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-1">
+                        No deliverables added yet. Click &ldquo;Add Deliverable&rdquo; to attach checklist steps.
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {studioItems.map((item, idx) => (
+                          <div
+                            key={item.id || idx}
+                            className="p-3 rounded-[8px] border border-slate-200 bg-slate-50/50 space-y-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded bg-white border border-slate-200 text-[11px] font-semibold text-slate-600 flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <input
+                                type="text"
+                                value={item.title}
+                                onChange={(e) => updateStudioItem(idx, { title: e.target.value })}
+                                placeholder="Deliverable title..."
+                                className="flex-1 h-8 px-2.5 text-xs font-medium bg-white border border-slate-200 rounded-[6px] text-slate-900 focus:outline-none focus:border-slate-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateStudioItem(idx, { isImportant: !item.isImportant })}
+                                className={`p-1 rounded-[6px] border cursor-pointer ${
+                                  item.isImportant
+                                    ? "bg-amber-50 border-amber-200 text-amber-500"
+                                    : "bg-white border-slate-200 text-slate-300 hover:text-amber-500"
+                                }`}
+                                title="Mark deliverable as important"
+                              >
+                                <Star className={`w-3.5 h-3.5 ${item.isImportant ? "fill-amber-500" : ""}`} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveStudioItem(idx, "up")}
+                                className="p-1 rounded-[6px] border border-slate-200 bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                title="Move up"
+                                aria-label="Move deliverable up"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === studioItems.length - 1}
+                                onClick={() => moveStudioItem(idx, "down")}
+                                className="p-1 rounded-[6px] border border-slate-200 bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                title="Move down"
+                                aria-label="Move deliverable down"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeStudioItem(idx)}
+                                className="p-1 rounded-[6px] border border-slate-200 bg-white text-slate-400 hover:text-rose-600 cursor-pointer"
+                                title="Remove deliverable"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={item.description || ""}
+                              onChange={(e) => updateStudioItem(idx, { description: e.target.value })}
+                              placeholder="Short description or instructions (optional)..."
+                              className="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-[6px] text-slate-700 focus:outline-none focus:border-slate-400"
+                            />
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase mr-1">
+                                Resource:
+                              </span>
+                              {(["none", "file", "image", "video", "url", "html"] as const).map((rType) => (
+                                <button
+                                  key={rType}
+                                  type="button"
+                                  onClick={() =>
+                                    updateStudioItem(idx, {
+                                      resourceType: rType,
+                                      resourceValue: rType === item.resourceType ? item.resourceValue : "",
+                                      resourceSource: rType === "url" ? "url" : "upload",
+                                      ...(rType !== item.resourceType ? { resourceName: "", resourceSize: "" } : {}),
+                                    })
+                                  }
+                                  className={`px-2 py-0.5 rounded-[6px] text-[11px] font-medium border cursor-pointer ${
+                                    (item.resourceType || "none") === rType
+                                      ? "bg-slate-900 text-white border-slate-900"
+                                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {rType === "none"
+                                    ? "None"
+                                    : rType === "html"
+                                    ? "HTML Block"
+                                    : rType === "url"
+                                    ? "URL"
+                                    : rType.charAt(0).toUpperCase() + rType.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+
+                            {item.resourceType && item.resourceType !== "none" && (
+                              <div className="p-2.5 bg-white rounded-[8px] border border-slate-200 space-y-2">
+                                {item.resourceType === "html" ? (
+                                  <div className="space-y-1.5">
+                                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                                      <FileCode className="w-3.5 h-3.5" />
+                                      <span>Monospace HTML / CSS Block (Sandboxed)</span>
+                                    </label>
+                                    <textarea
+                                      rows={3}
+                                      value={item.resourceValue || ""}
+                                      onChange={(e) => updateStudioItem(idx, { resourceValue: e.target.value })}
+                                      placeholder="<div style='padding: 12px;'>Custom HTML/CSS block...</div>"
+                                      className="w-full p-2 text-xs font-mono bg-slate-900 text-emerald-400 border border-slate-700 rounded-[6px] focus:outline-none"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {item.resourceType !== "url" && (
+                                      <div className="inline-flex items-center gap-1 p-0.5 bg-slate-100 border border-slate-200 rounded-[7px] text-[11px] font-medium">
+                                        <button
+                                          type="button"
+                                          onClick={() => updateStudioItem(idx, { resourceSource: "upload" })}
+                                          className={`px-2.5 py-0.5 rounded-[5px] transition-all cursor-pointer ${
+                                            item.resourceSource === "upload" || !item.resourceSource
+                                              ? "bg-white text-slate-900 shadow-2xs"
+                                              : "text-slate-600 hover:text-slate-900"
+                                          }`}
+                                        >
+                                          Direct Upload (max 1MB)
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => updateStudioItem(idx, { resourceSource: "url" })}
+                                          className={`px-2.5 py-0.5 rounded-[5px] transition-all cursor-pointer ${
+                                            item.resourceSource === "url"
+                                              ? "bg-white text-slate-900 shadow-2xs"
+                                              : "text-slate-600 hover:text-slate-900"
+                                          }`}
+                                        >
+                                          Online URL
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {item.resourceType !== "url" &&
+                                    (item.resourceSource === "upload" || !item.resourceSource) ? (
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <label className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-[7px] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors">
+                                          <Upload className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>
+                                            {item.resourceValue && item.resourceName
+                                              ? "Replace File"
+                                              : "Choose File (Max 1MB)"}
+                                          </span>
+                                          <input
+                                            type="file"
+                                            accept={
+                                              item.resourceType === "image"
+                                                ? "image/*"
+                                                : item.resourceType === "video"
+                                                ? "video/*"
+                                                : undefined
+                                            }
+                                            onChange={(e) => {
+                                              const f = e.target.files?.[0];
+                                              if (f) handleStudioItemFileUpload(idx, f);
+                                              e.target.value = "";
+                                            }}
+                                            className="hidden"
+                                          />
+                                        </label>
+                                        {item.resourceName && (
+                                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] bg-slate-50 border border-slate-200 text-xs">
+                                            <span className="font-mono text-slate-700 truncate max-w-[160px]">
+                                              {item.resourceName}
+                                            </span>
+                                            {item.resourceSize && (
+                                              <span className="text-[10px] text-slate-400">
+                                                ({item.resourceSize})
+                                              </span>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                updateStudioItem(idx, {
+                                                  resourceValue: "",
+                                                  resourceName: "",
+                                                  resourceSize: "",
+                                                })
+                                              }
+                                              className="hover:text-rose-600 p-0.5 cursor-pointer text-slate-400"
+                                              title="Remove file"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <input
+                                        type="url"
+                                        value={item.resourceValue || ""}
+                                        onChange={(e) => updateStudioItem(idx, { resourceValue: e.target.value })}
+                                        placeholder="https://example.com/asset..."
+                                        className="w-full h-8 px-2.5 text-xs font-mono bg-white border border-slate-200 rounded-[6px] text-slate-800 focus:outline-none focus:border-slate-400"
+                                      />
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Mini Resource Preview */}
+                                {item.resourceValue && (
+                                  <div className="pt-2 border-t border-slate-100">
+                                    {item.resourceType === "image" && (
+                                      <img
+                                        src={item.resourceValue}
+                                        alt={item.title}
+                                        className="w-full max-w-[220px] h-28 object-cover rounded-[6px] border border-slate-200"
+                                      />
+                                    )}
+                                    {item.resourceType === "video" && (
+                                      <video
+                                        src={item.resourceValue}
+                                        controls
+                                        className="w-full max-w-[240px] max-h-32 rounded-[6px] bg-black"
+                                      />
+                                    )}
+                                    {item.resourceType === "url" && (
+                                      <a
+                                        href={item.resourceValue}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:underline font-mono truncate max-w-full"
+                                      >
+                                        <LinkIcon className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{item.resourceValue}</span>
+                                      </a>
+                                    )}
+                                    {item.resourceType === "file" && (
+                                      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[6px] bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                                        <FileText className="w-3.5 h-3.5 text-slate-500" />
+                                        <span className="font-mono">{item.resourceName || "Attachment"}</span>
+                                      </div>
+                                    )}
+                                    {item.resourceType === "html" && (
+                                      <iframe
+                                        srcDoc={item.resourceValue}
+                                        sandbox="allow-same-origin"
+                                        title="HTML Preview"
+                                        className="w-full h-28 border border-slate-200 rounded-[6px]"
+                                      />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {(stepKey === "assignhuman" || stepKey === "assign-responsible") && (() => {
               const currentScope: "department" | "user" =
                 params.assignScope === "user" ||
@@ -2847,8 +3960,6 @@ export default function StepParametersFields({
                 ? params.selectedDepartments
                 : params.assignedDepartment
                 ? [params.assignedDepartment]
-                : availableDepartments.length > 0
-                ? [availableDepartments[0]]
                 : [];
 
               const selectedRoles: string[] = Array.isArray(params.selectedRoles)
@@ -2863,24 +3974,10 @@ export default function StepParametersFields({
                 ? [params.assignedUser]
                 : [];
 
-              const scopeRoleSelections: Record<string, string[]> = params.scopeRoleSelections || {};
-              const roleSequences: Record<string, Record<string, number>> = params.roleSequences || {};
-              const userSequences: Record<string, Record<string, number>> = params.userSequences || {};
-              const distributionPriority: "round_robin" | "strict_priority" | "random" =
-                params.distributionPriority || "round_robin";
+              // Strict priority removed — coerce legacy strict_priority to round_robin
+              const distributionPriority: "round_robin" | "random" =
+                params.distributionPriority === "random" ? "random" : "round_robin";
 
-              // Helpers to get members for a department
-              const getDeptMembers = (deptName: string): TeamMember[] => {
-                const dLower = deptName.toLowerCase();
-                return teamMembers.filter((m) => {
-                  if (m.department && m.department.toLowerCase() === dLower) return true;
-                  if (m.departments && m.departments.some((d) => d.toLowerCase() === dLower)) return true;
-                  if (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.department?.toLowerCase() === dLower)) return true;
-                  return false;
-                });
-              };
-
-              // Helper to get roles for a department
               const getDeptRoles = (deptName: string): string[] => {
                 const dLower = deptName.toLowerCase();
                 const fromMembers = teamMembers.flatMap((m) => {
@@ -2944,196 +4041,41 @@ export default function StepParametersFields({
                 return Array.from(new Set([...fromMembers, ...defaults])).filter(Boolean);
               };
 
-              // Helper to count members with a role in a department
-              const getMembersWithRoleInDept = (deptName: string, roleName: string): number => {
-                const dLower = deptName.toLowerCase();
-                const rLower = roleName.toLowerCase();
-                return teamMembers.filter((m) => {
-                  const isDept =
-                    (m.department && m.department.toLowerCase() === dLower) ||
-                    (m.departments && m.departments.some((d) => d.toLowerCase() === dLower)) ||
-                    (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.department?.toLowerCase() === dLower));
-                  if (!isDept) return false;
-                  const isRole =
-                    (m.role && m.role.toLowerCase() === rLower) ||
-                    (m.assignedDepartments && m.assignedDepartments.some((ad) => ad.role?.toLowerCase() === rLower));
-                  return isRole;
-                }).length;
-              };
+              const deptOptions: MultiSelectOption[] = availableDepartments.map((d) => {
+                const count = getDeptRoles(d).length;
+                return { value: d, label: d, sublabel: `${count} roles available` };
+              });
 
-              // Helper to toggle a selection in an array
-              const toggleItem = (list: string[], item: string) => {
-                return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
-              };
-
-              // Helper to toggle role within a department
-              const toggleRoleInDept = (deptName: string, roleName: string, allRoles: string[]) => {
-                const currentSelected = scopeRoleSelections[deptName];
-                let next: string[];
-                if (!currentSelected || currentSelected.length === 0) {
-                  // Was "all roles assigned", now deselect this one
-                  next = allRoles.filter((r) => r !== roleName);
-                } else if (currentSelected.includes(roleName)) {
-                  next = currentSelected.filter((r) => r !== roleName);
-                } else {
-                  next = [...currentSelected, roleName];
-                }
-                const updatedScopeRoles = {
-                  ...scopeRoleSelections,
-                  [deptName]: next,
+              const deptsForRoles = selectedDepts.length > 0 ? selectedDepts : availableDepartments;
+              const availableRoleList = Array.from(
+                new Set(deptsForRoles.flatMap((d) => getDeptRoles(d)))
+              );
+              const roleOptions: MultiSelectOption[] = availableRoleList.map((r) => {
+                const matchedDepts = deptsForRoles.filter((d) => getDeptRoles(d).includes(r));
+                return {
+                  value: r,
+                  label: r,
+                  sublabel: matchedDepts.join(", "),
                 };
-                const aggregatedRoles = Array.from(
-                  new Set(
-                    selectedDepts.flatMap((d) => {
-                      const roles = updatedScopeRoles[d];
-                      return roles && roles.length > 0 ? roles : getDeptRoles(d);
-                    })
-                  )
-                );
-                onChange({
-                  scopeRoleSelections: updatedScopeRoles,
-                  selectedRoles: aggregatedRoles,
-                  assignedRole: aggregatedRoles[0] || "",
-                });
-              };
+              });
 
-              // Helper to reset all roles assigned for a department
-              const resetAllRolesInDept = (deptName: string) => {
-                const next = { ...scopeRoleSelections };
-                delete next[deptName];
-                const aggregatedRoles = Array.from(
-                  new Set(
-                    selectedDepts.flatMap((d) => {
-                      const roles = next[d];
-                      return roles && roles.length > 0 ? roles : getDeptRoles(d);
-                    })
-                  )
-                );
-                onChange({
-                  scopeRoleSelections: next,
-                  selectedRoles: aggregatedRoles,
-                  assignedRole: aggregatedRoles[0] || "",
-                });
-              };
-
-              // Helper to reorder role sequence within a department
-              const moveRoleSequence = (
-                deptName: string,
-                sortedRoles: string[],
-                index: number,
-                direction: "up" | "down"
-              ) => {
-                const targetIndex = direction === "up" ? index - 1 : index + 1;
-                if (targetIndex < 0 || targetIndex >= sortedRoles.length) return;
-
-                const currentMap = { ...(roleSequences[deptName] || {}) };
-                sortedRoles.forEach((r, idx) => {
-                  if (currentMap[r] === undefined) {
-                    currentMap[r] = idx + 1;
-                  }
-                });
-
-                const roleA = sortedRoles[index];
-                const roleB = sortedRoles[targetIndex];
-
-                const seqA = currentMap[roleA] ?? index + 1;
-                const seqB = currentMap[roleB] ?? targetIndex + 1;
-
-                currentMap[roleA] = seqB;
-                currentMap[roleB] = seqA;
-
-                onChange({
-                  roleSequences: {
-                    ...roleSequences,
-                    [deptName]: currentMap,
-                  },
-                });
-              };
-
-              const setRoleSequenceNumber = (deptName: string, roleName: string, newSeq: number) => {
-                const currentMap = { ...(roleSequences[deptName] || {}) };
-                currentMap[roleName] = Math.max(1, newSeq);
-                onChange({
-                  roleSequences: {
-                    ...roleSequences,
-                    [deptName]: currentMap,
-                  },
-                });
-              };
-
-              // Helper to reorder sequence within user scope
-              const moveUserSequence = (
-                scopeKey: string,
-                sortedMembers: TeamMember[],
-                index: number,
-                direction: "up" | "down"
-              ) => {
-                const targetIndex = direction === "up" ? index - 1 : index + 1;
-                if (targetIndex < 0 || targetIndex >= sortedMembers.length) return;
-
-                const currentMap = { ...(userSequences[scopeKey] || {}) };
-                sortedMembers.forEach((m, idx) => {
-                  if (currentMap[String(m.id)] === undefined) {
-                    currentMap[String(m.id)] = idx + 1;
-                  }
-                });
-
-                const userA = sortedMembers[index];
-                const userB = sortedMembers[targetIndex];
-
-                const seqA = currentMap[String(userA.id)] ?? index + 1;
-                const seqB = currentMap[String(userB.id)] ?? targetIndex + 1;
-
-                currentMap[String(userA.id)] = seqB;
-                currentMap[String(userB.id)] = seqA;
-
-                onChange({
-                  userSequences: {
-                    ...userSequences,
-                    [scopeKey]: currentMap,
-                  },
-                });
-              };
-
-              const setUserSequenceNumber = (scopeKey: string, userId: string | number, newSeq: number) => {
-                const currentMap = { ...(userSequences[scopeKey] || {}) };
-                currentMap[String(userId)] = Math.max(1, newSeq);
-                onChange({
-                  userSequences: {
-                    ...userSequences,
-                    [scopeKey]: currentMap,
-                  },
-                });
-              };
+              const userOptions: MultiSelectOption[] = teamMembers.map((m) => ({
+                value: String(m.id),
+                label: m.name || String(m.id),
+                sublabel: [m.department, m.role, m.email].filter(Boolean).join(" • "),
+              }));
 
               return (
-                <div className="space-y-5 p-5 border border-slate-200 rounded-2xl bg-slate-50/50">
-                  {/* Header Title */}
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                        <User className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-                          Assign Responsible
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Configure assignment scope by Department & Roles, or specific Users
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 1. Choose Scope: Department | User */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Choose Scope
+                <div className="space-y-4">
+                  {/* Assignment Scope Segmented Toggle */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Assign By
                     </label>
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-[8px] border border-slate-200/80">
                       {[
-                        { id: "department", label: "Department", icon: Building2, desc: "Assign roles by department" },
-                        { id: "user", label: "User", icon: Users, desc: "Assign specific users" },
+                        { id: "department", label: "Department & Roles", icon: Building2 },
+                        { id: "user", label: "Team Members", icon: Users },
                       ].map((tab) => {
                         const Icon = tab.icon;
                         const isSelected = currentScope === tab.id;
@@ -3147,489 +4089,98 @@ export default function StepParametersFields({
                                 assignmentFilter: tab.id,
                               })
                             }
-                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            className={`flex-1 py-1.5 px-3 rounded-[6px] text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                               isSelected
-                                ? "bg-blue-50/90 border-blue-500 text-blue-900 shadow-2xs ring-1 ring-blue-500/20"
-                                : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                                ? "bg-white text-slate-900 shadow-2xs"
+                                : "text-slate-600 hover:text-slate-900"
                             }`}
                           >
-                            <div className="flex items-center gap-1.5">
-                              <Icon className={`w-4 h-4 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
-                              <span className="text-xs font-bold">{tab.label}</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-medium">{tab.desc}</span>
+                            <Icon className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{tab.label}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* ── 2. SCOPE: DEPARTMENT (Assign Roles & Sequencing) ── */}
+                  {/* Scope: Department -> Multi-Select Dropdowns for Departments & Roles */}
                   {currentScope === "department" && (
                     <div className="space-y-4">
-                      {/* Department Multi-Select Picker */}
-                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Select Departments (Multi-Select)
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedDepartments: [...availableDepartments] })}
-                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-slate-300">•</span>
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedDepartments: [] })}
-                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {availableDepartments.map((deptName) => {
-                            const isChecked = selectedDepts.includes(deptName);
-                            const deptRolesCount = getDeptRoles(deptName).length;
-                            return (
-                              <button
-                                key={deptName}
-                                type="button"
-                                onClick={() =>
-                                  onChange({
-                                    selectedDepartments: toggleItem(selectedDepts, deptName),
-                                  })
-                                }
-                                className={`px-3 py-2 rounded-lg border text-left text-xs font-medium transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                                  isChecked
-                                    ? "bg-blue-50/80 border-blue-400 text-blue-900 font-semibold"
-                                    : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <div
-                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                      isChecked
-                                        ? "bg-blue-600 border-blue-600 text-white"
-                                        : "border-slate-300 bg-white"
-                                    }`}
-                                  >
-                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                  <span className="truncate">{deptName}</span>
-                                </div>
-                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
-                                  {deptRolesCount} {deptRolesCount === 1 ? "role" : "roles"}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Department Roles & Sequencing */}
-                      {selectedDepts.length === 0 ? (
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500">
-                          Please select one or more departments above to configure role assignments.
-                        </div>
-                      ) : (
-                        selectedDepts.map((dept) => {
-                          const allDeptRoles = getDeptRoles(dept);
-                          const customSelected = scopeRoleSelections[dept];
-                          const isAllAssigned =
-                            !customSelected ||
-                            customSelected.length === 0 ||
-                            customSelected.length === allDeptRoles.length;
-
-                          const sortedRoles = [...allDeptRoles].sort((a, b) => {
-                            const seqA = roleSequences[dept]?.[a] ?? 999;
-                            const seqB = roleSequences[dept]?.[b] ?? 999;
-                            return seqA - seqB;
-                          });
-
-                          return (
-                            <div
-                              key={dept}
-                              className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs"
-                            >
-                              {/* Department Header */}
-                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                  <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-                                  <span className="text-xs font-bold text-slate-900">{dept}</span>
-                                  <span className="text-[10px] text-slate-400">
-                                    ({allDeptRoles.length} {allDeptRoles.length === 1 ? "role" : "roles"})
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {isAllAssigned ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      <Check className="w-3 h-3 stroke-[2.5]" />
-                                      All Roles Assigned
-                                    </span>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                        Custom ({customSelected.length} of {allDeptRoles.length} roles)
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => resetAllRolesInDept(dept)}
-                                        className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
-                                      >
-                                        Assign All Roles
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <p className="text-[11px] text-slate-500">
-                                {isAllAssigned
-                                  ? "All active roles in this department are assigned by default. Check specific roles below to restrict assignment, and set the sequence / priority for routing."
-                                  : "Only checked roles in this department are assigned. Adjust the sequence order below."}
-                              </p>
-
-                              {/* Roles List with Sequencing */}
-                              {allDeptRoles.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic py-2">
-                                  No roles currently defined for {dept}.
-                                </p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {sortedRoles.map((roleName, idx) => {
-                                    const isRoleChecked =
-                                      isAllAssigned ||
-                                      (customSelected && customSelected.includes(roleName));
-                                    const seq = roleSequences[dept]?.[roleName] ?? idx + 1;
-                                    const membersCount = getMembersWithRoleInDept(dept, roleName);
-
-                                    return (
-                                      <div
-                                        key={roleName}
-                                        className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                                          isRoleChecked
-                                            ? "bg-slate-50/70 border-slate-200"
-                                            : "bg-white border-slate-100 opacity-50"
-                                        }`}
-                                      >
-                                        {/* Role Checkbox & Info */}
-                                        <div
-                                          onClick={() => toggleRoleInDept(dept, roleName, allDeptRoles)}
-                                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
-                                        >
-                                          <div
-                                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                              isRoleChecked
-                                                ? "bg-blue-600 border-blue-600 text-white"
-                                                : "border-slate-300 bg-white"
-                                            }`}
-                                          >
-                                            {isRoleChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                                          </div>
-
-                                          <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0 border border-blue-200/60">
-                                            <Shield className="w-3 h-3" />
-                                          </div>
-
-                                          <div className="min-w-0 flex-1">
-                                            <span className="text-xs font-semibold text-slate-800 block truncate">
-                                              {roleName}
-                                            </span>
-                                            <span className="text-[10px] text-slate-400 block truncate">
-                                              {dept} • {membersCount} {membersCount === 1 ? "team member" : "team members"}
-                                            </span>
-                                          </div>
-                                        </div>
-
-                                        {/* Role Sequence / Priority Controls */}
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                              Seq
-                                            </span>
-                                            <input
-                                              type="number"
-                                              min="1"
-                                              max="99"
-                                              value={seq}
-                                              onChange={(e) =>
-                                                setRoleSequenceNumber(dept, roleName, parseInt(e.target.value) || 1)
-                                              }
-                                              className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
-                                            />
-                                          </div>
-
-                                          <div className="flex flex-col">
-                                            <button
-                                              type="button"
-                                              disabled={idx === 0}
-                                              onClick={() => moveRoleSequence(dept, sortedRoles, idx, "up")}
-                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                              title="Move up priority"
-                                            >
-                                              <ChevronUp className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={idx === sortedRoles.length - 1}
-                                              onClick={() => moveRoleSequence(dept, sortedRoles, idx, "down")}
-                                              className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                              title="Move down priority"
-                                            >
-                                              <ChevronDown className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
+                      <MultiSelectDropdown
+                        label="Departments"
+                        placeholder="Select departments..."
+                        options={deptOptions}
+                        selectedValues={selectedDepts}
+                        onChange={(nextDepts) => {
+                          const nextValidRoles = Array.from(
+                            new Set(
+                              (nextDepts.length > 0 ? nextDepts : availableDepartments).flatMap((d) =>
+                                getDeptRoles(d)
+                              )
+                            )
                           );
-                        })
-                      )}
+                          const filteredRoles = selectedRoles.filter((r) => nextValidRoles.includes(r));
+                          onChange({
+                            selectedDepartments: nextDepts,
+                            assignedDepartment: nextDepts[0] || "",
+                            selectedRoles: filteredRoles,
+                            assignedRole: filteredRoles[0] || "",
+                          });
+                        }}
+                        allSelectedFallbackText="Select departments..."
+                      />
+
+                      <MultiSelectDropdown
+                        label="Roles"
+                        placeholder="All roles in selected departments..."
+                        options={roleOptions}
+                        selectedValues={selectedRoles}
+                        onChange={(nextRoles) =>
+                          onChange({
+                            selectedRoles: nextRoles,
+                            assignedRole: nextRoles[0] || "",
+                          })
+                        }
+                        allSelectedFallbackText="All active roles (or pick specific roles)..."
+                      />
                     </div>
                   )}
 
-                  {/* ── 3. SCOPE: USER ── */}
+                  {/* Scope: User -> Multi-Select Dropdown for Team Members */}
                   {currentScope === "user" && (
-                    <div className="space-y-4">
-                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Select Users (Multi-Select)
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedUsers: teamMembers.map((m) => m.id) })}
-                              className="text-[11px] text-blue-600 hover:underline font-medium cursor-pointer"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-slate-300">•</span>
-                            <button
-                              type="button"
-                              onClick={() => onChange({ selectedUsers: [] })}
-                              className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
-
-                        <p className="text-[11px] text-slate-500">
-                          {selectedUsers.length === 0
-                            ? "All active team members are assigned by default. Check specific members below to restrict assignment."
-                            : `${selectedUsers.length} of ${teamMembers.length} team members selected. Set priority/sequence for each user below.`}
-                        </p>
-
-                        {/* List of Users with Sequence Controls */}
-                        {(() => {
-                          const activeUsers =
-                            selectedUsers.length > 0
-                              ? teamMembers.filter((m) => selectedUsers.some((id) => String(id) === String(m.id)))
-                              : teamMembers;
-
-                          const sortedUsers = [...activeUsers].sort((a, b) => {
-                            const seqA = userSequences["user"]?.[String(a.id)] ?? 999;
-                            const seqB = userSequences["user"]?.[String(b.id)] ?? 999;
-                            return seqA - seqB;
-                          });
-
-                          return (
-                            <div className="space-y-1.5">
-                              {sortedUsers.map((member, idx) => {
-                                const isChecked =
-                                  selectedUsers.length === 0 ||
-                                  selectedUsers.some((id) => String(id) === String(member.id));
-                                const seq = userSequences["user"]?.[String(member.id)] ?? idx + 1;
-
-                                return (
-                                  <div
-                                    key={member.id}
-                                    className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                                      isChecked
-                                        ? "bg-slate-50/70 border-slate-200"
-                                        : "bg-white border-slate-100 opacity-50"
-                                    }`}
-                                  >
-                                    <div
-                                      onClick={() => {
-                                        const current = selectedUsers;
-                                        let next: (string | number)[];
-                                        if (current.length === 0) {
-                                          next = teamMembers
-                                            .map((m) => m.id)
-                                            .filter((id) => String(id) !== String(member.id));
-                                        } else if (current.some((id) => String(id) === String(member.id))) {
-                                          next = current.filter((id) => String(id) !== String(member.id));
-                                        } else {
-                                          next = [...current, member.id];
-                                        }
-                                        onChange({ selectedUsers: next });
-                                      }}
-                                      className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2"
-                                    >
-                                      <div
-                                        className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                          isChecked
-                                            ? "bg-blue-600 border-blue-600 text-white"
-                                            : "border-slate-300 bg-white"
-                                        }`}
-                                      >
-                                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                                      </div>
-
-                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                        {member.name
-                                          ? member.name
-                                              .split(" ")
-                                              .map((n) => n[0])
-                                              .slice(0, 2)
-                                              .join("")
-                                              .toUpperCase()
-                                          : "U"}
-                                      </div>
-
-                                      <div className="min-w-0 flex-1">
-                                        <span className="text-xs font-semibold text-slate-800 block truncate">
-                                          {member.name}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400 block truncate">
-                                          {member.department || "Clinical"} • {member.role || "Member"} • {member.email}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {/* Sequence control */}
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 shadow-2xs">
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                          Seq
-                                        </span>
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          max="99"
-                                          value={seq}
-                                          onChange={(e) =>
-                                            setUserSequenceNumber("user", member.id, parseInt(e.target.value) || 1)
-                                          }
-                                          className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent outline-none"
-                                        />
-                                      </div>
-
-                                      <div className="flex flex-col">
-                                        <button
-                                          type="button"
-                                          disabled={idx === 0}
-                                          onClick={() => moveUserSequence("user", sortedUsers, idx, "up")}
-                                          className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                          title="Move up priority"
-                                        >
-                                          <ChevronUp className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={idx === sortedUsers.length - 1}
-                                          onClick={() => moveUserSequence("user", sortedUsers, idx, "down")}
-                                          className="p-0.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 cursor-pointer"
-                                          title="Move down priority"
-                                        >
-                                          <ChevronDown className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                    <MultiSelectDropdown
+                      label="Team Members"
+                      placeholder="Select team members..."
+                      options={userOptions}
+                      selectedValues={selectedUsers.map((id) => String(id))}
+                      onChange={(nextIds) => {
+                        const firstMember = teamMembers.find((m) => String(m.id) === nextIds[0]);
+                        onChange({
+                          selectedUsers: nextIds,
+                          assignedUser: nextIds[0] || "",
+                          assigneeName:
+                            nextIds.length > 1
+                              ? `${firstMember?.name || "Member"} +${nextIds.length - 1}`
+                              : firstMember?.name || "",
+                        });
+                      }}
+                      allSelectedFallbackText="All active team members (or pick specific users)..."
+                    />
                   )}
 
-                  {/* ── 4. DISTRIBUTION PRIORITY ── */}
-                  <div className="space-y-3 p-3.5 bg-white border border-slate-200 rounded-xl">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
-                        Distribution Priority <span className="text-rose-500">*</span>
-                      </label>
-                      <p className="text-[11px] text-slate-500 mb-2.5">
-                        Choose how assignments are distributed across team members:
-                      </p>
-                      <div className="flex flex-col gap-2.5">
-                        {[
-                          {
-                            id: "round_robin",
-                            label: "Round Robin",
-                            badge: "Sequential",
-                            desc: "Cycles through team members in priority order for equal workload distribution.",
-                          },
-                          {
-                            id: "strict_priority",
-                            label: "Strict Priority",
-                            badge: "Waterfall",
-                            desc: "Assigns to Priority 1 first; cascades to next priority members if busy or off-duty.",
-                          },
-                          {
-                            id: "random",
-                            label: "Random",
-                            badge: "Balanced",
-                            desc: "Randomly distributes assignments among all active assigned team members.",
-                          },
-                        ].map((prio) => {
-                          const isSelected = distributionPriority === prio.id;
-                          return (
-                            <label
-                              key={prio.id}
-                              onClick={() => onChange({ distributionPriority: prio.id })}
-                              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                                isSelected
-                                  ? "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500/20 shadow-2xs"
-                                  : "border-slate-200 hover:border-slate-300 bg-white"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="distributionPriority"
-                                value={prio.id}
-                                checked={isSelected}
-                                onChange={() => onChange({ distributionPriority: prio.id })}
-                                className="mt-1 accent-blue-600 shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-slate-900">{prio.label}</span>
-                                  <span
-                                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                      isSelected
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "bg-slate-100 text-slate-600"
-                                    }`}
-                                  >
-                                    {prio.badge}
-                                  </span>
-                                </div>
-                                <span className="text-[11px] text-slate-500 leading-relaxed block mt-1">
-                                  {prio.desc}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+                  {/* Distribution Method (Round Robin / Random only — Strict Priority removed) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Distribution Method
+                    </label>
+                    <select
+                      value={distributionPriority}
+                      onChange={(e) => onChange({ distributionPriority: e.target.value })}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-[8px] text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="round_robin">Round Robin — Cycles evenly across matching members</option>
+                      <option value="random">Random — Distributes randomly across matching members</option>
+                    </select>
                   </div>
                 </div>
               );
@@ -3740,256 +4291,229 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {(stepKey === "whatsapp" || stepKey === "send-whatsapp") && (
-              <div className="space-y-4">
-                {renderField(
-                  "Select Source",
-                  <div className="inline-flex rounded-md border border-border overflow-hidden bg-white">
-                    {[
-                      { v: "template", l: "Template" },
-                      { v: "campaign", l: "Campaign" }
-                    ].map(opt => (
-                      <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => {
-                          if (opt.v === "template") {
-                            onChange({ whatsappSource: "template", whatsappCampaignId: "" });
-                          } else if (opt.v === "campaign") {
-                            onChange({ whatsappSource: "campaign", whatsappTemplate: "", whatsappTemplateIdentifier: "" });
-                          }
-                        }}
-                        className={`px-3 py-1.5 text-xs font-semibold ${whatsappSource === opt.v ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                      >
-                        {opt.l}
-                      </button>
-                    ))}
+            {(stepKey === "whatsapp" || stepKey === "send-whatsapp") && (() => {
+              const selectedTpl = whatsappTemplates.find((t) => t.id === whatsappTemplate);
+              return (
+                <div className="space-y-4">
+                  {/* Connected WhatsApp Account */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Connected Account <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={whatsappConnectedAccount}
+                      onChange={(e) => {
+                        const acc = whatsappNumbers.find((n) => n.id === e.target.value);
+                        onChange({
+                          whatsappConnectedAccount: e.target.value,
+                          whatsappConnectedNumber: acc?.displayPhoneNumber || "",
+                        });
+                      }}
+                      className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="">Select WhatsApp account...</option>
+                      {whatsappNumbers.map((num) => (
+                        <option key={num.id} value={num.id}>
+                          {num.name || num.displayPhoneNumber}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
 
-                {whatsappSource === "template" && (
-                  <>
-                    {whatsappTemplates.length === 0 ? (
-                      <div className="space-y-1.5">
-                        <label className="block text-sm font-semibold text-[#020817]">Template</label>
-                        <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                          <span>No templates yet — create one in Chats → Template Builder</span>
-                          <Link to="/chats?tab=templates" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                            Manage Templates →
-                          </Link>
-                        </div>
-                      </div>
-                    ) : (
-                      renderField(
-                        "Template",
-                        <select
-                          value={whatsappTemplate}
-                          onChange={e => {
-                            const id = e.target.value;
-                            const selectedTpl = whatsappTemplates.find(t => t.id === id);
-                            onChange({
-                              whatsappTemplate: id,
-                              whatsappTemplateIdentifier: selectedTpl ? selectedTpl.identifier : ""
-                            });
-                          }}
-                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                        >
-                          <option value="">Select Template...</option>
-                          {whatsappTemplates.map(t => (
-                            <option key={t.id} value={t.id}>
-                              {t.name} — {t.category}
-                            </option>
-                          ))}
-                        </select>
-                      )
-                    )}
-                  </>
-                )}
-
-                {whatsappSource === "campaign" && (
-                  whatsappCampaigns.length === 0 ? (
+                  {/* WhatsApp Template */}
+                  {whatsappTemplates.length === 0 ? (
                     <div className="space-y-1.5">
-                      <label className="block text-sm font-semibold text-[#020817]">Campaign</label>
-                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                        <span>No campaigns yet — create one in Chats → Campaigns</span>
-                        <Link to="/chats?tab=campaigns" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                          Manage Campaigns →
+                      <label className="block text-[13px] font-medium text-slate-700">Template</label>
+                      <div className="text-xs text-slate-500 p-3 bg-slate-50 rounded-[8px] border border-dashed border-slate-200 flex flex-col gap-1.5">
+                        <span>No templates yet — create one in Chats → Template Builder</span>
+                        <Link to="/chats?tab=templates" className="text-xs text-slate-800 hover:underline font-semibold w-fit">
+                          Manage Templates →
                         </Link>
                       </div>
                     </div>
                   ) : (
-                    renderField(
-                      "Campaign",
+                    <div className="space-y-1.5">
+                      <label className="block text-[13px] font-medium text-slate-700">
+                        Template <span className="text-red-500">*</span>
+                      </label>
                       <select
-                        value={whatsappCampaignId}
-                        onChange={e => onChange({ whatsappCampaignId: e.target.value })}
-                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                        value={whatsappTemplate}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const tpl = whatsappTemplates.find((t) => t.id === id);
+                          onChange({
+                            whatsappSource: "template",
+                            whatsappTemplate: id,
+                            whatsappTemplateIdentifier: tpl ? tpl.identifier || tpl.id : "",
+                            whatsappTemplateName: tpl?.name || "",
+                            whatsappMessage: tpl?.bodyText || "",
+                          });
+                        }}
+                        className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
                       >
-                        <option value="">Select Campaign...</option>
-                        {whatsappCampaigns.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
+                        <option value="">Select Template...</option>
+                        {whatsappTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} {t.category ? `— ${t.category}` : ""}
                           </option>
                         ))}
                       </select>
-                    )
-                  )
-                )}
+                    </div>
+                  )}
 
-                {renderField(
-                  <div className="flex items-center gap-1.5">
-                    <span>Website Chat Notification Message</span>
-                    <InfoTooltip text="Message shown in Website Chat Widget when a visitor triggers this automation (e.g. notifying them that the template details were dispatched to their WhatsApp)." />
-                  </div>,
-                  <textarea
-                    rows={2}
-                    value={websiteNotificationMessage}
-                    onChange={e => onChange({ websiteNotificationMessage: e.target.value })}
-                    placeholder="e.g. We have sent the requested details to your WhatsApp number. Please check your WhatsApp messages!"
-                    className="w-full px-3 py-2 text-xs rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500"
-                  />
-                )}
-              </div>
-            )}
-
-            {(stepKey === "sms" || stepKey === "send-sms") && (
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>Message</label>
-                    <VariablePickerButton
-                      targetRef={smsMessageRef}
-                      value={smsMessage}
-                      onChange={v => onChange({ smsMessage: v })}
-                      label="{ } Insert Variable"
-                    />
-                  </div>
-                  <textarea
-                    ref={smsMessageRef}
-                    rows={5}
-                    value={smsMessage}
-                    onChange={e => onChange({ smsMessage: e.target.value })}
-                    placeholder="Type your SMS message..."
-                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none"
-                  />
-                </div>
-
-                {renderField(
-                  <div className="flex items-center gap-1.5">
-                    <span>Website Chat Notification Message</span>
-                    <InfoTooltip text="Message shown in Website Chat Widget when a visitor triggers this SMS automation (e.g. notifying them that the SMS details were sent to their number)." />
-                  </div>,
-                  <textarea
-                    rows={2}
-                    value={websiteNotificationMessage}
-                    onChange={e => onChange({ websiteNotificationMessage: e.target.value })}
-                    placeholder="e.g. We have sent the requested details to your mobile number via SMS. Please check your messages!"
-                    className="w-full px-3 py-2 text-xs rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500"
-                  />
-                )}
-              </div>
-            )}
-
-            {(stepKey === "email" || stepKey === "send-email") && (
-              <div className="space-y-4">
-                {renderField(
-                  "Connected Account",
-                  <select
-                    value={emailConnectedAccount}
-                    onChange={e => onChange({ emailConnectedAccount: e.target.value })}
-                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white"
-                  >
-                    <option value="">Select email account...</option>
-                    <option>support@company.com</option>
-                  </select>
-                )}
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2 text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Mode</label>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="emailTemplateMode"
-                        checked={!showCustomEmail}
-                        onChange={() => onChange({ showCustomEmail: false })}
-                      />
-                      <span className="text-sm">Rich Editor</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="emailTemplateMode"
-                        checked={showCustomEmail}
-                        onChange={() => onChange({ showCustomEmail: true })}
-                      />
-                      <span className="text-sm">HTML Source</span>
-                    </label>
-                  </div>
-                </div>
-
-                {renderField(
-                  "Subject",
-                  <input
-                    type="text"
-                    value={emailSubject}
-                    onChange={e => onChange({ emailSubject: e.target.value })}
-                    placeholder="Subject..."
-                    className="w-full px-3 py-2.5 text-sm border rounded-md bg-white"
-                  />
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>Email Body</label>
-                    <VariablePickerButton
-                      targetRef={!showCustomEmail ? emailRichBodyRef : emailHtmlBodyRef}
-                      value={!showCustomEmail ? emailRichBody : emailHtmlBody}
-                      onChange={v => onChange(!showCustomEmail ? { emailRichBody: v } : { emailHtmlBody: v })}
-                      label="</> + Variable"
-                    />
-                  </div>
-
-                  {!showCustomEmail ? (
-                    <textarea
-                      ref={emailRichBodyRef}
-                      value={emailRichBody}
-                      onChange={e => onChange({ emailRichBody: e.target.value })}
-                      placeholder="Hello {{ContactName}}, ..."
-                      className="w-full px-3 py-2.5 text-sm border rounded-md bg-white resize-none"
-                      rows={5}
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1">
-                        {["code", "preview"].map(tab => (
-                          <button
-                            key={tab}
-                            type="button"
-                            onClick={() => onChange({ htmlBodyViewMode: tab })}
-                            className={`px-3 py-1 text-xs font-semibold rounded-md border ${htmlBodyViewMode === tab ? "bg-blue-600 text-white" : "bg-white text-gray-500"}`}
-                          >
-                            {tab === "code" ? "Code" : "Preview"}
-                          </button>
-                        ))}
-                      </div>
-                      {htmlBodyViewMode === "code" ? (
-                        <textarea
-                          ref={emailHtmlBodyRef}
-                          value={emailHtmlBody}
-                          onChange={e => onChange({ emailHtmlBody: e.target.value })}
-                          placeholder="<p>Hello {{ContactName}}</p>"
-                          className="w-full px-3 py-2.5 text-sm border rounded-md font-mono bg-white"
-                          rows={5}
-                        />
-                      ) : (
-                        <div className="p-3 border rounded-md bg-gray-50 min-h-[100px]" dangerouslySetInnerHTML={{ __html: emailHtmlBody }} />
-                      )}
+                  {selectedTpl?.bodyText && (
+                    <div className="p-3 rounded-[8px] border border-slate-200 bg-slate-50/70 space-y-1">
+                      <span className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Template Preview
+                      </span>
+                      <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                        {selectedTpl.bodyText}
+                      </p>
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
+
+            {(stepKey === "sms" || stepKey === "send-sms") && (() => {
+              const selectedTpl = smsTemplates.find((t) => t.id === smsTemplate);
+              return (
+                <div className="space-y-4">
+                  {/* Connected SMS Number */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Connected Account <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={smsConnectedAccount}
+                      onChange={(e) => onChange({ smsConnectedAccount: e.target.value })}
+                      className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="">Select SMS number...</option>
+                      {smsNumbers.map((num) => (
+                        <option key={num.id} value={num.id}>
+                          {num.number} ({num.provider})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* SMS Template Only */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Template <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={smsTemplate}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const tpl = smsTemplates.find((t) => t.id === id);
+                        onChange({
+                          smsTemplate: id,
+                          smsTemplateName: tpl?.name || "",
+                          smsMessage: tpl?.bodyText || "",
+                        });
+                      }}
+                      className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="">Select SMS Template...</option>
+                      {smsTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.category ? `— ${t.category}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedTpl?.bodyText && (
+                    <div className="p-3 rounded-[8px] border border-slate-200 bg-slate-50/70 space-y-1">
+                      <span className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Template Preview
+                      </span>
+                      <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                        {selectedTpl.bodyText}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {(stepKey === "email" || stepKey === "send-email") && (() => {
+              const selectedTpl = emailTemplates.find((t) => t.id === emailTemplate);
+              return (
+                <div className="space-y-4">
+                  {/* Connected Email Account */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Connected Account <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={emailConnectedAccount}
+                      onChange={(e) => onChange({ emailConnectedAccount: e.target.value })}
+                      className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="">Select email account...</option>
+                      {mailboxAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.email}>
+                          {acc.name ? `${acc.name} (${acc.email})` : acc.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Email Template */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Template <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={emailTemplate}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const tpl = emailTemplates.find((t) => t.id === id);
+                        onChange({
+                          emailTemplate: id,
+                          emailTemplateName: tpl?.name || "",
+                          subject: tpl?.subject || "",
+                          emailSubject: tpl?.subject || "",
+                          emailRichBody: tpl?.bodyText || "",
+                        });
+                      }}
+                      className="w-full h-9 px-3 text-[13px] rounded-[8px] border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value="">Select Email Template...</option>
+                      {emailTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.category ? `— ${t.category}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedTpl && (
+                    <div className="p-3 rounded-[8px] border border-slate-200 bg-slate-50/70 space-y-2">
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Subject
+                        </span>
+                        <p className="text-xs font-medium text-slate-900 mt-0.5">
+                          {selectedTpl.subject}
+                        </p>
+                      </div>
+                      <div className="pt-2 border-t border-slate-200/70">
+                        <span className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Body Preview
+                        </span>
+                        <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed mt-0.5">
+                          {selectedTpl.bodyText}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {stepKey === "crmupdate" && (
               <div className="space-y-4">
@@ -4751,16 +5275,16 @@ export default function StepParametersFields({
                   {/* Source process context / override for Duplicate Process */}
                   {isDuplicate && (
                     contextSourceProc && !params.sourceProcessId ? (
-                      <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex items-center justify-between gap-2">
+                      <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-lg flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                          <span className="block text-[11px] font-medium text-slate-500">
                             Duplicating From (Trigger Process)
                           </span>
-                          <span className="text-xs font-semibold text-slate-800 truncate block">
+                          <span className="text-sm font-medium text-slate-900 truncate block mt-0.5">
                             {contextSourceProc.name}
                           </span>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 shrink-0">
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-white text-slate-600 border border-slate-200 shrink-0">
                           Source
                         </span>
                       </div>
@@ -4776,7 +5300,7 @@ export default function StepParametersFields({
                               sourceProcessName: src?.name || "",
                             });
                           }}
-                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                          className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-slate-900"
                         >
                           <option value="">Trigger Process (Common / Global Fields)</option>
                           {effectiveClientProcesses.map((p: any) => (
@@ -4807,7 +5331,7 @@ export default function StepParametersFields({
                           stepDetailStage: firstStage?.id || firstStage?.name || "",
                         });
                       }}
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                      className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-slate-900"
                     >
                       <option value="">Select process...</option>
                       {effectiveClientProcesses.map((p: any) => (
@@ -4832,7 +5356,7 @@ export default function StepParametersFields({
                           stepDetailStage: val,
                         });
                       }}
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                      className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-slate-900"
                     >
                       {stages.length === 0 ? (
                         <option value="">No stages defined for this process</option>
@@ -4849,10 +5373,10 @@ export default function StepParametersFields({
                   {/* 3. Duplicate Process: Auto-copied shared fields + Unique fields to fill */}
                   {isDuplicate && selectedProc && (
                     <div className="space-y-4">
-                      <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl space-y-2.5">
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-lg space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Copy className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <Copy className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                             <span
                               className="text-xs font-bold text-slate-800 uppercase tracking-wider"
                               style={{ fontFamily: "Outfit, sans-serif" }}
@@ -4861,12 +5385,12 @@ export default function StepParametersFields({
                             </span>
                             <InfoTooltip text="Fields present in both the trigger process and the target process are automatically copied over." />
                           </div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
                             {sharedProcessFields.length} auto-copied
                           </span>
                         </div>
                         {sharedProcessFields.length === 0 ? (
-                          <p className="text-xs text-slate-500 italic">
+                          <p className="text-xs text-slate-500">
                             No shared fields detected between source and target processes.
                           </p>
                         ) : (
@@ -4874,9 +5398,9 @@ export default function StepParametersFields({
                             {sharedProcessFields.map((sf) => (
                               <span
                                 key={sf.key}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200/80 text-[11px] font-medium text-slate-700"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700"
                               >
-                                <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <Check className="w-3 h-3 text-slate-500 shrink-0" />
                                 {sf.label}
                               </span>
                             ))}
@@ -4885,13 +5409,13 @@ export default function StepParametersFields({
                       </div>
 
                       {uniqueProcessFields.length === 0 ? (
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 italic">
+                        <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg text-xs text-slate-500">
                           All fields for {selectedProc.name} already match the source process and will be copied automatically.
                         </div>
                       ) : (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-600">
+                            <span className="text-xs font-medium text-slate-500">
                               Unique Fields for {selectedProc.name} ({uniqueProcessFields.length})
                             </span>
                           </div>
@@ -5561,7 +6085,7 @@ export default function StepParametersFields({
                     <select
                       value={selectedContactType}
                       onChange={(e) => onChange({ contactType: e.target.value })}
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                      className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-slate-900"
                     >
                       {contactCategories.map((cat) => (
                         <option key={cat} value={cat}>
@@ -5571,8 +6095,8 @@ export default function StepParametersFields({
                     </select>
                   )}
 
-                  <div className="p-3 bg-sky-50/70 border border-sky-200/80 rounded-xl flex items-start gap-2.5 text-xs text-slate-600">
-                    <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                  <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg flex items-start gap-2.5 text-xs text-slate-600">
+                    <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                     <span>
                       Map contact parameters below or use the field picker icon inside each input. Any fields left blank fall back to the trigger payload automatically.
                     </span>
@@ -6443,7 +6967,7 @@ export default function StepParametersFields({
                       <select
                         value={params.fileType || "pdf"}
                         onChange={(e) => onChange({ fileType: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        className="w-full h-10 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                       >
                         <option value="pdf">PDF Document (.pdf)</option>
                         <option value="doc">Word Document (.docx)</option>
@@ -6453,9 +6977,7 @@ export default function StepParametersFields({
                 </div>
               );
             })()}
-          </div>
-        )}
-      </div>
+        </div>
       )}
 
       {/* Root Field Registry Modal (Shared across Trigger, Conditions, and Field Updates) */}
@@ -6471,7 +6993,10 @@ export default function StepParametersFields({
             fieldModalMode === "caseConditionSingle" ||
             fieldModalMode === "caseConditionDynamic" ||
             fieldModalMode === "triggerConditionSingle" ||
-            fieldModalMode === "assignProcessFieldToken" || fieldModalMode === "fieldUpdateValueToken"
+            fieldModalMode === "assignProcessFieldToken" ||
+            fieldModalMode === "fieldUpdateValueToken" ||
+            fieldModalMode === "createTaskTitleToken" ||
+            fieldModalMode === "createTaskDescToken"
           }
           initialSelectedKeys={
             fieldModalMode === "monitoredFields"

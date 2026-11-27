@@ -133,6 +133,7 @@ export interface TaskEntity {
   workflowId?: string;
   workflowName?: string;
   isImportant: boolean;
+  isRequired?: boolean;
   scopeLevel: TaskScopeLevel;
   assignee: TaskAssigneeScope;
   assignees?: TaskAssigneeScope[];

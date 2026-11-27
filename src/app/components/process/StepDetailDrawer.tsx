@@ -154,20 +154,20 @@ export default function StepDetailDrawer({
         }}
       >
         {/* Header */}
-        <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
+        <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-slate-200 bg-white">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
-                  className="text-xl font-bold"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                  className="text-lg font-bold text-slate-900"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {step.name}
                 </h2>
               </div>
               <p
-                className="text-sm mt-1"
-                style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
+                className="text-xs mt-0.5 text-slate-500"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {step.description}
               </p>
@@ -177,10 +177,10 @@ export default function StepDetailDrawer({
                 <button
                   type="button"
                   onClick={onShowInFlowBuilder}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                   title="Open this step in the visual flow builder canvas"
                 >
-                  <GitBranch className="w-3.5 h-3.5 text-blue-600" />
+                  <GitBranch className="w-3.5 h-3.5 text-slate-500" />
                   <span>Show in flow builder</span>
                 </button>
               )}
@@ -192,16 +192,16 @@ export default function StepDetailDrawer({
                     onClose();
                   }
                 }}
-                className="p-2 rounded hover:bg-muted/40 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5 text-muted-foreground" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-white" style={{ fontFamily: "Outfit, sans-serif" }}>
           {!onlyParameters && (
             <>
               {/* Trigger, Execution & Delay Row */}
@@ -442,18 +442,18 @@ export default function StepDetailDrawer({
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-start gap-3">
+        <div className="flex-shrink-0 border-t border-slate-200 px-6 py-4 bg-white flex items-center justify-end gap-2.5">
           <button
             onClick={onBack}
-            className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-            style={{ fontFamily: "DM Sans, sans-serif", color: "#64748B" }}
+            className="px-4 py-2 text-xs font-semibold rounded-[8px] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Back
           </button>
           <button
             onClick={onSave}
-            className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-            style={{ backgroundColor: "#2563EB", fontFamily: "DM Sans, sans-serif" }}
+            className="px-5 py-2 text-xs font-semibold rounded-[8px] bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white border border-slate-700/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_rgba(24,30,37,0.20)] transition-all cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Save Changes
           </button>
