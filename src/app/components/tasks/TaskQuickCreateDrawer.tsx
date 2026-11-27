@@ -211,23 +211,23 @@ function SearchableMultiSelectPicker({
 
   return (
     <div className="space-y-1.5" ref={dropdownRef}>
-      <label className="text-[11px] font-semibold text-slate-700 block">{label}</label>
+      <label className="text-[13px] font-medium text-slate-700 block">{label}</label>
       <div className="relative">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 flex items-center justify-between hover:bg-slate-100/70 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+          className="w-full h-10 px-3 py-2 text-sm bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-slate-800 flex items-center justify-between transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
         >
-          <span className={selectedIds.length > 0 ? "text-slate-900 font-bold" : "text-slate-500 font-normal truncate"}>
+          <span className={selectedIds.length > 0 ? "text-slate-900 font-medium" : "text-slate-400 font-normal truncate"}>
             {selectedIds.length > 0
               ? `${selectedIds.length} selected`
               : autoRoleText || placeholder}
           </span>
-          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </button>
 
         {isOpen && (
-          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 space-y-2 animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2 animate-in fade-in zoom-in-95 duration-100">
             {/* Search Input */}
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -236,7 +236,7 @@ function SearchableMultiSelectPicker({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full text-xs pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
+                className="w-full text-xs pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
                 autoFocus
               />
               {search && (
@@ -285,29 +285,26 @@ function SearchableMultiSelectPicker({
                     <div
                       key={opt.id}
                       onClick={() => handleToggle(opt.id)}
-                      className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                        isChecked ? "bg-blue-50/80 text-blue-900 font-medium" : "hover:bg-slate-50 text-slate-700"
+                      className={`flex items-center gap-2.5 p-2 rounded-md text-xs cursor-pointer transition-colors ${
+                        isChecked ? "bg-blue-50/40 text-blue-900 font-medium" : "hover:bg-slate-50 text-slate-700"
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {opt.name.charAt(0)}
-                        </div>
-                        <div className="truncate">
-                          <span className="block truncate font-semibold text-slate-800">{opt.name}</span>
-                          {opt.subtitle && (
-                            <span className="block text-[10px] text-slate-500 truncate">{opt.subtitle}</span>
-                          )}
-                        </div>
-                      </div>
                       <div
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ml-2 ${
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                           isChecked
                             ? "bg-blue-600 border-blue-600 text-white"
                             : "border-slate-300 bg-white"
                         }`}
                       >
                         {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <div className="min-w-0 flex-1 truncate">
+                        <span className="truncate">{opt.name}</span>
+                        {opt.subtitle && (
+                          <span className="text-[11px] text-slate-400 font-normal ml-1.5">
+                            ({opt.subtitle})
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1695,37 +1692,35 @@ export default function TaskQuickCreateDrawer({
           STEP 1: CONFIGURE THE TASK
       ───────────────────────────────────────────────────────────── */}
       {step === 1 && (
-        <div className="space-y-5 animate-in fade-in duration-150">
+        <div className="space-y-3.5 animate-in fade-in duration-150" style={{ fontFamily: "Outfit, sans-serif" }}>
           {/* 1. Task Title (Required) */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
-                <span>Task Title</span>
-                <span className="text-rose-500 font-bold">*</span>
+          <div className="border border-slate-200 rounded-lg bg-white p-4 space-y-4">
+            <div>
+              <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                <span>Task title</span>
+                <span className="text-red-500 ml-0.5">*</span>
               </label>
-              <span className="text-[10px] text-slate-400 font-medium">Required</span>
+              <input
+                type="text"
+                placeholder="e.g. Verify Patient Insurance Eligibility for Fasting Labs"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              />
             </div>
-            <input
-              type="text"
-              placeholder="e.g. Verify Patient Insurance Eligibility for Fasting Labs"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-sm font-semibold p-3 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] text-slate-900 placeholder:text-slate-400 transition-all"
-            />
-          </div>
 
-          {/* 2. Task Description */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-900 block">
-              Task Description
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Provide background context, clinical objectives, and deliverables instructions..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs p-3 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] text-slate-800 placeholder:text-slate-400 resize-none transition-all leading-relaxed"
-            />
+            <div>
+              <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                <span>Description</span>
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Provide background context, clinical objectives, and deliverables instructions..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none"
+              />
+            </div>
           </div>
 
           {/* Admin Control (Scope Rules) - Only in Admin Mode */}
@@ -1743,21 +1738,20 @@ export default function TaskQuickCreateDrawer({
           )}
 
           {/* 3. Task Responsible */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-slate-500" />
-                <span>Task Responsible</span>
-              </label>
+          <div className="border border-slate-200 rounded-lg bg-white p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-bold text-slate-900">
+                Task responsible
+              </span>
               {!isAdmin && (
-                <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/70">
+                <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
                   <button
                     type="button"
                     onClick={() => setResponsibleType("team")}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                       responsibleType === "team"
-                        ? "bg-white text-slate-900 shadow-2xs"
-                        : "text-slate-500 hover:text-slate-800"
+                        ? "bg-white text-blue-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     Team Members
@@ -1765,10 +1759,10 @@ export default function TaskQuickCreateDrawer({
                   <button
                     type="button"
                     onClick={() => setResponsibleType("contact")}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                       responsibleType === "contact"
-                        ? "bg-white text-slate-900 shadow-2xs"
-                        : "text-slate-500 hover:text-slate-800"
+                        ? "bg-white text-blue-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     Contacts
@@ -1782,57 +1776,52 @@ export default function TaskQuickCreateDrawer({
               <div className="space-y-3">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Assign to Role(s)</span>
+                    <label className="text-[13px] font-medium text-slate-700">
+                      Assign to role(s)
                     </label>
                     {adminScopingRules.length > 0 && (
-                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                      <span className="text-[11px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                         Filtered by Scope ({adminScopingRules.map((r) => r.industryCategory || "All").join(", ")})
                       </span>
                     )}
                   </div>
-                  <div className="relative">
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) toggleAdminRoleSelection(e.target.value);
-                        e.target.value = "";
-                      }}
-                      defaultValue=""
-                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 hover:bg-slate-100/60 transition-colors"
-                    >
-                      <option value="" disabled>
-                        + Select role to assign...
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) toggleAdminRoleSelection(e.target.value);
+                      e.target.value = "";
+                    }}
+                    defaultValue=""
+                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                  >
+                    <option value="" disabled>
+                      Select role to assign...
+                    </option>
+                    {availableAdminRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role} {selectedAdminRoles.includes(role) ? "✓ (Selected)" : ""}
                       </option>
-                      {availableAdminRoles.map((role) => (
-                        <option key={role} value={role}>
-                          {role} {selectedAdminRoles.includes(role) ? "✓ (Selected)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Selected Role Chips */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {selectedAdminRoles.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No roles selected. Select at least one role above.</p>
+                    <p className="text-xs text-slate-400">No roles selected. Select at least one role above.</p>
                   ) : (
                     selectedAdminRoles.map((role) => (
                       <span
                         key={role}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/80 shadow-2xs"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
                       >
-                        <Shield className="w-3 h-3 text-blue-600" />
                         <span>{role}</span>
                         <button
                           type="button"
                           onClick={() => removeAdminRoleChip(role)}
-                          className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                          className="ml-0.5 p-0.5 hover:bg-black/5 rounded-full transition-colors cursor-pointer"
                           title={`Remove ${role}`}
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3 h-3 opacity-60 hover:opacity-100" />
                         </button>
                       </span>
                     ))
@@ -1843,30 +1832,27 @@ export default function TaskQuickCreateDrawer({
               /* Clinic Team Members: Vertically aligned Role -> Searchable Multi-select members */
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
-                  <div className="relative">
-                    <select
-                      value={selectedRoleFilter}
-                      onChange={(e) => {
-                        setSelectedRoleFilter(e.target.value);
-                        setSelectedTeamMemberIds([]);
-                      }}
-                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
-                    >
-                      {availableRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                  <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Role</label>
+                  <select
+                    value={selectedRoleFilter}
+                    onChange={(e) => {
+                      setSelectedRoleFilter(e.target.value);
+                      setSelectedTeamMemberIds([]);
+                    }}
+                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                  >
+                    {availableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <SearchableMultiSelectPicker
-                    label="Select Members"
-                    placeholder="+ Click to select team members..."
+                    label="Select members"
+                    placeholder="Select team members..."
                     searchPlaceholder="Search team members by name or role..."
                     options={filteredTeamMembers.map((m) => ({
                       id: String(m.id),
@@ -1885,12 +1871,8 @@ export default function TaskQuickCreateDrawer({
 
                 {/* If Role is selected and no individual members are picked: show role-wide assignment banner */}
                 {selectedRoleFilter !== "All Roles" && selectedTeamMemberIds.length === 0 && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50/90 border border-blue-200/90 text-xs text-blue-900">
-                    <Users className="w-4 h-4 text-blue-600 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold">Role-wide Assignment:</span> Task is assigned to all{" "}
-                      <span className="font-semibold underline">{filteredTeamMembers.length} {selectedRoleFilter}</span> members.
-                    </div>
+                  <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-xs text-blue-900">
+                    Assigned to all <strong>{filteredTeamMembers.length} {selectedRoleFilter}</strong> members.
                   </div>
                 )}
 
@@ -1902,20 +1884,16 @@ export default function TaskQuickCreateDrawer({
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/80"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
                         >
-                          <div className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center text-[9px] font-bold">
-                            {m?.name?.charAt(0) || "U"}
-                          </div>
                           <span>{m?.name || "Member"}</span>
-                          {m?.role && <span className="text-[10px] text-slate-500">({m.role})</span>}
                           <button
                             type="button"
                             onClick={() => removeTeamMemberChip(id)}
-                            className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                            className="ml-0.5 p-0.5 hover:bg-black/5 rounded-full transition-colors cursor-pointer"
                             title="Remove person"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3 h-3 opacity-60 hover:opacity-100" />
                           </button>
                         </span>
                       );
@@ -1927,30 +1905,27 @@ export default function TaskQuickCreateDrawer({
               /* Clinic Contacts: Vertically aligned Category -> Searchable Multi-select contacts */
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-700 block mb-1">Category</label>
-                  <div className="relative">
-                    <select
-                      value={selectedContactCategory}
-                      onChange={(e) => {
-                        setSelectedContactCategory(e.target.value);
-                        setSelectedContactIds([]);
-                      }}
-                      className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
-                    >
-                      {CONTACT_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                  <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Category</label>
+                  <select
+                    value={selectedContactCategory}
+                    onChange={(e) => {
+                      setSelectedContactCategory(e.target.value);
+                      setSelectedContactIds([]);
+                    }}
+                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                  >
+                    {CONTACT_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <SearchableMultiSelectPicker
-                    label="Select Contacts"
-                    placeholder="+ Click to select contacts..."
+                    label="Select contacts"
+                    placeholder="Select contacts..."
                     searchPlaceholder="Search contacts by name or category..."
                     options={filteredContacts.map((c) => ({
                       id: c.id,
@@ -1969,12 +1944,8 @@ export default function TaskQuickCreateDrawer({
 
                 {/* If Category is selected and no individual contacts are picked */}
                 {selectedContactCategory !== "All Categories" && selectedContactIds.length === 0 && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/90 text-xs text-emerald-900">
-                    <Users className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold">Category-wide Assignment:</span> Task is assigned to all{" "}
-                      <span className="font-semibold underline">{filteredContacts.length} {selectedContactCategory}</span> contacts.
-                    </div>
+                  <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-xs text-blue-900">
+                    Assigned to all <strong>{filteredContacts.length} {selectedContactCategory}</strong> contacts.
                   </div>
                 )}
 
@@ -1986,17 +1957,16 @@ export default function TaskQuickCreateDrawer({
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
                         >
-                          <User className="w-3 h-3 text-emerald-600" />
                           <span>{c?.name || "Contact"}</span>
                           <button
                             type="button"
                             onClick={() => removeContactChip(id)}
-                            className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer ml-0.5"
+                            className="ml-0.5 p-0.5 hover:bg-black/5 rounded-full transition-colors cursor-pointer"
                             title="Remove contact"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3 h-3 opacity-60 hover:opacity-100" />
                           </button>
                         </span>
                       );
@@ -2009,133 +1979,92 @@ export default function TaskQuickCreateDrawer({
 
           {/* 4. Workflow (Required, pipeline name only; omitted for Admin tasks) */}
           {!isAdmin && (
-            <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
-                  <span>Workflow Pipeline</span>
-                  <span className="text-rose-500 font-bold">*</span>
+            <div className="border border-slate-200 rounded-lg bg-white p-4 space-y-1.5">
+              <div className="flex items-center">
+                <label className="flex items-center text-[13px] font-medium text-slate-700">
+                  <span>Workflow pipeline</span>
+                  <span className="text-red-500 ml-0.5">*</span>
                 </label>
-                <InfoTooltip content="The task will automatically begin in the pipeline's starting stage" />
+                <InfoTooltip content="The task will automatically begin in the pipeline's starting stage." />
               </div>
-              <div className="relative">
-                <select
-                  value={selectedPipelineId}
-                  onChange={(e) => setSelectedPipelineId(e.target.value)}
-                  className="w-full text-xs font-bold p-3 bg-slate-50 border border-gray-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0]"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {taskPipelines.map((pipe) => (
-                    <option key={pipe.id} value={pipe.id}>
-                      {pipe.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              <select
+                value={selectedPipelineId}
+                onChange={(e) => setSelectedPipelineId(e.target.value)}
+                className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+              >
+                {taskPipelines.map((pipe) => (
+                  <option key={pipe.id} value={pipe.id}>
+                    {pipe.name}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
           {/* 5. Settings Accordion Rows (Scheduling omitted for Admin tasks) */}
-          <div className="space-y-3 pt-1">
-            <h3
-              className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {isAdmin ? "Task Parameters" : "Task Parameters & Schedule"}
-            </h3>
-
+          <div className="space-y-3.5">
             {/* Mark as Important Toggle */}
-            <div
-              onClick={() => setIsImportant((prev) => !prev)}
-              className="flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 rounded-2xl border border-slate-200/80 shadow-xs transition-colors cursor-pointer select-none"
-            >
-              <div className="flex items-center gap-3 min-w-0 pr-3">
-                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
-                  isImportant ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-slate-200 text-slate-400"
-                }`}>
-                  <Star className={`w-4 h-4 ${isImportant ? "fill-amber-500 text-amber-500" : ""}`} />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-sm font-bold text-[#222222] block" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Mark as Important
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    Flags this task with high urgency priority
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isImportant}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsImportant((prev) => !prev);
-                }}
-                className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                  isImportant ? "bg-slate-900" : "bg-slate-200"
-                }`}
-              >
-                <div
-                  className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
-                    isImportant ? "translate-x-5" : "translate-x-0"
-                  }`}
+            <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-white">
+              <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                <span>Mark as important</span>
+                <InfoTooltip content="Flags this task with high urgency priority." />
+              </label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isImportant}
+                  onChange={(e) => setIsImportant(e.target.checked)}
+                  className="sr-only peer"
                 />
-              </button>
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
             </div>
 
             {/* Row A: Schedule (Client only) */}
             {!isAdmin && (
-              <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+              <div className="border border-slate-200 rounded-lg bg-white">
                 <button
                   type="button"
                   onClick={() => setOpenSettingsRow(openSettingsRow === "schedule" ? null : "schedule")}
-                  className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+                  className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+                    openSettingsRow === "schedule" ? "rounded-t-lg" : "rounded-lg"
+                  }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                      <Calendar className="w-4 h-4 text-[#1456f0]" />
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Schedule
-                      </span>
-                      <Tooltip text="Set completion deadline and target time">
-                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </Tooltip>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-slate-900">Schedule</span>
+                    <InfoTooltip content="Set completion deadline and target time." />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                    <span className="text-xs font-medium text-slate-500">
                       {scheduleChipSummary}
                     </span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                        openSettingsRow === "schedule" ? "rotate-180" : ""
-                      }`}
-                    />
+                    {openSettingsRow === "schedule" ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    )}
                   </div>
                 </button>
 
                 {openSettingsRow === "schedule" && (
-                  <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                  <div className="px-4 py-4 border-t border-slate-100 space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-semibold text-slate-700 block mb-1">Deadline Date</label>
+                        <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Deadline date</label>
                         <input
                           type="date"
                           value={deadlineDate}
                           onChange={(e) => setDeadlineDate(e.target.value)}
-                          className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                          className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-slate-700 block mb-1">Target Time</label>
+                        <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Target time</label>
                         <input
                           type="time"
                           value={deadlineTime}
                           onChange={(e) => setDeadlineTime(e.target.value)}
-                          className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                          className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
                       </div>
                     </div>
@@ -2146,93 +2075,68 @@ export default function TaskQuickCreateDrawer({
 
             {/* Row B: Repeat (Inline recurrence settings — Client only; hidden for Admin) */}
             {!isAdmin && (
-            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+            <div className="border border-slate-200 rounded-lg bg-white">
               <button
                 type="button"
                 onClick={() => setOpenSettingsRow(openSettingsRow === "repeat" ? null : "repeat")}
-                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+                  openSettingsRow === "repeat" ? "rounded-t-lg" : "rounded-lg"
+                }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
-                    <Repeat className="w-4 h-4" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Repeat
-                    </span>
-                    <Tooltip text="Automated cadence for recurring task dispatch">
-                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                    </Tooltip>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-slate-900">Repeat</span>
+                  <InfoTooltip content="Automated cadence for recurring task dispatch." />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-full font-mono transition-colors ${
-                      repeatEnabled
-                        ? "bg-purple-100 text-purple-800 border border-purple-200"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
+                  <span className="text-xs font-medium text-slate-500">
                     {repeatChipSummary}
                   </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                      openSettingsRow === "repeat" ? "rotate-180" : ""
-                    }`}
-                  />
+                  {openSettingsRow === "repeat" ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
                 </div>
               </button>
 
               {openSettingsRow === "repeat" && (
-                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                <div className="px-4 py-4 border-t border-slate-100 space-y-4">
                   {/* Enable Repeat Toggle */}
-                  <div
-                    onClick={() => setRepeatEnabled((prev) => !prev)}
-                    className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/80 transition-colors cursor-pointer select-none"
-                  >
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">Enable Recurrence</span>
-                      <span className="text-[11px] text-slate-500">Auto-create new instances on schedule</span>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={repeatEnabled}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRepeatEnabled((prev) => !prev);
-                      }}
-                      className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                        repeatEnabled ? "bg-[#1456f0]" : "bg-slate-200"
-                      }`}
-                    >
-                      <div
-                        className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
-                          repeatEnabled ? "translate-x-5" : "translate-x-0"
-                        }`}
+                  <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                    <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                      <span>Enable recurrence</span>
+                      <InfoTooltip content="Auto-create new instances on schedule." />
+                    </label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={repeatEnabled}
+                        onChange={(e) => setRepeatEnabled(e.target.checked)}
+                        className="sr-only peer"
                       />
-                    </button>
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                   </div>
 
                   {repeatEnabled && (
-                    <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                    <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs font-semibold text-slate-700 block mb-1">Every</label>
+                          <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Every</label>
                           <input
                             type="number"
                             min={1}
                             value={repeatInterval}
                             onChange={(e) => setRepeatInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono tabular-nums"
+                            className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 tabular-nums"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-semibold text-slate-700 block mb-1">Unit</label>
+                          <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Unit</label>
                           <select
                             value={repeatUnit}
                             onChange={(e) => setRepeatUnit(e.target.value as any)}
-                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 cursor-pointer"
+                            className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                           >
                             <option value="days">Days</option>
                             <option value="weeks">Weeks</option>
@@ -2242,21 +2146,19 @@ export default function TaskQuickCreateDrawer({
                         </div>
                       </div>
 
-
-
                       {/* Stop Conditions */}
-                      <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-2">
-                        <span className="text-xs font-semibold text-slate-700 block">End Recurrence</span>
+                      <div className="space-y-2">
+                        <label className="text-[13px] font-medium text-slate-700 block">End recurrence</label>
                         <div className="grid grid-cols-3 gap-2">
                           {(["never", "count", "date"] as const).map((r) => (
                             <button
                               key={r}
                               type="button"
                               onClick={() => setRepeatStopRule(r)}
-                              className={`py-1.5 rounded-lg text-xs font-semibold capitalize border transition-all cursor-pointer ${
+                              className={`h-9 rounded-lg text-xs font-semibold capitalize border transition-colors cursor-pointer ${
                                 repeatStopRule === r
                                   ? "bg-slate-900 text-white border-slate-900"
-                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                               }`}
                             >
                               {r}
@@ -2265,26 +2167,26 @@ export default function TaskQuickCreateDrawer({
                         </div>
 
                         {repeatStopRule === "count" && (
-                          <div className="pt-2">
-                            <label className="text-[11px] text-slate-500 block mb-1">Stop after (occurrences)</label>
+                          <div className="pt-1">
+                            <label className="text-[12px] font-medium text-slate-600 block mb-1">Stop after (occurrences)</label>
                             <input
                               type="number"
                               min={1}
                               value={repeatStopCount}
                               onChange={(e) => setRepeatStopCount(Math.max(1, parseInt(e.target.value) || 1))}
-                              className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                              className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                           </div>
                         )}
 
                         {repeatStopRule === "date" && (
-                          <div className="pt-2">
-                            <label className="text-[11px] text-slate-500 block mb-1">Stop on date</label>
+                          <div className="pt-1">
+                            <label className="text-[12px] font-medium text-slate-600 block mb-1">Stop on date</label>
                             <input
                               type="date"
                               value={repeatStopDate}
                               onChange={(e) => setRepeatStopDate(e.target.value)}
-                              className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                              className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                           </div>
                         )}
@@ -2297,65 +2199,55 @@ export default function TaskQuickCreateDrawer({
             )}
 
             {/* Row C: Observers */}
-            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+            <div className="border border-slate-200 rounded-lg bg-white">
               <button
                 type="button"
                 onClick={() => setOpenSettingsRow(openSettingsRow === "observers" ? null : "observers")}
-                className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+                  openSettingsRow === "observers" ? "rounded-t-lg" : "rounded-lg"
+                }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                    <Eye className="w-4 h-4" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-[#222222]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Observers
-                    </span>
-                    <Tooltip text="Observers receive notifications and progress updates without direct responsibility">
-                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                    </Tooltip>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-slate-900">Observers</span>
+                  <InfoTooltip content="Observers receive notifications and progress updates without direct responsibility." />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                  <span className="text-xs font-medium text-slate-500">
                     {computedObservers.length} {computedObservers.length === 1 ? "Observer" : "Observers"}
                   </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                      openSettingsRow === "observers" ? "rotate-180" : ""
-                    }`}
-                  />
+                  {openSettingsRow === "observers" ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
                 </div>
               </button>
 
               {openSettingsRow === "observers" && (
-                <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+                <div className="px-4 py-4 border-t border-slate-100 space-y-4">
                   <div className="space-y-3">
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Role</label>
-                      <div className="relative">
-                        <select
-                          value={observerRoleFilter}
-                          onChange={(e) => {
-                            setObserverRoleFilter(e.target.value);
-                            setSelectedObserverMemberIds([]);
-                          }}
-                          className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
-                        >
-                          {availableRoles.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+                      <label className="text-[13px] font-medium text-slate-700 block mb-1.5">Role</label>
+                      <select
+                        value={observerRoleFilter}
+                        onChange={(e) => {
+                          setObserverRoleFilter(e.target.value);
+                          setSelectedObserverMemberIds([]);
+                        }}
+                        className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
+                      >
+                        {availableRoles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
                       <SearchableMultiSelectPicker
-                        label="Select Observer Members"
-                        placeholder="+ Click to select observers..."
+                        label="Select observer members"
+                        placeholder="Select observers..."
                         searchPlaceholder="Search team members by name or role..."
                         options={filteredObserverTeamMembers.map((m) => ({
                           id: String(m.id),
@@ -2374,12 +2266,8 @@ export default function TaskQuickCreateDrawer({
 
                     {/* If role is selected and no members picked: show role-wide banner */}
                     {observerRoleFilter !== "All Roles" && selectedObserverMemberIds.length === 0 && (
-                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900">
-                        <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <span className="font-bold">Role-wide Observers:</span> All{" "}
-                          <span className="font-semibold underline">{filteredObserverTeamMembers.length} {observerRoleFilter}</span> members will observe this task.
-                        </div>
+                      <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-xs text-blue-900">
+                        All <strong>{filteredObserverTeamMembers.length} {observerRoleFilter}</strong> members will observe this task.
                       </div>
                     )}
 
@@ -2391,17 +2279,16 @@ export default function TaskQuickCreateDrawer({
                           return (
                             <span
                               key={id}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200/90 shadow-2xs"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
                             >
-                              <Eye className="w-3 h-3 text-amber-500" />
                               <span>{m?.name || "Member"}</span>
-                              {m?.role && <span className="text-[10px] text-slate-400">({m.role})</span>}
                               <button
                                 type="button"
                                 onClick={() => handleRemoveObserver(id)}
-                                className="hover:text-rose-600 transition-colors p-0.5 cursor-pointer text-slate-400"
+                                className="ml-0.5 p-0.5 hover:bg-black/5 rounded-full transition-colors cursor-pointer"
+                                title="Remove observer"
                               >
-                                <X className="w-3 h-3" />
+                                <X className="w-3 h-3 opacity-60 hover:opacity-100" />
                               </button>
                             </span>
                           );

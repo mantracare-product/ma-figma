@@ -1,30 +1,17 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Paperclip,
-  Settings,
   Send,
-  Clock,
-  AlertTriangle,
   FileText,
-  UserCheck,
-  ChevronRight,
-  ChevronLeft,
   X,
   Reply,
   File,
-  PauseCircle,
-  PlayCircle,
-  UserX,
-  Check,
-  Search,
 } from "lucide-react";
 import { Conversation, SessionWindowStatus, Message, MessageReplyReference, MessageAttachment } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
 import { WhatsappTemplate, Campaign } from "../../pages/Chats";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
-import AssignResponsibleModal from "./AssignResponsibleModal";
-import { getStoredTeamMembers, TeamMember } from "../../../lib/teamStore";
 
 export interface MessageComposerBarProps {
   conversation?: Conversation;
@@ -88,26 +75,19 @@ export default function MessageComposerBar({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [globalTemplates] = useWhatsappTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [showGearMenu, setShowGearMenu] = useState(false);
-  const [gearView, setGearView] = useState<"menu" | "assign">("menu");
-  const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const gearMenuRef = useRef<HTMLDivElement>(null);
 
-  // Determine if this is a website conversation (hide More Actions & Settings on website channel)
+  // Determine if this is a website conversation
   const isWebsite = conversation?.channel === "website" || channel === "website";
 
-  // Determine if this is an internal team conversation (hide CRM share template/gear actions)
+  // Determine if this is an internal team conversation
   const isTeam = conversation?.channel === "team" || channel === "team" || Boolean(conversation?.isTeam);
 
   // Determine if this is a Companion conversation
   const isCompanion = conversation?.channel === "companion" || conversation?.id === "care-bot-system" || channel === "companion";
-  const isBotActive = conversation?.botStatus === "active";
+  const isWhatsApp = (conversation?.channel === "whatsapp" || channel === "whatsapp") && !isWebsite && !isTeam && !isCompanion;
 
   const isGroup = Boolean(conversation?.isGroup);
-  const isOnlyModeratorsCanPost = isGroup && conversation?.groupConfig?.permissions.whoCanPost === "moderators";
   // Demo assumption: current user is admin/practitioner who is owner/moderator
   const canPost = true;
 
@@ -118,46 +98,6 @@ export default function MessageComposerBar({
       setSelectedTemplateId(approvedTemplates[0].id);
     }
   }, [approvedTemplates, selectedTemplateId]);
-
-  // Load organization team members when gear menu opens
-  useEffect(() => {
-    if (showGearMenu) {
-      try {
-        const stored = getStoredTeamMembers();
-        if (Array.isArray(stored) && stored.length > 0) {
-          setTeamMembers(stored.filter((m) => m && m.name && m.status !== false));
-        }
-      } catch {}
-    } else {
-      setGearView("menu");
-      setMemberSearchQuery("");
-    }
-  }, [showGearMenu]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) {
-        setShowGearMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredTeamMembers = useMemo(() => {
-    const q = memberSearchQuery.trim().toLowerCase();
-    if (!q) return teamMembers;
-    return teamMembers.filter((m) =>
-      m.name.toLowerCase().includes(q) ||
-      (m.role && m.role.toLowerCase().includes(q)) ||
-      (m.department && m.department.toLowerCase().includes(q))
-    );
-  }, [teamMembers, memberSearchQuery]);
-
-  const assignedMember = useMemo(() => {
-    if (!conversation?.assignedPersonId) return null;
-    return teamMembers.find((m) => String(m.id) === String(conversation.assignedPersonId));
-  }, [teamMembers, conversation?.assignedPersonId]);
 
   const handleSendText = () => {
     if (!inputText.trim() && !attachedFile) return;
@@ -198,67 +138,16 @@ export default function MessageComposerBar({
   const handleSendTemplateFromModal = (tpl: WhatsappTemplate) => {
     onSendTemplate(tpl);
     setShowTemplateModal(false);
-    setShowGearMenu(false);
-  };
-
-  const handleToggleCareBot = () => {
-    if (onToggleBotStatus) {
-      onToggleBotStatus();
-    } else if (conversation) {
-      const nextStatus = isBotActive ? "off" : "active";
-      try {
-        const stored = localStorage.getItem("whatsappMockConversations");
-        if (stored) {
-          const list: Conversation[] = JSON.parse(stored);
-          const updated = list.map((c) =>
-            c.id === conversation.id
-              ? {
-                  ...c,
-                  botStatus: nextStatus,
-                  assignedPersonId: nextStatus === "active" ? null : c.assignedPersonId,
-                }
-              : c
-          );
-          localStorage.setItem("whatsappMockConversations", JSON.stringify(updated));
-          window.dispatchEvent(new Event("storage"));
-          window.dispatchEvent(new CustomEvent("test-conversation-sync"));
-        }
-      } catch {}
-      toast.success(isBotActive ? "Care Bot paused" : "Care Bot active");
-    }
-    setShowGearMenu(false);
-  };
-
-  const handleSelectResponsible = (personId: string, personName: string) => {
-    if (onAssignResponsible) {
-      onAssignResponsible(personId, personName);
-    } else if (conversation) {
-      try {
-        const stored = localStorage.getItem("whatsappMockConversations");
-        if (stored) {
-          const list: Conversation[] = JSON.parse(stored);
-          const updated = list.map((c) =>
-            c.id === conversation.id
-              ? {
-                  ...c,
-                  assignedPersonId: personId || null,
-                  botStatus: personId ? ("off" as const) : c.botStatus,
-                }
-              : c
-          );
-          localStorage.setItem("whatsappMockConversations", JSON.stringify(updated));
-          window.dispatchEvent(new Event("storage"));
-          window.dispatchEvent(new CustomEvent("test-conversation-sync"));
-        }
-      } catch {}
-      toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
-    }
-    setShowGearMenu(false);
-    setGearView("menu");
   };
 
   return (
-    <div className="p-4 border-t border-gray-200 bg-white shrink-0 relative">
+    <div
+      className={`shrink-0 relative ${
+        isWhatsApp
+          ? "px-4 py-2.5 border-t border-[#e9edef] bg-[#f0f2f5]"
+          : "p-4 border-t border-gray-200 bg-white"
+      }`}
+    >
       {/* Hidden File Input */}
       <input
         type="file"
@@ -271,9 +160,15 @@ export default function MessageComposerBar({
       <div className="space-y-2">
         {/* Reply Quote Strip */}
         {replyingTo && (
-          <div className="flex items-center justify-between p-2 px-3 bg-slate-50 border border-slate-200/90 rounded-xl text-xs animate-in fade-in duration-100">
+          <div
+            className={`flex items-center justify-between p-2 px-3 text-xs animate-in fade-in duration-100 ${
+              isWhatsApp
+                ? "bg-white border-l-4 border-[#00a884] rounded-lg shadow-2xs"
+                : "bg-slate-50 border border-slate-200/90 rounded-xl"
+            }`}
+          >
             <div className="flex items-center gap-2 min-w-0">
-              <Reply className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+              <Reply className={`w-3.5 h-3.5 shrink-0 ${isWhatsApp ? "text-[#00a884]" : "text-[#1456f0]"}`} />
               <div className="min-w-0">
                 <span className="font-bold text-slate-800">
                   Replying to {replyingTo.senderName || (replyingTo.sender === "me" ? "Me" : conversation?.contactName || "Contact")}:
@@ -296,9 +191,15 @@ export default function MessageComposerBar({
 
         {/* Attached File Preview Chip */}
         {attachedFile && (
-          <div className="flex items-center justify-between p-2 px-3 bg-blue-50/60 border border-blue-200/80 rounded-xl text-xs">
+          <div
+            className={`flex items-center justify-between p-2 px-3 text-xs ${
+              isWhatsApp
+                ? "bg-white border border-[#bbf7d0] rounded-lg"
+                : "bg-blue-50/60 border border-blue-200/80 rounded-xl"
+            }`}
+          >
             <div className="flex items-center gap-2 min-w-0">
-              <File className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+              <File className={`w-3.5 h-3.5 shrink-0 ${isWhatsApp ? "text-[#00a884]" : "text-[#1456f0]"}`} />
               <div className="min-w-0">
                 <span className="font-bold text-slate-900 truncate block">{attachedFile.name}</span>
                 <span className="text-[10px] text-slate-500 font-mono tabular-nums">{attachedFile.size}</span>
@@ -307,7 +208,7 @@ export default function MessageComposerBar({
             <button
               type="button"
               onClick={() => setAttachedFile(null)}
-              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-blue-100/60 rounded-md transition-colors cursor-pointer shrink-0"
+              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer shrink-0"
               title="Remove attachment"
             >
               <X className="w-3.5 h-3.5" />
@@ -321,236 +222,19 @@ export default function MessageComposerBar({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              className={`p-2 transition-colors cursor-pointer ${
+                isWhatsApp
+                  ? "text-[#54656f] hover:text-[#111b21] hover:bg-black/5 rounded-full"
+                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl"
+              }`}
             >
               <Paperclip className="w-4 h-4" />
             </button>
           </Tooltip>
 
-          {/* Gear Settings Button + Popover (Hidden on Website channel and Team chat) */}
-          {!isWebsite && !isTeam && (
-            <div className="relative" ref={gearMenuRef}>
-              <Tooltip content="Message Actions & Settings">
-                <button
-                  type="button"
-                  onClick={() => setShowGearMenu((prev) => !prev)}
-                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                    showGearMenu ? "bg-blue-50 text-[#1456f0]" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-              </Tooltip>
-
-              {/* Settings Dropdown Popover (Positioned cleanly above the gear box) */}
-              {showGearMenu && (
-                <div
-                  className="absolute bottom-11 left-0 z-50 bg-white border border-slate-200/90 rounded-2xl shadow-xl text-xs animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
-                  style={{ width: isCompanion && gearView === "assign" ? "272px" : "240px" }}
-                >
-                  {isCompanion ? (
-                    gearView === "menu" ? (
-                      /* Companion Gear Menu: Pause Care Bot + Assign Responsible (No templates) */
-                      <div className="py-1">
-                        {/* 1. Pause / Resume Care Bot */}
-                        <button
-                          type="button"
-                          onClick={handleToggleCareBot}
-                          className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2.5 font-medium">
-                            {isBotActive ? (
-                              <>
-                                <PauseCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                                <span>Pause Care Bot</span>
-                              </>
-                            ) : (
-                              <>
-                                <PlayCircle className="w-4 h-4 text-emerald-500 shrink-0" />
-                                <span>Resume Care Bot</span>
-                              </>
-                            )}
-                          </span>
-                          <span
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                              isBotActive
-                                ? "bg-emerald-50 text-emerald-600 font-semibold"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {isBotActive ? "Active" : "Paused"}
-                          </span>
-                        </button>
-
-                        {/* 2. Assign Responsible (Only Organization Team Members) */}
-                        <button
-                          type="button"
-                          onClick={() => setGearView("assign")}
-                          className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer border-t border-slate-100"
-                        >
-                          <span className="flex items-center gap-2.5 font-medium">
-                            <UserCheck className="w-4 h-4 text-[#1456f0] shrink-0" />
-                            <span>Assign Responsible</span>
-                          </span>
-                          <div className="flex items-center gap-1 text-slate-400">
-                            {assignedMember && (
-                              <span className="text-[10px] text-blue-600 max-w-[70px] truncate font-medium">
-                                {assignedMember.name}
-                              </span>
-                            )}
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </div>
-                        </button>
-                      </div>
-                    ) : (
-                      /* Clean, Small, Concise Assign Responsible Popup Above Gear Box */
-                      <div className="p-2 space-y-2">
-                        {/* Header */}
-                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 px-1">
-                          <button
-                            type="button"
-                            onClick={() => setGearView("menu")}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                          >
-                            <ChevronLeft className="w-3.5 h-3.5" />
-                            <span>Back</span>
-                          </button>
-                          <span className="text-[11px] font-bold text-slate-700 tracking-tight">
-                            Assign Responsible
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowGearMenu(false);
-                              setGearView("menu");
-                            }}
-                            className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {/* Search Input */}
-                        <div className="relative px-0.5">
-                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                          <input
-                            type="text"
-                            autoFocus
-                            value={memberSearchQuery}
-                            onChange={(e) => setMemberSearchQuery(e.target.value)}
-                            placeholder="Filter team member..."
-                            className="w-full pl-8 pr-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                          />
-                        </div>
-
-                        {/* Team Members List (Only Organization Team Members) */}
-                        <div className="max-h-48 overflow-y-auto space-y-0.5 px-0.5">
-                          {/* Unassigned Option */}
-                          <button
-                            type="button"
-                            onClick={() => handleSelectResponsible("", "Unassigned")}
-                            className={`w-full px-2 py-1.5 rounded-lg flex items-center justify-between text-left transition-colors cursor-pointer ${
-                              !conversation?.assignedPersonId
-                                ? "bg-blue-50/70 text-[#1456f0] font-semibold"
-                                : "text-slate-600 hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
-                                <UserX className="w-3 h-3" />
-                              </div>
-                              <span className="text-xs">Unassigned</span>
-                            </div>
-                            {!conversation?.assignedPersonId && (
-                              <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
-                            )}
-                          </button>
-
-                          {filteredTeamMembers.map((member) => {
-                            const isAssigned = String(conversation?.assignedPersonId) === String(member.id);
-                            return (
-                              <button
-                                key={member.id}
-                                type="button"
-                                onClick={() => handleSelectResponsible(String(member.id), member.name)}
-                                className={`w-full px-2 py-1.5 rounded-lg flex items-center justify-between text-left transition-colors cursor-pointer ${
-                                  isAssigned
-                                    ? "bg-blue-50/70 text-[#1456f0] font-semibold"
-                                    : "text-slate-800 hover:bg-slate-50"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div
-                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${getAvatarColor(
-                                      member.name
-                                    )}`}
-                                  >
-                                    {getInitials(member.name)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-medium truncate leading-tight">{member.name}</p>
-                                    <p className="text-[10px] text-slate-400 truncate leading-tight">
-                                      {member.role || "Team Member"}
-                                    </p>
-                                  </div>
-                                </div>
-                                {isAssigned && (
-                                  <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
-                                )}
-                              </button>
-                            );
-                          })}
-
-                          {filteredTeamMembers.length === 0 && (
-                            <p className="text-[11px] text-slate-400 text-center py-3">
-                              No team members match "{memberSearchQuery}"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  ) : (
-                    /* Other channels: WhatsApp, SMS (Templates + Assign) */
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowTemplateModal(true);
-                          setShowGearMenu(false);
-                        }}
-                        className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2 font-medium">
-                          <FileText className="w-4 h-4 text-[#1456f0]" />
-                          Share Template Message
-                        </span>
-                        <ChevronRight className="w-3 h-3 text-slate-400" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAssignModal(true);
-                          setShowGearMenu(false);
-                        }}
-                        className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2 font-medium">
-                          <UserCheck className="w-4 h-4 text-[#1456f0]" />
-                          Assign Responsible
-                        </span>
-                        <ChevronRight className="w-3 h-3 text-slate-400" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Text input */}
           <textarea
-            rows={2}
+            rows={isWhatsApp ? 1 : 2}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             disabled={!canPost}
@@ -563,18 +247,40 @@ export default function MessageComposerBar({
             placeholder={
               !canPost
                 ? "Only moderators can post in this group"
+                : isWhatsApp
+                ? "Type a message..."
                 : "Type a message... (Press Enter to send)"
             }
-            className="flex-1 text-xs p-2.5 bg-slate-50/60 hover:bg-white focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] resize-none text-[#1E293B]"
+            className={
+              isWhatsApp
+                ? "flex-1 text-sm py-2.5 px-4 bg-white border border-transparent focus:border-[#00a884]/40 rounded-full focus:outline-none resize-none text-[#111b21] placeholder:text-[#667781]"
+                : "flex-1 text-xs p-2.5 bg-slate-50/60 hover:bg-white focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] resize-none text-[#1E293B]"
+            }
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
+
+          {/* Quick Use Template pill for WhatsApp */}
+          {isWhatsApp && (
+            <button
+              type="button"
+              onClick={() => setShowTemplateModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#e7fce3] hover:bg-[#d9fdd3] text-[#008069] border border-[#bbf7d0] text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Use template</span>
+            </button>
+          )}
 
           {/* Send button */}
           <button
             type="button"
             onClick={handleSendText}
             disabled={(!inputText.trim() && !attachedFile) || !canPost}
-            className="w-10 h-10 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
+            className={
+              isWhatsApp
+                ? "w-10 h-10 bg-[#00a884] hover:bg-[#008f72] disabled:opacity-45 text-white rounded-full shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                : "w-10 h-10 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
+            }
           >
             <Send className="w-4 h-4" />
           </button>
@@ -620,15 +326,6 @@ export default function MessageComposerBar({
           </div>
         </div>
       )}
-
-      {/* Assign Responsible Modal */}
-      <AssignResponsibleModal
-        isOpen={showAssignModal}
-        onClose={() => setShowAssignModal(false)}
-        currentAssignedId={conversation?.assignedPersonId}
-        contactName={conversation?.contactName}
-        onAssign={handleSelectResponsible}
-      />
     </div>
   );
 }

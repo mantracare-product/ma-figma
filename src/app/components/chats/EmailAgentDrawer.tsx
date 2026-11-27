@@ -1,20 +1,13 @@
 import React, { useState, useEffect } from "react";
 import DrawerShell from "../ui/DrawerShell";
 import {
-  Sparkles,
-  Mail,
-  Tag,
-  Pencil,
-  Zap,
-  Bell,
   ChevronDown,
+  ChevronUp,
   Info,
   RotateCcw,
   Check,
   Plus,
   Trash2,
-  CornerUpRight,
-  UserPlus,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -273,106 +266,77 @@ export default function EmailAgentDrawer({
       onClose={onClose}
       title="Email Agent Settings"
       subtitle="Configure email monitoring, categorization, drafting rules, and automations"
-      icon={<Sparkles className="w-5 h-5 text-primary" />}
-      width="max-w-[540px]"
-      bodyClassName="p-4 sm:p-5 overflow-y-auto bg-slate-50/50"
+      width="max-w-3xl"
+      bodyClassName="pt-3.5 px-6 pb-6 overflow-y-auto overflow-x-hidden"
       footer={
-        <div className="flex items-center justify-between w-full">
+        <div className="flex items-center justify-between w-full" style={{ fontFamily: "Outfit, sans-serif" }}>
           <button
             type="button"
             onClick={handleResetDefaults}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Reset Defaults
+            <span>Reset Defaults</span>
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
+              className="px-4 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl shadow-xs transition-colors cursor-pointer"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
+              className="px-5 py-2 text-xs font-bold rounded-lg bg-[#1456f0] text-white hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <Check className="w-4 h-4" />
-              Save Settings
+              <Check className="w-3.5 h-3.5" />
+              <span>Save Settings</span>
             </button>
           </div>
         </div>
       }
     >
-      <div className="space-y-4">
-        {/* ── DROPDOWN 1: Email Monitoring & Automation ── */}
-        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+      <div className="space-y-3.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+        {/* ── 1. Email Monitoring & Automation ── */}
+        <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
             onClick={() => setMonitoringDropdownOpen(!monitoringDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+              monitoringDropdownOpen ? "rounded-t-lg" : "rounded-lg"
+            }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <Mail className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold text-[#222222]"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Email Monitoring & Automation
-                </span>
-                <Tooltip text="Control background email ingestion, automatic categorization, and AI draft generation.">
-                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                </Tooltip>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">1. Email Monitoring & Automation</span>
+              <Tooltip content="Control background email ingestion, automatic categorization, and AI draft generation." position="top">
+                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  monitoringEnabled
-                    ? "bg-emerald-100 text-emerald-700 font-bold"
-                    : "bg-slate-100 text-slate-500 font-bold"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <span className="text-xs font-medium text-slate-500">
                 {monitoringEnabled ? "On" : "Off"}
               </span>
-              <ChevronDown
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  monitoringDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {monitoringDropdownOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
             </div>
           </button>
 
           {monitoringDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-              {/* Feature 1: Email monitoring */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div className="pr-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-xs font-bold text-slate-900"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      Email Monitoring
-                    </span>
-                    <Tooltip text="Master toggle. Turning this off stops both AI labelling and drafts below.">
-                      <Info className="w-3 h-3 text-slate-400 cursor-help" />
-                    </Tooltip>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Turning this off stops both features below
-                  </p>
-                </div>
+            <div className="px-4 py-4 border-t border-slate-100 space-y-3">
+              {/* Email Monitoring */}
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>Email monitoring</span>
+                  <Tooltip content="Master toggle. Turning this off stops both AI labelling and AI drafts below." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -380,26 +344,18 @@ export default function EmailAgentDrawer({
                     checked={monitoringEnabled}
                     onChange={(e) => setMonitoringEnabled(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                 </label>
               </div>
 
-              {/* Feature 2: AI labelling */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div className="pr-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-xs font-bold text-slate-900 flex items-center gap-1.5"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                      AI Labelling
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Automatically classify and assign tags to incoming messages
-                  </p>
-                </div>
+              {/* AI Labelling */}
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>AI labelling</span>
+                  <Tooltip content="Automatically classify and assign tags to incoming messages." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -408,31 +364,18 @@ export default function EmailAgentDrawer({
                     checked={monitoringEnabled && aiLabellingEnabled}
                     onChange={(e) => setAiLabellingEnabled(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer peer-disabled:opacity-50" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer peer-disabled:opacity-50" />
                 </label>
               </div>
 
-              {/* Feature 3: AI drafts */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div className="pr-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-xs font-bold text-slate-900 flex items-center gap-1.5"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      <Pencil className="w-3.5 h-3.5 text-indigo-500" />
-                      AI Drafts
-                    </span>
-                    {monitoringEnabled && aiDraftsEnabled && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                        On
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Switch drafts off to keep automatic labelling without any drafts.
-                  </p>
-                </div>
+              {/* AI Drafts */}
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>AI drafts</span>
+                  <Tooltip content="Switch drafts off to keep automatic labelling without generating AI drafts." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -441,76 +384,63 @@ export default function EmailAgentDrawer({
                     checked={monitoringEnabled && aiDraftsEnabled}
                     onChange={(e) => setAiDraftsEnabled(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer peer-disabled:opacity-50" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer peer-disabled:opacity-50" />
                 </label>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── DROPDOWN 2: Labels & Categorization (with Custom vs Templates Toggle & Drafting Rules) ── */}
-        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+        {/* ── 2. Labels & Categorization ── */}
+        <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
             onClick={() => setLabelsDropdownOpen(!labelsDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+              labelsDropdownOpen ? "rounded-t-lg" : "rounded-lg"
+            }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <Tag className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold text-[#222222]"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Labels & Categorization
-                </span>
-                <Tooltip text="Custom and predefined tags applied automatically to organize incoming emails and trigger tailored drafting rules.">
-                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                </Tooltip>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">2. Labels & Categorization</span>
+              <Tooltip content="Custom and predefined tags applied automatically to organize incoming emails and trigger tailored drafting rules." position="top">
+                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <span className="text-xs font-medium text-slate-500">
                 {totalActiveLabels} Active
               </span>
-              <ChevronDown
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  labelsDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {labelsDropdownOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
             </div>
           </button>
 
           {labelsDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-              {/* Clean Segmented Tab Toggle: [ Custom Labels ] | [ Templates ] */}
-              <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 gap-1">
+            <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+              {/* Segmented Tab Toggle */}
+              <div className="inline-flex w-full items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setLabelViewTab("custom")}
-                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                  className={`flex-1 py-1.5 px-3 rounded-md text-xs font-semibold transition-all text-center cursor-pointer ${
                     labelViewTab === "custom"
-                      ? "bg-white text-[#1E293B] shadow-2xs"
-                      : "text-slate-500 hover:text-slate-900"
+                      ? "bg-white text-blue-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   Custom Labels ({customLabels.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setLabelViewTab("templates")}
-                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                  className={`flex-1 py-1.5 px-3 rounded-md text-xs font-semibold transition-all text-center cursor-pointer ${
                     labelViewTab === "templates"
-                      ? "bg-white text-[#1E293B] shadow-2xs"
-                      : "text-slate-500 hover:text-slate-900"
+                      ? "bg-white text-blue-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   Templates ({predefinedLabels.length})
                 </button>
@@ -518,33 +448,30 @@ export default function EmailAgentDrawer({
 
               {/* ── TAB 1: CUSTOM LABELS ── */}
               {labelViewTab === "custom" && (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {customLabels.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-400 italic bg-white rounded-xl border border-dashed border-slate-200">
-                      No custom labels created yet. Click "+ Add Label" below to create one.
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                      No custom labels created yet. Click "Add label" below to create one.
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {customLabels.map((lbl) => {
                         const isExpanded = expandedDraftingRuleId === lbl.id;
                         return (
                           <div
                             key={lbl.id}
-                            className="p-3 rounded-xl bg-white border border-slate-200/80 space-y-2 shadow-2xs"
+                            className="p-3.5 rounded-lg bg-slate-50/30 border border-slate-200 space-y-2.5"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${getLabelColorClasses(
-                                      lbl.color
-                                    )}`}
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    {lbl.name}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                <span
+                                  className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${getLabelColorClasses(
+                                    lbl.color
+                                  )}`}
+                                >
+                                  {lbl.name}
+                                </span>
+                                <p className="text-xs text-slate-500 mt-1.5 leading-snug">
                                   {lbl.description}
                                 </p>
                               </div>
@@ -557,12 +484,12 @@ export default function EmailAgentDrawer({
                                     checked={lbl.enabled}
                                     onChange={() => handleToggleCustomLabel(lbl.id)}
                                   />
-                                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                                 </label>
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteLabel(lbl.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                                   title="Delete label"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -570,24 +497,22 @@ export default function EmailAgentDrawer({
                               </div>
                             </div>
 
-                            {/* Drafting rule per label */}
                             <div className="pt-2 border-t border-slate-100">
                               <button
                                 type="button"
                                 onClick={() =>
                                   setExpandedDraftingRuleId(isExpanded ? null : lbl.id)
                                 }
-                                className="text-[11px] font-semibold text-slate-600 hover:text-primary flex items-center gap-1.5 cursor-pointer"
+                                className="text-xs font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1.5 cursor-pointer"
                               >
-                                <Pencil className="w-3 h-3 text-slate-400" />
-                                <span>Drafting Rule</span>
-                                <span className="text-[10px] text-slate-400 font-normal">
-                                  {lbl.draftingRule ? "— configured" : "— (click to define)"}
+                                <span>Drafting rule</span>
+                                <span className="text-slate-400 font-normal">
+                                  {lbl.draftingRule ? "— configured" : "— click to define"}
                                 </span>
                               </button>
 
                               {isExpanded && (
-                                <div className="mt-2 space-y-1 animate-in fade-in duration-100">
+                                <div className="mt-2">
                                   <textarea
                                     rows={2}
                                     value={lbl.draftingRule || ""}
@@ -595,7 +520,7 @@ export default function EmailAgentDrawer({
                                       handleUpdateLabelDraftingRule(lbl.id, e.target.value, false)
                                     }
                                     placeholder="Enter AI drafting instructions specifically for this label (e.g. Tone, greeting, action to offer)..."
-                                    className="w-full p-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 resize-none font-sans"
+                                    className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                                   />
                                 </div>
                               )}
@@ -606,57 +531,55 @@ export default function EmailAgentDrawer({
                     </div>
                   )}
 
-                  {/* Unified subtle grey Add Label button (DESIGN.md Section 5.1) */}
                   <div className="flex justify-end pt-1">
                     <button
                       type="button"
                       onClick={() => setShowAddLabelForm(!showAddLabelForm)}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 bg-white border border-blue-200 rounded-md transition-colors cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      {showAddLabelForm ? "Cancel Add Label" : "Add Label"}
+                      <span>{showAddLabelForm ? "Cancel" : "Add label"}</span>
                     </button>
                   </div>
 
-                  {/* Inline Add Label Form (NO auto-generate button per user instructions) */}
                   {showAddLabelForm && (
-                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs mt-2 animate-in fade-in duration-150">
+                    <div className="p-3.5 bg-slate-50/40 border border-slate-200 rounded-lg space-y-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                          Label Name
+                        <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                          Label name
                         </label>
                         <input
                           type="text"
                           placeholder="e.g. VIP Client, Urgent Lab, Billing"
                           value={newLabelName}
                           onChange={(e) => setNewLabelName(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary font-medium"
+                          className="w-full h-10 px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                          Description (Required for Classification)
+                        <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                          Description
                         </label>
                         <textarea
                           rows={2}
                           placeholder="Describe when this label should be applied to an email..."
                           value={newLabelDesc}
                           onChange={(e) => setNewLabelDesc(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary resize-none"
+                          className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                          Drafting Rule (Instructions for AI reply)
+                        <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                          Drafting rule
                         </label>
                         <textarea
                           rows={2}
                           placeholder="Provide specific reply drafting instructions for emails with this label..."
                           value={newLabelDraftingRule}
                           onChange={(e) => setNewLabelDraftingRule(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary resize-none"
+                          className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                         />
                       </div>
 
@@ -681,10 +604,10 @@ export default function EmailAgentDrawer({
                         <button
                           type="button"
                           onClick={handleCreateLabel}
-                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
+                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#1456f0] hover:bg-blue-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          Create
+                          <span>Create</span>
                         </button>
                       </div>
                     </div>
@@ -694,25 +617,24 @@ export default function EmailAgentDrawer({
 
               {/* ── TAB 2: TEMPLATES (PREDEFINED LABELS) ── */}
               {labelViewTab === "templates" && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {predefinedLabels.map((lbl) => {
                     const isExpanded = expandedDraftingRuleId === lbl.id;
                     return (
                       <div
                         key={lbl.id}
-                        className="p-3 rounded-xl bg-white border border-slate-200/80 space-y-2 shadow-2xs"
+                        className="p-3.5 rounded-lg bg-slate-50/30 border border-slate-200 space-y-2.5"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <span
-                              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${getLabelColorClasses(
+                              className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${getLabelColorClasses(
                                 lbl.color
                               )}`}
-                              style={{ fontFamily: "Outfit, sans-serif" }}
                             >
                               {lbl.name}
                             </span>
-                            <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                            <p className="text-xs text-slate-500 mt-1.5 leading-snug">
                               {lbl.description}
                             </p>
                           </div>
@@ -724,28 +646,26 @@ export default function EmailAgentDrawer({
                               checked={lbl.enabled}
                               onChange={() => handleTogglePredefinedLabel(lbl.id)}
                             />
-                            <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                           </label>
                         </div>
 
-                        {/* Drafting rule per template label */}
                         <div className="pt-2 border-t border-slate-100">
                           <button
                             type="button"
                             onClick={() =>
                               setExpandedDraftingRuleId(isExpanded ? null : lbl.id)
                             }
-                            className="text-[11px] font-semibold text-slate-600 hover:text-primary flex items-center gap-1.5 cursor-pointer"
+                            className="text-xs font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Pencil className="w-3 h-3 text-slate-400" />
-                            <span>Drafting Rule</span>
-                            <span className="text-[10px] text-slate-400 font-normal">
-                              {lbl.draftingRule ? "— configured" : "— (click to define)"}
+                            <span>Drafting rule</span>
+                            <span className="text-slate-400 font-normal">
+                              {lbl.draftingRule ? "— configured" : "— click to define"}
                             </span>
                           </button>
 
                           {isExpanded && (
-                            <div className="mt-2 space-y-1 animate-in fade-in duration-100">
+                            <div className="mt-2">
                               <textarea
                                 rows={2}
                                 value={lbl.draftingRule || ""}
@@ -753,7 +673,7 @@ export default function EmailAgentDrawer({
                                   handleUpdateLabelDraftingRule(lbl.id, e.target.value, true)
                                 }
                                 placeholder="Enter AI drafting instructions specifically for this template label..."
-                                className="w-full p-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 resize-none font-sans"
+                                className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                               />
                             </div>
                           )}
@@ -767,62 +687,42 @@ export default function EmailAgentDrawer({
           )}
         </div>
 
-        {/* ── DROPDOWN 3: Email Signature ── */}
-        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+        {/* ── 3. Email Signature ── */}
+        <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
             onClick={() => setSignatureDropdownOpen(!signatureDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+              signatureDropdownOpen ? "rounded-t-lg" : "rounded-lg"
+            }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <Pencil className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold text-[#222222]"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Email Signature
-                </span>
-                <Tooltip text="Signature automatically attached to AI drafted responses.">
-                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                </Tooltip>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">3. Email Signature</span>
+              <Tooltip content="Signature automatically attached to AI drafted responses." position="top">
+                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  signatureEnabled
-                    ? "bg-emerald-100 text-emerald-700 font-bold"
-                    : "bg-slate-100 text-slate-500 font-bold"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <span className="text-xs font-medium text-slate-500">
                 {signatureEnabled ? "Configured" : "None"}
               </span>
-              <ChevronDown
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  signatureDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {signatureDropdownOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
             </div>
           </button>
 
           {signatureDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div>
-                  <span
-                    className="text-xs font-bold text-slate-900"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Include Signature in AI Drafts
-                  </span>
-                  <p className="text-[11px] text-slate-500 leading-normal mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Automatically appends your designated sign-off to every drafted email
-                  </p>
-                </div>
+            <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>Include signature in AI drafts</span>
+                  <Tooltip content="Automatically appends your designated sign-off to every drafted email." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -830,24 +730,21 @@ export default function EmailAgentDrawer({
                     checked={signatureEnabled}
                     onChange={(e) => setSignatureEnabled(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                 </label>
               </div>
 
               {signatureEnabled && (
                 <div>
-                  <label
-                    className="block text-xs font-bold text-slate-700 mb-1.5"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Signature Body Text
+                  <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                    Signature body text
                   </label>
                   <textarea
                     rows={4}
                     value={signatureBody}
                     onChange={(e) => setSignatureBody(e.target.value)}
                     placeholder="Best regards,&#10;Dr. Ananya Sharma&#10;MantraCare Medical Team&#10;support@mantra.care"
-                    className="w-full p-3 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-primary text-slate-800 font-mono shadow-2xs resize-none"
+                    className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                   />
                 </div>
               )}
@@ -855,63 +752,44 @@ export default function EmailAgentDrawer({
           )}
         </div>
 
-        {/* ── DROPDOWN 4: Automations & Forwarding (Auto-Create Contact with Entity Selector) ── */}
-        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+        {/* ── 4. Automations & Forwarding ── */}
+        <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
             onClick={() => setAutomationsDropdownOpen(!automationsDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+              automationsDropdownOpen ? "rounded-t-lg" : "rounded-lg"
+            }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold text-[#222222]"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Automations & Forwarding
-                </span>
-                <Tooltip text="Automatic actions executed upon email arrival (CRM contact generation, forwarding rules).">
-                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                </Tooltip>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">4. Automations & Forwarding</span>
+              <Tooltip content="Automatic actions executed upon email arrival (CRM contact generation, forwarding rules)." position="top">
+                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <span className="text-xs font-medium text-slate-500">
                 {forwardingRules.length > 0 ? `${forwardingRules.length} Rules` : "Active"}
               </span>
-              <ChevronDown
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  automationsDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {automationsDropdownOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
             </div>
           </button>
 
           {automationsDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-              {/* Feature 1: Auto-Create Contact with Choose Entity */}
-              <div className="space-y-3 p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UserPlus className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      <span
-                        className="text-xs font-bold text-slate-900"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        Auto-Create Contact
-                      </span>
-                      <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Identify prospective inquiries and automatically generate a CRM record
-                      </p>
-                    </div>
-                  </div>
+            <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+              {/* Auto-Create Contact */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                  <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                    <span>Auto-create contact</span>
+                    <Tooltip content="Identify prospective inquiries and automatically generate a CRM record." position="top">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </label>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
                     <input
                       type="checkbox"
@@ -919,29 +797,27 @@ export default function EmailAgentDrawer({
                       checked={autoCreateContactEnabled}
                       onChange={(e) => setAutoCreateContactEnabled(e.target.checked)}
                     />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                   </label>
                 </div>
 
                 {autoCreateContactEnabled && (
-                  <div className="pt-2.5 border-t border-slate-100 space-y-3 animate-in fade-in duration-100">
-                    {/* Entity Selection */}
+                  <div className="space-y-3 pt-1">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Choose Entity Type
+                      <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                        Entity type
                       </label>
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-4 gap-2">
                         {(["Contact", "Lead", "Patient", "Deal"] as const).map((ent) => (
                           <button
                             type="button"
                             key={ent}
                             onClick={() => setContactEntityType(ent)}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                            className={`h-9 px-2 rounded-lg text-xs font-semibold transition-colors text-center cursor-pointer border ${
                               contactEntityType === ent
-                                ? "bg-[#1E293B] text-white shadow-2xs"
-                                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                ? "bg-slate-900 text-white border-slate-900"
+                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                             }`}
-                            style={{ fontFamily: "Outfit, sans-serif" }}
                           >
                             {ent}
                           </button>
@@ -949,51 +825,52 @@ export default function EmailAgentDrawer({
                       </div>
                     </div>
 
-                    {/* Criteria prompt */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Qualification Criteria Prompt
+                      <label className="block text-[13px] font-medium text-slate-700 mb-1.5">
+                        Qualification criteria prompt
                       </label>
                       <textarea
                         rows={2}
                         value={contactQualificationPrompt}
                         onChange={(e) => setContactQualificationPrompt(e.target.value)}
                         placeholder="Criteria for creating this record (e.g. sender inquiring about consultation packages, pricing, or therapy booking)..."
-                        className="w-full p-2.5 text-xs bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:border-primary text-slate-800 resize-none font-sans"
+                        className="w-full p-2.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 resize-none"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Feature 2: Forwarding Rules */}
-              <div className="space-y-2 pt-2 border-t border-slate-200/80">
+              {/* Forwarding Rules */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CornerUpRight className="w-4 h-4 text-blue-600" />
-                    <span
-                      className="text-xs font-bold text-slate-900"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      Forwarding Rules ({forwardingRules.length})
-                    </span>
-                  </div>
+                  <span className="text-[13px] font-medium text-slate-700">
+                    Forwarding rules ({forwardingRules.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForwardRuleModal(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 bg-white border border-blue-200 rounded-md transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add rule</span>
+                  </button>
                 </div>
 
                 {forwardingRules.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic py-1">No forwarding rules active.</p>
+                  <p className="text-xs text-slate-400">No forwarding rules active.</p>
                 ) : (
                   <div className="space-y-2">
                     {forwardingRules.map((rule) => (
                       <div
                         key={rule.id}
-                        className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-3 shadow-2xs"
+                        className="p-3 rounded-lg bg-slate-50/30 border border-slate-200 flex items-center justify-between gap-3"
                       >
                         <div className="min-w-0 flex-1">
-                          <span className="text-xs font-bold text-slate-800 block truncate">
+                          <span className="text-xs font-semibold text-slate-900 block truncate">
                             {rule.name}
                           </span>
-                          <p className="text-[11px] text-slate-500 font-mono truncate mt-0.5">
+                          <p className="text-xs text-slate-500 truncate mt-0.5">
                             {rule.conditionField} {rule.conditionOperator} "{rule.conditionValue}" → {rule.forwardTo}
                           </p>
                         </div>
@@ -1005,12 +882,12 @@ export default function EmailAgentDrawer({
                               checked={rule.enabled}
                               onChange={() => handleToggleForwardingRule(rule.id)}
                             />
-                            <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                           </label>
                           <button
                             type="button"
                             onClick={() => handleDeleteForwardingRule(rule.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1019,76 +896,47 @@ export default function EmailAgentDrawer({
                     ))}
                   </div>
                 )}
-
-                {/* Subtle Add Forwarding Rule button (DESIGN.md Section 5.1) */}
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForwardRuleModal(true)}
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Forwarding Rule
-                  </button>
-                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── DROPDOWN 5: Email Notifications ── */}
-        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+        {/* ── 5. Email Notifications ── */}
+        <div className="border border-slate-200 rounded-lg bg-white">
           <button
             type="button"
             onClick={() => setNotificationsDropdownOpen(!notificationsDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+            className={`w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer ${
+              notificationsDropdownOpen ? "rounded-t-lg" : "rounded-lg"
+            }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <Bell className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold text-[#222222]"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Email Notifications
-                </span>
-                <Tooltip text="Choose which email agent events trigger immediate notifications to the team.">
-                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                </Tooltip>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">5. Email Notifications</span>
+              <Tooltip content="Choose which email agent events trigger immediate notifications to the team." position="top">
+                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  crmLeadEmail || meetingRequest || calendarReminder
-                    ? "bg-emerald-100 text-emerald-700 font-bold"
-                    : "bg-slate-100 text-slate-500 font-bold"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <span className="text-xs font-medium text-slate-500">
                 {crmLeadEmail || meetingRequest || calendarReminder ? "Active" : "Muted"}
               </span>
-              <ChevronDown
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  notificationsDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {notificationsDropdownOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
             </div>
           </button>
 
           {notificationsDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    New Contact Identified Alerts
-                  </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Notify responsible staff when an incoming email creates a new contact or lead
-                  </p>
-                </div>
+            <div className="px-4 py-4 border-t border-slate-100 space-y-3">
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>New contact identified alerts</span>
+                  <Tooltip content="Notify responsible staff when an incoming email creates a new contact or lead." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -1096,19 +944,17 @@ export default function EmailAgentDrawer({
                     checked={crmLeadEmail}
                     onChange={(e) => setCrmLeadEmail(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                 </label>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Meeting & Reschedule Requests
-                  </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Send high-priority alerts when a client requests appointment rescheduling or confirmation
-                  </p>
-                </div>
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>Meeting & reschedule requests</span>
+                  <Tooltip content="Send high-priority alerts when a client requests appointment rescheduling or confirmation." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -1116,19 +962,17 @@ export default function EmailAgentDrawer({
                     checked={meetingRequest}
                     onChange={(e) => setMeetingRequest(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                 </label>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Calendar Reminder Sync
-                  </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Sync reminder notifications with staff calendar schedules
-                  </p>
-                </div>
+              <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                  <span>Calendar reminder sync</span>
+                  <Tooltip content="Sync reminder notifications with staff calendar schedules." position="top">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
@@ -1136,7 +980,7 @@ export default function EmailAgentDrawer({
                     checked={calendarReminder}
                     onChange={(e) => setCalendarReminder(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 cursor-pointer" />
                 </label>
               </div>
             </div>

@@ -53,6 +53,7 @@ export interface WhatsAppAgentRule {
   id: string;
   name: string;
   description?: string;
+  connected_account?: string; // Connected WhatsApp account ID or "all"
   is_active: boolean; // Controlled only from list Status toggle. Default true on create.
   enabled: boolean; // Alias of is_active for backward compatibility
   priority: number; // 1-based order; 1 wins first; fallback is lowest & pinned

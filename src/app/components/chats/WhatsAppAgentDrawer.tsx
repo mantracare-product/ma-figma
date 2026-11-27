@@ -78,6 +78,7 @@ import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { getStoredDepartments } from "../../../lib/departmentStore";
 import { getContactCategories } from "../../../lib/contactCategoriesStore";
+import { getStoredWhatsAppNumbers } from "../../../lib/useWhatsAppNumbers";
 import DocumentSelectFieldsModal from "../ui/DocumentSelectFieldsModal";
 
 export interface WhatsAppAgentDrawerProps {
@@ -133,6 +134,7 @@ export default function WhatsAppAgentDrawer({
   const teamMembers = useMemo(() => getStoredTeamMembers(), [isOpen]);
   const departments = useMemo(() => getStoredDepartments(), [isOpen]);
   const contactCategories = useMemo(() => getContactCategories(), [isOpen]);
+  const connectedAccounts = useMemo(() => getStoredWhatsAppNumbers(), [isOpen]);
 
   // Collapsible section state: 1, 2, 3, 4, or 5 (only one open at a time)
   const [openSection, setOpenSection] = useState<number | null>(1);
@@ -140,6 +142,7 @@ export default function WhatsAppAgentDrawer({
   // ── Section 1: Name & Description ──
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [connectedAccount, setConnectedAccount] = useState<string>("all");
 
   // ── Section 2: When it runs ──
   const [triggerType, setTriggerType] = useState<"template_reply" | "new_message">("template_reply");
@@ -448,6 +451,7 @@ export default function WhatsAppAgentDrawer({
       // ── Step 1: Agent Identification ──
       setName(rule.name || "");
       setDescription(rule.description || "");
+      setConnectedAccount(rule.connected_account || "all");
 
       // ── Step 2: Trigger & Condition Rules ──
       const tType = rule.trigger_type || "template_reply";
@@ -583,6 +587,7 @@ export default function WhatsAppAgentDrawer({
       // ═════════════════════════════════════════════════════════════════════════
       setName("");
       setDescription("");
+      setConnectedAccount("all");
 
       // Step 2: Trigger & Condition Defaults
       setTriggerType("template_reply");
@@ -873,6 +878,7 @@ export default function WhatsAppAgentDrawer({
       id: rule?.id || `wa-rule-${Date.now()}`,
       name: name.trim(),
       description: description.trim() || undefined,
+      connected_account: connectedAccount || "all",
       is_active: isActive,
       enabled: isActive,
       priority: rule?.priority || rules.length + 1,
@@ -1036,6 +1042,31 @@ export default function WhatsAppAgentDrawer({
                   placeholder="e.g. Automatically handles appointment attendance and confirms clinic visit details"
                   className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none"
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                  <span>Connected WhatsApp Account</span>
+                  <InfoTip text="Choose which connected WhatsApp business account or phone number this agent is connected to." />
+                </label>
+                <select
+                  value={connectedAccount}
+                  onChange={(e) => setConnectedAccount(e.target.value)}
+                  className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors cursor-pointer"
+                >
+                  <option value="all">All Connected Accounts</option>
+                  {connectedAccounts.map((acc) => {
+                    const label =
+                      acc.name && !acc.name.includes(acc.displayPhoneNumber)
+                        ? `${acc.name} (${acc.displayPhoneNumber})`
+                        : acc.name || acc.displayPhoneNumber;
+                    return (
+                      <option key={acc.id} value={acc.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
             </div>
           )}

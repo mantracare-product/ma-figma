@@ -3151,10 +3151,10 @@ export default function StepParametersFields({
               return (
                 <div className="space-y-4">
                   {/* 1. Task Title & Task Description (Unified bordered container) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
                     <div className="space-y-1.5">
                       <label className="block text-[13px] font-medium text-slate-700">
-                        Task Title <span className="text-red-500">*</span>
+                        Task title <span className="text-red-500 ml-0.5">*</span>
                       </label>
                       <div className="relative flex items-center">
                         <input
@@ -3162,7 +3162,7 @@ export default function StepParametersFields({
                           value={taskTitle}
                           onChange={(e) => onChange({ taskTitle: e.target.value })}
                           placeholder="e.g. Verify Patient Insurance Eligibility for {{client_name}}"
-                          className={`w-full h-9 pl-3 ${taskTitle ? "pr-16" : "pr-9"} text-[13px] border border-slate-200 rounded-[8px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors`}
+                          className={`w-full h-10 pl-3 ${taskTitle ? "pr-16" : "pr-9"} text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors`}
                         />
                         {renderInputTrailingIcons({
                           onOpenPicker: () => {
@@ -3177,14 +3177,14 @@ export default function StepParametersFields({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-[13px] font-medium text-slate-700">Task Description</label>
+                      <label className="block text-[13px] font-medium text-slate-700">Task description</label>
                       <div className="relative">
                         <textarea
                           rows={3}
                           value={taskDescription}
                           onChange={(e) => onChange({ taskDescription: e.target.value })}
                           placeholder="Provide background context, clinical objectives, and deliverables instructions..."
-                          className={`w-full pl-3 ${taskDescription ? "pr-16" : "pr-9"} py-2 text-[13px] border border-slate-200 rounded-[8px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors resize-y`}
+                          className={`w-full pl-3 ${taskDescription ? "pr-16" : "pr-9"} py-2.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y`}
                         />
                         {renderInputTrailingIcons({
                           onOpenPicker: () => {
@@ -3201,20 +3201,19 @@ export default function StepParametersFields({
                   </div>
 
                   {/* 3. Task Responsible (Custom | Inherit from Previous Node) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
-                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Task Responsible</span>
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
+                    <label className="text-sm font-bold text-slate-900 block">
+                      Task responsible
                     </label>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Assignment Source
+                      <label className="block text-[13px] font-medium text-slate-700">
+                        Assignment source
                       </label>
                       <select
                         value={responsibleSource}
                         onChange={(e) => onChange({ responsibleSource: e.target.value })}
-                        className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                        className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                       >
                         <option value="inherit">Inherit from Previous Node</option>
                         <option value="custom">Choose Responsible</option>
@@ -3223,8 +3222,8 @@ export default function StepParametersFields({
 
                     {responsibleSource === "inherit" ? (
                       <div className="space-y-1.5">
-                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                          <span>Inherit Assignee Type</span>
+                        <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700">
+                          <span>Inherit assignee type</span>
                           <InfoTooltip
                             text={
                               inheritResponsibleType === "contact"
@@ -3241,7 +3240,7 @@ export default function StepParametersFields({
                               responsibleType: e.target.value,
                             })
                           }
-                          className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                          className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                         >
                           <option value="team">Team Member</option>
                           <option value="contact">Contact</option>
@@ -3250,8 +3249,8 @@ export default function StepParametersFields({
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-slate-600">Assignee Type</span>
-                          <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-[7px] border border-slate-200/80">
+                          <span className="text-[13px] font-medium text-slate-700">Assignee type</span>
+                          <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
                             {[
                               { id: "team", label: "Team Members" },
                               { id: "contact", label: "Contacts" },
@@ -3260,10 +3259,10 @@ export default function StepParametersFields({
                                 key={tab.id}
                                 type="button"
                                 onClick={() => onChange({ responsibleType: tab.id })}
-                                className={`px-2.5 py-0.5 text-[11px] font-medium rounded-[5px] transition-all cursor-pointer ${
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                                   responsibleType === tab.id
-                                    ? "bg-white text-slate-900 shadow-2xs"
-                                    : "text-slate-500 hover:text-slate-800"
+                                    ? "bg-white text-blue-700 shadow-2xs"
+                                    : "text-slate-600 hover:text-slate-900"
                                 }`}
                               >
                                 {tab.label}
@@ -3284,7 +3283,7 @@ export default function StepParametersFields({
                                     selectedTeamMemberIds: [],
                                   })
                                 }
-                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                                className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                               >
                                 {roleSet.map((r) => (
                                   <option key={r} value={r}>
@@ -3296,7 +3295,7 @@ export default function StepParametersFields({
 
                             <MultiSelectDropdown
                               label="Select Members"
-                              placeholder="+ Click to select team members..."
+                              placeholder="Select team members..."
                               options={filteredTaskMembers.map((m) => ({
                                 value: String(m.id),
                                 label: m.name,
@@ -3322,12 +3321,12 @@ export default function StepParametersFields({
                             {/* Distribution Strategy: Round Robin vs Assign All Selected */}
                             <div className="space-y-1.5">
                               <label className="block text-[13px] font-medium text-slate-700">
-                                Assignment Strategy
+                                Assignment strategy
                               </label>
                               <select
                                 value={responsibleDistribution}
                                 onChange={(e) => onChange({ responsibleDistribution: e.target.value })}
-                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                                className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                               >
                                 <option value="round_robin">Round Robin — Rotate evenly across selected members</option>
                                 <option value="all">Assign All Selected — Create individual tasks per member</option>
@@ -3346,7 +3345,7 @@ export default function StepParametersFields({
                                     selectedContactIds: [],
                                   })
                                 }
-                                className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                                className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                               >
                                 {taskContactCats.map((cat) => (
                                   <option key={cat} value={cat}>
@@ -3379,53 +3378,31 @@ export default function StepParametersFields({
                   </div>
 
                   {/* Mark as Important Toggle */}
-                  <div
-                    onClick={() =>
-                      onChange({
-                        isImportant: !taskIsImportant,
-                        taskIsImportant: !taskIsImportant,
-                      })
-                    }
-                    className="flex items-center justify-between p-3.5 border border-slate-200 rounded-[10px] bg-white hover:bg-slate-50/70 transition-colors cursor-pointer select-none"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 pr-3">
-                      <Star className={`w-4 h-4 shrink-0 ${taskIsImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
-                      <div className="min-w-0">
-                        <span className="text-[13px] font-semibold text-slate-900 block">
-                          Mark as Important
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Flags this task with high urgency priority
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={taskIsImportant}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onChange({
-                          isImportant: !taskIsImportant,
-                          taskIsImportant: !taskIsImportant,
-                        });
-                      }}
-                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                        taskIsImportant ? "bg-slate-900" : "bg-slate-200"
-                      }`}
-                    >
-                      <div
-                        className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
-                          taskIsImportant ? "translate-x-5" : "translate-x-0"
-                        }`}
+                  <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                    <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                      <span>Mark as important</span>
+                      <InfoTooltip text="Flags this task with high urgency priority." />
+                    </label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={taskIsImportant}
+                        onChange={(e) =>
+                          onChange({
+                            isImportant: e.target.checked,
+                            taskIsImportant: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
                       />
-                    </button>
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                   </div>
 
                   {/* 4. Workflow Pipeline (from Task Workflows / DEFAULT_TASK_PROCESSES) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-2">
-                    <label className="block text-[13px] font-semibold text-slate-900">
-                      Workflow Pipeline <span className="text-red-500">*</span>
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">
+                      Workflow pipeline <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={selectedWorkflowId}
@@ -3436,7 +3413,7 @@ export default function StepParametersFields({
                           workflowName: wf?.name || "",
                         });
                       }}
-                      className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                      className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                     >
                       {taskPipelines.map((pipe: any) => (
                         <option key={pipe.id} value={pipe.id}>
@@ -3447,15 +3424,14 @@ export default function StepParametersFields({
                   </div>
 
                   {/* 5. Schedule (Deadline Offset & Target Time) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
-                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Schedule</span>
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
+                    <label className="text-sm font-bold text-slate-900 block">
+                      Schedule
                     </label>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-slate-600">Deadline Offset</label>
+                        <label className="block text-[13px] font-medium text-slate-700">Deadline offset</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -3465,7 +3441,7 @@ export default function StepParametersFields({
                               const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                               onChange({ deadlineOffsetValue: v, taskDueValue: v });
                             }}
-                            className="w-20 h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                            className="w-20 h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                           />
                           <select
                             value={deadlineOffsetUnit}
@@ -3475,7 +3451,7 @@ export default function StepParametersFields({
                                 taskDueUnit: e.target.value,
                               })
                             }
-                            className="flex-1 h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                            className="flex-1 h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                           >
                             <option value="hours">Hours</option>
                             <option value="days">Days</option>
@@ -3485,52 +3461,40 @@ export default function StepParametersFields({
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-slate-600">Target Time</label>
+                        <label className="block text-[13px] font-medium text-slate-700">Target time</label>
                         <input
                           type="time"
                           value={deadlineTime}
                           onChange={(e) => onChange({ deadlineTime: e.target.value })}
-                          className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                          className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* 6. Repeat (Recurrence) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
-                    <div
-                      onClick={() => onChange({ repeatEnabled: !repeatEnabled })}
-                      className="flex items-center justify-between cursor-pointer select-none"
-                    >
-                      <div>
-                        <span className="text-[13px] font-semibold text-slate-900 block">Repeat (Recurrence)</span>
-                        <span className="text-[11px] text-slate-500">Auto-create recurring task instances on schedule</span>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={repeatEnabled}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onChange({ repeatEnabled: !repeatEnabled });
-                        }}
-                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                          repeatEnabled ? "bg-slate-900" : "bg-slate-200"
-                        }`}
-                      >
-                        <div
-                          className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
-                            repeatEnabled ? "translate-x-5" : "translate-x-0"
-                          }`}
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
+                    <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                      <label className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 cursor-pointer">
+                        <span>Repeat (Recurrence)</span>
+                        <InfoTooltip text="Auto-create recurring task instances on schedule." />
+                      </label>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={repeatEnabled}
+                          onChange={(e) => onChange({ repeatEnabled: e.target.checked })}
+                          className="sr-only peer"
                         />
-                      </button>
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
                     </div>
 
                     {repeatEnabled && (
                       <div className="space-y-3 pt-2 border-t border-slate-100">
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="block text-xs font-medium text-slate-600">Every</label>
+                          <div className="space-y-1.5">
+                            <label className="block text-[13px] font-medium text-slate-700">Every</label>
                             <input
                               type="number"
                               min={1}
@@ -3538,15 +3502,15 @@ export default function StepParametersFields({
                               onChange={(e) =>
                                 onChange({ repeatInterval: Math.max(1, parseInt(e.target.value, 10) || 1) })
                               }
-                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400"
+                              className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="block text-xs font-medium text-slate-600">Unit</label>
+                          <div className="space-y-1.5">
+                            <label className="block text-[13px] font-medium text-slate-700">Unit</label>
                             <select
                               value={repeatUnit}
                               onChange={(e) => onChange({ repeatUnit: e.target.value })}
-                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                              className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                             >
                               <option value="days">Days</option>
                               <option value="weeks">Weeks</option>
@@ -3557,17 +3521,17 @@ export default function StepParametersFields({
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-medium text-slate-600">End Recurrence</label>
+                          <label className="block text-[13px] font-medium text-slate-700">End recurrence</label>
                           <div className="grid grid-cols-3 gap-2">
                             {(["never", "count", "date"] as const).map((r) => (
                               <button
                                 key={r}
                                 type="button"
                                 onClick={() => onChange({ repeatStopRule: r })}
-                                className={`py-1.5 rounded-[7px] text-xs font-medium capitalize border transition-colors cursor-pointer ${
+                                className={`h-9 rounded-lg text-xs font-semibold capitalize border transition-colors cursor-pointer ${
                                   repeatStopRule === r
                                     ? "bg-slate-900 text-white border-slate-900"
-                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                                 }`}
                               >
                                 {r}
@@ -3584,7 +3548,7 @@ export default function StepParametersFields({
                                 onChange({ repeatStopCount: Math.max(1, parseInt(e.target.value, 10) || 1) })
                               }
                               placeholder="Stop after occurrences..."
-                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] mt-1.5"
+                              className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm mt-1.5"
                             />
                           )}
 
@@ -3593,7 +3557,7 @@ export default function StepParametersFields({
                               type="date"
                               value={repeatStopDate}
                               onChange={(e) => onChange({ repeatStopDate: e.target.value })}
-                              className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] mt-1.5"
+                              className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm mt-1.5"
                             />
                           )}
                         </div>
@@ -3603,7 +3567,7 @@ export default function StepParametersFields({
                             type="checkbox"
                             checked={repeatSkipWeekends}
                             onChange={(e) => onChange({ repeatSkipWeekends: e.target.checked })}
-                            className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900 cursor-pointer"
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-0 cursor-pointer"
                           />
                           <span>Skip weekends when scheduling occurrences</span>
                         </label>
@@ -3612,19 +3576,19 @@ export default function StepParametersFields({
                   </div>
 
                   {/* 7. Observers (Custom / Inherit + Round Robin) */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
-                    <label className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
-                      <span>Observers</span>
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
+                    <label className="text-sm font-bold text-slate-900 block">
+                      Observers
                     </label>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Observer Source
+                      <label className="block text-[13px] font-medium text-slate-700">
+                        Observer source
                       </label>
                       <select
                         value={observerSource}
                         onChange={(e) => onChange({ observerSource: e.target.value })}
-                        className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                        className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                       >
                         <option value="custom">Choose Observers</option>
                         <option value="inherit">Inherit from Previous Node</option>
@@ -3632,7 +3596,7 @@ export default function StepParametersFields({
                     </div>
 
                     {observerSource === "inherit" ? (
-                      <div className="px-3 py-2.5 rounded-[8px] border border-slate-200 bg-slate-50/80 text-xs text-slate-600 leading-relaxed">
+                      <div className="px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50/50 text-xs text-slate-600 leading-relaxed">
                         Inherits observers automatically from the previous workflow node or triggering record participants.
                       </div>
                     ) : (
@@ -3647,7 +3611,7 @@ export default function StepParametersFields({
                                 selectedObserverMemberIds: [],
                               })
                             }
-                            className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                            className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                           >
                             {roleSet.map((r) => (
                               <option key={r} value={r}>
@@ -3659,7 +3623,7 @@ export default function StepParametersFields({
 
                         <MultiSelectDropdown
                           label="Select Observer Members"
-                          placeholder="+ Click to select observers..."
+                          placeholder="Select observers..."
                           options={filteredTaskObservers.map((m) => ({
                             value: String(m.id),
                             label: m.name,
@@ -3670,18 +3634,18 @@ export default function StepParametersFields({
                           allSelectedFallbackText={
                             observerRoleFilter !== "All Roles"
                               ? `All ${observerRoleFilter} members (${filteredTaskObservers.length} observers)`
-                              : "+ Click to select observers..."
+                              : "Select observers..."
                           }
                         />
 
                         <div className="space-y-1.5">
                           <label className="block text-[13px] font-medium text-slate-700">
-                            Observer Strategy
+                            Observer strategy
                           </label>
                           <select
                             value={observerDistribution}
                             onChange={(e) => onChange({ observerDistribution: e.target.value })}
-                            className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                            className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-colors"
                           >
                             <option value="round_robin">Round Robin — Rotate observer evenly across selected members</option>
                             <option value="all">Assign All Selected — Add all selected members as observers</option>
@@ -3692,23 +3656,21 @@ export default function StepParametersFields({
                   </div>
 
                   {/* 8. Task Studio / Deliverables */}
-                  <div className="p-3.5 border border-slate-200 rounded-[10px] bg-white space-y-3">
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white space-y-3">
                     <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[13px] font-semibold text-slate-900 block">
-                          Task Studio Deliverables
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-slate-900">
+                          Task studio deliverables
                         </span>
-                        <span className="text-[11px] text-slate-500">
-                          Checklist deliverables and resources included on the created task
-                        </span>
+                        <InfoTooltip text="Checklist deliverables and resources included on the created task." />
                       </div>
                       <button
                         type="button"
                         onClick={addStudioItem}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[7px] border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 cursor-pointer shrink-0"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-blue-200 bg-white hover:bg-blue-50 text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer shrink-0 shadow-2xs transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Add Deliverable</span>
+                        <span>Add deliverable</span>
                       </button>
                     </div>
 

@@ -1658,12 +1658,28 @@ export default function Chats() {
           ? {
               ...c,
               assignedPersonId: personId,
-              botStatus: personId ? "off" : c.botStatus,
+              botStatus: "off",
             }
           : c
       )
     );
     toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
+  };
+
+  const handleAssignAgent = () => {
+    if (!activeConversation) return;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConversationId
+          ? {
+              ...c,
+              botStatus: "active",
+              assignedPersonId: "",
+            }
+          : c
+      )
+    );
+    toast.success("Assigned to Agent");
   };
 
   const handleAssignBot = (bot: BotType) => {
@@ -2375,42 +2391,36 @@ export default function Chats() {
                 >
                   {channelFilter === "whatsapp" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#25D366]" />
                       <Phone className="w-3.5 h-3.5 text-[#128C7E]" />
                       <span className="text-[#128C7E] font-bold">WhatsApp</span>
                     </div>
                   )}
                   {channelFilter === "sms" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#10B981]" />
                       <MessageSquare className="w-3.5 h-3.5 text-[#10B981]" />
                       <span className="text-[#10B981] font-bold">SMS</span>
                     </div>
                   )}
                   {channelFilter === "website" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#6366F1]" />
                       <Globe className="w-3.5 h-3.5 text-[#6366F1]" />
                       <span className="text-[#6366F1] font-bold">Website</span>
                     </div>
                   )}
                   {channelFilter === "email" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
                       <Mail className="w-3.5 h-3.5 text-[#0284C7]" />
                       <span className="text-[#0284C7] font-bold">Email</span>
                     </div>
                   )}
                   {channelFilter === "companion" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
                       <Bot className="w-3.5 h-3.5 text-[#2563EB]" />
                       <span className="text-[#2563EB] font-bold">Companion</span>
                     </div>
                   )}
                   {channelFilter === "all" && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-slate-400" />
                       <MessageCircle className="w-3.5 h-3.5 text-slate-600" />
                       <span className="text-slate-700 font-bold">All Channels</span>
                     </div>
@@ -3321,11 +3331,14 @@ export default function Chats() {
                     onToggleBotStatus={handleToggleBotStatus}
                     onOpenAssignBotModal={() => setShowAssignBotModal(true)}
                     onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
+                    onAssignResponsible={handleAssignPerson}
+                    onAssignToAgent={handleAssignAgent}
                     onOpenGroupSettings={() => setShowGroupSettingsDrawer(true)}
                     availableEmployees={AVAILABLE_EMPLOYEES}
                   />
                   <MessageThreadList
                     messages={activeConversation.messages}
+                    channel={chatAudience === "team" ? "team" : (channelFilter || activeConversation.channel)}
                     emptyMessage="No messages in this conversation yet."
                     onReply={(msg) => setReplyingToMessage(msg)}
                   />

@@ -136,12 +136,27 @@ export default function ConversationThreadDrawer({
           ? {
               ...c,
               assignedPersonId: personId,
-              botStatus: personId ? "off" : c.botStatus,
+              botStatus: "off",
             }
           : c
       )
     );
     toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
+  };
+
+  const handleAssignAgent = () => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversation.id
+          ? {
+              ...c,
+              botStatus: "active",
+              assignedPersonId: "",
+            }
+          : c
+      )
+    );
+    toast.success("Assigned to Agent");
   };
 
   const handleToggleBotStatus = () => {
@@ -171,11 +186,14 @@ export default function ConversationThreadDrawer({
           isDrawer={true}
           onClose={onClose}
           onToggleBotStatus={handleToggleBotStatus}
+          onAssignResponsible={handleAssignResponsible}
+          onAssignToAgent={handleAssignAgent}
         />
 
         {/* Shared Message List */}
         <MessageThreadList
           messages={conversation.messages}
+          channel={conversation.channel}
           emptyMessage="No messages in this conversation yet."
         />
 
