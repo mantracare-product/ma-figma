@@ -32,37 +32,33 @@ export default function AIAssistantCapsule() {
 
   return (
     <>
-      {/* ── Top Header AI Action Buttons (Not floating) ── */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* ── Top Header AI Action Buttons (Crisp SaaS rectangular style) ── */}
+      <div className="flex items-center gap-2 shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
         {/* AI Scribe Button */}
         <button
           type="button"
           onClick={() => setIsNewConsultationOpen(true)}
-          className="h-8 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs transition-all cursor-pointer"
+          className="h-8 flex items-center gap-1.5 px-3 rounded-[8px] text-xs font-semibold text-slate-800 bg-gradient-to-b from-white to-slate-50/90 hover:from-slate-50 hover:to-slate-100/90 border border-slate-200/90 hover:border-slate-300 shadow-[0_1px_2px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.95)] active:scale-[0.98] transition-all cursor-pointer"
           title="Start AI Scribe Consultation"
           aria-label="Start AI Scribe Consultation"
         >
-          <Mic className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-          <span className="tracking-tight text-slate-800">Scribe</span>
+          <Mic className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+          <span className="tracking-tight">Scribe</span>
         </button>
 
         {/* AI Assistant Button */}
         <button
           type="button"
           onClick={() => setIsAssistantOpen((prev) => !prev)}
-          className={`h-8 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+          className={`h-8 flex items-center gap-1.5 px-3.5 rounded-[8px] text-xs font-semibold active:scale-[0.98] transition-all cursor-pointer ${
             isAssistantOpen
-              ? "bg-[#1456f0] text-white border border-[#1456f0] shadow-xs"
-              : "bg-blue-50/90 text-[#1456f0] border border-blue-200/80 hover:bg-blue-100 hover:border-blue-300"
+              ? "bg-gradient-to-b from-[#0f172a] to-[#1e293b] text-white border border-slate-800 shadow-[0_1px_3px_rgba(15,23,42,0.28),inset_0_1px_0_rgba(255,255,255,0.16)]"
+              : "bg-gradient-to-b from-[#1d63f5] to-[#1456f0] hover:from-[#1959e0] hover:to-[#114ad6] text-white border border-[#1249ce] shadow-[0_1px_3px_rgba(20,86,240,0.28),inset_0_1px_0_rgba(255,255,255,0.24)]"
           }`}
           title={isAssistantOpen ? "Close AI Clinical Assistant" : "Open AI Clinical Assistant"}
           aria-label="AI Assistant"
         >
-          <Sparkles
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isAssistantOpen ? "text-white" : "text-[#1456f0]"
-            }`}
-          />
+          <Sparkles className="w-3.5 h-3.5 text-blue-100 shrink-0" />
           <span className="tracking-tight">AI Assistant</span>
         </button>
       </div>

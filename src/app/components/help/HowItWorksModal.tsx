@@ -111,7 +111,7 @@ export function HowItWorksButton({ label, onClick }: HowItWorksButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50/70 hover:bg-blue-100/90 text-xs font-semibold text-blue-600 flex items-center gap-1.5 transition-all shadow-xs hover:shadow active:scale-95 cursor-pointer shrink-0"
+      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline bg-transparent border-0 p-0 transition-colors cursor-pointer shrink-0"
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
       <Play className="w-3 h-3 fill-current" />
