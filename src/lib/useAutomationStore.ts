@@ -226,6 +226,7 @@ export const EVENT_CATALOG: Record<
   ],
   task: [
     { event: "task.created", label: "Task created", description: "Fires when a new task is created" },
+    { event: "task.updated", label: "Task updated", description: "Fires when task details, status, stage, or assignee are modified" },
     { event: "task.assigned", label: "Task assigned", description: "Task is assigned to team member or contact" },
     { event: "task.status_changed", label: "Task status changed", description: "Task status transitions between lifecycle states" },
     { event: "task.completed", label: "Task completed", description: "Task checklist and deliverables finished" },
@@ -300,10 +301,12 @@ export function validateRuleEntityTarget(
         ? "appointment"
         : rule.trigger?.event?.toLowerCase().startsWith("invoice")
         ? "invoice"
+        : rule.trigger?.event?.toLowerCase().startsWith("task")
+        ? "task"
         : rule.entityType || "client"
     );
 
-    if (!targetProcess && (effectiveEntity === "appointment" || effectiveEntity === "invoice")) {
+    if (!targetProcess && (effectiveEntity === "appointment" || effectiveEntity === "invoice" || effectiveEntity === "task")) {
       targetProcess = DEFAULT_ENTITY_PROCESSES[effectiveEntity];
     }
 

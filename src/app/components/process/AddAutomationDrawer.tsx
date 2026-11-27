@@ -309,12 +309,18 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
 
 function getTriggerIcon(type: EventTriggerType | "stage") {
   switch (type) {
+    case "process":
+      return <Workflow className="w-4 h-4 text-indigo-600" />;
     case "appointment":
       return <Calendar className="w-4 h-4 text-emerald-600" />;
     case "client":
       return <User className="w-4 h-4 text-blue-600" />;
     case "invoice":
       return <Receipt className="w-4 h-4 text-purple-600" />;
+    case "call":
+      return <Phone className="w-4 h-4 text-blue-600" />;
+    case "task":
+      return <CheckSquare className="w-4 h-4 text-fuchsia-600" />;
     case "insurance":
       return <ShieldCheck className="w-4 h-4 text-rose-600" />;
     case "stage":

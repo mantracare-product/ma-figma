@@ -17,6 +17,7 @@ import {
 import { addNotification } from "./notificationsStore";
 import { recordAuditLog } from "./auditLogsStore";
 import { addActivityEntry } from "./activityLog";
+import { eventBus } from "./eventBus";
 
 export const TASKS_STORAGE_KEY = "mantra_tasks_store";
 export const TASKS_STORE_EVENT = "mantra-tasks-updated";
@@ -953,6 +954,9 @@ export function useTasks() {
 
       const updated = [...newTasks, ...current];
       saveStoredTasks(updated);
+      newTasks.forEach((task) => {
+        void eventBus.emit("task.created", "task", task.id, task);
+      });
       return newTasks;
     },
     []
@@ -968,6 +972,7 @@ export function useTasks() {
 
   const updateTask = useCallback((id: string, patch: Partial<TaskEntity>) => {
     const current = getStoredTasks();
+    let updatedTask: TaskEntity | undefined;
     const updated = current.map((t) => {
       if (t.id === id) {
         if (patch.assignee && patch.assignee.assigneeName !== t.assignee.assigneeName) {
@@ -979,15 +984,19 @@ export function useTasks() {
             meta: { taskId: t.id },
           });
         }
-        return {
+        updatedTask = {
           ...t,
           ...patch,
           updatedAt: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
         };
+        return updatedTask;
       }
       return t;
     });
     saveStoredTasks(updated);
+    if (updatedTask) {
+      void eventBus.emit("task.updated", "task", updatedTask.id, updatedTask);
+    }
   }, []);
 
   const deleteTask = useCallback((id: string) => {
@@ -1034,6 +1043,10 @@ export function useTasks() {
     });
     saveStoredTasks(updated);
 
+    if (affectedTask) {
+      void eventBus.emit("task.updated", "task", affectedTask.id, affectedTask);
+    }
+
     if (affectedTask && newStatus === "completed") {
       addNotification({
         type: "task",
@@ -1075,6 +1088,7 @@ export function useTasks() {
     saveStoredTasks(updated);
 
     if (affectedTask) {
+      void eventBus.emit("task.updated", "task", affectedTask.id, affectedTask);
       if (nextStatus === "completed") {
         addNotification({
           type: "task",

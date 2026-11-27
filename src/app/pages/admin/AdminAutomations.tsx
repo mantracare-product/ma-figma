@@ -592,6 +592,8 @@ export default function AdminAutomations() {
               ? "appointment"
               : triggerCategory?.type === "invoice" || triggerEvtStr.startsWith("invoice")
               ? "invoice"
+              : triggerCategory?.type === "task" || triggerEvtStr.startsWith("task")
+              ? "task"
               : "client";
 
           const mappedActions: WorkflowStep[] = (saved.steps || []).map((s: any) => ({

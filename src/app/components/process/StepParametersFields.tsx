@@ -2095,6 +2095,7 @@ export default function StepParametersFields({
       params.selectedEvent?.startsWith("appointment") ? "appointment" :
       params.selectedEvent?.startsWith("invoice") ? "invoice" :
       params.selectedEvent?.startsWith("call") ? "call" :
+      params.selectedEvent?.startsWith("task") ? "task" :
       "process"
     )).toLowerCase();
 
@@ -2120,6 +2121,10 @@ export default function StepParametersFields({
       call: [
         { event: "call.created", label: "Created", desc: "Fires when a new call session is initiated or logged", iconKey: "phone" },
         { event: "call.updated", label: "Updated", desc: "Fires when call metadata, transcript, or status updates", iconKey: "phone" },
+      ],
+      task: [
+        { event: "task.created", label: "Created", desc: "Fires when a new task is created or assigned", iconKey: "checksquare" },
+        { event: "task.updated", label: "Updated", desc: "Fires when task details, status, stage, or assignee are modified", iconKey: "checksquare" },
       ],
     };
 
@@ -2982,11 +2987,15 @@ export default function StepParametersFields({
             {(stepKey === "create_task" || stepKey === "create-task") && (() => {
               const taskTitle = params.taskTitle ?? "";
               const taskDescription = params.taskDescription ?? "";
-              const taskIsRequired = Boolean(params.isRequired ?? params.taskIsRequired);
+              const taskIsImportant = Boolean(params.isImportant ?? params.taskIsImportant);
               const responsibleSource: "custom" | "inherit" =
-                params.responsibleSource === "inherit" ? "inherit" : "custom";
+                params.responsibleSource === "custom" ? "custom" : "inherit";
               const responsibleType: "team" | "contact" =
                 params.responsibleType === "contact" ? "contact" : "team";
+              const inheritResponsibleType: "team" | "contact" =
+                (params.inheritResponsibleType ?? params.responsibleType) === "contact"
+                  ? "contact"
+                  : "team";
               const responsibleDistribution: "round_robin" | "all" =
                 params.responsibleDistribution === "all" ? "all" : "round_robin";
 
@@ -3207,15 +3216,36 @@ export default function StepParametersFields({
                         onChange={(e) => onChange({ responsibleSource: e.target.value })}
                         className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
                       >
-                        <option value="custom">Custom</option>
                         <option value="inherit">Inherit from Previous Node</option>
+                        <option value="custom">Choose Responsible</option>
                       </select>
                     </div>
 
                     {responsibleSource === "inherit" ? (
-                      <div className="px-3 py-2.5 rounded-[8px] border border-slate-200 bg-slate-50/80 text-xs text-slate-600 leading-relaxed">
-                        Inherits the responsible assignee automatically from the previous node (for example, an{" "}
-                        <span className="font-semibold text-slate-800">Assign Responsible</span> step) or falls back to the triggering record owner.
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                          <span>Inherit Assignee Type</span>
+                          <InfoTooltip
+                            text={
+                              inheritResponsibleType === "contact"
+                                ? "Inherits the Contact automatically from the triggering record or a previous Create Contact step and creates the task for them."
+                                : "Inherits the Team Member automatically from the previous node (for example, an Assign Responsible step) or falls back to the triggering record owner."
+                            }
+                          />
+                        </label>
+                        <select
+                          value={inheritResponsibleType}
+                          onChange={(e) =>
+                            onChange({
+                              inheritResponsibleType: e.target.value,
+                              responsibleType: e.target.value,
+                            })
+                          }
+                          className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
+                        >
+                          <option value="team">Team Member</option>
+                          <option value="contact">Contact</option>
+                        </select>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -3348,42 +3378,45 @@ export default function StepParametersFields({
                     )}
                   </div>
 
-                  {/* Mark Required Toggle */}
+                  {/* Mark as Important Toggle */}
                   <div
                     onClick={() =>
                       onChange({
-                        isRequired: !taskIsRequired,
-                        taskIsRequired: !taskIsRequired,
+                        isImportant: !taskIsImportant,
+                        taskIsImportant: !taskIsImportant,
                       })
                     }
                     className="flex items-center justify-between p-3.5 border border-slate-200 rounded-[10px] bg-white hover:bg-slate-50/70 transition-colors cursor-pointer select-none"
                   >
-                    <div className="min-w-0 pr-3">
-                      <span className="text-[13px] font-semibold text-slate-900 block">
-                        Mark Required
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        Require completion of this task before advancing stage or workflow
-                      </span>
+                    <div className="flex items-center gap-2.5 min-w-0 pr-3">
+                      <Star className={`w-4 h-4 shrink-0 ${taskIsImportant ? "fill-amber-500 text-amber-500" : "text-slate-400"}`} />
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-semibold text-slate-900 block">
+                          Mark as Important
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Flags this task with high urgency priority
+                        </span>
+                      </div>
                     </div>
                     <button
                       type="button"
                       role="switch"
-                      aria-checked={taskIsRequired}
+                      aria-checked={taskIsImportant}
                       onClick={(e) => {
                         e.stopPropagation();
                         onChange({
-                          isRequired: !taskIsRequired,
-                          taskIsRequired: !taskIsRequired,
+                          isImportant: !taskIsImportant,
+                          taskIsImportant: !taskIsImportant,
                         });
                       }}
                       className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                        taskIsRequired ? "bg-slate-900" : "bg-slate-200"
+                        taskIsImportant ? "bg-slate-900" : "bg-slate-200"
                       }`}
                     >
                       <div
                         className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
-                          taskIsRequired ? "translate-x-5" : "translate-x-0"
+                          taskIsImportant ? "translate-x-5" : "translate-x-0"
                         }`}
                       />
                     </button>
@@ -3593,7 +3626,7 @@ export default function StepParametersFields({
                         onChange={(e) => onChange({ observerSource: e.target.value })}
                         className="w-full h-9 px-3 border border-slate-200 rounded-[8px] bg-white text-[13px] text-slate-900 focus:outline-none focus:border-slate-400 cursor-pointer"
                       >
-                        <option value="custom">Custom</option>
+                        <option value="custom">Choose Observers</option>
                         <option value="inherit">Inherit from Previous Node</option>
                       </select>
                     </div>

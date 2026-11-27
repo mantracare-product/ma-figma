@@ -14,6 +14,7 @@ export type EventTriggerType =
   | "appointment"
   | "invoice"
   | "call"
+  | "task"
   | "insurance"
   | "stage"
   | "field_update";
@@ -138,6 +139,16 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     events: [
       { event: "call.created", label: "Call created", description: "A new inbound or outbound call session is initiated" },
       { event: "call.updated", label: "Call updated", description: "Call recording, transcript, analysis, or status is modified" },
+    ],
+  },
+  {
+    type: "task",
+    label: "Task",
+    description: "Trigger when a task is created or updated",
+    iconKey: "checksquare",
+    events: [
+      { event: "task.created", label: "Task created", description: "Fires when a new task is created or assigned" },
+      { event: "task.updated", label: "Task updated", description: "Fires when task details, status, stage, or assignee are modified" },
     ],
   },
 ];

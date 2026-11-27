@@ -401,6 +401,8 @@ export async function executeRulesForEvent(
         } catch (err) {
           console.warn("[RuleEngine] Failed to sync invoice stage:", err);
         }
+      } else if (event.recordType === "task") {
+        // Task stage sync handled by task workflow updates; avoid moving client records with task IDs
       } else {
         // Client or processes
         try {

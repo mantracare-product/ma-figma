@@ -413,6 +413,26 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
       iconKey: "phone",
     },
 
+    // Task Triggers
+    {
+      id: "trig-task-created",
+      triggerType: "task",
+      triggerEvent: "task.created",
+      label: "Task Created",
+      desc: "Fires when a new task is created or assigned",
+      icon: <CheckSquare className="w-4 h-4" />,
+      iconKey: "checksquare",
+    },
+    {
+      id: "trig-task-updated",
+      triggerType: "task",
+      triggerEvent: "task.updated",
+      label: "Task Updated",
+      desc: "Fires when task details, status, stage, or assignee are modified",
+      icon: <CheckSquare className="w-4 h-4" />,
+      iconKey: "checksquare",
+    },
+
   ];
 };
 
@@ -518,6 +538,16 @@ function getCrystalTriggerTheme(triggerType?: string): CrystalNodeTheme {
         cardSurface: baseCard,
         badgeStyle: { backgroundColor: "#fffbeb", color: "#b45309" },
         dotColor: "#d97706",
+        portColor: "#94a3b8",
+        roleLabel: "TRIGGER",
+      };
+    case "task":
+      return {
+        orbGradient: "",
+        orbStyle: "linear-gradient(135deg, #e879f9 0%, #a21caf 100%)",
+        cardSurface: baseCard,
+        badgeStyle: { backgroundColor: "#fdf4ff", color: "#a21caf" },
+        dotColor: "#c026d3",
         portColor: "#94a3b8",
         roleLabel: "TRIGGER",
       };
@@ -841,6 +871,7 @@ function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) 
   if (triggerIconKey === "calendar" || triggerType === "appointment") return <Calendar className="w-4 h-4" />;
   if (triggerIconKey === "receipt" || triggerType === "invoice") return <Receipt className="w-4 h-4" />;
   if (triggerIconKey === "phone" || triggerType === "call") return <Phone className="w-4 h-4" />;
+  if (triggerIconKey === "checksquare" || triggerType === "task") return <CheckSquare className="w-4 h-4" />;
   if (triggerIconKey === "sparkles" || triggerType === "ai") return <Sparkles className="w-4 h-4" />;
   if (triggerIconKey === "user" || triggerType === "client") return <User className="w-4 h-4" />;
   if (triggerIconKey === "briefcase" || triggerIconKey === "product") return <Briefcase className="w-4 h-4" />;
@@ -2104,6 +2135,14 @@ export default function FlowBuilderTab({
         desc: "Created or updated",
         icon: <Phone className="w-4 h-4 text-blue-600" />,
         defaultTrigger: allTriggers.find((t) => t.triggerType === "call" && t.triggerEvent === "call.created") || allTriggers[0],
+      },
+      {
+        id: "task",
+        type: "task",
+        label: "Task Triggers",
+        desc: "Created or updated",
+        icon: <CheckSquare className="w-4 h-4 text-fuchsia-600" />,
+        defaultTrigger: allTriggers.find((t) => t.triggerType === "task" && t.triggerEvent === "task.created") || allTriggers[0],
       },
 
     ];
