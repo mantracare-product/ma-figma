@@ -653,10 +653,16 @@ function CrystalOrbIcon({
   const sizeCls = size === "sm" ? "w-9 h-9" : "w-10 h-10";
   return (
     <div
-      className={`${sizeCls} rounded-full ${gradient ? `bg-gradient-to-br ${gradient}` : ""} flex items-center justify-center shrink-0 text-white shadow-[0_4px_12px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.55)] ring-1 ring-white/40 relative overflow-hidden`}
+      className={`${sizeCls} rounded-full ${gradient ? `bg-gradient-to-br ${gradient}` : ""} flex items-center justify-center shrink-0 text-white shadow-[0_4px_10px_-2px_rgba(15,23,42,0.16),inset_0_0_0_1px_rgba(255,255,255,0.28),inset_0_1px_1.5px_rgba(255,255,255,0.6),inset_0_-2px_4px_rgba(15,23,42,0.18)] relative overflow-hidden`}
       style={orbStyle ? { background: orbStyle } : undefined}
     >
-      <span className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2.5 rounded-full bg-white/35 blur-[0.5px]" />
+      <span
+        className="pointer-events-none absolute inset-0 rounded-full"
+        style={{
+          background:
+            "radial-gradient(115% 78% at 50% 6%, rgba(255,255,255,0.44) 0%, rgba(255,255,255,0.18) 44%, rgba(255,255,255,0) 48%)",
+        }}
+      />
       <span className="relative z-10 flex items-center justify-center text-white [&_svg]:text-white">{children}</span>
     </div>
   );
