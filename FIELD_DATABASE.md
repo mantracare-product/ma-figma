@@ -12,9 +12,9 @@ The application maintains a strict separation between **Field Definitions (Schem
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                          1. SCHEMA LAYER (ADMIN)                          │
 │                                                                           │
-│   FieldRegistryContext ──► localStorage["mantra_field_registry_v1"]      │
-│   AdvanceListStore     ──► localStorage["mantra_advance_lists_v1"]       │
-│   SectionRegistry      ──► localStorage["mantra_section_registry_v1"]    │
+│   FieldRegistryContext ──► localStorage["mantra_field_registry_v1"]       │
+│   AdvanceListStore     ──► localStorage["mantra_advance_lists_v1"]        │
+│   SectionRegistry      ──► localStorage["mantra_section_registry_v1"]     │
 └─────────────────────────────────────┬─────────────────────────────────────┘
                                       │ defines schema & rules
                                       ▼

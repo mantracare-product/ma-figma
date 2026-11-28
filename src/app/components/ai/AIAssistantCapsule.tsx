@@ -38,11 +38,11 @@ export default function AIAssistantCapsule() {
         <button
           type="button"
           onClick={() => setIsNewConsultationOpen(true)}
-          className="h-8 flex items-center gap-1.5 px-3 rounded-[8px] text-xs font-semibold text-slate-800 bg-gradient-to-b from-white to-slate-50/90 hover:from-slate-50 hover:to-slate-100/90 border border-slate-200/90 hover:border-slate-300 shadow-[0_1px_2px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.95)] active:scale-[0.98] transition-all cursor-pointer"
+          className="h-8 flex items-center gap-1.5 px-3 rounded-[8px] text-xs font-semibold text-[#1E293B] bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
           title="Start AI Scribe Consultation"
           aria-label="Start AI Scribe Consultation"
         >
-          <Mic className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+          <Mic className="w-3.5 h-3.5 text-[#1E293B] shrink-0" />
           <span className="tracking-tight">Scribe</span>
         </button>
 
@@ -52,13 +52,13 @@ export default function AIAssistantCapsule() {
           onClick={() => setIsAssistantOpen((prev) => !prev)}
           className={`h-8 flex items-center gap-1.5 px-3.5 rounded-[8px] text-xs font-semibold active:scale-[0.98] transition-all cursor-pointer ${
             isAssistantOpen
-              ? "bg-gradient-to-b from-[#0f172a] to-[#1e293b] text-white border border-slate-800 shadow-[0_1px_3px_rgba(15,23,42,0.28),inset_0_1px_0_rgba(255,255,255,0.16)]"
-              : "bg-gradient-to-b from-[#1d63f5] to-[#1456f0] hover:from-[#1959e0] hover:to-[#114ad6] text-white border border-[#1249ce] shadow-[0_1px_3px_rgba(20,86,240,0.28),inset_0_1px_0_rgba(255,255,255,0.24)]"
+              ? "bg-[#0F172A] text-white border border-slate-900 shadow-xs ring-2 ring-slate-900/15"
+              : "bg-[#1E293B] hover:bg-[#0F172A] text-white border border-[#1E293B] shadow-xs"
           }`}
           title={isAssistantOpen ? "Close AI Clinical Assistant" : "Open AI Clinical Assistant"}
           aria-label="AI Assistant"
         >
-          <Sparkles className="w-3.5 h-3.5 text-blue-100 shrink-0" />
+          <Sparkles className="w-3.5 h-3.5 text-slate-200 shrink-0" />
           <span className="tracking-tight">AI Assistant</span>
         </button>
       </div>

@@ -111,7 +111,7 @@ export function HowItWorksButton({ label, onClick }: HowItWorksButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline bg-transparent border-0 p-0 transition-colors cursor-pointer shrink-0"
+      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1E293B] hover:text-[#0F172A] hover:underline bg-transparent border-0 p-0 transition-colors cursor-pointer shrink-0"
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
       <Play className="w-3 h-3 fill-current" />

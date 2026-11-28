@@ -1536,26 +1536,6 @@ export default function Overview() {
                 </div>
               ) : (
                 <>
-                  <div className="col-span-1 md:col-span-2 lg:col-span-6 flex items-center justify-between pb-1">
-                    <div>
-                      <span className="text-xs font-bold text-slate-700">{currentTab.name}</span>
-                      <span className="text-xs text-slate-400 ml-1.5">({currentTab.metrics.length} metrics)</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMetricTitle("");
-                        setKpiValue("");
-                        setKpiSubtitle("");
-                        setIsAddMetricModalOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#1456f0] hover:bg-blue-600 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Metric</span>
-                    </button>
-                  </div>
-
                   {/* KPI Stat Cards (4 columns responsive grid) */}
                   {kpiMetrics.length > 0 && (
                     <div className="col-span-1 md:col-span-2 lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

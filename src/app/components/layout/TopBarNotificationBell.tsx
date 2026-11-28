@@ -31,7 +31,7 @@ export default function TopBarNotificationBell() {
         >
           <Bell className="w-[22px] h-[22px]" strokeWidth={1.85} />
           {unreadCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#1456f0] text-white text-[9px] font-mono tabular-nums font-bold flex items-center justify-center ring-2 ring-white leading-none">
+            <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#1E293B] text-white text-[9px] font-mono tabular-nums font-bold flex items-center justify-center ring-2 ring-white leading-none">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
