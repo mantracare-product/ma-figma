@@ -21,6 +21,7 @@ import { appendActivity } from "./activityEngine";
 import { flattenRuleSteps } from "./automationTree";
 import { getClientList } from "./getClientList";
 import { findRoomForAppointment } from "./roomsStore";
+import { getStoredServices } from "./servicesStore";
 import { isDemoMantraActive, isFreshWorkspace } from "./onboardingWorkspace";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
@@ -119,6 +120,9 @@ export function hasAppointmentAutomation(processId?: string): boolean {
   }
 }
 
+export type MeetingProvider = "google_meet" | "zoom" | "custom";
+export type PaymentRequirementMode = "paid" | "require_before_join" | "bill_after_visit" | "waived";
+
 export interface Appointment {
   id: number | string;
   clientName: string;
@@ -147,6 +151,11 @@ export interface Appointment {
   invoiceId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
+  meetingProvider?: MeetingProvider;
+  meetingUrl?: string;
+  meetingId?: string;
+  meetingPasscode?: string;
+  paymentRequirement?: PaymentRequirementMode;
   roomName?: string;
   roomNumber?: string;
   roomStationId?: string;
@@ -175,6 +184,12 @@ export interface CreateAppointmentPayload {
   clientId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
+  meetingProvider?: MeetingProvider;
+  meetingUrl?: string;
+  meetingId?: string;
+  meetingPasscode?: string;
+  paymentRequirement?: PaymentRequirementMode;
+  markPaidNow?: boolean;
   processId?: string;
   stageId?: string;
   generateInvoice?: boolean;
@@ -182,6 +197,124 @@ export interface CreateAppointmentPayload {
   discountAmount?: number;
   source?: "MA-Client" | "Inbound Call" | "Walked In" | "screen" | "call" | "webhook" | "import" | "ai" | string;
   bookingType?: "service" | "specialist";
+}
+
+/**
+ * Generates deterministic-looking prototype Google Meet metadata.
+ * Backend teams can replace this single hook with live Google Calendar / Meet provisioning.
+ */
+export function generateTeleconsultMeeting(
+  _provider: MeetingProvider = "google_meet",
+  _seed?: string | number
+): {
+  meetingProvider: MeetingProvider;
+  meetingUrl: string;
+  meetingId: string;
+  meetingPasscode?: string;
+} {
+  const randAlpha = (len: number) => {
+    const chars = "abcdefghijkmnpqrstuvwxyz";
+    let out = "";
+    for (let i = 0; i < len; i += 1) {
+      out += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return out;
+  };
+
+  const code = `${randAlpha(3)}-${randAlpha(4)}-${randAlpha(3)}`;
+  return {
+    meetingProvider: "google_meet",
+    meetingUrl: `https://meet.google.com/${code}`,
+    meetingId: code,
+  };
+}
+
+export function isOnlineAppointment(apt?: Partial<Appointment> | null): boolean {
+  if (!apt) return false;
+  if (apt.sessionType === "video") return true;
+  if (apt.sessionType === "inPerson") return false;
+  const loc = (apt.location || "").toLowerCase();
+  return loc === "online" || loc.includes("virtual") || loc.includes("video") || loc.includes("tele");
+}
+
+export function getMeetingProviderLabel(_provider?: MeetingProvider): string {
+  return "Google Meet";
+}
+
+export function getAppointmentPaymentLockState(
+  apt?: Partial<Appointment> | null,
+  invoicesInput?: any[]
+): {
+  isLocked: boolean;
+  isPaid: boolean;
+  hasUnpaidInvoice: boolean;
+  amountDue: number;
+  currency: string;
+  invoice?: any;
+} {
+  const allInvoices = invoicesInput || invoiceService.getInvoices();
+  const linkedInvoice = apt
+    ? allInvoices.find(
+        (inv) =>
+          inv.status !== "void" &&
+          inv.currentStageId !== "inv-7" &&
+          ((apt.invoiceId && inv.id === apt.invoiceId) ||
+            (apt.id !== undefined && inv.appointmentId && String(inv.appointmentId) === String(apt.id)))
+      )
+    : undefined;
+
+  const currency = linkedInvoice?.currency || "$";
+  const balanceRemaining = linkedInvoice
+    ? Math.max(0, Number((linkedInvoice.total - (linkedInvoice.amountPaid || 0)).toFixed(2)))
+    : 0;
+  const isInvoiceSettled = Boolean(
+    linkedInvoice &&
+      (linkedInvoice.status === "paid" ||
+        linkedInvoice.currentStageId === "inv-paid" ||
+        linkedInvoice.currentStageId === "paid" ||
+        balanceRemaining <= 0.01)
+  );
+  const hasUnpaidInvoice = Boolean(linkedInvoice && !isInvoiceSettled && balanceRemaining > 0.01);
+
+  if (!apt) {
+    return { isLocked: false, isPaid: false, hasUnpaidInvoice: false, amountDue: 0, currency };
+  }
+
+  if (apt.paymentRequirement === "waived" || apt.paymentRequirement === "bill_after_visit") {
+    return {
+      isLocked: false,
+      isPaid: isInvoiceSettled,
+      hasUnpaidInvoice,
+      amountDue: balanceRemaining,
+      currency,
+      invoice: linkedInvoice,
+    };
+  }
+
+  if (apt.paymentRequirement === "paid" || isInvoiceSettled) {
+    return {
+      isLocked: false,
+      isPaid: true,
+      hasUnpaidInvoice: false,
+      amountDue: 0,
+      currency,
+      invoice: linkedInvoice,
+    };
+  }
+
+  const online = isOnlineAppointment(apt);
+  const explicitlyGated = apt.paymentRequirement === "require_before_join";
+  const implicitlyGated = online && hasUnpaidInvoice;
+  const isLocked = Boolean(explicitlyGated || implicitlyGated);
+
+  return {
+    isLocked,
+    isPaid: isInvoiceSettled,
+    hasUnpaidInvoice,
+    amountDue: balanceRemaining,
+    currency,
+    invoice: linkedInvoice,
+  };
 }
 
 export interface CreateAppointmentOptions {
@@ -715,14 +848,43 @@ class AppointmentService {
       } catch {}
     }
 
-    const resolvedRoom = findRoomForAppointment({
-      serviceId: payload.serviceId,
-      location: payload.location,
-      employeeId: payload.employeeId,
-    });
-    const roomNumber = payload.roomNumber || resolvedRoom?.roomNumber;
-    const roomStationId = payload.roomStationId || resolvedRoom?.id;
-    const roomName = payload.roomName || resolvedRoom?.name;
+    const matchedService = getStoredServices().find((s) => String(s.id) === String(payload.serviceId));
+    const effectiveSessionType: "video" | "inPerson" =
+      payload.sessionType ||
+      (payload.location &&
+      (payload.location.toLowerCase() === "online" ||
+        payload.location.toLowerCase().includes("virtual") ||
+        payload.location.toLowerCase().includes("video"))
+        ? "video"
+        : matchedService?.deliveryModes?.length === 1 && matchedService.deliveryModes[0] === "video"
+        ? "video"
+        : "inPerson");
+
+    const resolvedRoom =
+      effectiveSessionType === "inPerson"
+        ? findRoomForAppointment({
+            serviceId: payload.serviceId,
+            location: payload.location,
+            employeeId: payload.employeeId,
+          })
+        : null;
+    const roomNumber = effectiveSessionType === "inPerson" ? payload.roomNumber || resolvedRoom?.roomNumber : undefined;
+    const roomStationId = effectiveSessionType === "inPerson" ? payload.roomStationId || resolvedRoom?.id : undefined;
+    const roomName = effectiveSessionType === "inPerson" ? payload.roomName || resolvedRoom?.name : undefined;
+
+    const chosenProvider: MeetingProvider =
+      payload.meetingProvider || matchedService?.defaultVideoProvider || "google_meet";
+    const generatedMeeting =
+      effectiveSessionType === "video"
+        ? payload.meetingUrl && payload.meetingUrl.trim()
+          ? {
+              meetingProvider: chosenProvider,
+              meetingUrl: payload.meetingUrl.trim(),
+              meetingId: payload.meetingId,
+              meetingPasscode: payload.meetingPasscode,
+            }
+          : generateTeleconsultMeeting(chosenProvider, nextId)
+        : undefined;
 
     const newAppointment: Appointment = {
       id: nextId,
@@ -733,18 +895,26 @@ class AppointmentService {
       serviceId: payload.serviceId || 1,
       date: payload.date,
       time: payload.time,
-      duration: payload.duration || 60,
+      duration: payload.duration || matchedService?.slotDuration || matchedService?.duration || 60,
       status: initialStage?.systemCategory === "completed" ? "completed" : initialStage?.systemCategory === "cancelled" ? "cancelled" : "scheduled",
-      notes: payload.notes || `Session Type: ${payload.sessionType === "video" ? "Video Call" : "In-Person"}`,
+      notes: payload.notes || `Session Type: ${effectiveSessionType === "video" ? "Teleconsultation (Video)" : "In-Person"}`,
       title: payload.title || "Scheduled Appointment",
+      serviceName: matchedService?.name,
       description: payload.description,
       tags: payload.tags,
       currentStageId: initialStageId,
       statusLabel: initialStageName,
       processId: proc.id,
       clientId: resolvedClientId,
-      location: payload.location,
-      sessionType: payload.sessionType || "video",
+      location: effectiveSessionType === "video" ? payload.location || "Online" : payload.location,
+      sessionType: effectiveSessionType,
+      meetingProvider: generatedMeeting?.meetingProvider,
+      meetingUrl: generatedMeeting?.meetingUrl,
+      meetingId: generatedMeeting?.meetingId,
+      meetingPasscode: generatedMeeting?.meetingPasscode,
+      paymentRequirement:
+        payload.paymentRequirement ||
+        (payload.markPaidNow ? "paid" : undefined),
       roomNumber,
       roomStationId,
       roomName,
@@ -798,20 +968,35 @@ class AppointmentService {
       });
     }
 
-    // 2. Invoice Generation (ONLY if explicitly enabled by user OR active appointment-to-invoice automation rule exists)
+    // 2. Invoice Generation (if explicitly requested OR active appointment-to-invoice automation rule exists)
     const hasApptInvRule = hasAppointmentInvoiceAutomation(proc.id);
     const shouldGenerateInvoice =
       payload.generateInvoice === true ||
+      payload.paymentRequirement === "require_before_join" ||
+      payload.markPaidNow === true ||
       (payload.generateInvoice === undefined && hasApptInvRule);
 
     let createdInvoiceId: string | undefined = undefined;
     if (shouldGenerateInvoice) {
-      if (!hasApptInvRule && payload.generateInvoice !== true) {
+      const explicitBilling =
+        payload.generateInvoice === true ||
+        payload.paymentRequirement === "require_before_join" ||
+        payload.markPaidNow === true;
+      if (!hasApptInvRule && !explicitBilling) {
         console.warn("[AppointmentService] Invoice creation skipped: No active invoice automation configured for appointments.");
       } else {
+        const defaultPrice = matchedService?.price ?? 150;
         const lineItems = payload.lineItems && payload.lineItems.length > 0
           ? payload.lineItems
-          : [{ id: `li-${newAppointment.id}-1`, source: "service", serviceId: String(newAppointment.serviceId), description: newAppointment.title || "Appointment Consultation", quantity: 1, unitPrice: 150 }];
+          : [{
+              id: `li-${newAppointment.id}-1`,
+              source: "service",
+              serviceId: String(newAppointment.serviceId),
+              description: matchedService?.name || newAppointment.title || "Appointment Consultation",
+              quantity: 1,
+              unitPrice: defaultPrice,
+              taxPercent: matchedService?.tax ?? 0,
+            }];
 
         const { invoice } = invoiceService.createInvoiceFromAppointment(
           {
@@ -828,7 +1013,17 @@ class AppointmentService {
         if (invoice?.id) {
           createdInvoiceId = invoice.id;
           newAppointment.invoiceId = invoice.id;
-          this.updateAppointment(newAppointment.id, { invoiceId: invoice.id });
+          if (payload.markPaidNow) {
+            invoiceService.recordPayment(invoice.id, invoice.total, "card_on_file", "Collected at appointment booking");
+            newAppointment.paymentRequirement = "paid";
+          } else if (payload.paymentRequirement === "require_before_join") {
+            invoiceService.sendInvoice(invoice.id, "email");
+            newAppointment.paymentRequirement = "require_before_join";
+          }
+          this.updateAppointment(newAppointment.id, {
+            invoiceId: invoice.id,
+            paymentRequirement: newAppointment.paymentRequirement,
+          });
         }
       }
     }

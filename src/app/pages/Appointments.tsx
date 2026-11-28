@@ -38,10 +38,21 @@ import {
   RefreshCw,
   X,
   Copy,
+  Video,
+  Building2,
+  ExternalLink,
+  Lock,
 } from "lucide-react";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import WorkflowGearDropdown from "../components/workflow/WorkflowGearDropdown";
-import { appointmentService, hasAppointmentAutomation, Appointment } from "../../lib/appointmentService";
+import {
+  appointmentService,
+  hasAppointmentAutomation,
+  Appointment,
+  isOnlineAppointment,
+  getMeetingProviderLabel,
+  getAppointmentPaymentLockState,
+} from "../../lib/appointmentService";
 import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
@@ -55,6 +66,7 @@ import ImportIntegrationsTab from "../components/common/ImportIntegrationsTab";
 
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
+import JoinTeleconsultModal from "../components/appointments/JoinTeleconsultModal";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { SegmentedStageBar } from "../components/common/SegmentedStageBar";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
@@ -178,6 +190,12 @@ export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedAppointmentForDrawer, setSelectedAppointmentForDrawer] = useState<Appointment | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [detailInitialTab, setDetailInitialTab] = useState<"overview" | "session-notes" | "documents" | "invoices" | "calls">("overview");
+  const [detailOpenScribe, setDetailOpenScribe] = useState(false);
+
+  // Join Call popup & targeted Scribe session state
+  const [joinPopupAppt, setJoinPopupAppt] = useState<Appointment | null>(null);
+  const [scribeTargetAppt, setScribeTargetAppt] = useState<Appointment | null>(null);
 
   // Process filter state: selected specific appointment process (strictly specific processes, no "all processes")
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
@@ -450,6 +468,12 @@ export default function Appointments() {
     return `${year}-${month}-${day}`;
   });
   const [sessionType, setSessionType] = useState<"video" | "inPerson">("video");
+  const [meetingProvider, setMeetingProvider] = useState<"google_meet" | "zoom" | "custom">("google_meet");
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [meetingId, setMeetingId] = useState("");
+  const [meetingPasscode, setMeetingPasscode] = useState("");
+  const [paymentRequirement, setPaymentRequirement] = useState<"paid" | "require_before_join" | "bill_after_visit" | "waived" | undefined>(undefined);
+  const [markPaidNow, setMarkPaidNow] = useState(false);
   // New flat form fields
   const [moduleDefaultProcess, setModuleDefaultProcess] = useState<string>(() => {
     try {
@@ -478,7 +502,7 @@ export default function Appointments() {
   const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(() => hasAppointmentInvoiceAutomation());
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
-  const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
+  const [bookingLocation, setBookingLocation] = useState("Online");
   const [bookingSource, setBookingSource] = useState<string>("Inbound Call");
   const [bookingType, setBookingType] = useState<"service" | "specialist">("service");
 
@@ -770,11 +794,19 @@ export default function Appointments() {
 
     setBookingNote(apt.notes || "");
     setBookingTags(apt.tags ? apt.tags.join(", ") : "");
-    if (apt.notes?.toLowerCase().includes("in-person")) {
-      setSessionType("inPerson");
-    } else {
-      setSessionType("video");
-    }
+    const resolvedMode =
+      apt.sessionType ||
+      (apt.location?.toLowerCase().includes("online") || apt.location?.toLowerCase().includes("virtual")
+        ? "video"
+        : apt.notes?.toLowerCase().includes("in-person")
+        ? "inPerson"
+        : "video");
+    setSessionType(resolvedMode);
+    setBookingLocation(apt.location || (resolvedMode === "video" ? "Online" : "Main Clinic — Suite 400"));
+    setMeetingProvider((apt as any).meetingProvider || "google_meet");
+    setMeetingUrl((apt as any).meetingUrl || "");
+    setMeetingId((apt as any).meetingId || "");
+    setMeetingPasscode((apt as any).meetingPasscode || "");
     setBookingSource(apt.source || "Inbound Call");
 
     setShowAddModal(true);
@@ -843,6 +875,12 @@ export default function Appointments() {
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,
         location: bookingLocation,
         sessionType,
+        meetingProvider: sessionType === "video" ? meetingProvider : undefined,
+        meetingUrl: sessionType === "video" ? meetingUrl : undefined,
+        meetingId: sessionType === "video" ? meetingId : undefined,
+        meetingPasscode: sessionType === "video" ? meetingPasscode : undefined,
+        paymentRequirement: sessionType === "video" ? paymentRequirement : undefined,
+        markPaidNow: sessionType === "video" ? markPaidNow : false,
         processId: targetProc?.id || bookingProcessId,
         stageId: targetStage?.id || bookingStageId || undefined,
         generateInvoice: bookingGenerateInvoice ?? false,
@@ -895,7 +933,14 @@ export default function Appointments() {
     setBookingStageId("Confirmed");
     setBookingStartHour(9);
     setBookingStartMinute(0);
-    setBookingLocation("Main Clinic — Suite 400");
+    setSessionType("video");
+    setMeetingProvider("google_meet");
+    setMeetingUrl("");
+    setMeetingId("");
+    setMeetingPasscode("");
+    setPaymentRequirement(undefined);
+    setMarkPaidNow(false);
+    setBookingLocation("Online");
     setBookingType("service");
     setBookingGenerateInvoice(hasAppointmentInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
     setBookingLineItems([]);
@@ -1639,6 +1684,21 @@ export default function Appointments() {
             employees={employees}
             services={services}
             openBookingDrawerForReschedule={openBookingDrawerForReschedule}
+            onSelectAppointment={(apt) => {
+              setSelectedAppointmentForDrawer(apt);
+              setDetailInitialTab("overview");
+              setDetailOpenScribe(false);
+              setIsDetailDrawerOpen(true);
+            }}
+            onOpenAiNote={(apt) => {
+              setSelectedAppointmentForDrawer(apt);
+              setDetailInitialTab("session-notes");
+              setDetailOpenScribe(true);
+              setIsDetailDrawerOpen(true);
+            }}
+            onJoinCall={(apt) => {
+              setJoinPopupAppt(apt);
+            }}
             onBookForDate={(dateStr) => {
               if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
                 toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
@@ -1847,6 +1907,33 @@ export default function Appointments() {
                     );
                   },
                 },
+                {
+                  header: "Mode & Link",
+                  accessorKey: "sessionType",
+                  align: "left",
+                  minWidth: 150,
+                  render: (apt) => {
+                    const online = isOnlineAppointment(apt);
+                    return online ? (
+                      <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setJoinPopupAppt(apt)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+                          title="Open teleconsultation join popup"
+                        >
+                          <Video className="w-3 h-3" />
+                          <span>{getMeetingProviderLabel(apt.meetingProvider)}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">
+                        <Building2 className="w-3 h-3" />
+                        <span>{apt.roomNumber ? `Room ${apt.roomNumber}` : apt.location || "In-Person"}</span>
+                      </span>
+                    );
+                  },
+                },
               ]}
                 getRowId={(apt) => apt.id}
                 onRowClick={(apt) => {
@@ -1856,6 +1943,14 @@ export default function Appointments() {
                 emptyMessage="No appointments found. Adjust your filters or book a new appointment."
                 tableId="appointments-master-table"
                 rowActions={[
+                  {
+                    label: "Join Call",
+                    icon: <Video className="w-3.5 h-3.5 text-blue-600" />,
+                    hidden: (apt) => !isOnlineAppointment(apt) || !apt.meetingUrl,
+                    onClick: (apt) => {
+                      setJoinPopupAppt(apt);
+                    },
+                  },
                   {
                     label: "View Details",
                     icon: <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />,
@@ -1961,6 +2056,12 @@ export default function Appointments() {
           startHour: bookingStartHour,
           startMinute: bookingStartMinute,
           sessionType: sessionType,
+          meetingProvider,
+          meetingUrl,
+          meetingId,
+          meetingPasscode,
+          paymentRequirement,
+          markPaidNow,
           client: selectedClient,
           provider: selectedProvider,
           serviceId: bookingServiceId,
@@ -1982,6 +2083,12 @@ export default function Appointments() {
           if (patch.startHour !== undefined) setBookingStartHour(patch.startHour);
           if (patch.startMinute !== undefined) setBookingStartMinute(patch.startMinute);
           if (patch.sessionType !== undefined) setSessionType(patch.sessionType);
+          if (patch.meetingProvider !== undefined) setMeetingProvider(patch.meetingProvider);
+          if (patch.meetingUrl !== undefined) setMeetingUrl(patch.meetingUrl);
+          if (patch.meetingId !== undefined) setMeetingId(patch.meetingId);
+          if (patch.meetingPasscode !== undefined) setMeetingPasscode(patch.meetingPasscode);
+          if (patch.paymentRequirement !== undefined) setPaymentRequirement(patch.paymentRequirement);
+          if (patch.markPaidNow !== undefined) setMarkPaidNow(patch.markPaidNow);
           if (patch.location !== undefined) setBookingLocation(patch.location);
           if (patch.client !== undefined) setSelectedClient(patch.client);
           if (patch.provider !== undefined) setSelectedProvider(patch.provider as any);
@@ -2027,9 +2134,13 @@ export default function Appointments() {
       {/* Appointment Detail Drawer */}
       <AppointmentDetailDrawer
         isOpen={isDetailDrawerOpen && Boolean(selectedAppointmentForDrawer)}
+        initialTab={detailInitialTab}
+        openScribeOnOpen={detailOpenScribe}
         onClose={() => {
           setIsDetailDrawerOpen(false);
           setSelectedAppointmentForDrawer(null);
+          setDetailInitialTab("overview");
+          setDetailOpenScribe(false);
         }}
         appointment={
           selectedAppointmentForDrawer
@@ -2098,12 +2209,36 @@ export default function Appointments() {
       {/* Ambient AI Scribe Consultation Drawer */}
       <NewConsultationDrawer
         isOpen={showScribeModal}
-        onClose={() => setShowScribeModal(false)}
+        onClose={() => {
+          setShowScribeModal(false);
+          setScribeTargetAppt(null);
+        }}
+        initialClientId={scribeTargetAppt?.clientId ? String(scribeTargetAppt.clientId) : undefined}
+        initialClientName={scribeTargetAppt?.clientName}
         initialEntityType="appointment"
+        initialRecordId={scribeTargetAppt ? String(scribeTargetAppt.id) : undefined}
+        initialAppointmentId={scribeTargetAppt ? String(scribeTargetAppt.id) : undefined}
+        initialAppointmentDate={scribeTargetAppt?.date}
+        initialAttendeeId={scribeTargetAppt?.employeeId ? String(scribeTargetAppt.employeeId) : undefined}
+        initialAttendeeName={scribeTargetAppt?.employeeName}
+        initialProcessId={scribeTargetAppt?.processId}
         zIndex={600}
         onSessionCreated={(session) => {
           setShowScribeModal(false);
+          setScribeTargetAppt(null);
           toast.success(`AI Scribe consultation saved for ${session.clientName || "Appointment"}!`);
+        }}
+      />
+
+      {/* Join Call — AI Scribe Confirm Popup */}
+      <JoinTeleconsultModal
+        appointment={joinPopupAppt}
+        onClose={() => setJoinPopupAppt(null)}
+        onConfirmJoin={(apt, withAiScribe) => {
+          if (withAiScribe) {
+            setScribeTargetAppt(apt as Appointment);
+            setShowScribeModal(true);
+          }
         }}
       />
 

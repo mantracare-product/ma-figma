@@ -28,11 +28,19 @@ import {
   Bot,
   CheckSquare,
   Star,
+  Video,
+  Lock,
 } from "lucide-react";
 import { useTasks, getPersonTaskProgress } from "../../../lib/tasksStore";
 import { CircularProgressRing } from "../../components/ui/CircularProgressRing";
 import { Client, getStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
-import { appointmentService, Appointment } from "../../../lib/appointmentService";
+import {
+  appointmentService,
+  Appointment,
+  isOnlineAppointment,
+  getMeetingProviderLabel,
+  getAppointmentPaymentLockState,
+} from "../../../lib/appointmentService";
 import { invoiceService } from "../../../lib/invoiceService";
 import { ClientInvoice } from "../../types/invoiceTypes";
 import {
@@ -910,26 +918,54 @@ export default function PatientStatusScreen() {
       {/* ── 4. QUICK CLINIC ESSENTIALS ── */}
       <QuietList title="Clinic Essentials">
         {/* Next Appointment Row */}
-        {nextAppt ? (
-          <QuietRow
-            icon={<Calendar className="w-4 h-4" />}
-            iconBg="#eff6ff"
-            iconColor="#2563eb"
-            title={nextAppt.title || nextAppt.serviceName || "Clinical Consultation"}
-            subtitle={`${
-              nextAppt.date
-                ? new Date(nextAppt.date).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })
-                : "Upcoming"
-            } at ${nextAppt.time || "10:30 AM"} • ${
-              nextAppt.employeeName || "Dr. Rajesh Patel"
-            }`}
-            right="View"
-            onClick={() => navigate("/patient/book")}
-          />
-        ) : (
+        {nextAppt ? (() => {
+          const isOnline = isOnlineAppointment(nextAppt);
+          const payLock = getAppointmentPaymentLockState(nextAppt, invoices);
+          return (
+            <QuietRow
+              icon={isOnline ? <Video className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+              iconBg={isOnline ? "#eff6ff" : "#eff6ff"}
+              iconColor={isOnline ? "#1d4ed8" : "#2563eb"}
+              title={nextAppt.title || nextAppt.serviceName || "Clinical Consultation"}
+              subtitle={`${
+                nextAppt.date
+                  ? new Date(nextAppt.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "Upcoming"
+              } at ${nextAppt.time || "10:30 AM"} • ${
+                isOnline ? `Online (${getMeetingProviderLabel(nextAppt.meetingProvider)})` : nextAppt.location || "Clinic Visit"
+              } • ${nextAppt.employeeName || "Clinician"}`}
+              right={
+                isOnline ? (
+                  payLock.isLocked ? (
+                    <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                      <Lock className="w-3 h-3" /> Pay to Join
+                    </span>
+                  ) : nextAppt.meetingUrl ? (
+                    <span className="inline-flex items-center gap-1 text-blue-600 font-semibold">
+                      <Video className="w-3 h-3" /> Join Call
+                    </span>
+                  ) : (
+                    "View"
+                  )
+                ) : (
+                  "View"
+                )
+              }
+              onClick={() => {
+                if (isOnline && payLock.isLocked && payLock.invoice?.id) {
+                  navigate(`/patient/pay?invoiceId=${encodeURIComponent(payLock.invoice.id)}`);
+                } else if (isOnline && nextAppt.meetingUrl) {
+                  window.open(nextAppt.meetingUrl, "_blank", "noopener,noreferrer");
+                } else {
+                  navigate("/patient/book");
+                }
+              }}
+            />
+          );
+        })() : (
           <QuietRow
             icon={<Calendar className="w-4 h-4" />}
             iconBg="#f1f5f9"

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -6,10 +6,24 @@ import {
   Plus,
   Clock,
   User,
-  MoreVertical,
+  Video,
+  Building2,
+  Copy,
+  ExternalLink,
+  Sparkles,
+  Lock,
+  CheckCircle2,
+  CalendarClock,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "../ui/Button";
-import type { Appointment } from "../../../lib/appointmentService";
+import {
+  Appointment,
+  isOnlineAppointment,
+  getMeetingProviderLabel,
+  getAppointmentPaymentLockState,
+} from "../../../lib/appointmentService";
+import { invoiceService } from "../../../lib/invoiceService";
 export type { Appointment };
 
 export interface Employee {
@@ -35,6 +49,9 @@ export interface AppointmentCalendarViewProps {
   employees: Employee[];
   services: Service[];
   openBookingDrawerForReschedule: (apt: Appointment) => void;
+  onSelectAppointment?: (apt: Appointment) => void;
+  onOpenAiNote?: (apt: Appointment) => void;
+  onJoinCall?: (apt: Appointment) => void;
   onBookForDate: (dateStr: string) => void;
   formatDate: (date: Date) => string;
 }
@@ -49,9 +66,17 @@ export default function AppointmentCalendarView({
   employees,
   services,
   openBookingDrawerForReschedule,
+  onSelectAppointment,
+  onOpenAiNote,
+  onJoinCall,
   onBookForDate,
   formatDate,
 }: AppointmentCalendarViewProps) {
+  const [invoices, setInvoices] = useState(() => invoiceService.getInvoices());
+
+  useEffect(() => {
+    return invoiceService.subscribe(setInvoices);
+  }, []);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -194,23 +219,28 @@ export default function AppointmentCalendarView({
                 {/* Appointment Tags */}
                 <div className="space-y-1 my-auto">
                   {dayAppointments.slice(0, 3).map((apt, aptIdx) => {
+                    const isOnline = isOnlineAppointment(apt);
                     const dotColor =
-                      aptIdx % 4 === 0
-                        ? "bg-blue-500"
-                        : aptIdx % 4 === 1
+                      isOnline
+                        ? "bg-blue-600"
+                        : aptIdx % 3 === 0
                         ? "bg-emerald-500"
-                        : aptIdx % 4 === 2
-                        ? "bg-purple-500"
+                        : aptIdx % 3 === 1
+                        ? "bg-slate-600"
                         : "bg-amber-500";
 
                     return (
                       <div
                         key={apt.id}
-                        className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 truncate hover:bg-slate-100"
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 truncate hover:bg-slate-100"
                         style={{ fontFamily: "Outfit, sans-serif" }}
-                        title={`${apt.time} - ${apt.title || apt.clientName}`}
+                        title={`${apt.time} · ${isOnline ? "Online Video" : "In-Person"} · ${apt.title || apt.clientName}`}
                       >
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                        {isOnline ? (
+                          <Video className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                        ) : (
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                        )}
                         <span className="truncate">{apt.title || apt.clientName}</span>
                       </div>
                     );
@@ -289,6 +319,9 @@ export default function AppointmentCalendarView({
             selectedDateAppointments.map((apt) => {
               const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
               const service = services.find((s) => s.id === apt.serviceId);
+              const isOnline = isOnlineAppointment(apt);
+              const providerLabel = getMeetingProviderLabel(apt.meetingProvider);
+              const payLock = getAppointmentPaymentLockState(apt, invoices);
 
               const [hours, minutes] = (apt.time || "09:00").split(":").map(Number);
               const endHour = hours + Math.floor((minutes + (apt.duration || 30)) / 60);
@@ -303,31 +336,59 @@ export default function AppointmentCalendarView({
               return (
                 <div
                   key={apt.id}
-                  onClick={() => openBookingDrawerForReschedule(apt)}
-                  className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer group"
+                  onClick={() =>
+                    onSelectAppointment
+                      ? onSelectAppointment(apt)
+                      : openBookingDrawerForReschedule(apt)
+                  }
+                  className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer group space-y-3"
                 >
-                  {/* Top row: Title + Status Badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h4
-                      className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      {apt.title || service?.name || `Appointment with ${apt.clientName}`}
-                    </h4>
+                  {/* Top row: Title + subtle modality */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4
+                        className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {apt.title || service?.name || `Appointment with ${apt.clientName}`}
+                      </h4>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                        className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 shrink-0"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        ✓ CONFIRMED
+                        {apt.status === "completed" ? "Completed" : apt.status === "cancelled" ? "Cancelled" : "Confirmed"}
                       </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {isOnline ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onJoinCall) {
+                              onJoinCall(apt);
+                            } else if (apt.meetingUrl) {
+                              window.open(apt.meetingUrl, "_blank", "noopener,noreferrer");
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 hover:bg-blue-100 cursor-pointer transition-colors"
+                        >
+                          <Video className="w-2.5 h-2.5" />
+                          <span>Google Meet</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600">
+                          <Building2 className="w-2.5 h-2.5" />
+                          <span>{apt.roomNumber ? `Room ${apt.roomNumber}` : apt.location || "In-Person"}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Details */}
-                  <div className="mt-2.5 space-y-1.5">
-                    {/* Time */}
+                  <div className="space-y-1.5">
                     <div
                       className="flex items-center gap-2 text-xs text-slate-500 font-medium"
                       style={{ fontFamily: "Outfit, sans-serif" }}
@@ -338,7 +399,6 @@ export default function AppointmentCalendarView({
                       </span>
                     </div>
 
-                    {/* Client */}
                     <div
                       className="flex items-center gap-2 text-xs text-slate-700 font-medium"
                       style={{ fontFamily: "Outfit, sans-serif" }}
@@ -349,16 +409,73 @@ export default function AppointmentCalendarView({
                       </span>
                     </div>
 
-                    {/* Provider */}
                     <div
                       className="flex items-center gap-2 text-xs text-slate-500 font-medium"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span>
-                        With: {employee?.name || "Assigned Provider"}
+                        With: {employee?.name || apt.employeeName || "Assigned Provider"}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Quick Actions Bar */}
+                  <div
+                    className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 flex-wrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {isOnline && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onJoinCall) {
+                              onJoinCall(apt);
+                            } else if (apt.meetingUrl) {
+                              window.open(apt.meetingUrl, "_blank", "noopener,noreferrer");
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          <Video className="w-3 h-3" />
+                          <span>Join Call</span>
+                        </button>
+                        {apt.meetingUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(apt.meetingUrl!);
+                              toast.success("Teleconsultation link copied");
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px] font-medium cursor-pointer"
+                            title="Copy meeting link"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {!isOnline && onOpenAiNote && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenAiNote(apt)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px] font-medium cursor-pointer"
+                      >
+                        <span>AI Note</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => openBookingDrawerForReschedule(apt)}
+                      className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 text-[11px] font-medium cursor-pointer"
+                    >
+                      <CalendarClock className="w-3 h-3" />
+                      <span>Reschedule</span>
+                    </button>
                   </div>
                 </div>
               );

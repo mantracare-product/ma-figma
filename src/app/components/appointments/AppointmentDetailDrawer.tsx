@@ -36,9 +36,16 @@ import {
   UserX,
   PanelRightClose,
   PanelRightOpen,
+  Building2,
+  Copy,
+  RefreshCw,
+  Lock,
+  Unlock,
+  CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import JoinTeleconsultModal from "./JoinTeleconsultModal";
 import SessionNotesPanel from "../clinical/SessionNotesPanel";
 import { getSessionNotes, SESSION_NOTES_EVENT } from "../../../lib/sessionNotesStore";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
@@ -62,7 +69,14 @@ import {
 } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, Process, Stage } from "../../../lib/useProcessStore";
-import { appointmentService } from "../../../lib/appointmentService";
+import {
+  appointmentService,
+  isOnlineAppointment,
+  generateTeleconsultMeeting,
+  getMeetingProviderLabel,
+  getAppointmentPaymentLockState,
+  MeetingProvider,
+} from "../../../lib/appointmentService";
 import { getStoredCallLogs, CallLog } from "../../../lib/processLogsStore";
 import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
 import { logStageMove } from "../../../lib/useAutomationStore";
@@ -75,6 +89,8 @@ export interface AppointmentDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   appointment: any;
+  initialTab?: "overview" | "session-notes" | "documents" | "invoices" | "calls";
+  openScribeOnOpen?: boolean;
   onUpdateAppointment?: (updated: any) => void;
   onReschedule?: (appointment: any) => void;
   onMarkComplete?: (id: number | string) => void;
@@ -119,6 +135,8 @@ export default function AppointmentDetailDrawer({
   isOpen,
   onClose,
   appointment,
+  initialTab = "overview",
+  openScribeOnOpen = false,
   onUpdateAppointment,
   onReschedule,
   onMarkComplete,
@@ -142,12 +160,15 @@ export default function AppointmentDetailDrawer({
     return () => window.removeEventListener(SESSION_NOTES_EVENT, onNotesUpdated);
   }, []);
 
-  // Ensure Overview tab is active when drawer opens or appointment changes
+  // Ensure requested tab (or Overview) is active when drawer opens or appointment changes
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("overview");
+      setActiveTab(initialTab || "overview");
+      if (openScribeOnOpen) {
+        setShowScribeModal(true);
+      }
     }
-  }, [isOpen, appointment?.id]);
+  }, [isOpen, appointment?.id, initialTab, openScribeOnOpen]);
 
   // Invoices Sub-drawers & State
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
@@ -181,6 +202,9 @@ export default function AppointmentDetailDrawer({
 
   // AI Scribe Consultation Drawer state
   const [showScribeModal, setShowScribeModal] = useState(false);
+
+  // Join Call popup state (AI Scribe toggle before opening meeting)
+  const [joinPopupAppt, setJoinPopupAppt] = useState<typeof appointment | null>(null);
 
   // Sync with appointmentService in real time
   const [liveAppointment, setLiveAppointment] = useState<ServiceAppointment | undefined>(appointment);
@@ -783,6 +807,17 @@ export default function AppointmentDetailDrawer({
             >
               {formattedApptId.startsWith("#") ? formattedApptId : `#${formattedApptId}`}
             </span>
+            {isOnlineAppointment(effectiveAppt) ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shrink-0">
+                <Video className="w-3 h-3" />
+                <span>Online · {getMeetingProviderLabel(effectiveAppt.meetingProvider)}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 shrink-0">
+                <Building2 className="w-3 h-3" />
+                <span>{effectiveAppt.roomNumber ? `Room ${effectiveAppt.roomNumber}` : effectiveAppt.location || "In-Person"}</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -886,12 +921,141 @@ export default function AppointmentDetailDrawer({
           {activeTab === "overview" && (
             <div className="p-6">
               <div className="flex flex-col lg:flex-row gap-6 items-start relative">
-                {/* LEFT COLUMN: Draggable Sections & Custom Fields */}
+                {/* LEFT COLUMN: Teleconsultation & Modality Card + Draggable Sections */}
                 <motion.div
                   layout
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   className="flex-1 min-w-0 space-y-5 w-full"
                 >
+                  {/* ── Session Mode & Teleconsultation Card ── */}
+                  {(() => {
+                    const isOnline = isOnlineAppointment(effectiveAppt);
+                    const payLock = getAppointmentPaymentLockState(effectiveAppt, invoices);
+                    const activeProvider: MeetingProvider = effectiveAppt.meetingProvider || "google_meet";
+                    const ensureUrl =
+                      effectiveAppt.meetingUrl ||
+                      generateTeleconsultMeeting(activeProvider, effectiveAppt.id).meetingUrl;
+
+                    const applyApptPatch = (patch: Partial<ServiceAppointment>) => {
+                      const updated = appointmentService.updateAppointment(effectiveAppt.id, patch);
+                      if (updated) {
+                        setLiveAppointment(updated);
+                        onUpdateAppointment?.(updated);
+                      }
+                    };
+
+                    const handleSwitchModality = () => {
+                      if (isOnline) {
+                        applyApptPatch({
+                          sessionType: "inPerson",
+                          location: effectiveAppt.location?.toLowerCase() === "online" ? "Main Clinic" : effectiveAppt.location,
+                        });
+                        toast.success("Switched appointment to In-Person");
+                      } else {
+                        const gen = effectiveAppt.meetingUrl
+                          ? {
+                              meetingProvider: activeProvider,
+                              meetingUrl: effectiveAppt.meetingUrl,
+                              meetingId: effectiveAppt.meetingId,
+                              meetingPasscode: effectiveAppt.meetingPasscode,
+                            }
+                          : generateTeleconsultMeeting(activeProvider, effectiveAppt.id);
+                        applyApptPatch({
+                          sessionType: "video",
+                          location: "Online",
+                          ...gen,
+                        });
+                        toast.success("Switched appointment to Online Teleconsultation");
+                      }
+                    };
+
+                    return (
+                      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                isOnline ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {isOnline ? <Video className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-xs font-bold text-slate-900 truncate">
+                                {isOnline ? "Teleconsultation Room" : "In-Person Clinic Visit"}
+                              </h3>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                {isOnline
+                                  ? "Google Meet"
+                                  : effectiveAppt.roomNumber
+                                  ? `Room ${effectiveAppt.roomNumber}${effectiveAppt.roomName ? ` (${effectiveAppt.roomName})` : ""}`
+                                  : effectiveAppt.location || "Physical clinic visit"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleSwitchModality}
+                            className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+                          >
+                            {isOnline ? "Switch to In-Person" : "Switch to Online"}
+                          </button>
+                        </div>
+
+                        {isOnline && (
+                          <div className="space-y-2 pt-2.5 border-t border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setJoinPopupAppt({ ...effectiveAppt, meetingUrl: ensureUrl })}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer"
+                              >
+                                <Video className="w-3.5 h-3.5" />
+                                <span>Join Call</span>
+                                <ExternalLink className="w-3 h-3 opacity-80" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(ensureUrl);
+                                  toast.success("Google Meet link copied");
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium cursor-pointer"
+                                title={ensureUrl}
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy Link</span>
+                              </button>
+                            </div>
+
+                            {payLock.isLocked && (
+                              <p className="text-[11px] text-amber-700 flex items-center gap-1.5">
+                                <Lock className="w-3 h-3 shrink-0" />
+                                <span>
+                                  Payment pending ({payLock.currency}{payLock.amountDue.toFixed(2)}) — client portal join locked.
+                                </span>
+                                {payLock.invoice && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedInvoiceForPayment(payLock.invoice);
+                                      setIsRecordPaymentOpen(true);
+                                    }}
+                                    className="font-semibold underline cursor-pointer shrink-0"
+                                  >
+                                    Mark Paid
+                                  </button>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <DraggableOverviewSections
                     mode="appointment"
                     customFieldsModule="appointment"
@@ -1403,6 +1567,15 @@ export default function AppointmentDetailDrawer({
           onSelectCallId={(targetId) => setSelectedCallId(targetId)}
         />
       )}
+
+      {/* Join Call — AI Scribe Confirm Popup */}
+      <JoinTeleconsultModal
+        appointment={joinPopupAppt}
+        onClose={() => setJoinPopupAppt(null)}
+        onConfirmJoin={(_appt, withAiScribe) => {
+          if (withAiScribe) setShowScribeModal(true);
+        }}
+      />
 
       {/* AI Scribe Consultation Drawer */}
       <NewConsultationDrawer

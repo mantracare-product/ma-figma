@@ -40,6 +40,7 @@ import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
+import JoinTeleconsultModal from "../components/appointments/JoinTeleconsultModal";
 import { appendActivity } from "../../lib/activityEngine";
 import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
 import { ACTIVITY_ENGINE_EVENT } from "../../lib/activityEngine";
@@ -51,7 +52,7 @@ import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
-import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
+import { appointmentService, hasAppointmentAutomation, isOnlineAppointment, getMeetingProviderLabel } from "../../lib/appointmentService";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT, getStoredProcesses, Process } from "../../lib/useProcessStore";
 import DocumentsTab from "../components/profile/DocumentsTab";
@@ -947,6 +948,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [appointmentWorkflowFilter, setAppointmentWorkflowFilter] = useState("all");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>("all");
   const [showScribeModal, setShowScribeModal] = useState(false);
+  const [joinPopupAppt, setJoinPopupAppt] = useState<any | null>(null);
   const [scribeInitialStep, setScribeInitialStep] = useState<"list" | "record">("record");
 
 
@@ -1314,8 +1316,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       notes: activityBookingValues.note || activityBookingValues.description || undefined,
       title: activityBookingValues.title.trim(),
       clientId: String(client.id),
-      location: activityBookingValues.sessionType === "inPerson" ? "In-Person" : "Video Call",
+      location: activityBookingValues.sessionType === "inPerson" ? (activityBookingValues.location || "In-Person") : (activityBookingValues.location || "Online"),
       sessionType: activityBookingValues.sessionType,
+      meetingProvider: activityBookingValues.sessionType === "video" ? activityBookingValues.meetingProvider : undefined,
+      meetingUrl: activityBookingValues.sessionType === "video" ? activityBookingValues.meetingUrl : undefined,
+      meetingId: activityBookingValues.sessionType === "video" ? activityBookingValues.meetingId : undefined,
+      meetingPasscode: activityBookingValues.sessionType === "video" ? activityBookingValues.meetingPasscode : undefined,
+      paymentRequirement: activityBookingValues.sessionType === "video" ? activityBookingValues.paymentRequirement : undefined,
+      markPaidNow: activityBookingValues.sessionType === "video" ? activityBookingValues.markPaidNow : false,
       processId: activityBookingValues.processId,
       stageId: activityBookingValues.stageId,
       generateInvoice: activityBookingValues.generateInvoice ?? hasAppointmentInvoiceAutomation(activityBookingValues.processId || client.processes?.[0]),
@@ -3331,6 +3339,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </span>
                 ),
               },
+              {
+                header: "Mode",
+                accessorKey: "sessionType",
+                align: "left",
+                render: (apt) => {
+                  const online = isOnlineAppointment(apt);
+                  return online ? (
+                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setJoinPopupAppt(apt)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 hover:bg-blue-100 cursor-pointer transition-colors"
+                      >
+                        <Video className="w-3 h-3" />
+                        <span>{getMeetingProviderLabel(apt.meetingProvider)}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">
+                      <MapPin className="w-3 h-3" />
+                      <span>{apt.roomNumber ? `Room ${apt.roomNumber}` : apt.location || "In-Person"}</span>
+                    </span>
+                  );
+                },
+              },
             ];
 
             return (
@@ -3440,6 +3473,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   getRowId={(apt) => apt.id}
                   emptyMessage={clientAppts.length === 0 ? "No appointments yet for this client." : "No appointments match your search."}
                   rowActions={[
+                    {
+                      label: "Join Call",
+                      icon: <Video className="w-3.5 h-3.5 text-blue-600" />,
+                      hidden: (apt: any) => !isOnlineAppointment(apt) || !apt.meetingUrl,
+                      onClick: (apt) => {
+                        setJoinPopupAppt(apt);
+                      },
+                    },
                     {
                       label: "View Details",
                       icon: <Calendar className="w-3.5 h-3.5 text-blue-600" />,
@@ -4436,6 +4477,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             callLogs={getStoredCallLogs()}
             onSelectCallId={(targetId) => {
               setSelectedCallId(targetId);
+            }}
+          />
+
+          {/* Join Call — AI Scribe Confirm Popup */}
+          <JoinTeleconsultModal
+            appointment={joinPopupAppt}
+            onClose={() => setJoinPopupAppt(null)}
+            onConfirmJoin={(_apt, withAiScribe) => {
+              if (withAiScribe) {
+                setScribeInitialStep(1);
+                setShowScribeModal(true);
+              }
             }}
           />
 

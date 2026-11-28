@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   Plus, Trash2, Search, Clock, Check, Briefcase,
   Layers, Building2, MapPin, Navigation,
-  Users, UserCheck, UserPlus, X, CreditCard, ShieldCheck
+  Users, UserCheck, UserPlus, X, CreditCard, ShieldCheck, Video
 } from "lucide-react";
 import DrawerShell from "../ui/DrawerShell";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
@@ -12,6 +12,7 @@ import { SelectFieldsModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import {
   Service, INIT_FORM, addService, updateService, EMPLOYEES, getStoredServices,
+  ServiceDeliveryMode, VideoProviderType,
 } from "../../../lib/servicesStore";
 import { useTeamMembers } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
@@ -102,6 +103,9 @@ export default function ServiceDrawer({
   const [drawerActiveTab, setDrawerActiveTab] = useState<"overview" | "availability">("overview");
   const [availableForAppointment, setAvailableForAppointment] = useState<boolean>(initialAvailableForAppointment);
   const [slotDuration, setSlotDuration] = useState<number>(30);
+  const [deliveryModes, setDeliveryModes] = useState<ServiceDeliveryMode[]>(["inPerson", "video"]);
+  const [defaultVideoProvider, setDefaultVideoProvider] = useState<VideoProviderType>("google_meet");
+  const [requirePaymentForOnlineJoin, setRequirePaymentForOnlineJoin] = useState<boolean>(false);
   const [isPrepaid, setIsPrepaid] = useState<boolean>(false);
   const [prepaidDepositType, setPrepaidDepositType] = useState<"full" | "deposit">("full");
   const [prepaidDepositAmount, setPrepaidDepositAmount] = useState<number>(0);
@@ -226,6 +230,13 @@ export default function ServiceDrawer({
 
     if (mode === "edit" && service) {
       setAvailableForAppointment(service.availableForAppointment ?? true);
+      setDeliveryModes(
+        service.deliveryModes && service.deliveryModes.length > 0
+          ? service.deliveryModes
+          : ["inPerson", "video"]
+      );
+      setDefaultVideoProvider(service.defaultVideoProvider || "google_meet");
+      setRequirePaymentForOnlineJoin(Boolean(service.requirePaymentForOnlineJoin));
       setIsPrepaid(Boolean(service.isPrepaid));
       setPrepaidDepositType(service.prepaidDepositType || "full");
       setPrepaidDepositAmount(service.prepaidDepositAmount ?? service.price ?? 0);
@@ -299,6 +310,9 @@ export default function ServiceDrawer({
       // Add mode
       const isApptAvail = initialAvailableForAppointment;
       setAvailableForAppointment(isApptAvail);
+      setDeliveryModes(["inPerson", "video"]);
+      setDefaultVideoProvider("google_meet");
+      setRequirePaymentForOnlineJoin(false);
       setIsPrepaid(false);
       setPrepaidDepositType("full");
       setPrepaidDepositAmount(0);
@@ -464,6 +478,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        deliveryModes,
+        defaultVideoProvider,
+        requirePaymentForOnlineJoin: deliveryModes.includes("video") ? requirePaymentForOnlineJoin : false,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
@@ -490,6 +507,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        deliveryModes,
+        defaultVideoProvider,
+        requirePaymentForOnlineJoin: deliveryModes.includes("video") ? requirePaymentForOnlineJoin : false,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
@@ -515,6 +535,9 @@ export default function ServiceDrawer({
         tax: Number(fieldValues["tax"]) || 0,
         isActive: true,
         availableForAppointment,
+        deliveryModes,
+        defaultVideoProvider,
+        requirePaymentForOnlineJoin: deliveryModes.includes("video") ? requirePaymentForOnlineJoin : false,
         isPrepaid: availableForAppointment ? isPrepaid : false,
         prepaidDepositType: availableForAppointment && isPrepaid ? prepaidDepositType : "full",
         prepaidDepositAmount: availableForAppointment && isPrepaid ? calculatedDeposit : 0,
@@ -649,6 +672,84 @@ export default function ServiceDrawer({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* ── Consultation Mode & Video Settings ── */}
+        <div className="bg-slate-50/90 border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <Video className="w-3.5 h-3.5 text-blue-600" />
+                <span>Consultation Mode & Telehealth</span>
+              </label>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Choose whether this service is delivered In-Person, via Online Teleconsultation, or both.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: "both", label: "Both Modes", modes: ["inPerson", "video"] as ServiceDeliveryMode[] },
+              { id: "video", label: "Online Only", modes: ["video"] as ServiceDeliveryMode[] },
+              { id: "inPerson", label: "In-Person Only", modes: ["inPerson"] as ServiceDeliveryMode[] },
+            ].map((opt) => {
+              const active =
+                deliveryModes.length === opt.modes.length &&
+                opt.modes.every((m) => deliveryModes.includes(m));
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDeliveryModes(opt.modes)}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    active
+                      ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {deliveryModes.includes("video") && (
+            <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-700">Default Video Platform</span>
+                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">
+                  Google Meet
+                </span>
+              </div>
+
+              <label className="flex items-center justify-between gap-3 pt-1 cursor-pointer">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">
+                    Lock Video Join Until Paid
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Withhold Client Portal "Join Call" button until the linked invoice is settled
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={requirePaymentForOnlineJoin}
+                  onClick={() => setRequirePaymentForOnlineJoin((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    requirePaymentForOnlineJoin ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                      requirePaymentForOnlineJoin ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* ── Prepaid Appointment / Upfront Collection Card ── */}
@@ -887,54 +988,76 @@ export default function ServiceDrawer({
                     </div>
                   </div>
 
-                  {/* Row 2: Room Number & Label */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start pt-1">
-                    <div className="sm:col-span-5 space-y-1">
-                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <Building2 className="w-3 h-3 text-blue-600" />
-                        <span>Room Number</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={rule.roomNumber || ""}
-                        onChange={(e) => handleUpdateRuleField(rule.id, "roomNumber", e.target.value)}
-                        placeholder="e.g. 101, Suite 4B"
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                    </div>
+                  {/* Row 2 & 3: Room details (physical) OR Virtual Telehealth note (Online) */}
+                  {(() => {
+                    const matchedRuleLoc = fullOrgLocations.find(
+                      (l) => l.id === rule.locationId || l.name === rule.locationId
+                    );
+                    const isVirtualLoc =
+                      matchedRuleLoc?.name?.toLowerCase() === "online" ||
+                      matchedRuleLoc?.name?.toLowerCase().includes("virtual") ||
+                      rule.locationId.toLowerCase() === "online";
+                    if (isVirtualLoc) {
+                      return (
+                        <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200/70 flex items-center gap-2.5 text-xs text-blue-900">
+                          <Video className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span>
+                            Virtual Teleconsultation location — Google Meet link will be generated automatically at booking.
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start pt-1">
+                          <div className="sm:col-span-5 space-y-1">
+                            <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <Building2 className="w-3 h-3 text-blue-600" />
+                              <span>Room Number</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={rule.roomNumber || ""}
+                              onChange={(e) => handleUpdateRuleField(rule.id, "roomNumber", e.target.value)}
+                              placeholder="e.g. 101, Suite 4B"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            />
+                          </div>
 
-                    <div className="sm:col-span-7 space-y-1">
-                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <Layers className="w-3 h-3 text-blue-600" />
-                        <span>Label (Name of the room)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={rule.roomName || ""}
-                        onChange={(e) => handleUpdateRuleField(rule.id, "roomName", e.target.value)}
-                        placeholder="e.g. Consultation Room 1"
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                    </div>
-                  </div>
+                          <div className="sm:col-span-7 space-y-1">
+                            <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <Layers className="w-3 h-3 text-blue-600" />
+                              <span>Label (Name of the room)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={rule.roomName || ""}
+                              onChange={(e) => handleUpdateRuleField(rule.id, "roomName", e.target.value)}
+                              placeholder="e.g. Consultation Room 1"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            />
+                          </div>
+                        </div>
 
-                  {/* Row 3: Directions */}
-                  <div className="space-y-1 pt-1">
-                    <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <Navigation className="w-3 h-3 text-blue-600" />
-                      <span>Directions</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={rule.direction || ""}
-                      onChange={(e) => handleUpdateRuleField(rule.id, "direction", e.target.value)}
-                      placeholder="e.g. Ground floor, turn left past main reception desk"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    />
-                  </div>
+                        <div className="space-y-1 pt-1">
+                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <Navigation className="w-3 h-3 text-blue-600" />
+                            <span>Directions</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={rule.direction || ""}
+                            onChange={(e) => handleUpdateRuleField(rule.id, "direction", e.target.value)}
+                            placeholder="e.g. Ground floor, turn left past main reception desk"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   {/* Assign User Section */}
                   <div className="pt-2 border-t border-slate-100 space-y-2 relative">

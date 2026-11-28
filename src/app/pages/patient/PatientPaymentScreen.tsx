@@ -12,10 +12,13 @@ import {
   Loader2,
   Copy,
   Check,
+  Video,
+  ExternalLink,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
 import { invoiceService } from "../../../lib/invoiceService";
+import { appointmentService, isOnlineAppointment, getMeetingProviderLabel } from "../../../lib/appointmentService";
 import { ClientInvoice } from "../../../app/types/invoiceTypes";
 import confetti from "canvas-confetti";
 import QRCode from "qrcode";
@@ -114,6 +117,16 @@ export default function PatientPaymentScreen() {
   const invoiceId = targetInvoice.id;
   const balanceDue = Math.max(0, targetInvoice.total - (targetInvoice.amountPaid || 0)) || targetInvoice.total;
 
+  const linkedOnlineAppt = useMemo(() => {
+    const allAppts = appointmentService.getAppointments();
+    const matched = allAppts.find(
+      (a) =>
+        (targetInvoice.appointmentId && String(a.id) === String(targetInvoice.appointmentId)) ||
+        (a.invoiceId && a.invoiceId === targetInvoice.id)
+    );
+    return matched && isOnlineAppointment(matched) ? matched : null;
+  }, [targetInvoice.id, targetInvoice.appointmentId, paymentDone]);
+
   const upiPayload = `upi://pay?pa=billing@mantracare.com&pn=MantraCare+Health&am=${balanceDue.toFixed(
     2
   )}&cu=USD&tr=${invoiceId}&tn=Portal+Settlement+${invoiceId}`;
@@ -154,6 +167,10 @@ export default function PatientPaymentScreen() {
         "Client Portal Touchless QR Settlement"
       );
 
+      if (result && linkedOnlineAppt?.id) {
+        appointmentService.updateAppointment(linkedOnlineAppt.id, { paymentRequirement: "paid" });
+      }
+
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("mantra_payments_changed"));
         window.dispatchEvent(new Event("mantra_invoices_changed"));
@@ -171,6 +188,10 @@ export default function PatientPaymentScreen() {
       try {
         if (onStageChange) onStageChange("Payment Done");
       } catch {}
+
+      if (result && linkedOnlineAppt?.id) {
+        appointmentService.updateAppointment(linkedOnlineAppt.id, { paymentRequirement: "paid" });
+      }
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: activeClient.id }));
@@ -261,6 +282,31 @@ export default function PatientPaymentScreen() {
                 </span>
               </div>
             </div>
+
+            {linkedOnlineAppt && linkedOnlineAppt.meetingUrl && (
+              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 max-w-md mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <Video className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900">
+                      Teleconsultation Unlocked ({getMeetingProviderLabel(linkedOnlineAppt.meetingProvider)})
+                    </p>
+                    <p className="text-[11px] text-slate-600 truncate">
+                      {linkedOnlineAppt.date} · {linkedOnlineAppt.time}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={linkedOnlineAppt.meetingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 transition-colors"
+                >
+                  <span>Join Call</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button

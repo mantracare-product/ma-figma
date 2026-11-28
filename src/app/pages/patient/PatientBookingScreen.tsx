@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useOutletContext } from "react-router";
+import { useOutletContext, useNavigate } from "react-router";
 import {
   Calendar,
   Clock,
@@ -25,11 +25,22 @@ import {
   QrCode,
   Receipt,
   Loader2,
+  Video,
+  ExternalLink,
+  Copy,
+  Lock,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
-import { appointmentService, Appointment } from "../../../lib/appointmentService";
+import {
+  appointmentService,
+  Appointment,
+  isOnlineAppointment,
+  getMeetingProviderLabel,
+  getAppointmentPaymentLockState,
+} from "../../../lib/appointmentService";
 import { invoiceService } from "../../../lib/invoiceService";
+import type { ClientInvoice } from "../../../app/types/invoiceTypes";
 import confetti from "canvas-confetti";
 import QRCode from "qrcode";
 import { getStoredTeamMembers } from "../../../lib/teamStore";
@@ -54,10 +65,16 @@ interface PortalContext {
 }
 
 export default function PatientBookingScreen() {
+  const navigate = useNavigate();
   const { activeClient } = useOutletContext<PortalContext>();
   const { activeOrganization } = useOrganization();
 
   const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
+  const [invoices, setInvoices] = useState<ClientInvoice[]>(() => invoiceService.getInvoices());
+
+  useEffect(() => {
+    return invoiceService.subscribe(setInvoices);
+  }, []);
 
   // ── 1. Fetch User's Appointments ──
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
@@ -254,7 +271,15 @@ export default function PatientBookingScreen() {
     return services.find((s) => String(s.id) === String(selectedServiceId)) || services[0];
   }, [services, selectedServiceId]);
 
-  const isSelectedServicePrepaid = Boolean(selectedServiceObj?.isPrepaid);
+  const isSelectedLocationOnline = useMemo(() => {
+    const locLower = (selectedLocation || "").toLowerCase();
+    return locLower === "online" || locLower.includes("virtual") || locLower.includes("video");
+  }, [selectedLocation]);
+
+  const isSelectedServicePrepaid = Boolean(
+    selectedServiceObj?.isPrepaid ||
+      (isSelectedLocationOnline && selectedServiceObj?.requirePaymentForOnlineJoin)
+  );
 
   const prepaidAmount = useMemo(() => {
     if (!selectedServiceObj) return 0;
@@ -337,14 +362,43 @@ export default function PatientBookingScreen() {
     return docs;
   }, [selectedServiceObj, selectedLocation, fullOrgLocations, team]);
 
-  // Available locations for current service
+  // Available locations for current service (respects deliveryModes + adds Online virtual option if video is supported)
   const availableLocations = useMemo(() => {
-    if (!selectedServiceObj) return fullOrgLocations;
-    if (!selectedServiceObj.locationIds || selectedServiceObj.locationIds.length === 0) {
-      return fullOrgLocations;
+    const allowOnline = !selectedServiceObj?.deliveryModes || selectedServiceObj.deliveryModes.includes("video");
+    const allowInPerson = !selectedServiceObj?.deliveryModes || selectedServiceObj.deliveryModes.includes("inPerson");
+
+    let base = fullOrgLocations;
+    if (selectedServiceObj?.locationIds && selectedServiceObj.locationIds.length > 0) {
+      const matched = fullOrgLocations.filter((loc) => isServiceEnabledAtLocation(selectedServiceObj, loc));
+      if (matched.length > 0) base = matched;
     }
-    const matched = fullOrgLocations.filter((loc) => isServiceEnabledAtLocation(selectedServiceObj, loc));
-    return matched.length > 0 ? matched : fullOrgLocations;
+
+    const withOnline = allowOnline && !base.some((l) => l.type === "online" || l.name.toLowerCase() === "online")
+      ? [
+          ...base,
+          {
+            id: "loc-online",
+            name: "Online",
+            type: "online" as const,
+            workingHours: base[0]?.workingHours || {
+              monday: { enabled: true, start: "09:00", end: "18:00" },
+              tuesday: { enabled: true, start: "09:00", end: "18:00" },
+              wednesday: { enabled: true, start: "09:00", end: "18:00" },
+              thursday: { enabled: true, start: "09:00", end: "18:00" },
+              friday: { enabled: true, start: "09:00", end: "18:00" },
+              saturday: { enabled: true, start: "09:00", end: "17:00" },
+              sunday: { enabled: false },
+            },
+          },
+        ]
+      : base;
+
+    return withOnline.filter((l) => {
+      const isOnline = l.type === "online" || l.name.toLowerCase() === "online";
+      if (isOnline && !allowOnline) return false;
+      if (!isOnline && !allowInPerson) return false;
+      return true;
+    });
   }, [selectedServiceObj, fullOrgLocations]);
 
   // Auto-sync location if current location is not valid for service
@@ -662,12 +716,15 @@ export default function PatientBookingScreen() {
         ? `${selectedServiceObj?.name || "Consultation"} with ${selectedDoctorObj?.name || "Doctor"}`
         : `${selectedServiceObj?.name || "Consultation"} Consultation`;
 
-      const roomToAssign = allocatedRoom || findRoomForAppointment({
-        serviceId: selectedServiceId,
-        location: selectedLocation,
-        employeeId: assignedEmpId,
-        employeeName: assignedEmpName,
-      });
+      const roomToAssign = !isSelectedLocationOnline
+        ? allocatedRoom ||
+          findRoomForAppointment({
+            serviceId: selectedServiceId,
+            location: selectedLocation,
+            employeeId: assignedEmpId,
+            employeeName: assignedEmpName,
+          })
+        : null;
 
       const createdResult = appointmentService.createAppointment(
         {
@@ -678,6 +735,11 @@ export default function PatientBookingScreen() {
           employeeId: assignedEmpId,
           serviceId: Number(selectedServiceObj?.id) || 1,
           location: selectedLocation,
+          sessionType: isSelectedLocationOnline ? "video" : "inPerson",
+          meetingProvider: isSelectedLocationOnline
+            ? selectedServiceObj?.defaultVideoProvider || "google_meet"
+            : undefined,
+          paymentRequirement: isSelectedServicePrepaid ? "paid" : "bill_after_visit",
           date,
           time: selectedTime,
           duration: selectedServiceObj?.slotDuration || selectedServiceObj?.duration || 30,
@@ -837,11 +899,16 @@ export default function PatientBookingScreen() {
       ) : (
         <div className="space-y-3">
           {displayAppts.map((appt) => {
-            const roomAllocated = findRoomForAppointment({
-              serviceId: appt.serviceId,
-              location: appt.location,
-              employeeId: appt.employeeId,
-            });
+            const isOnline = isOnlineAppointment(appt);
+            const payLock = getAppointmentPaymentLockState(appt, invoices);
+            const providerLabel = getMeetingProviderLabel(appt.meetingProvider);
+            const roomAllocated = !isOnline
+              ? findRoomForAppointment({
+                  serviceId: appt.serviceId,
+                  location: appt.location,
+                  employeeId: appt.employeeId,
+                })
+              : null;
 
             return (
               <div
@@ -850,14 +917,15 @@ export default function PatientBookingScreen() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold tracking-wider uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
-                        {appt.serviceName || (appt.bookingType === "service" ? "Service Visit" : "Consultation")}
-                      </span>
-                      {appt.invoiceId && (
-                        <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 inline-flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" />
-                          Prepaid Paid
+                    <div className="flex items-center gap-2">
+                      {isOnline ? (
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/80 inline-flex items-center gap-1">
+                          <Video className="w-2.5 h-2.5" />
+                          Online
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/80">
+                          In-Clinic
                         </span>
                       )}
                     </div>
@@ -896,23 +964,101 @@ export default function PatientBookingScreen() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{appt.location || "California Branch"}</span>
-                  </div>
+                  {isOnline ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Video className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>Virtual Teleconsultation ({providerLabel})</span>
+                      </div>
+                      {appt.meetingPasscode && !payLock.isLocked && (
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Passcode: <strong className="font-mono text-slate-800">{appt.meetingPasscode}</strong></span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{appt.location || "California Branch"}</span>
+                      </div>
 
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span>
-                      Room:{" "}
-                      <strong className="text-blue-700 font-bold">
-                        {appt.roomNumber ? `Room ${appt.roomNumber}` : roomAllocated ? `Room ${roomAllocated.roomNumber} (${roomAllocated.name})` : "General Station"}
-                      </strong>
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span>
+                          Room:{" "}
+                          <strong className="text-blue-700 font-bold">
+                            {appt.roomNumber ? `Room ${appt.roomNumber}` : roomAllocated ? `Room ${roomAllocated.roomNumber} (${roomAllocated.name})` : "General Station"}
+                          </strong>
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {roomAllocated?.direction && (
+                {/* Online Teleconsultation Join OR Payment Lock CTA */}
+                {isOnline && appt.status !== "cancelled" && appt.status !== "completed" && (
+                  payLock.isLocked ? (
+                    <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-start gap-2 text-amber-900">
+                        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">Payment Required to Unlock Video Call</p>
+                          <p className="text-[11px] text-amber-700 mt-0.5">
+                            Settle {payLock.currency}{payLock.amountDue.toFixed(2)} to reveal your {providerLabel} join button.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            payLock.invoice?.id
+                              ? `/patient/pay?invoiceId=${encodeURIComponent(payLock.invoice.id)}`
+                              : "/patient/pay"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 cursor-pointer transition-colors"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Pay {payLock.currency}{payLock.amountDue.toFixed(2)} &amp; Unlock</span>
+                      </button>
+                    </div>
+                  ) : appt.meetingUrl ? (
+                    <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900">Ready for Teleconsultation</p>
+                        <p className="text-[11px] text-slate-600 truncate font-mono">{appt.meetingUrl}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(appt.meetingUrl!);
+                            toast.success("Video call link copied");
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-blue-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </button>
+                        <a
+                          href={appt.meetingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                          <span>Join Video Call</span>
+                          <ExternalLink className="w-3 h-3 opacity-80" />
+                        </a>
+                      </div>
+                    </div>
+                  ) : null
+                )}
+
+                {!isOnline && roomAllocated?.direction && (
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-start gap-2 text-xs text-slate-600">
                     <Navigation className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
                     <span>
@@ -1136,11 +1282,11 @@ export default function PatientBookingScreen() {
                     )}
                   </div>
 
-                  {/* 3. Location Dropdown (if multiple locations exist) */}
+                  {/* 3. Consultation Mode & Location Dropdown (if multiple locations exist) */}
                   {availableLocations.length > 1 && (
                     <div className="space-y-1.5 relative">
                       <label className="text-[13px] font-semibold text-slate-700 block">
-                        Facility Location
+                        Consultation Mode &amp; Location
                       </label>
                       <button
                         type="button"
@@ -1151,7 +1297,18 @@ export default function PatientBookingScreen() {
                             : "border-slate-200 hover:border-slate-300 shadow-2xs"
                         }`}
                       >
-                        <span className="truncate">{selectedLocation}</span>
+                        <span className="truncate flex items-center gap-2">
+                          {isSelectedLocationOnline ? (
+                            <Video className="w-4 h-4 text-blue-600 shrink-0" />
+                          ) : (
+                            <Building2 className="w-4 h-4 text-slate-500 shrink-0" />
+                          )}
+                          <span>
+                            {isSelectedLocationOnline
+                              ? `Online · Video Consultation (${getMeetingProviderLabel(selectedServiceObj?.defaultVideoProvider)})`
+                              : selectedLocation}
+                          </span>
+                        </span>
                         <ChevronDown
                           className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
                             openDropdown === "location" ? "rotate-180" : ""
@@ -1163,6 +1320,7 @@ export default function PatientBookingScreen() {
                         <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-white border border-slate-100 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100 max-h-60 overflow-y-auto">
                           {availableLocations.map((loc) => {
                             const isSelected = loc.name.toLowerCase() === selectedLocation.toLowerCase();
+                            const locOnline = loc.type === "online" || loc.name.toLowerCase() === "online";
                             return (
                               <button
                                 key={loc.id || loc.name}
@@ -1171,22 +1329,40 @@ export default function PatientBookingScreen() {
                                   setSelectedLocation(loc.name);
                                   setOpenDropdown(null);
                                 }}
-                                className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm transition-all flex items-center cursor-pointer ${
+                                className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm transition-all flex items-center justify-between cursor-pointer ${
                                   isSelected
                                     ? "bg-[#f0f6ff] text-slate-900 font-semibold"
                                     : "text-slate-700 hover:bg-slate-50 font-normal"
                                 }`}
                               >
-                                {isSelected ? (
-                                  <Check className="w-4 h-4 text-blue-600 stroke-[2.5] shrink-0 mr-2.5" />
-                                ) : (
-                                  <span className="w-4 h-4 shrink-0 mr-2.5 invisible" />
+                                <div className="flex items-center min-w-0">
+                                  {isSelected ? (
+                                    <Check className="w-4 h-4 text-blue-600 stroke-[2.5] shrink-0 mr-2.5" />
+                                  ) : (
+                                    <span className="w-4 h-4 shrink-0 mr-2.5 invisible" />
+                                  )}
+                                  <span className="truncate">
+                                    {locOnline ? "Online (Video Consultation)" : loc.name}
+                                  </span>
+                                </div>
+                                {locOnline && (
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded shrink-0">
+                                    Video
+                                  </span>
                                 )}
-                                <span className="truncate">{loc.name}</span>
                               </button>
                             );
                           })}
                         </div>
+                      )}
+
+                      {isSelectedLocationOnline && (
+                        <p className="text-[11px] text-slate-500 flex items-center gap-1.5 px-1 pt-0.5">
+                          <Video className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>
+                            Your {getMeetingProviderLabel(selectedServiceObj?.defaultVideoProvider)} link will appear in Visits once confirmed{isSelectedServicePrepaid ? " & paid" : ""}.
+                          </span>
+                        </p>
                       )}
                     </div>
                   )}

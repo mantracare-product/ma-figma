@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Calendar, Clock, Check, X, Video, MessageCircle, Star, User, MoreVertical, CalendarIcon, XCircle, AlertCircle, Trash2, Sparkles, MapPin, Ticket } from "lucide-react";
+import { Calendar, Clock, Check, X, Video, Building2, Star, User, MoreVertical, CalendarIcon, Trash2, Sparkles, MapPin, Ticket, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { isOnlineAppointment, getMeetingProviderLabel } from "../../../lib/appointmentService";
 
 interface Appointment {
   id: number;
@@ -21,6 +22,10 @@ interface Appointment {
   processId?: string;
   stageId?: string;
   source?: string;
+  location?: string;
+  sessionType?: "video" | "inPerson";
+  meetingProvider?: "google_meet" | "zoom" | "custom";
+  meetingUrl?: string;
   roomName?: string;
   tokenNumber?: string;
   checkedInAt?: string;
@@ -156,19 +161,23 @@ export default function AppointmentCard({
             >
               <User className="w-6 h-6" style={{ color: "#9CA3AF" }} />
             </div>
-            {/* Video/Chat Badge */}
+            {/* Video / In-Person Modality Avatar Badge */}
             <div
               className="absolute flex items-center justify-center"
               style={{
                 width: "16px",
                 height: "16px",
                 borderRadius: "50%",
-                backgroundColor: "#1A73E8",
+                backgroundColor: isOnlineAppointment(appointment) ? "#1A73E8" : "#334155",
                 bottom: "0",
                 left: "0",
               }}
             >
-              <Video className="w-2.5 h-2.5" style={{ color: "#FFFFFF" }} />
+              {isOnlineAppointment(appointment) ? (
+                <Video className="w-2.5 h-2.5" style={{ color: "#FFFFFF" }} />
+              ) : (
+                <Building2 className="w-2.5 h-2.5" style={{ color: "#FFFFFF" }} />
+              )}
             </div>
           </div>
 
@@ -186,14 +195,7 @@ export default function AppointmentCard({
                 {appointment.clientName}
               </span>
               {appointment.source && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  appointment.source.toLowerCase().includes("walk") || appointment.source === "ai_receptionist" || appointment.source === "kiosk"
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : appointment.source.toLowerCase().includes("ma-client") || appointment.source.toLowerCase().includes("portal")
-                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                    : "bg-sky-50 text-sky-700 border border-sky-200"
-                }`}>
-                  <Sparkles className="w-2.5 h-2.5 opacity-75" />
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200/70">
                   {appointment.source === "ai_receptionist" ? "Walked In" : appointment.source}
                 </span>
               )}
@@ -218,8 +220,27 @@ export default function AppointmentCard({
               {service?.name || "Unknown Service"}
             </div>
 
-            {/* Room & Token (if originated or assigned via reception) */}
-            {(appointment.roomName || appointment.tokenNumber) && (
+            {/* Online Teleconsultation vs Room & Token */}
+            {isOnlineAppointment(appointment) ? (
+              <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] font-['Outfit']">
+                <span className="inline-flex items-center gap-1 font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                  <Video className="w-3 h-3" />
+                  Online · {getMeetingProviderLabel(appointment.meetingProvider)}
+                </span>
+                {appointment.meetingUrl && (
+                  <a
+                    href={appointment.meetingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-600 hover:underline"
+                  >
+                    <span>Join Call</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            ) : (appointment.roomName || appointment.tokenNumber) ? (
               <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] font-['Outfit']">
                 {appointment.tokenNumber && (
                   <span className="inline-flex items-center gap-1 font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
@@ -234,7 +255,7 @@ export default function AppointmentCard({
                   </span>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 

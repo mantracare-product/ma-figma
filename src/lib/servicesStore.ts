@@ -8,6 +8,9 @@ const CHANGE_EVENT = "ma_services_changed";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type ServiceDeliveryMode = "inPerson" | "video";
+export type VideoProviderType = "google_meet" | "zoom" | "custom";
+
 export interface Service {
   id: number;
   name: string;
@@ -21,6 +24,9 @@ export interface Service {
   tax?: number;
   isActive: boolean;
   availableForAppointment?: boolean;
+  deliveryModes?: ServiceDeliveryMode[];
+  defaultVideoProvider?: VideoProviderType;
+  requirePaymentForOnlineJoin?: boolean;
   isPrepaid?: boolean;
   prepaidDepositType?: "full" | "deposit";
   prepaidDepositAmount?: number;

@@ -16,6 +16,10 @@ import {
   UserCheck,
   Stethoscope,
   Plus,
+  RefreshCw,
+  Copy,
+  CreditCard,
+  Lock,
 } from "lucide-react";
 import ServiceDrawer from "../services/ServiceDrawer";
 import { getStoredClients } from "../../../lib/clientsStore";
@@ -24,7 +28,13 @@ import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
-import { hasAppointmentAutomation, appointmentService } from "../../../lib/appointmentService";
+import {
+  hasAppointmentAutomation,
+  appointmentService,
+  generateTeleconsultMeeting,
+  MeetingProvider,
+  PaymentRequirementMode,
+} from "../../../lib/appointmentService";
 import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { Link } from "react-router";
@@ -65,6 +75,12 @@ export interface BookingFormValues {
   startHour: number;
   startMinute: number;
   sessionType: "video" | "inPerson";
+  meetingProvider?: MeetingProvider;
+  meetingUrl?: string;
+  meetingId?: string;
+  meetingPasscode?: string;
+  paymentRequirement?: PaymentRequirementMode;
+  markPaidNow?: boolean;
   client: ClientOption | null;
   provider: Employee | null;
   serviceId?: string;
@@ -491,6 +507,8 @@ export default function ScheduleAppointmentDrawer({
       isPrepaid?: boolean;
       prepaidDepositType?: "full" | "deposit";
       prepaidDepositAmount?: number;
+      defaultVideoProvider?: MeetingProvider;
+      requirePaymentForOnlineJoin?: boolean;
       assignedEmployees?: (number | string)[];
       locationIds?: string[];
       maxSeats?: number;
@@ -516,6 +534,8 @@ export default function ScheduleAppointmentDrawer({
               isPrepaid: s.isPrepaid,
               prepaidDepositType: s.prepaidDepositType,
               prepaidDepositAmount: s.prepaidDepositAmount,
+              defaultVideoProvider: s.defaultVideoProvider,
+              requirePaymentForOnlineJoin: s.requirePaymentForOnlineJoin,
               assignedEmployees: s.assignedEmployees,
               locationIds: s.locationIds,
               maxSeats: s.maxSeats,
@@ -1087,16 +1107,32 @@ export default function ScheduleAppointmentDrawer({
     }));
   }, [currentBookingType, serviceModeSlots, generatedSlots]);
 
-  // Auto-sync sessionType with location (online/virtual -> video, physical branch -> inPerson)
+  // Auto-sync sessionType & default teleconsultation meeting URL with location
   useEffect(() => {
     if (values.location) {
-      const isOnline = values.location.toLowerCase() === "online" || values.location.toLowerCase().includes("virtual");
+      const isOnline =
+        values.location.toLowerCase() === "online" ||
+        values.location.toLowerCase().includes("virtual") ||
+        values.location.toLowerCase().includes("video");
       const expectedSessionType = isOnline ? "video" : "inPerson";
+      const patch: Partial<BookingFormValues> = {};
       if (values.sessionType !== expectedSessionType) {
-        onChange({ sessionType: expectedSessionType });
+        patch.sessionType = expectedSessionType;
+      }
+      if (expectedSessionType === "video" && !values.meetingUrl) {
+        const srv = allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+        const prov = values.meetingProvider || srv?.defaultVideoProvider || "google_meet";
+        const gen = generateTeleconsultMeeting(prov);
+        patch.meetingProvider = gen.meetingProvider;
+        patch.meetingUrl = gen.meetingUrl;
+        patch.meetingId = gen.meetingId;
+        patch.meetingPasscode = gen.meetingPasscode;
+      }
+      if (Object.keys(patch).length > 0) {
+        onChange(patch);
       }
     }
-  }, [values.location, values.sessionType]);
+  }, [values.location, values.sessionType, values.meetingUrl, values.serviceId]);
 
   // Auto-select first available slot if current slot is invalid or not in active slots
   useEffect(() => {
@@ -1136,10 +1172,31 @@ export default function ScheduleAppointmentDrawer({
         }
       }
 
+      const requiresUpfront = Boolean(srv.isPrepaid || srv.requirePaymentForOnlineJoin);
+      const nextVideoProvider = values.meetingProvider || srv.defaultVideoProvider || "google_meet";
+      const meetingPatch =
+        values.sessionType === "video"
+          ? values.meetingUrl
+            ? {}
+            : generateTeleconsultMeeting(nextVideoProvider)
+          : {};
+
       onChange({
-        serviceId: String(srv.id), serviceName: srv.name,
+        serviceId: String(srv.id),
+        serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
-        generateInvoice: (srv as any).isPrepaid ? true : (values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId)),
+        generateInvoice: requiresUpfront
+          ? true
+          : values.generateInvoice !== undefined
+          ? values.generateInvoice
+          : hasAppointmentInvoiceAutomation(values.processId),
+        paymentRequirement: requiresUpfront
+          ? values.markPaidNow
+            ? "paid"
+            : "require_before_join"
+          : values.paymentRequirement || "bill_after_visit",
+        meetingProvider: nextVideoProvider,
+        ...meetingPatch,
         lineItems: [li],
         provider: nextProvider,
       });
@@ -1149,14 +1206,27 @@ export default function ScheduleAppointmentDrawer({
   };
 
   const handleLocationSelect = (locName: string) => {
-    const isOnline = locName.toLowerCase() === "online";
+    const isOnline =
+      locName.toLowerCase() === "online" ||
+      locName.toLowerCase().includes("virtual") ||
+      locName.toLowerCase().includes("video");
+    const srv = allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+    const prov = values.meetingProvider || srv?.defaultVideoProvider || "google_meet";
+    const generated = isOnline && !values.meetingUrl ? generateTeleconsultMeeting(prov) : {};
+
     const patch: Partial<BookingFormValues> = {
       location: locName,
       sessionType: isOnline ? "video" : "inPerson",
+      ...(isOnline ? { meetingProvider: prov, ...generated } : {}),
     };
 
+    if (isOnline && (srv?.requirePaymentForOnlineJoin || srv?.isPrepaid) && !values.paymentRequirement) {
+      patch.paymentRequirement = "require_before_join";
+      patch.generateInvoice = true;
+    }
+
     // Auto-adjust provider if not valid for location
-    if (locName && locName.toLowerCase() !== "online" && values.provider) {
+    if (locName && !isOnline && values.provider) {
       const validEmps = availableEmployeesForServiceAndLocation;
       const isValid = validEmps.some((e) => String(e.id) === String(values.provider?.id) || e.name.toLowerCase() === values.provider?.name?.toLowerCase());
       if (!isValid && validEmps.length > 0) {
@@ -1165,6 +1235,30 @@ export default function ScheduleAppointmentDrawer({
     }
 
     onChange(patch);
+  };
+
+  const handleSessionModeToggle = (targetMode: "video" | "inPerson") => {
+    if (targetMode === "video") {
+      const onlineLoc =
+        filteredLocations.find((l) => l.type === "online" || l.name.toLowerCase() === "online") ||
+        orgLocations.find((l) => l.type === "online" || l.name.toLowerCase() === "online");
+      handleLocationSelect(onlineLoc?.name || "Online");
+    } else {
+      const physicalLoc =
+        filteredLocations.find((l) => l.type !== "online" && l.name.toLowerCase() !== "online") ||
+        orgLocations.find((l) => l.type !== "online" && l.name.toLowerCase() !== "online");
+      handleLocationSelect(physicalLoc?.name || "Main Clinic — Suite 400");
+    }
+  };
+
+  const handleVideoProviderChange = (prov: MeetingProvider) => {
+    const gen = generateTeleconsultMeeting(prov);
+    onChange({
+      meetingProvider: gen.meetingProvider,
+      meetingUrl: gen.meetingUrl,
+      meetingId: gen.meetingId,
+      meetingPasscode: gen.meetingPasscode,
+    });
   };
 
   const handleClientSelect = (clientId: string) => {
@@ -1215,15 +1309,14 @@ export default function ScheduleAppointmentDrawer({
   ];
 
   const locationOptions: DropdownOption[] = [
-    { value: "", label: "Select a location" },
-    ...filteredLocations.map((loc) => {
-      const isOnline = loc.type === "online" || loc.name.toLowerCase() === "online";
-      return {
+    { value: "", label: "Select clinic branch" },
+    ...filteredLocations
+      .filter((loc) => loc.type !== "online" && loc.name.toLowerCase() !== "online")
+      .map((loc) => ({
         value: loc.name,
         label: loc.name,
-        meta: isOnline ? "Online (Video Call)" : (loc.address || "In-Person Clinic"),
-      };
-    }),
+        meta: loc.address || "In-Person Clinic",
+      })),
   ];
 
   const handleSaveClick = () => {
@@ -1329,19 +1422,131 @@ export default function ScheduleAppointmentDrawer({
         </SectionCard>
 
         {/* ================================================================ */}
-        {/* SECTION 2 — LOCATION                                             */}
+        {/* SECTION 2 — SESSION MODE & LOCATION                              */}
         {/* ================================================================ */}
         <SectionCard>
-          <SectionHeader title="2. Location" />
-          <div className="p-3">
-            <FieldRow label="Select Location" required>
-              <CustomDropdown
-                value={values.location || ""}
-                options={locationOptions}
-                placeholder="Select location (Clinic branch or Online)"
-                onChange={handleLocationSelect}
-              />
-            </FieldRow>
+          <SectionHeader title="2. Session Mode & Location" />
+          <div className="p-3 space-y-3">
+            {/* Explicit Offline vs Online Segmented Switcher */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSessionModeToggle("inPerson")}
+                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  values.sessionType === "inPerson"
+                    ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                    : "bg-slate-50/70 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-900"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>In-Person (Offline)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSessionModeToggle("video")}
+                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  values.sessionType === "video"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                    : "bg-slate-50/70 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-900"
+                }`}
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span>Online (Teleconsultation)</span>
+              </button>
+            </div>
+
+            {values.sessionType === "inPerson" && (
+              <FieldRow label="Location" required>
+                <CustomDropdown
+                  value={values.location || ""}
+                  options={locationOptions}
+                  placeholder="Select clinic branch"
+                  onChange={handleLocationSelect}
+                />
+              </FieldRow>
+            )}
+
+            {/* Teleconsultation Video Link & Payment Gate Settings */}
+            {values.sessionType === "video" && (
+              <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/80 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5 text-blue-600" />
+                    Teleconsultation Room
+                  </span>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200/60">
+                    Google Meet
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={values.meetingUrl || ""}
+                    onChange={(e) => onChange({ meetingUrl: e.target.value })}
+                    placeholder="https://meet.google.com/..."
+                    className="flex-1 min-w-0 px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleVideoProviderChange(values.meetingProvider || "google_meet")}
+                    className="p-1.5 rounded-lg bg-white border border-blue-200 text-slate-600 hover:text-blue-700 hover:bg-blue-50 cursor-pointer shrink-0"
+                    title="Regenerate Meeting Link"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (values.meetingUrl) {
+                        navigator.clipboard?.writeText(values.meetingUrl);
+                        toast.success("Meeting link copied");
+                      }
+                    }}
+                    className="p-1.5 rounded-lg bg-white border border-blue-200 text-slate-600 hover:text-blue-700 hover:bg-blue-50 cursor-pointer shrink-0"
+                    title="Copy Link"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {mode !== "reschedule" && (
+                  <div className="pt-2 border-t border-blue-200/70">
+                    <FieldRow label="Payment & Join Link Gating">
+                      <CustomDropdown
+                        value={values.paymentRequirement || (values.generateInvoice ? "require_before_join" : "bill_after_visit")}
+                        placeholder="Select payment policy"
+                        options={[
+                          {
+                            value: "bill_after_visit",
+                            label: "Bill After Visit",
+                            meta: "Join link open · invoice later",
+                          },
+                          {
+                            value: "require_before_join",
+                            label: "Require Payment Before Join",
+                            meta: "Send invoice · lock portal join until paid",
+                          },
+                          {
+                            value: "paid",
+                            label: "Paid Now",
+                            meta: "Mark invoice settled & unlock join",
+                          },
+                        ]}
+                        onChange={(val) => {
+                          const policy = val as "require_before_join" | "paid" | "bill_after_visit";
+                          onChange({
+                            paymentRequirement: policy,
+                            generateInvoice: policy !== "bill_after_visit",
+                            markPaidNow: policy === "paid",
+                          });
+                        }}
+                      />
+                    </FieldRow>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </SectionCard>
 
@@ -1436,7 +1641,7 @@ export default function ScheduleAppointmentDrawer({
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   Select a service above to view available time slots.
                 </div>
-              ) : !values.location ? (
+              ) : !values.location && values.sessionType === "inPerson" ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   Select a location above to view available time slots.
                 </div>
