@@ -247,7 +247,7 @@ export default function WebsiteChannelDrawer({
       setName(channel.name || channel.botName || "");
       setHeadline(channel.botSubtitle || channel.description || "Online · Ready to help");
       setScriptKey(channel.scriptKey || generateWebsiteScriptKey());
-      setAllowedWebsites(channel.allowedWebsites || []);
+      setAllowedWebsites((channel.allowedWebsites || []).slice(0, 1));
       setBotAvatar(channel.botAvatar || "");
       setWelcomeMessage(channel.welcomeMessage || DEFAULT_WIDGET_CONFIG.welcomeMessage);
       setThemeColor(channel.themeColor || DEFAULT_WIDGET_CONFIG.themeColor);
@@ -339,8 +339,8 @@ export default function WebsiteChannelDrawer({
   const handleAddSite = () => {
     const raw = newSiteUrl.trim();
     if (!raw) return;
-    if (allowedWebsites.length >= 20) {
-      toast.error("Maximum of 20 allowed websites reached");
+    if (allowedWebsites.length >= 1) {
+      toast.error("Only 1 allowed website can be added per channel");
       return;
     }
     const normalized = /^https?:\/\//i.test(raw) ? raw.replace(/\/+$/, "") : `https://${raw.replace(/\/+$/, "")}`;
@@ -389,7 +389,7 @@ export default function WebsiteChannelDrawer({
       name: trimmedName,
       description: trimmedHeadline,
       scriptKey,
-      allowedWebsites,
+      allowedWebsites: allowedWebsites.slice(0, 1),
       themeColor,
       themeMode,
       botName: trimmedName,
@@ -978,18 +978,40 @@ export default function WebsiteChannelDrawer({
                     <option value="human">Human Team Member</option>
                   </select>
                 </div>
+              </div>
+            )}
+          </div>
 
-                {/* Team Members + Custom Photo/Avatar Upload */}
-                <div className="space-y-2.5 pt-1 border-t border-slate-100">
-                  <div className="flex items-center justify-between pt-2">
-                    <div>
-                      <span className="text-[13px] font-medium text-slate-700 block">
-                        Team members
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        Assign team members to this channel and customize their chat photo or avatar.
-                      </span>
-                    </div>
+          {/* ── SECTION 5: TEAM MEMBERS ── */}
+          <div className={`border rounded-lg bg-white transition-colors ${openSection === 5 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
+            <button
+              type="button"
+              onClick={() => handleToggleSection(5)}
+              className={`w-full flex items-center justify-between p-4 transition-colors text-left cursor-pointer ${
+                openSection === 5 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
+              }`}
+            >
+              <span className="text-sm font-bold text-slate-900">5. Team Members</span>
+              <div className="flex items-center gap-2">
+                {agentQueue.length > 0 && <Check className="w-4 h-4 text-emerald-600" />}
+                {openSection === 5 ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </div>
+            </button>
+
+            {openSection === 5 && (
+              <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+                <div className="space-y-2.5">
+                  <div>
+                    <span className="text-[13px] font-medium text-slate-700 block">
+                      Team members
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Assign team members to this channel and customize their chat photo or avatar.
+                    </span>
                   </div>
 
                   <div className="relative" ref={teamDropdownRef}>
@@ -1182,211 +1204,7 @@ export default function WebsiteChannelDrawer({
             )}
           </div>
 
-          {/* ── SECTION 5: AUTO WELCOME MESSAGE ── */}
-          <div className={`border rounded-lg bg-white transition-colors ${openSection === 5 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
-            <button
-              type="button"
-              onClick={() => handleToggleSection(5)}
-              className={`w-full flex items-center justify-between p-4 transition-colors text-left cursor-pointer ${
-                openSection === 5 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
-              }`}
-            >
-              <span className="text-sm font-bold text-slate-900">5. Auto Welcome Message</span>
-              <div className="flex items-center gap-2">
-                {autoWelcomeMode !== "off" && <Check className="w-4 h-4 text-emerald-600" />}
-                {openSection === 5 ? (
-                  <ChevronUp className="w-4 h-4 text-slate-400" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
-                )}
-              </div>
-            </button>
-
-            {openSection === 5 && (
-              <div className="px-4 py-4 border-t border-slate-100 space-y-4">
-                <div>
-                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                    <span>Welcome message show mode</span>
-                  </label>
-                  <select
-                    value={autoWelcomeMode}
-                    onChange={(e) =>
-                      setAutoWelcomeMode(e.target.value as "all" | "selected" | "off")
-                    }
-                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
-                  >
-                    <option value="all">On all pages</option>
-                    <option value="selected">Only on selected pages</option>
-                    <option value="off">Off</option>
-                  </select>
-                </div>
-
-                {autoWelcomeMode !== "off" && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                        <span>Welcome message</span>
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={welcomeMessage}
-                        onChange={(e) => setWelcomeMessage(e.target.value)}
-                        placeholder="Hello! Welcome to Mantra Health. How can we assist you today?"
-                        className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                        <span>Show delay</span>
-                        <InfoTip text="Delay before the launcher welcome message pops up for visitors." />
-                      </label>
-                      <select
-                        value={autoWelcomeDelay}
-                        onChange={(e) =>
-                          setAutoWelcomeDelay(
-                            e.target.value as "immediate" | "3s" | "5s" | "10s" | "30s"
-                          )
-                        }
-                        className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
-                      >
-                        <option value="immediate">Show immediately</option>
-                        <option value="3s">After 3 seconds</option>
-                        <option value="5s">After 5 seconds</option>
-                        <option value="10s">After 10 seconds</option>
-                        <option value="30s">After 30 seconds</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                        <span>Except these pages</span>
-                        <InfoTip text="Pages matching these URLs or paths, and pages with individually configured messages, will not auto-open the default welcome bubble." />
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={newExcludedPage}
-                          onChange={(e) => setNewExcludedPage(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddExcludedPage();
-                            }
-                          }}
-                          placeholder="http://example.com/dir/page"
-                          className="flex-1 h-10 px-3 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#1456f0]"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddExcludedPage}
-                          className="h-10 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-[#1456f0] flex items-center gap-1 cursor-pointer shrink-0"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
-                        </button>
-                      </div>
-                      {autoWelcomeExcludedPages.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {autoWelcomeExcludedPages.map((pg) => (
-                            <span
-                              key={pg}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-200 bg-white text-[11px] font-mono text-slate-700"
-                            >
-                              <span className="truncate max-w-[220px]">{pg}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setAutoWelcomeExcludedPages((prev) =>
-                                    prev.filter((item) => item !== pg)
-                                  )
-                                }
-                                className="text-slate-400 hover:text-red-500 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200/70 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center text-[13px] font-medium text-slate-700">
-                          <span>Custom welcome messages</span>
-                          <InfoTip text="Show a tailored greeting message when visitors land on specific page URLs or paths." />
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleAddCustomWelcome}
-                          className="text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer"
-                        >
-                          + Add welcome message
-                        </button>
-                      </div>
-
-                      {customWelcomeMessages.length > 0 && (
-                        <div className="space-y-2">
-                          {customWelcomeMessages.map((item) => (
-                            <div
-                              key={item.id}
-                              className="p-3 rounded-lg border border-slate-200 bg-slate-50/40 space-y-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={item.pagePattern}
-                                  onChange={(e) =>
-                                    setCustomWelcomeMessages((prev) =>
-                                      prev.map((m) =>
-                                        m.id === item.id
-                                          ? { ...m, pagePattern: e.target.value }
-                                          : m
-                                      )
-                                    )
-                                  }
-                                  placeholder="/pricing or https://example.com/pricing"
-                                  className="flex-1 h-9 px-3 text-xs rounded-lg border border-slate-200 bg-white text-slate-900"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCustomWelcomeMessages((prev) =>
-                                      prev.filter((m) => m.id !== item.id)
-                                    )
-                                  }
-                                  className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer"
-                                  title="Remove custom welcome message"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={item.message}
-                                onChange={(e) =>
-                                  setCustomWelcomeMessages((prev) =>
-                                    prev.map((m) =>
-                                      m.id === item.id ? { ...m, message: e.target.value } : m
-                                    )
-                                  )
-                                }
-                                placeholder="Page-specific welcome greeting..."
-                                className="w-full h-9 px-3 text-xs rounded-lg border border-slate-200 bg-white text-slate-900"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── SECTION 6: INSTALLATION & EMBED SCRIPT (AT THE BOTTOM) ── */}
+          {/* ── SECTION 6: AUTO WELCOME MESSAGE ── */}
           <div className={`border rounded-lg bg-white transition-colors ${openSection === 6 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
             <button
               type="button"
@@ -1395,9 +1213,9 @@ export default function WebsiteChannelDrawer({
                 openSection === 6 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
               }`}
             >
-              <span className="text-sm font-bold text-slate-900">6. Installation &amp; Embed Script</span>
+              <span className="text-sm font-bold text-slate-900">6. Auto Welcome Message</span>
               <div className="flex items-center gap-2">
-                {scriptKey && <Check className="w-4 h-4 text-emerald-600" />}
+                {Boolean(welcomeMessage.trim()) && <Check className="w-4 h-4 text-emerald-600" />}
                 {openSection === 6 ? (
                   <ChevronUp className="w-4 h-4 text-slate-400" />
                 ) : (
@@ -1407,6 +1225,66 @@ export default function WebsiteChannelDrawer({
             </button>
 
             {openSection === 6 && (
+              <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+                <div>
+                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                    <span>Welcome message</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={welcomeMessage}
+                    onChange={(e) => setWelcomeMessage(e.target.value)}
+                    placeholder="Hello! Welcome to Mantra Health. How can we assist you today?"
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                    <span>Show delay</span>
+                    <InfoTip text="Delay before the launcher welcome message pops up for visitors." />
+                  </label>
+                  <select
+                    value={autoWelcomeDelay}
+                    onChange={(e) =>
+                      setAutoWelcomeDelay(
+                        e.target.value as "immediate" | "3s" | "5s" | "10s" | "30s"
+                      )
+                    }
+                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
+                  >
+                    <option value="immediate">Show immediately</option>
+                    <option value="3s">After 3 seconds</option>
+                    <option value="5s">After 5 seconds</option>
+                    <option value="10s">After 10 seconds</option>
+                    <option value="30s">After 30 seconds</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── SECTION 7: INSTALLATION & EMBED SCRIPT (AT THE BOTTOM) ── */}
+          <div className={`border rounded-lg bg-white transition-colors ${openSection === 7 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
+            <button
+              type="button"
+              onClick={() => handleToggleSection(7)}
+              className={`w-full flex items-center justify-between p-4 transition-colors text-left cursor-pointer ${
+                openSection === 7 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
+              }`}
+            >
+              <span className="text-sm font-bold text-slate-900">7. Installation &amp; Embed Script</span>
+              <div className="flex items-center gap-2">
+                {scriptKey && <Check className="w-4 h-4 text-emerald-600" />}
+                {openSection === 7 ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </div>
+            </button>
+
+            {openSection === 7 && (
               <div className="px-4 py-4 border-t border-slate-100 space-y-4">
                 {/* Embed Script Card */}
                 <div className="p-3.5 border border-slate-200 rounded-xl bg-slate-50/40 space-y-2.5">
@@ -1441,11 +1319,11 @@ export default function WebsiteChannelDrawer({
                   </div>
                 </div>
 
-                {/* Allowed Websites Card */}
+                {/* Allowed Website Card (Max 1 website) */}
                 <div className="p-3.5 border border-slate-200 rounded-xl bg-white space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900">Allowed websites</h4>
+                      <h4 className="text-xs font-bold text-slate-900">Allowed website</h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         Restrict where this chat can load, such as https://clinic.com.
                       </p>
@@ -1456,38 +1334,38 @@ export default function WebsiteChannelDrawer({
                         <span>{allowedWebsites.length} allowed</span>
                       </span>
                       <span className="text-[11px] font-mono text-slate-400">
-                        {allowedWebsites.length}/20
+                        {allowedWebsites.length}/1
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="url"
-                      value={newSiteUrl}
-                      onChange={(e) => setNewSiteUrl(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddSite();
-                        }
-                      }}
-                      placeholder="https://clinic.com"
-                      className="flex-1 h-9 px-3 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddSite}
-                      className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add site</span>
-                    </button>
-                  </div>
-
-                  {allowedWebsites.length > 0 && (
+                  {allowedWebsites.length === 0 ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={newSiteUrl}
+                        onChange={(e) => setNewSiteUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddSite();
+                          }
+                        }}
+                        placeholder="https://clinic.com"
+                        className="flex-1 h-9 px-3 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSite}
+                        className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add site</span>
+                      </button>
+                    </div>
+                  ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {allowedWebsites.map((site) => (
+                      {allowedWebsites.slice(0, 1).map((site) => (
                         <span
                           key={site}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-mono text-slate-700"
@@ -1896,59 +1774,57 @@ export default function WebsiteChannelDrawer({
                       position.endsWith("left") ? "flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {autoWelcomeMode !== "off" && (
-                      <div
-                        onClick={() => setPreviewExpanded(true)}
-                        className={`relative w-[220px] rounded-xl border p-2.5 shadow-md cursor-pointer transition-all animate-in fade-in zoom-in-95 duration-150 ${
-                          themeMode === "dark"
-                            ? "bg-slate-900 text-white"
-                            : "bg-white text-slate-900"
+                    <div
+                      onClick={() => setPreviewExpanded(true)}
+                      className={`relative w-[220px] rounded-xl border p-2.5 shadow-md cursor-pointer transition-all animate-in fade-in zoom-in-95 duration-150 ${
+                        themeMode === "dark"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-900"
+                      }`}
+                      style={{ borderColor: themeColor }}
+                    >
+                      {/* Pointer caret toward launcher icon */}
+                      <span
+                        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rotate-45 ${
+                          themeMode === "dark" ? "bg-slate-900" : "bg-white"
+                        } ${
+                          position.endsWith("left")
+                            ? "-left-[6px] border-l border-b"
+                            : "-right-[6px] border-r border-t"
                         }`}
                         style={{ borderColor: themeColor }}
-                      >
-                        {/* Pointer caret toward launcher icon */}
-                        <span
-                          className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rotate-45 ${
-                            themeMode === "dark" ? "bg-slate-900" : "bg-white"
-                          } ${
-                            position.endsWith("left")
-                              ? "-left-[6px] border-l border-b"
-                              : "-right-[6px] border-r border-t"
-                          }`}
-                          style={{ borderColor: themeColor }}
-                        />
-                        <div className="relative flex items-start gap-2.5">
-                          <div
-                            className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0 border border-slate-200/70"
-                            style={{ backgroundColor: botAvatar ? "#ffffff" : themeColor }}
-                          >
-                            {botAvatar ? (
-                              <img
-                                src={botAvatar}
-                                alt={name || "Chatbot"}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span>{botInitials}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1 pr-3">
-                            <div className="text-[11px] font-bold truncate">
-                              {name.trim() || "Website Chat"}
-                            </div>
-                            <p
-                              className={`text-[10px] leading-snug mt-0.5 line-clamp-3 ${
-                                themeMode === "dark" ? "text-slate-300" : "text-slate-600"
-                              }`}
-                            >
-                              {welcomeMessage.trim() ||
-                                "Hello! Welcome to Mantra Health. How can we assist you today?"}
-                            </p>
-                          </div>
-                          <X className="w-3 h-3 text-slate-400 shrink-0 absolute top-0 right-0" />
+                      />
+                      <div className="relative flex items-start gap-2.5">
+                        <div
+                          className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0 border border-slate-200/70"
+                          style={{ backgroundColor: botAvatar ? "#ffffff" : themeColor }}
+                        >
+                          {botAvatar ? (
+                            <img
+                              src={botAvatar}
+                              alt={name || "Chatbot"}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span>{botInitials}</span>
+                          )}
                         </div>
+                        <div className="min-w-0 flex-1 pr-3">
+                          <div className="text-[11px] font-bold truncate">
+                            {name.trim() || "Website Chat"}
+                          </div>
+                          <p
+                            className={`text-[10px] leading-snug mt-0.5 line-clamp-3 ${
+                              themeMode === "dark" ? "text-slate-300" : "text-slate-600"
+                            }`}
+                          >
+                            {welcomeMessage.trim() ||
+                              "Hello! Welcome to Mantra Health. How can we assist you today?"}
+                          </p>
+                        </div>
+                        <X className="w-3 h-3 text-slate-400 shrink-0 absolute top-0 right-0" />
                       </div>
-                    )}
+                    </div>
 
                     <button
                       type="button"

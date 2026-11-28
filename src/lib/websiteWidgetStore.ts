@@ -190,7 +190,6 @@ export const DEFAULT_WEBSITE_CHANNELS: WebsiteChannel[] = [
     scriptKey: "wk_38go25p7JGrVmndXVS00ACjB",
     allowedWebsites: [
       "https://widget-test-lyart-beta.vercel.app",
-      "https://widget-test-4h2cfeda3-mantra-care-mantra-assist.vercel.app",
     ],
     isActive: true,
     createdAt: "2026-11-18",
