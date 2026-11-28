@@ -41,6 +41,8 @@ export interface WebsiteWidgetConfig {
 
   // Pre-chat form & requirement labels
   enablePreChatForm: boolean;
+  preChatTiming?: "before_chat" | "after_first_message";
+  showOnlineMembers?: boolean;
   formFields: {
     name: boolean;
     email: boolean;
@@ -134,6 +136,8 @@ export const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
   includePages: ["/pricing", "/contact", "/services/*"],
 
   enablePreChatForm: true,
+  preChatTiming: "after_first_message",
+  showOnlineMembers: true,
   formFields: {
     name: true,
     email: true,

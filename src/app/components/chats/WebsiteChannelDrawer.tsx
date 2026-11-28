@@ -35,11 +35,14 @@ import {
   Stethoscope,
   Trash2,
   Upload,
+  Users,
   X,
   Zap,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
+import { getStoredTeamMembers, TeamMember } from "../../../lib/teamStore";
+import { useOrganization } from "../../context/OrganizationContext";
 import {
   WebsiteChannel,
   DEFAULT_WIDGET_CONFIG,
@@ -160,6 +163,10 @@ export default function WebsiteChannelDrawer({
 
   // ── 4. Pre-chat & Routing ──
   const [enablePreChatForm, setEnablePreChatForm] = useState(true);
+  const [preChatTiming, setPreChatTiming] = useState<"before_chat" | "after_first_message">(
+    "after_first_message"
+  );
+  const [showOnlineMembers, setShowOnlineMembers] = useState(true);
   const [formFields, setFormFields] = useState({
     name: true,
     email: true,
@@ -167,6 +174,22 @@ export default function WebsiteChannelDrawer({
     requirement: true,
   });
   const [firstResponder, setFirstResponder] = useState<"ai" | "human">("ai");
+  const [agentQueue, setAgentQueue] = useState<string[]>([]);
+  const [customProfiles, setCustomProfiles] = useState<
+    Record<string, { name?: string; position?: string; image?: string }>
+  >({});
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const teamDropdownRef = useRef<HTMLDivElement>(null);
+
+  const { activeOrganization } = useOrganization();
+  const orgTeamMembers = useMemo<TeamMember[]>(() => {
+    const all = getStoredTeamMembers().filter((m) => m.status !== false);
+    if (!activeOrganization?.id) return all;
+    const matched = all.filter(
+      (m) => !m.organizationId || String(m.organizationId) === String(activeOrganization.id)
+    );
+    return matched.length > 0 ? matched : all;
+  }, [activeOrganization?.id, isOpen]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [previewVisitorName, setPreviewVisitorName] = useState("");
@@ -179,6 +202,9 @@ export default function WebsiteChannelDrawer({
     const handleOutside = (e: MouseEvent) => {
       if (launcherDropdownRef.current && !launcherDropdownRef.current.contains(e.target as Node)) {
         setLauncherDropdownOpen(false);
+      }
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) {
+        setTeamDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutside);
@@ -202,6 +228,7 @@ export default function WebsiteChannelDrawer({
     setPreviewExpanded(true);
     setLauncherDropdownOpen(false);
     setLauncherIconSearch("");
+    setTeamDropdownOpen(false);
     setPreviewVisitorName("");
     setPreviewVisitorEmail("");
     setPreviewVisitorPhone("");
@@ -220,6 +247,8 @@ export default function WebsiteChannelDrawer({
       setRemoveSignature(Boolean(channel.removeSignature));
       setPosition(channel.position || "bottom-right");
       setEnablePreChatForm(channel.enablePreChatForm !== false);
+      setPreChatTiming(channel.preChatTiming || "after_first_message");
+      setShowOnlineMembers(channel.showOnlineMembers !== false);
       setFormFields({
         name: channel.formFields?.name ?? true,
         email: channel.formFields?.email ?? true,
@@ -227,6 +256,8 @@ export default function WebsiteChannelDrawer({
         requirement: channel.formFields?.requirement ?? true,
       });
       setFirstResponder(channel.firstResponder || "ai");
+      setAgentQueue(Array.isArray(channel.agentQueue) ? channel.agentQueue.map(String) : []);
+      setCustomProfiles(channel.customProfiles || {});
       setOpenSection(1);
     } else {
       setName("");
@@ -241,11 +272,37 @@ export default function WebsiteChannelDrawer({
       setRemoveSignature(false);
       setPosition("bottom-right");
       setEnablePreChatForm(true);
+      setPreChatTiming("after_first_message");
+      setShowOnlineMembers(true);
       setFormFields({ name: true, email: true, phone: true, requirement: true });
       setFirstResponder("ai");
+      setAgentQueue([]);
+      setCustomProfiles({});
       setOpenSection(1);
     }
   }, [channel, isOpen]);
+
+  const handleToggleTeamMember = (memberId: string) => {
+    setAgentQueue((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
+    );
+  };
+
+  const handleTeamMemberAvatarUpload = (memberId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setCustomProfiles((prev) => ({
+          ...prev,
+          [memberId]: {
+            ...(prev[memberId] || {}),
+            image: reader.result as string,
+          },
+        }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const embedScript = useMemo(() => buildWebsiteEmbedScript(scriptKey), [scriptKey]);
 
@@ -321,6 +378,8 @@ export default function WebsiteChannelDrawer({
       removeSignature,
       position,
       enablePreChatForm,
+      preChatTiming,
+      showOnlineMembers,
       formFields: {
         ...formFields,
         processSelect: false,
@@ -328,6 +387,8 @@ export default function WebsiteChannelDrawer({
       autoCreateClientEnabled: false,
       autoCreateContactCategory: "",
       firstResponder,
+      agentQueue,
+      customProfiles,
       isActive: channel?.isActive ?? true,
       createdAt: channel?.createdAt || new Date().toISOString().substring(0, 10),
       updatedAt: new Date().toISOString().substring(0, 10),
@@ -821,30 +882,55 @@ export default function WebsiteChannelDrawer({
                 </label>
 
                 {enablePreChatForm && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {(
-                      [
-                        { key: "name", label: "Full Name" },
-                        { key: "email", label: "Email" },
-                        { key: "phone", label: "Phone" },
-                        { key: "requirement", label: "Requirement" },
-                      ] as const
-                    ).map((item) => (
-                      <label
-                        key={item.key}
-                        className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formFields[item.key]}
-                          onChange={(e) =>
-                            setFormFields((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                          }
-                          className="w-3.5 h-3.5 rounded border-slate-300 text-[#1456f0]"
-                        />
-                        <span>{item.label}</span>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {(
+                        [
+                          { key: "name", label: "Full Name" },
+                          { key: "email", label: "Email" },
+                          { key: "phone", label: "Phone" },
+                          { key: "requirement", label: "Requirement" },
+                        ] as const
+                      ).map((item) => (
+                        <label
+                          key={item.key}
+                          className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formFields[item.key]}
+                            onChange={(e) =>
+                              setFormFields((prev) => ({ ...prev, [item.key]: e.target.checked }))
+                            }
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-[#1456f0]"
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                        <span>Show form</span>
                       </label>
-                    ))}
+                      <select
+                        value={preChatTiming}
+                        onChange={(e) =>
+                          setPreChatTiming(e.target.value as "before_chat" | "after_first_message")
+                        }
+                        className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
+                      >
+                        <option value="after_first_message">
+                          Wait for customer&apos;s first message
+                        </option>
+                        <option value="before_chat">Before the chat starts</option>
+                      </select>
+                      <p className="text-[11px] text-slate-500 mt-1.5">
+                        {preChatTiming === "after_first_message"
+                          ? "The form will show up once the customer has posted their first message."
+                          : "The form will show immediately before the customer sends their first message."}
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -860,6 +946,206 @@ export default function WebsiteChannelDrawer({
                     <option value="ai">AI Agent</option>
                     <option value="human">Human Team Member</option>
                   </select>
+                </div>
+
+                {/* Team Members + Custom Photo/Avatar Upload */}
+                <div className="space-y-2.5 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between pt-2">
+                    <div>
+                      <span className="text-[13px] font-medium text-slate-700 block">
+                        Team members
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Assign team members to this channel and customize their chat photo or avatar.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="relative" ref={teamDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setTeamDropdownOpen((o) => !o)}
+                      className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50/70 flex items-center justify-between text-sm text-slate-700 cursor-pointer transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span>
+                          {agentQueue.length > 0
+                            ? `${agentQueue.length} team member${agentQueue.length > 1 ? "s" : ""} selected`
+                            : "Select team members"}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform ${
+                          teamDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {teamDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-30 rounded-xl border border-slate-200 bg-white shadow-lg p-1.5 max-h-56 overflow-y-auto space-y-0.5">
+                        {orgTeamMembers.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-slate-500">
+                            No active team members found.
+                          </div>
+                        ) : (
+                          orgTeamMembers.map((member) => {
+                            const memberId = String(member.id);
+                            const isSelected = agentQueue.includes(memberId);
+                            const memberAvatar = customProfiles[memberId]?.image;
+                            const initials = member.name
+                              .split(/\s+/)
+                              .map((p) => p[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
+
+                            return (
+                              <button
+                                key={memberId}
+                                type="button"
+                                onClick={() => handleToggleTeamMember(memberId)}
+                                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? "bg-blue-50/70 text-[#1456f0] font-semibold"
+                                    : "text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
+                                    {memberAvatar ? (
+                                      <img
+                                        src={memberAvatar}
+                                        alt={member.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      initials
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate">{member.name}</span>
+                                    <span className="block text-[10px] text-slate-400 truncate font-normal">
+                                      {member.role || member.email}
+                                    </span>
+                                  </span>
+                                </span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {agentQueue.length > 0 && (
+                    <div className="space-y-2">
+                      {agentQueue.map((memberId) => {
+                        const member = orgTeamMembers.find((m) => String(m.id) === memberId);
+                        const memberName = member?.name || customProfiles[memberId]?.name || `Team Member #${memberId}`;
+                        const memberSub = member?.role || member?.email || "Team Member";
+                        const avatarUrl = customProfiles[memberId]?.image;
+                        const initials = memberName
+                          .split(/\s+/)
+                          .map((p) => p[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase();
+
+                        return (
+                          <div
+                            key={memberId}
+                            className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-slate-200 bg-white"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className="w-9 h-9 rounded-full border border-slate-200 overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: avatarUrl ? "#ffffff" : themeColor }}
+                              >
+                                {avatarUrl ? (
+                                  <img
+                                    src={avatarUrl}
+                                    alt={memberName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span>{initials}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-900 truncate">
+                                  {memberName}
+                                </p>
+                                <p className="text-[11px] text-slate-500 truncate">{memberSub}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <label className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer transition-colors">
+                                <Upload className="w-3 h-3 text-slate-500" />
+                                <span>{avatarUrl ? "Change" : "Upload"}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleTeamMemberAvatarUpload(memberId, f);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                              {avatarUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomProfiles((prev) => {
+                                      const next = { ...prev };
+                                      if (next[memberId]) {
+                                        const { image: _removed, ...rest } = next[memberId];
+                                        next[memberId] = rest;
+                                      }
+                                      return next;
+                                    })
+                                  }
+                                  className="px-2 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-red-600 cursor-pointer"
+                                  title="Remove custom photo"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTeamMember(memberId)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                title="Remove team member"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/40 cursor-pointer">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block">
+                        Show available online team members
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Display available member photos and names inside the chat widget
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={showOnlineMembers}
+                      onChange={(e) => setShowOnlineMembers(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#1456f0] cursor-pointer"
+                    />
+                  </label>
                 </div>
               </div>
             )}
@@ -1082,18 +1368,150 @@ export default function WebsiteChannelDrawer({
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewExpanded(false)}
-                        className="p-1 rounded-lg hover:bg-white/15 text-white/80 hover:text-white cursor-pointer"
-                        title="Minimize preview"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {showOnlineMembers && agentQueue.length > 0 && (
+                          <div className="flex -space-x-1.5">
+                            {agentQueue.slice(0, 3).map((memberId) => {
+                              const m = orgTeamMembers.find((tm) => String(tm.id) === memberId);
+                              const mName = m?.name || customProfiles[memberId]?.name || "Team";
+                              const mAvatar = customProfiles[memberId]?.image;
+                              const mInitials = mName
+                                .split(/\s+/)
+                                .map((p) => p[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase();
+                              return (
+                                <span
+                                  key={memberId}
+                                  title={mName}
+                                  className="w-5 h-5 rounded-full border border-white/70 bg-white/20 overflow-hidden flex items-center justify-center text-[8px] font-bold text-white"
+                                >
+                                  {mAvatar ? (
+                                    <img
+                                      src={mAvatar}
+                                      alt={mName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    mInitials
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewExpanded(false)}
+                          className="p-1 rounded-lg hover:bg-white/15 text-white/80 hover:text-white cursor-pointer"
+                          title="Minimize preview"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Body */}
                     <div className="p-3 space-y-2.5">
+                      {showOnlineMembers && (() => {
+                        const previewMembers =
+                          agentQueue.length > 0
+                            ? agentQueue.slice(0, 4).map((memberId) => {
+                                const m = orgTeamMembers.find((tm) => String(tm.id) === memberId);
+                                const fullName =
+                                  m?.name || customProfiles[memberId]?.name || `Member #${memberId}`;
+                                return {
+                                  id: memberId,
+                                  firstName: fullName.split(/\s+/)[0] || fullName,
+                                  fullName,
+                                  avatar: customProfiles[memberId]?.image,
+                                };
+                              })
+                            : orgTeamMembers.slice(0, 3).map((m) => {
+                                const memberId = String(m.id);
+                                return {
+                                  id: memberId,
+                                  firstName: m.name.split(/\s+/)[0] || m.name,
+                                  fullName: m.name,
+                                  avatar: customProfiles[memberId]?.image,
+                                };
+                              });
+
+                        if (previewMembers.length === 0) return null;
+
+                        return (
+                          <div
+                            className={`rounded-xl border px-3 py-3 text-center space-y-2.5 ${
+                              themeMode === "dark"
+                                ? "bg-slate-800/60 border-slate-700"
+                                : "bg-slate-50/80 border-slate-200/80"
+                            }`}
+                          >
+                            <div>
+                              <div
+                                className={`text-xs font-semibold ${
+                                  themeMode === "dark" ? "text-slate-100" : "text-slate-700"
+                                }`}
+                              >
+                                We are online
+                              </div>
+                              <div
+                                className={`text-[10px] ${
+                                  themeMode === "dark" ? "text-slate-400" : "text-slate-500"
+                                }`}
+                              >
+                                and ready to help!
+                              </div>
+                            </div>
+
+                            <div className="flex items-start justify-center gap-3.5 flex-wrap">
+                              {previewMembers.map((pm) => {
+                                const pmInitials = pm.fullName
+                                  .split(/\s+/)
+                                  .map((p) => p[0])
+                                  .join("")
+                                  .slice(0, 2)
+                                  .toUpperCase();
+                                return (
+                                  <div
+                                    key={pm.id}
+                                    className="flex flex-col items-center gap-1 min-w-[44px]"
+                                  >
+                                    <div className="relative">
+                                      <div
+                                        className="w-10 h-10 rounded-full border-2 border-white shadow-xs overflow-hidden flex items-center justify-center text-[11px] font-bold text-white"
+                                        style={{
+                                          backgroundColor: pm.avatar ? "#ffffff" : themeColor,
+                                        }}
+                                      >
+                                        {pm.avatar ? (
+                                          <img
+                                            src={pm.avatar}
+                                            alt={pm.fullName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <span>{pmInitials}</span>
+                                        )}
+                                      </div>
+                                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                                    </div>
+                                    <span
+                                      className={`text-[10px] font-medium truncate max-w-[54px] ${
+                                        themeMode === "dark" ? "text-slate-200" : "text-slate-700"
+                                      }`}
+                                    >
+                                      {pm.firstName}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex items-start gap-2">
                         <div
                           className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-[10px] shrink-0 mt-0.5"
@@ -1116,6 +1534,17 @@ export default function WebsiteChannelDrawer({
                         </div>
                       </div>
 
+                      {enablePreChatForm && preChatTiming === "after_first_message" && (
+                        <div className="flex justify-end">
+                          <div
+                            className="px-2.5 py-1.5 rounded-2xl rounded-br-xs text-[10px] text-white max-w-[80%]"
+                            style={{ backgroundColor: themeColor }}
+                          >
+                            Hi, I&apos;d like to ask about an appointment.
+                          </div>
+                        </div>
+                      )}
+
                       {enablePreChatForm && (
                         <div
                           className={`p-2.5 rounded-xl border space-y-1.5 ${
@@ -1124,6 +1553,15 @@ export default function WebsiteChannelDrawer({
                               : "bg-slate-50/80 border-slate-200/80"
                           }`}
                         >
+                          {preChatTiming === "after_first_message" && (
+                            <div
+                              className={`text-[9px] font-medium ${
+                                themeMode === "dark" ? "text-slate-400" : "text-slate-500"
+                              }`}
+                            >
+                              Shown after visitor&apos;s first message
+                            </div>
+                          )}
                           {formFields.name && (
                             <input
                               type="text"

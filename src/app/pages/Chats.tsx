@@ -90,8 +90,10 @@ import { useWhatsappAgentStore, WhatsAppAgentRule } from "../../lib/whatsappAgen
 import WebsiteChannelDrawer from "../components/chats/WebsiteChannelDrawer";
 import WebsiteAgentRulesView from "../components/chats/WebsiteAgentRulesView";
 import WebsiteAgentDrawer from "../components/chats/WebsiteAgentDrawer";
+import WebsiteTemplateDrawer from "../components/chats/WebsiteTemplateDrawer";
 import { useWebsiteChannels, WebsiteChannel } from "../../lib/websiteWidgetStore";
 import { useWebsiteAgentStore, WebsiteAgentRule } from "../../lib/websiteAgentStore";
+import { useWebsiteTemplates, WebsiteTemplate } from "../../lib/websiteTemplateStore";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -1924,6 +1926,134 @@ export default function Chats() {
     );
   }, [globalTemplates, templateSearch]);
 
+  // ── Website Templates State ──
+  const { templates: websiteTemplates, updateTemplates: setWebsiteTemplates } = useWebsiteTemplates();
+  const [websiteTemplateSearch, setWebsiteTemplateSearch] = useState("");
+  const [showWebsiteTemplateDrawer, setShowWebsiteTemplateDrawer] = useState(false);
+  const [editingWebsiteTemplate, setEditingWebsiteTemplate] = useState<WebsiteTemplate | null>(null);
+  const [selectedWebsiteTemplateIds, setSelectedWebsiteTemplateIds] = useState<Set<string>>(new Set());
+
+  const filteredWebsiteTemplates = useMemo(() => {
+    const q = websiteTemplateSearch.toLowerCase().trim();
+    return websiteTemplates.filter((t) => {
+      if (activeWebsiteChannelId && t.channelId !== "all" && t.channelId !== activeWebsiteChannelId) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.shortcut.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.bodyText.toLowerCase().includes(q)
+      );
+    });
+  }, [websiteTemplates, websiteTemplateSearch, activeWebsiteChannelId]);
+
+  const handleSaveWebsiteTemplate = (saved: WebsiteTemplate) => {
+    setWebsiteTemplates((prev) => {
+      const exists = prev.some((t) => t.id === saved.id);
+      return exists ? prev.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...prev];
+    });
+    setShowWebsiteTemplateDrawer(false);
+    setEditingWebsiteTemplate(null);
+  };
+
+  const handleDeleteWebsiteTemplate = (id: string) => {
+    setWebsiteTemplates((prev) => prev.filter((t) => t.id !== id));
+    toast.success("Website template deleted");
+  };
+
+  const websiteTemplateColumns: TableColumn<WebsiteTemplate>[] = [
+    {
+      id: "name",
+      header: "NAME",
+      align: "left",
+      render: (tpl) => (
+        <button
+          type="button"
+          onClick={() => {
+            setEditingWebsiteTemplate(tpl);
+            setShowWebsiteTemplateDrawer(true);
+          }}
+          className="text-xs font-bold text-[#1E293B] hover:text-[#1456f0] transition-colors text-left cursor-pointer"
+        >
+          {tpl.name}
+        </button>
+      ),
+    },
+    {
+      id: "shortcut",
+      header: "SHORTCUT",
+      align: "left",
+      render: (tpl) => <span className="text-xs font-mono text-slate-600">{tpl.shortcut}</span>,
+    },
+    {
+      id: "category",
+      header: "CATEGORY",
+      align: "left",
+      render: (tpl) => <span className="text-xs font-medium text-slate-700">{tpl.category}</span>,
+    },
+    {
+      id: "channel",
+      header: "CHANNEL",
+      align: "left",
+      render: (tpl) => {
+        const ch = websiteChannels.find((c) => c.id === tpl.channelId);
+        return (
+          <span className="text-xs text-slate-600">
+            {tpl.channelId === "all" ? "All Channels" : ch?.name || "All Channels"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "bodyText",
+      header: "MESSAGE",
+      align: "left",
+      render: (tpl) => (
+        <span className="text-xs text-slate-600 line-clamp-1 max-w-[340px]" title={tpl.bodyText}>
+          {tpl.bodyText}
+        </span>
+      ),
+    },
+    {
+      id: "lastModified",
+      header: "LAST MODIFIED",
+      align: "left",
+      render: (tpl) => <span className="text-xs text-slate-500">{tpl.lastModified}</span>,
+    },
+  ];
+
+  const websiteTemplateRowActions: TableRowAction<WebsiteTemplate>[] = [
+    {
+      label: "Edit Template",
+      icon: <Pencil className="w-3.5 h-3.5 text-blue-500" />,
+      onClick: (tpl) => {
+        setEditingWebsiteTemplate(tpl);
+        setShowWebsiteTemplateDrawer(true);
+      },
+    },
+    {
+      label: "Delete",
+      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+      isDanger: true,
+      onClick: (tpl) => handleDeleteWebsiteTemplate(tpl.id),
+    },
+  ];
+
+  const websiteTemplateBulkActions: TableBulkAction[] = [
+    {
+      label: "Delete Selected",
+      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+      isDanger: true,
+      onClick: (selectedIds) => {
+        setWebsiteTemplates((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+        setSelectedWebsiteTemplateIds(new Set());
+        toast.success(`Deleted ${selectedIds.size} template(s)`);
+      },
+    },
+  ];
+
   // ── Website Widget Settings Search & Quick Jump State ──
   const [widgetSettingsSearch, setWidgetSettingsSearch] = useState("");
 
@@ -3243,6 +3373,8 @@ export default function Chats() {
               ? whatsappAgentSearch
               : channelFilter === "website" && subMode === "agent"
               ? websiteAgentSearch
+              : channelFilter === "website" && subMode === "templates"
+              ? websiteTemplateSearch
               : subMode === "templates"
               ? templateSearch
               : chatSearch
@@ -3260,6 +3392,8 @@ export default function Chats() {
               ? setWhatsappAgentSearch
               : channelFilter === "website" && subMode === "agent"
               ? setWebsiteAgentSearch
+              : channelFilter === "website" && subMode === "templates"
+              ? setWebsiteTemplateSearch
               : subMode === "templates"
               ? setTemplateSearch
               : setChatSearch
@@ -3277,6 +3411,8 @@ export default function Chats() {
               ? "Search WhatsApp rules, templates, prompts, entities..."
               : channelFilter === "website" && subMode === "agent"
               ? "Search website agent rules, channels, prompts..."
+              : channelFilter === "website" && subMode === "templates"
+              ? "Search website templates (name, shortcut, message)..."
               : subMode === "templates"
               ? "Search templates..."
               : channelFilter === "website"
@@ -3332,6 +3468,15 @@ export default function Chats() {
                     },
                   }
                 : undefined
+              : channelFilter === "website" && subMode === "templates"
+              ? {
+                  label: "New Template",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => {
+                    setEditingWebsiteTemplate(null);
+                    setShowWebsiteTemplateDrawer(true);
+                  },
+                }
               : subMode === "templates"
               ? {
                   label: "New Template",
@@ -3683,6 +3828,24 @@ export default function Chats() {
               }}
               defaultRowsPerPage={20}
               emptyMessage="No email templates found. Click '+ New Template' to create reusable email templates with merge tags."
+            />
+          ) : channelFilter === "website" ? (
+            <TableComponent<WebsiteTemplate>
+              className="rounded-2xl border-gray-200/90 shadow-xs"
+              data={filteredWebsiteTemplates}
+              columns={websiteTemplateColumns}
+              getRowId={(tpl) => tpl.id}
+              rowActions={websiteTemplateRowActions}
+              enableSelection={true}
+              selectedIds={selectedWebsiteTemplateIds}
+              onSelectionChange={(ids) => setSelectedWebsiteTemplateIds(new Set(Array.from(ids) as string[]))}
+              bulkActions={websiteTemplateBulkActions}
+              onRowClick={(tpl) => {
+                setEditingWebsiteTemplate(tpl);
+                setShowWebsiteTemplateDrawer(true);
+              }}
+              defaultRowsPerPage={20}
+              emptyMessage="No website chat templates yet. Click '+ New Template' to create quick replies for website visitors."
             />
           ) : (
           <>
@@ -4515,6 +4678,18 @@ export default function Chats() {
         }}
         template={editingEmailTemplate}
         onSave={handleSaveEmailTemplate}
+      />
+
+      <WebsiteTemplateDrawer
+        isOpen={showWebsiteTemplateDrawer}
+        onClose={() => {
+          setShowWebsiteTemplateDrawer(false);
+          setEditingWebsiteTemplate(null);
+        }}
+        template={editingWebsiteTemplate}
+        channels={websiteChannels}
+        activeChannelId={activeWebsiteChannelId}
+        onSave={handleSaveWebsiteTemplate}
       />
 
       <EmailBlacklistDrawer

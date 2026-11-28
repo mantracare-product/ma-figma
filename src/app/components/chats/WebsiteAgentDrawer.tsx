@@ -142,6 +142,54 @@ export default function WebsiteAgentDrawer({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const getChannelAllowedMembers = (channelId: string) => {
+    const sourceChannels =
+      channelId === "all"
+        ? websiteChannels
+        : websiteChannels.filter((c) => c.id === channelId);
+    const allowedIds = new Set<string>();
+    sourceChannels.forEach((ch) => {
+      (ch.agentQueue || []).forEach((id) => allowedIds.add(String(id)));
+    });
+    return teamMembers.filter((m) => allowedIds.has(String(m.id)));
+  };
+
+  const channelTeamMembers = useMemo(
+    () => getChannelAllowedMembers(connectedChannel),
+    [websiteChannels, connectedChannel, teamMembers]
+  );
+
+  const pruneConditionsToChannel = (
+    conditions: HandoffCondition[],
+    channelId: string
+  ): HandoffCondition[] => {
+    const allowedIds = new Set(getChannelAllowedMembers(channelId).map((m) => String(m.id)));
+    return conditions.map((c) => {
+      const filteredAssignees = (c.assignees || []).filter(
+        (a) => a.type !== "user" || allowedIds.has(String(a.id))
+      );
+      const validAssigneeId =
+        c.assigneeId && allowedIds.has(String(c.assigneeId))
+          ? c.assigneeId
+          : filteredAssignees[0]?.id || "";
+      const validAssigneeName =
+        validAssigneeId === c.assigneeId
+          ? c.assigneeName
+          : filteredAssignees[0]?.name || "";
+      return {
+        ...c,
+        assignees: filteredAssignees,
+        assigneeId: validAssigneeId,
+        assigneeName: validAssigneeName,
+      };
+    });
+  };
+
+  const handleConnectedChannelChange = (nextChannelId: string) => {
+    setConnectedChannel(nextChannelId);
+    setHandoffConditions((prev) => pruneConditionsToChannel(prev, nextChannelId));
+  };
+
   // Requirements available for the chosen Website Channel (or combined across all)
   const availableRequirements = useMemo(() => {
     const sourceChannels =
@@ -212,12 +260,14 @@ export default function WebsiteAgentDrawer({
     }
     initSessionRef.current = sessionKey;
     setErrors({});
-    const defaultMember = teamMembers[0];
+    const targetChannelId = rule ? rule.connected_channel || "all" : websiteChannels[0]?.id || "all";
+    const allowedMembers = getChannelAllowedMembers(targetChannelId);
+    const defaultMember = allowedMembers[0];
 
     if (rule) {
       setName(rule.name || "");
       setDescription(rule.description || "");
-      setConnectedChannel(rule.connected_channel || "all");
+      setConnectedChannel(targetChannelId);
       setTriggerType(rule.trigger_type || "new_message");
       setTriggerPrompt(rule.trigger_prompt || "");
       setSelectedReqIds(rule.requirement_ids || []);
@@ -235,8 +285,12 @@ export default function WebsiteAgentDrawer({
 
       setHandoffEnabled(rule.handoff_enabled !== false);
       if (Array.isArray(rule.handoff_conditions) && rule.handoff_conditions.length > 0) {
-        setHandoffConditions(rule.handoff_conditions);
+        setHandoffConditions(pruneConditionsToChannel(rule.handoff_conditions, targetChannelId));
       } else {
+        const legacyAllowed = rule.handoff_assignee_id
+          ? allowedMembers.find((m) => String(m.id) === String(rule.handoff_assignee_id))
+          : undefined;
+        const resolvedMember = legacyAllowed || defaultMember;
         setHandoffConditions([
           {
             id: "web-cond-1",
@@ -245,15 +299,15 @@ export default function WebsiteAgentDrawer({
               rule.handoff_condition_prompt ||
               "Visitor is upset, asks for urgent care, or requests a human specialist",
             assigneeLevel: "user",
-            assigneeId: rule.handoff_assignee_id || defaultMember?.id || "",
-            assigneeName: rule.handoff_assignee_name || defaultMember?.name,
-            assignees: defaultMember
+            assigneeId: resolvedMember?.id || "",
+            assigneeName: resolvedMember?.name,
+            assignees: resolvedMember
               ? [
                   {
-                    id: defaultMember.id,
+                    id: resolvedMember.id,
                     type: "user",
-                    name: defaultMember.name,
-                    roleOrDept: defaultMember.role || defaultMember.department || "Team Member",
+                    name: resolvedMember.name,
+                    roleOrDept: resolvedMember.role || resolvedMember.department || "Team Member",
                   },
                 ]
               : [],
@@ -277,7 +331,7 @@ export default function WebsiteAgentDrawer({
     } else {
       setName("");
       setDescription("");
-      setConnectedChannel(websiteChannels[0]?.id || "all");
+      setConnectedChannel(targetChannelId);
       setTriggerType("new_message");
       setTriggerPrompt("");
       setSelectedReqIds([]);
@@ -337,13 +391,13 @@ export default function WebsiteAgentDrawer({
         if (currentLevel === level) return c;
         let nextAssignees = (c.assignees || []).filter((a) => a.type === level);
         if (nextAssignees.length === 0) {
-          if (level === "user" && teamMembers[0]) {
+          if (level === "user" && channelTeamMembers[0]) {
             nextAssignees = [
               {
-                id: teamMembers[0].id,
+                id: channelTeamMembers[0].id,
                 type: "user",
-                name: teamMembers[0].name,
-                roleOrDept: teamMembers[0].role || teamMembers[0].department || "Team Member",
+                name: channelTeamMembers[0].name,
+                roleOrDept: channelTeamMembers[0].role || channelTeamMembers[0].department || "Team Member",
               },
             ];
           } else if (level === "department" && departments[0]) {
@@ -697,7 +751,7 @@ export default function WebsiteAgentDrawer({
                 </label>
                 <select
                   value={connectedChannel}
-                  onChange={(e) => setConnectedChannel(e.target.value)}
+                  onChange={(e) => handleConnectedChannelChange(e.target.value)}
                   className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                 >
                   <option value="all">All Website Channels</option>
@@ -1012,7 +1066,7 @@ export default function WebsiteAgentDrawer({
                     <button
                       type="button"
                       onClick={() => {
-                        const defaultMember = teamMembers[0];
+                        const defaultMember = channelTeamMembers[0];
                         setHandoffConditions((prev) => [
                           ...prev,
                           {
@@ -1355,7 +1409,7 @@ export default function WebsiteAgentDrawer({
           const selectedAssignees = (activeCond.assignees || []).filter(
             (a) => a.type === currentLevel
           );
-          const candidates = currentLevel === "user" ? teamMembers : departments;
+          const candidates = currentLevel === "user" ? channelTeamMembers : departments;
           const filteredCandidates = candidates.filter((item) => {
             const q = assigneeSearchQuery.trim().toLowerCase();
             if (!q) return true;
@@ -1386,13 +1440,20 @@ export default function WebsiteAgentDrawer({
                     type="text"
                     value={assigneeSearchQuery}
                     onChange={(e) => setAssigneeSearchQuery(e.target.value)}
-                    placeholder={currentLevel === "user" ? "Search team members..." : "Search departments..."}
+                    placeholder={currentLevel === "user" ? "Search channel team members..." : "Search departments..."}
                     className="w-full text-xs bg-transparent border-none outline-none"
                     autoFocus
                   />
                 </div>
                 <div className="overflow-y-auto p-1 divide-y divide-slate-50 flex-1">
-                  {filteredCandidates.map((item) => {
+                  {filteredCandidates.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-500 text-center">
+                      {currentLevel === "user" && channelTeamMembers.length === 0
+                        ? "No team members added to this Website channel yet. Add members in Channel settings first."
+                        : "No matching results found."}
+                    </div>
+                  ) : (
+                    filteredCandidates.map((item) => {
                     const isSelected = selectedAssignees.some(
                       (a) => String(a.id) === String(item.id) && a.type === currentLevel
                     );
@@ -1425,7 +1486,8 @@ export default function WebsiteAgentDrawer({
                         <span className="truncate">{item.name}</span>
                       </button>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             </>
