@@ -15,7 +15,7 @@ export interface WebsiteAgentRule {
   id: string;
   name: string;
   description?: string;
-  connected_channel?: string; // WebsiteChannel id or "all"
+  connected_channel?: string; // Single WebsiteChannel id
   connected_channel_name?: string;
   is_active: boolean;
   enabled: boolean;

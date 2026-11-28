@@ -93,7 +93,7 @@ export default function WebsiteAgentDrawer({
   // ── Section 1: Name, Description & Connected Website Channel ──
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [connectedChannel, setConnectedChannel] = useState<string>("all");
+  const [connectedChannel, setConnectedChannel] = useState<string>("");
 
   // ── Section 2: When it runs ──
   const [triggerType, setTriggerType] = useState<WebsiteTriggerType>("new_message");
@@ -143,10 +143,7 @@ export default function WebsiteAgentDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const getChannelAllowedMembers = (channelId: string) => {
-    const sourceChannels =
-      channelId === "all"
-        ? websiteChannels
-        : websiteChannels.filter((c) => c.id === channelId);
+    const sourceChannels = websiteChannels.filter((c) => c.id === channelId);
     const allowedIds = new Set<string>();
     sourceChannels.forEach((ch) => {
       (ch.agentQueue || []).forEach((id) => allowedIds.add(String(id)));
@@ -188,14 +185,12 @@ export default function WebsiteAgentDrawer({
   const handleConnectedChannelChange = (nextChannelId: string) => {
     setConnectedChannel(nextChannelId);
     setHandoffConditions((prev) => pruneConditionsToChannel(prev, nextChannelId));
+    setErrors((prev) => ({ ...prev, connectedChannel: "" }));
   };
 
-  // Requirements available for the chosen Website Channel (or combined across all)
+  // Requirements available for the chosen single Website Channel
   const availableRequirements = useMemo(() => {
-    const sourceChannels =
-      connectedChannel === "all"
-        ? websiteChannels
-        : websiteChannels.filter((c) => c.id === connectedChannel);
+    const sourceChannels = websiteChannels.filter((c) => c.id === connectedChannel);
     const seen = new Map<string, string>();
     sourceChannels.forEach((ch) => {
       (ch.requirements || []).forEach((r) => {
@@ -260,7 +255,10 @@ export default function WebsiteAgentDrawer({
     }
     initSessionRef.current = sessionKey;
     setErrors({});
-    const targetChannelId = rule ? rule.connected_channel || "all" : websiteChannels[0]?.id || "all";
+    const targetChannelId =
+      rule?.connected_channel && rule.connected_channel !== "all"
+        ? rule.connected_channel
+        : websiteChannels[0]?.id || "";
     const allowedMembers = getChannelAllowedMembers(targetChannelId);
     const defaultMember = allowedMembers[0];
 
@@ -527,6 +525,10 @@ export default function WebsiteAgentDrawer({
       nextErrors.name = "Agent name is required.";
       setOpenSection(1);
     }
+    if (!connectedChannel) {
+      nextErrors.connectedChannel = "Please select a Website Channel.";
+      setOpenSection(1);
+    }
 
     if (triggerType === "new_message" && !triggerPrompt.trim()) {
       nextErrors.triggerPrompt = "When should this run is required.";
@@ -596,11 +598,8 @@ export default function WebsiteAgentDrawer({
       id: rule?.id || `web-rule-${Date.now()}`,
       name: name.trim(),
       description: description.trim() || undefined,
-      connected_channel: connectedChannel || "all",
-      connected_channel_name:
-        connectedChannel === "all"
-          ? "All Channels"
-          : chosenChannelObj?.name || rule?.connected_channel_name,
+      connected_channel: chosenChannelObj?.id || connectedChannel,
+      connected_channel_name: chosenChannelObj?.name || rule?.connected_channel_name,
       is_active: isActive,
       enabled: isActive,
       priority: rule?.priority || rules.length + 1,
@@ -747,20 +746,27 @@ export default function WebsiteAgentDrawer({
               <div>
                 <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
                   <span>Connected Website Channel</span>
-                  <InfoTip text="Choose which website widget channel this agent handles." />
+                  <span className="text-red-500 ml-0.5">*</span>
+                  <InfoTip text="Each Website Agent applies to a single Website Channel." />
                 </label>
                 <select
                   value={connectedChannel}
                   onChange={(e) => handleConnectedChannelChange(e.target.value)}
                   className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                 >
-                  <option value="all">All Website Channels</option>
-                  {websiteChannels.map((ch) => (
-                    <option key={ch.id} value={ch.id}>
-                      {ch.name}
-                    </option>
-                  ))}
+                  {websiteChannels.length === 0 ? (
+                    <option value="">No Website Channels available</option>
+                  ) : (
+                    websiteChannels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        {ch.name}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {errors.connectedChannel && (
+                  <p className="text-xs text-red-500 mt-1">{errors.connectedChannel}</p>
+                )}
               </div>
             </div>
           )}

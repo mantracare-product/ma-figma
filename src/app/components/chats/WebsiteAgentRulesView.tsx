@@ -39,11 +39,8 @@ export default function WebsiteAgentRulesView({
   const [selectedIds, setSelectedIds] = useState<Set<any>>(new Set());
 
   const getChannelDisplayName = (rule: WebsiteAgentRule) => {
-    if (!rule.connected_channel || rule.connected_channel === "all") {
-      return "All Channels";
-    }
     const found = channels.find((c) => c.id === rule.connected_channel);
-    return found?.name || rule.connected_channel_name || "Website Channel";
+    return found?.name || rule.connected_channel_name || channels[0]?.name || "Website Channel";
   };
 
   const filteredRules = useMemo(() => {
@@ -59,7 +56,7 @@ export default function WebsiteAgentRulesView({
         if (filterType === "page_url" && r.trigger_type !== "page_url") return false;
         if (filterType.startsWith("channel:")) {
           const chId = filterType.replace("channel:", "");
-          if (r.connected_channel !== chId && r.connected_channel !== "all") return false;
+          if (r.connected_channel !== chId) return false;
         }
 
         if (!searchQuery.trim()) return true;
