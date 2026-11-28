@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { UserPlus, CornerUpRight, Pencil, SlidersHorizontal, Trash2, Filter, Sparkles } from "lucide-react";
+import { Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEmailAgentStore, EmailLabel } from "../../../lib/emailAgentStore";
 import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../ui/TableComponent";
 import LabelRuleDrawer from "./LabelRuleDrawer";
@@ -166,17 +166,9 @@ export default function EmailAgentRulesView({
       align: "left",
       render: (row) => (
         <div className="flex items-center gap-1.5 min-w-0">
-          {row.criteriaType === "filters" ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-              <Filter className="w-2.5 h-2.5" />
-              <span>Filters</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
-              <Sparkles className="w-2.5 h-2.5" />
-              <span>AI</span>
-            </span>
-          )}
+          <span className="text-xs font-medium text-slate-500 shrink-0">
+            {row.criteriaType === "filters" ? "Filters" : "AI"} ·
+          </span>
           <span className="text-xs text-slate-600 truncate" title={row.description}>
             {row.description || "—"}
           </span>
@@ -207,9 +199,8 @@ export default function EmailAgentRulesView({
       width: "170px",
       render: (row) => (
         row.autoCreateContact ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
-            <UserPlus className="w-3 h-3 text-blue-600" />
-            <span>Auto-Create: {row.entityType || "Contact"}</span>
+          <span className="text-xs font-medium text-slate-600">
+            Auto-Create: {row.entityType || "Contact"}
           </span>
         ) : (
           <span className="text-xs text-slate-400">—</span>
@@ -223,9 +214,8 @@ export default function EmailAgentRulesView({
       width: "160px",
       render: (row) => (
         row.handoffEnabled ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-            <CornerUpRight className="w-3 h-3 text-amber-600" />
-            <span className="truncate max-w-[120px]">{row.forwardTo || "Escalate"}</span>
+          <span className="text-xs font-medium text-slate-600 truncate max-w-[140px] block">
+            {row.forwardTo || "Escalate"}
           </span>
         ) : (
           <span className="text-xs text-slate-400">—</span>
@@ -239,10 +229,8 @@ export default function EmailAgentRulesView({
       width: "110px",
       render: (row) => (
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-            row.enabled !== false
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-slate-100 text-slate-500 border-slate-200"
+          className={`text-xs font-medium ${
+            row.enabled !== false ? "text-slate-600" : "text-slate-400"
           }`}
         >
           {row.enabled !== false ? "Active" : "Inactive"}

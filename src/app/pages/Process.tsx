@@ -3589,9 +3589,9 @@ export default function Process() {
                 onClick={() => setShowEntityDropdown(!showEntityDropdown)}
                 className="h-[36px] px-3.5 bg-white hover:bg-gray-50 border border-border/80 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-800 transition-all shadow-2xs cursor-pointer"
                 style={{ fontFamily: "Outfit, sans-serif" }}
-                title="Select Entity Workflow"
+                title="Select Entity"
               >
-                <span>{ENTITY_TABS.find((t) => t.id === selectedEntity)?.label || "Entity"} Workflow</span>
+                <span>{ENTITY_TABS.find((t) => t.id === selectedEntity)?.label || "Processes"}</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-600 border border-blue-200">
                   {processes.filter((p) => (p.entityType || "client") === selectedEntity).length}
                 </span>

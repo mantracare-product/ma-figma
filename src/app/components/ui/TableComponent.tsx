@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   Settings as SettingsIcon,
@@ -232,6 +232,125 @@ export function TableComponent<T>({
 
   const hasLeadingControls = enableSelection || enableColumnCustomization || Boolean(rowActions);
 
+  // Horizontal smooth chevron scroller state & refs
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const tableElRef = useRef<HTMLTableElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const hoverDirRef = useRef<-1 | 0 | 1>(0);
+  const virtualScrollLeftRef = useRef<number>(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(maxScroll > 1 && el.scrollLeft < maxScroll - 1);
+  }, []);
+
+  const stopHoverScroll = useCallback(() => {
+    hoverDirRef.current = 0;
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+  }, []);
+
+  const startHoverScroll = useCallback(
+    (dir: -1 | 1) => {
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      stopHoverScroll();
+      hoverDirRef.current = dir;
+      virtualScrollLeftRef.current = el.scrollLeft;
+
+      const startTime = performance.now();
+      let lastTime = startTime;
+
+      const step = (now: number) => {
+        const container = scrollContainerRef.current;
+        if (!container || hoverDirRef.current !== dir) {
+          scrollRafRef.current = null;
+          return;
+        }
+        const dt = Math.min((now - lastTime) / 1000, 0.05);
+        lastTime = now;
+
+        // Gentle ease-in over 180ms from 140px/s to 340px/s for silky continuous sliding
+        const ramp = Math.min(1, (now - startTime) / 180);
+        const speed = 140 + 200 * (ramp * (2 - ramp));
+        const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+        const nextPos = Math.max(0, Math.min(maxScroll, virtualScrollLeftRef.current + dir * speed * dt));
+
+        virtualScrollLeftRef.current = nextPos;
+        container.scrollLeft = nextPos;
+        updateScrollState();
+
+        const atBoundary = (dir === -1 && nextPos <= 0.5) || (dir === 1 && nextPos >= maxScroll - 0.5);
+        if (atBoundary) {
+          stopHoverScroll();
+          return;
+        }
+        scrollRafRef.current = requestAnimationFrame(step);
+      };
+
+      scrollRafRef.current = requestAnimationFrame(step);
+    },
+    [stopHoverScroll, updateScrollState]
+  );
+
+  const smoothStepScroll = useCallback(
+    (dir: -1 | 1) => {
+      const el = scrollContainerRef.current;
+      if (!el || hoverDirRef.current !== 0) return;
+      const startLeft = el.scrollLeft;
+      const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+      const targetLeft = Math.max(0, Math.min(maxScroll, startLeft + dir * 240));
+      const distance = targetLeft - startLeft;
+      if (Math.abs(distance) < 1) return;
+
+      const duration = 240;
+      const startTime = performance.now();
+
+      const animateStep = (now: number) => {
+        const container = scrollContainerRef.current;
+        if (!container || hoverDirRef.current !== 0) return;
+        const t = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        container.scrollLeft = startLeft + distance * eased;
+        updateScrollState();
+        if (t < 1) {
+          scrollRafRef.current = requestAnimationFrame(animateStep);
+        } else {
+          scrollRafRef.current = null;
+        }
+      };
+
+      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = requestAnimationFrame(animateStep);
+    },
+    [updateScrollState]
+  );
+
+  useEffect(() => {
+    updateScrollState();
+    const container = scrollContainerRef.current;
+    const tableEl = tableElRef.current;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateScrollState) : null;
+    if (ro) {
+      if (container) ro.observe(container);
+      if (tableEl) ro.observe(tableEl);
+    }
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [updateScrollState, orderedVisibleColumns, pageRows, isLoading]);
+
+  useEffect(() => stopHoverScroll, [stopHoverScroll]);
+
   const getColumnAlign = (col: TableColumn<T>): "left" | "center" | "right" => {
     if (col.align) return col.align;
     const headerLower = (typeof col.header === "string" ? col.header : String(col.id || "")).toLowerCase();
@@ -303,8 +422,48 @@ export function TableComponent<T>({
       )}
 
       {/* ── Table Element ── */}
-      <div className="overflow-x-auto">
-        <table className="w-full caption-bottom text-xs border-collapse">
+      <div className="relative">
+        {(
+          [
+            {
+              dir: -1 as const,
+              visible: canScrollLeft,
+              label: "Scroll table left",
+              edgeClass: "left-0 rounded-r-full border-r border-l-0 shadow-[2px_0_8px_rgba(15,23,42,0.06)] hover:shadow-[2px_0_10px_rgba(15,23,42,0.1)]",
+              iconClass: "-ml-0.5",
+              Icon: ChevronLeft,
+            },
+            {
+              dir: 1 as const,
+              visible: canScrollRight,
+              label: "Scroll table right",
+              edgeClass: "right-0 rounded-l-full border-l border-r-0 shadow-[-2px_0_8px_rgba(15,23,42,0.06)] hover:shadow-[-2px_0_10px_rgba(15,23,42,0.1)]",
+              iconClass: "-mr-0.5",
+              Icon: ChevronRight,
+            },
+          ]
+        ).map(({ dir, visible, label, edgeClass, iconClass, Icon }) => (
+          <button
+            key={dir}
+            type="button"
+            aria-label={label}
+            onMouseEnter={() => startHoverScroll(dir)}
+            onMouseLeave={stopHoverScroll}
+            onClick={() => smoothStepScroll(dir)}
+            className={`absolute top-1/2 -translate-y-1/2 z-20 w-[18px] h-9 border-y border-slate-300/60 bg-white/45 backdrop-blur-[2px] text-slate-600/75 flex items-center justify-center transition-all duration-150 cursor-pointer hover:bg-white/80 hover:border-slate-300/90 hover:text-slate-800 ${edgeClass} ${
+              visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
+          >
+            <Icon className={`w-3.5 h-3.5 ${iconClass}`} strokeWidth={2.25} />
+          </button>
+        ))}
+
+        <div
+          ref={scrollContainerRef}
+          onScroll={updateScrollState}
+          className="overflow-x-auto scrollbar-hide"
+        >
+          <table ref={tableElRef} className="w-full caption-bottom text-xs border-collapse">
           {/* ── Header ── */}
           <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white select-none rounded-none border-b border-border/80">
             <tr>
@@ -654,6 +813,7 @@ export function TableComponent<T>({
             </tfoot>
           )}
         </table>
+        </div>
       </div>
 
       {/* ── Bottom Pagination Toolbar ── */}

@@ -16,9 +16,6 @@ import {
   Pencil,
   Copy,
   Trash2,
-  FileText,
-  Sparkles,
-  Users,
 } from "lucide-react";
 import TableComponent, { TableColumn, TableRowAction } from "../ui/TableComponent";
 import {
@@ -154,9 +151,8 @@ export default function WhatsAppAgentRulesView({
 
         return (
           <Tooltip content={tplNames.join(", ")} position="top">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-800 max-w-[220px] truncate cursor-help">
-              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="truncate">{displayText}</span>
+            <span className="text-xs font-medium text-slate-600 max-w-[220px] truncate block cursor-help">
+              {displayText}
             </span>
           </Tooltip>
         );
@@ -179,9 +175,8 @@ export default function WhatsAppAgentRulesView({
             "Template";
           return (
             <Tooltip content={`Reply with template: ${tplName}`} position="top">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 cursor-help">
-                <FileText className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                <span className="truncate max-w-[105px]">Template</span>
+              <span className="text-xs font-medium text-slate-600 truncate max-w-[120px] block cursor-help">
+                Template
               </span>
             </Tooltip>
           );
@@ -189,9 +184,8 @@ export default function WhatsAppAgentRulesView({
 
         return (
           <Tooltip content={row.agent_prompt ? `AI Prompt: ${row.agent_prompt}` : "AI Prompt"} position="top">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 cursor-help">
-              <Sparkles className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span>AI</span>
+            <span className="text-xs font-medium text-slate-600 cursor-help">
+              AI
             </span>
           </Tooltip>
         );
@@ -224,7 +218,7 @@ export default function WhatsAppAgentRulesView({
         if (!isHandoffEnabled || conditionCount === 0) {
           return (
             <Tooltip content={!isHandoffEnabled ? "Handoff disabled (0 conditions)" : "0 handoff conditions"} position="top">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 cursor-help">
+              <span className="text-xs font-medium text-slate-400 cursor-help">
                 0
               </span>
             </Tooltip>
@@ -245,11 +239,8 @@ export default function WhatsAppAgentRulesView({
 
         return (
           <Tooltip content={tooltipContent} position="top">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 cursor-help">
-              <Users className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>
-                {conditionCount} {conditionCount === 1 ? "condition" : "conditions"}
-              </span>
+            <span className="text-xs font-medium text-slate-600 cursor-help">
+              {conditionCount} {conditionCount === 1 ? "condition" : "conditions"}
             </span>
           </Tooltip>
         );

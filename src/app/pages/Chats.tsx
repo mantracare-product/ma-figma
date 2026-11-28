@@ -87,6 +87,11 @@ import { useEmailAgentStore } from "../../lib/emailAgentStore";
 import WhatsAppAgentRulesView from "../components/chats/WhatsAppAgentRulesView";
 import WhatsAppAgentDrawer from "../components/chats/WhatsAppAgentDrawer";
 import { useWhatsappAgentStore, WhatsAppAgentRule } from "../../lib/whatsappAgentStore";
+import WebsiteChannelDrawer from "../components/chats/WebsiteChannelDrawer";
+import WebsiteAgentRulesView from "../components/chats/WebsiteAgentRulesView";
+import WebsiteAgentDrawer from "../components/chats/WebsiteAgentDrawer";
+import { useWebsiteChannels, WebsiteChannel } from "../../lib/websiteWidgetStore";
+import { useWebsiteAgentStore, WebsiteAgentRule } from "../../lib/websiteAgentStore";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -121,7 +126,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import ChatbotTab from "../components/chats/ChatbotTab";
-import WebsiteWidgetSettingsTab from "../components/chats/WebsiteWidgetSettingsTab";
 import CompanionSettingsTab from "../components/chats/CompanionSettingsTab";
 import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
@@ -869,7 +873,6 @@ export default function Chats() {
     updateGroupConfig,
   } = useConversations();
   const { user: currentUser } = useAuth();
-  const [chatAudience, setChatAudience] = useState<"contact" | "team">("contact");
   const [teamFilterTab, setTeamFilterTab] = useState<"all" | "groups" | "direct">("all");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => cleanLegacyMembers(getStoredTeamMembers()));
 
@@ -905,7 +908,8 @@ export default function Chats() {
   const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
   const [chatSearch, setChatSearch] = useState("");
   const [emailSearch, setEmailSearch] = useState("");
-  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | "email" | "companion" | null>("whatsapp");
+  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | "email" | "companion" | "team" | null>("whatsapp");
+  const chatAudience: "contact" | "team" = channelFilter === "team" ? "team" : "contact";
   const [showChannelDropdown, setShowChannelDropdown] = useState(false);
   const [numberFilter, setNumberFilter] = useState<string>("");
 
@@ -1063,6 +1067,61 @@ export default function Chats() {
         return `All Rules (${whatsappAgentCounts.all})`;
     }
   }, [whatsappAgentFilter, whatsappAgentCounts]);
+
+  // Website Channels & Agent states
+  const {
+    channels: websiteChannels,
+    activeChannel: activeWebsiteChannel,
+    activeChannelId: activeWebsiteChannelId,
+    selectChannel: selectWebsiteChannel,
+    saveChannel: saveWebsiteChannel,
+    removeChannel: removeWebsiteChannel,
+  } = useWebsiteChannels();
+  const {
+    rules: websiteRules,
+    saveRule: saveWebsiteRule,
+    deleteRule: deleteWebsiteRule,
+  } = useWebsiteAgentStore();
+  const [websiteSubMode, setWebsiteSubMode] = useState<"inbox" | "agent" | "templates">("inbox");
+  const [showWebsiteChannelDrawer, setShowWebsiteChannelDrawer] = useState(false);
+  const [editingWebsiteChannel, setEditingWebsiteChannel] = useState<WebsiteChannel | null>(null);
+  const [showWebsiteChannelDropdown, setShowWebsiteChannelDropdown] = useState(false);
+  const websiteChannelDropdownRef = useRef<HTMLDivElement>(null);
+  const [showWebsiteAgentDrawer, setShowWebsiteAgentDrawer] = useState(false);
+  const [selectedWebsiteRule, setSelectedWebsiteRule] = useState<WebsiteAgentRule | null>(null);
+  const [websiteAgentFilter, setWebsiteAgentFilter] = useState<string>("all");
+  const [websiteAgentSearch, setWebsiteAgentSearch] = useState("");
+  const [showWebsiteAgentFilterDropdown, setShowWebsiteAgentFilterDropdown] = useState(false);
+  const websiteAgentFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const websiteAgentCounts = useMemo(() => {
+    const all = websiteRules.length;
+    const active = websiteRules.filter((r) => r.enabled).length;
+    const newMessage = websiteRules.filter((r) => r.trigger_type === "new_message").length;
+    const requirement = websiteRules.filter((r) => r.trigger_type === "requirement_selected").length;
+    const pageUrl = websiteRules.filter((r) => r.trigger_type === "page_url").length;
+    return { all, active, newMessage, requirement, pageUrl };
+  }, [websiteRules]);
+
+  const websiteAgentFilterLabel = useMemo(() => {
+    if (websiteAgentFilter.startsWith("channel:")) {
+      const chId = websiteAgentFilter.replace("channel:", "");
+      const ch = websiteChannels.find((c) => c.id === chId);
+      return ch ? ch.name : "Channel";
+    }
+    switch (websiteAgentFilter) {
+      case "active":
+        return `Active (${websiteAgentCounts.active})`;
+      case "new_message":
+        return `New Chat (${websiteAgentCounts.newMessage})`;
+      case "requirement_selected":
+        return `Requirements (${websiteAgentCounts.requirement})`;
+      case "page_url":
+        return `Page URL (${websiteAgentCounts.pageUrl})`;
+      default:
+        return `All Rules (${websiteAgentCounts.all})`;
+    }
+  }, [websiteAgentFilter, websiteAgentCounts, websiteChannels]);
 
   useEffect(() => {
     const handleOpenMailbox = () => setShowMailboxIntegrationDrawer(true);
@@ -1287,15 +1346,29 @@ export default function Chats() {
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
-  const [showWebsiteSettingsDrawer, setShowWebsiteSettingsDrawer] = useState(false);
   const [showCompanionSettingsDrawer, setShowCompanionSettingsDrawer] = useState(false);
-  const widgetSettingsSaveRef = useRef<(() => boolean | void) | null>(null);
   const companionSaveRef = useRef<(() => void) | null>(null);
 
-  const handleChannelChange = (channel: "whatsapp" | "sms" | "website" | "email" | "companion") => {
+  const handleChannelChange = (channel: "whatsapp" | "sms" | "website" | "email" | "companion" | "team") => {
     setChannelFilter(channel);
     setShowChannelDropdown(false);
     setActiveTab("chats");
+    if (channel === "website" && websiteSubMode === "templates") {
+      setWebsiteSubMode("inbox");
+    }
+    if (channel === "team") {
+      const firstTeam = teamConversations[0];
+      if (firstTeam) {
+        setSelectedConversationId(firstTeam.id);
+      }
+    } else {
+      const firstMatch =
+        conversations.find((c) => c.channel === channel && !c.isTeam) ||
+        conversations.find((c) => c.channel !== "team" && !c.isTeam);
+      if (firstMatch) {
+        setSelectedConversationId(firstMatch.id);
+      }
+    }
   };
 
   const [emailSubMode, setEmailSubMode] = useState<"inbox" | "agent" | "templates">("inbox");
@@ -1319,6 +1392,15 @@ export default function Chats() {
       }
       return;
     }
+    if (channelFilter === "website") {
+      setWebsiteSubMode(mode);
+      if (mode === "templates") {
+        setActiveTab("templates");
+      } else {
+        setActiveTab("chats");
+      }
+      return;
+    }
     if (mode === "inbox") {
       setActiveTab("chats");
     } else if (mode === "templates") {
@@ -1335,8 +1417,12 @@ export default function Chats() {
       if (activeTab === "templates") return "templates";
       return whatsappSubMode;
     }
+    if (channelFilter === "website") {
+      if (activeTab === "templates") return "templates";
+      return websiteSubMode;
+    }
     return "inbox";
-  }, [channelFilter, activeTab, emailSubMode, whatsappSubMode]);
+  }, [channelFilter, activeTab, emailSubMode, whatsappSubMode, websiteSubMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1351,6 +1437,8 @@ export default function Chats() {
         setShowEmailFolderDropdown(false);
         setShowAgentFilterDropdown(false);
         setShowWhatsAppAgentFilterDropdown(false);
+        setShowWebsiteChannelDropdown(false);
+        setShowWebsiteAgentFilterDropdown(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
@@ -1375,6 +1463,12 @@ export default function Chats() {
       }
       if (agentFilterDropdownRef.current && !agentFilterDropdownRef.current.contains(e.target as Node)) {
         setShowAgentFilterDropdown(false);
+      }
+      if (websiteChannelDropdownRef.current && !websiteChannelDropdownRef.current.contains(e.target as Node)) {
+        setShowWebsiteChannelDropdown(false);
+      }
+      if (websiteAgentFilterDropdownRef.current && !websiteAgentFilterDropdownRef.current.contains(e.target as Node)) {
+        setShowWebsiteAgentFilterDropdown(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -1778,22 +1872,7 @@ export default function Chats() {
     });
     if (newGroup) {
       setSelectedConversationId(newGroup.id);
-      setChatAudience("team");
-    }
-  };
-
-  const handleAudienceChange = (audience: "contact" | "team") => {
-    setChatAudience(audience);
-    if (audience === "team") {
-      const firstTeam = teamConversations[0];
-      if (firstTeam) {
-        setSelectedConversationId(firstTeam.id);
-      }
-    } else {
-      const firstContact = conversations.find((c) => c.channel !== "team" && !c.isTeam);
-      if (firstContact) {
-        setSelectedConversationId(firstContact.id);
-      }
+      setChannelFilter("team");
     }
   };
 
@@ -2344,40 +2423,8 @@ export default function Chats() {
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-2">
-              {/* Audience Switcher: Contact Chat vs Team Chat */}
-              <div className="inline-flex items-center p-0.5 bg-slate-100 border border-border/80 rounded-xl gap-0.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleAudienceChange("contact")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    chatAudience === "contact"
-                      ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Contact Chat</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAudienceChange("team")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    chatAudience === "team"
-                      ? "bg-white text-[#1456f0] shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Team Chat</span>
-                </button>
-              </div>
-
-              {chatAudience === "contact" && (
-                <>
-                  {/* Channel Dropdown: WhatsApp, SMS, Website, Email */}
-                  <div className="relative shrink-0" ref={channelDropdownRef}>
+              {/* Channel Dropdown: WhatsApp, SMS, Website, Email, Companion, Team Chat */}
+              <div className="relative shrink-0" ref={channelDropdownRef}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2417,6 +2464,12 @@ export default function Chats() {
                     <div className="flex items-center gap-1.5">
                       <Bot className="w-3.5 h-3.5 text-[#2563EB]" />
                       <span className="text-[#2563EB] font-bold">Companion</span>
+                    </div>
+                  )}
+                  {channelFilter === "team" && (
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-[#1456f0]" />
+                      <span className="text-[#1456f0] font-bold">Team Chat</span>
                     </div>
                   )}
                   {channelFilter === "all" && (
@@ -2490,6 +2543,19 @@ export default function Chats() {
                     >
                       <span>Companion</span>
                       {channelFilter === "companion" && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+
+                    <button
+                      type="button"
+                      onClick={() => handleChannelChange("team")}
+                      className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                        channelFilter === "team" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                      }`}
+                    >
+                      <span>Team Chat</span>
+                      {channelFilter === "team" && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
                     </button>
                   </div>
                 )}
@@ -2679,6 +2745,204 @@ export default function Chats() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Website Channel Navigation: Channel Dropdown FIRST, then Inbox | Agent | Templates */}
+              {channelFilter === "website" && (
+                <>
+                  {/* Website Channel Dropdown with + Add channel text CTA */}
+                  <div className="relative shrink-0" ref={websiteChannelDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowWebsiteChannelDropdown((prev) => !prev);
+                        setShowWebsiteAgentFilterDropdown(false);
+                        setShowChannelDropdown(false);
+                        setShowNumberFilterDropdown(false);
+                      }}
+                      className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      title="Select Website Channel"
+                    >
+                      <span className="truncate max-w-[160px]">
+                        {activeWebsiteChannel?.name || "Select Website Channel"}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                          showWebsiteChannelDropdown ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {showWebsiteChannelDropdown && (
+                      <div
+                        className="absolute left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <div className="max-h-56 overflow-y-auto py-0.5">
+                          {websiteChannels.map((ch) => {
+                            const isSelected = ch.id === activeWebsiteChannelId;
+                            return (
+                              <button
+                                key={ch.id}
+                                type="button"
+                                onClick={() => {
+                                  selectWebsiteChannel(ch.id);
+                                  if (subMode === "agent") {
+                                    setWebsiteAgentFilter(`channel:${ch.id}`);
+                                  }
+                                  setShowWebsiteChannelDropdown(false);
+                                }}
+                                className={`w-full text-left px-3.5 py-2 hover:bg-muted transition-colors cursor-pointer truncate ${
+                                  isSelected ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B] font-medium"
+                                }`}
+                              >
+                                {ch.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="my-1 border-t border-gray-100" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowWebsiteChannelDropdown(false);
+                            setEditingWebsiteChannel(null);
+                            setShowWebsiteChannelDrawer(true);
+                          }}
+                          className="w-full text-left px-3.5 py-2 flex items-center gap-1.5 text-[#1456f0] hover:bg-blue-50/70 font-semibold transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add channel</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Website Sub-modes: Inbox | Agent | Templates */}
+                  <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("inbox")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "inbox"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Inbox</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("agent")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "agent"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Agent</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("templates")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "templates"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Templates</span>
+                    </button>
+                  </div>
+
+                  {/* Website Agent Filter Dropdown */}
+                  {subMode === "agent" && (
+                    <div className="relative shrink-0" ref={websiteAgentFilterDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWebsiteAgentFilterDropdown((prev) => !prev);
+                          setShowWebsiteChannelDropdown(false);
+                          setShowChannelDropdown(false);
+                        }}
+                        className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                        title="Filter Website Agent Rules"
+                      >
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="truncate max-w-[160px]">{websiteAgentFilterLabel}</span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                            showWebsiteAgentFilterDropdown ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {showWebsiteAgentFilterDropdown && (
+                        <div
+                          className="absolute left-0 mt-1 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {[
+                            { id: "all", label: "All Rules", count: websiteAgentCounts.all },
+                            { id: "active", label: "Active", count: websiteAgentCounts.active },
+                            { id: "new_message", label: "New Visitor Chat", count: websiteAgentCounts.newMessage },
+                            { id: "requirement_selected", label: "Pre-chat Requirement", count: websiteAgentCounts.requirement },
+                            { id: "page_url", label: "Page URL Match", count: websiteAgentCounts.pageUrl },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setWebsiteAgentFilter(opt.id);
+                                setShowWebsiteAgentFilterDropdown(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                                websiteAgentFilter === opt.id ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+                              <span className="text-slate-400 font-mono text-[11px]">({opt.count})</span>
+                            </button>
+                          ))}
+                          {websiteChannels.length > 0 && (
+                            <>
+                              <div className="my-1 border-t border-gray-100" />
+                              <div className="px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                By Channel
+                              </div>
+                              {websiteChannels.map((ch) => (
+                                <button
+                                  key={ch.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setWebsiteAgentFilter(`channel:${ch.id}`);
+                                    setShowWebsiteAgentFilterDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3.5 py-1.5 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                                    websiteAgentFilter === `channel:${ch.id}`
+                                      ? "text-[#1456f0] font-bold bg-blue-50/60"
+                                      : "text-[#1E293B]"
+                                  }`}
+                                >
+                                  <span className="truncate">{ch.name}</span>
+                                  {websiteAgentFilter === `channel:${ch.id}` && (
+                                    <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+                                  )}
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Email Channel Navigation: Mails | Agent | Template */}
@@ -2964,8 +3228,6 @@ export default function Chats() {
                   )}
                 </>
               )}
-                </>
-              )}
             </div>
           }
           searchQuery={
@@ -2979,6 +3241,8 @@ export default function Chats() {
                 : emailSearch
               : channelFilter === "whatsapp" && subMode === "agent"
               ? whatsappAgentSearch
+              : channelFilter === "website" && subMode === "agent"
+              ? websiteAgentSearch
               : subMode === "templates"
               ? templateSearch
               : chatSearch
@@ -2994,6 +3258,8 @@ export default function Chats() {
                 : setEmailSearch
               : channelFilter === "whatsapp" && subMode === "agent"
               ? setWhatsappAgentSearch
+              : channelFilter === "website" && subMode === "agent"
+              ? setWebsiteAgentSearch
               : subMode === "templates"
               ? setTemplateSearch
               : setChatSearch
@@ -3009,6 +3275,8 @@ export default function Chats() {
                 : "Search emails (from, subject, body)..."
               : channelFilter === "whatsapp" && subMode === "agent"
               ? "Search WhatsApp rules, templates, prompts, entities..."
+              : channelFilter === "website" && subMode === "agent"
+              ? "Search website agent rules, channels, prompts..."
               : subMode === "templates"
               ? "Search templates..."
               : channelFilter === "website"
@@ -3079,6 +3347,15 @@ export default function Chats() {
                   onClick: () => {
                     setSelectedWhatsAppRule(null);
                     setShowWhatsAppAgentDrawer(true);
+                  },
+                }
+              : channelFilter === "website" && subMode === "agent"
+              ? {
+                  label: "New Rule",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => {
+                    setSelectedWebsiteRule(null);
+                    setShowWebsiteAgentDrawer(true);
                   },
                 }
               : undefined
@@ -3186,11 +3463,15 @@ export default function Chats() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
-                      else setShowCompanionSettingsDrawer(true);
+                      if (channelFilter === "website") {
+                        setEditingWebsiteChannel(activeWebsiteChannel);
+                        setShowWebsiteChannelDrawer(true);
+                      } else {
+                        setShowCompanionSettingsDrawer(true);
+                      }
                     }}
                     className="w-[36px] h-[36px] rounded-xl border border-border bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
-                    title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
+                    title={channelFilter === "website" ? "Website Channel Settings" : "Companion Settings"}
                   >
                     <Settings className="w-4 h-4" />
                   </button>
@@ -3229,6 +3510,15 @@ export default function Chats() {
               onEditRule={(rule) => {
                 setSelectedWhatsAppRule(rule);
                 setShowWhatsAppAgentDrawer(true);
+              }}
+            />
+          ) : chatAudience === "contact" && channelFilter === "website" && subMode === "agent" ? (
+            <WebsiteAgentRulesView
+              searchQuery={websiteAgentSearch}
+              filterType={websiteAgentFilter}
+              onEditRule={(rule) => {
+                setSelectedWebsiteRule(rule);
+                setShowWebsiteAgentDrawer(true);
               }}
             />
           ) : (
@@ -3423,7 +3713,7 @@ export default function Chats() {
                   header: "Category",
                   align: "center",
                   render: (tpl) => (
-                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">
+                    <span className="text-xs font-medium text-slate-600 capitalize">
                       {tpl.category}
                     </span>
                   ),
@@ -3434,11 +3724,11 @@ export default function Chats() {
                   align: "center",
                   render: (tpl) => (
                     (!tpl.approvalStatus || tpl.approvalStatus === "pending") ? (
-                      <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
+                      <span className="text-xs font-medium text-slate-600">Pending</span>
                     ) : tpl.approvalStatus === "approved" ? (
-                      <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
+                      <span className="text-xs font-medium text-slate-600">Approved</span>
                     ) : (
-                      <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
+                      <span title={tpl.rejectionReason || "Denied by Meta"} className="text-xs font-medium text-slate-500 cursor-help">Denied</span>
                     )
                   ),
                 },
@@ -3970,49 +4260,39 @@ export default function Chats() {
 
       </div>
 
-      {/* ── Side Drawer: Website Widget Settings ── */}
-      <DrawerShell
-        isOpen={showWebsiteSettingsDrawer}
-        onClose={() => setShowWebsiteSettingsDrawer(false)}
-        title="Website Widget Settings"
-        subtitle="Configure chat widget design, working hours, and requirement mapping."
-        icon={<Globe className="w-4 h-4 text-[#6366F1]" />}
-        width="w-full max-w-5xl xl:max-w-[1140px]"
-        bodyClassName="p-5 sm:p-6 overflow-y-auto overflow-x-hidden"
-        zIndex={600}
-        footer={
-          <div className="flex items-center justify-end gap-2 w-full">
-            <button
-              type="button"
-              onClick={() => setShowWebsiteSettingsDrawer(false)}
-              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (widgetSettingsSaveRef.current) {
-                  const res = widgetSettingsSaveRef.current();
-                  if (res === false) return;
-                }
-                setShowWebsiteSettingsDrawer(false);
-              }}
-              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Check className="w-4 h-4" />
-              <span>Save Configuration</span>
-            </button>
-          </div>
-        }
-      >
-        <WebsiteWidgetSettingsTab
-          registerSaveHandler={(fn) => {
-            widgetSettingsSaveRef.current = fn;
-          }}
-          onNavigateToInbox={() => setShowWebsiteSettingsDrawer(false)}
-        />
-      </DrawerShell>
+      {/* ── Side Drawer: Website Channel Setup, Appearance & Live Preview ── */}
+      <WebsiteChannelDrawer
+        isOpen={showWebsiteChannelDrawer}
+        onClose={() => {
+          setShowWebsiteChannelDrawer(false);
+          setEditingWebsiteChannel(null);
+        }}
+        channel={editingWebsiteChannel}
+        canDelete={websiteChannels.length > 1}
+        onSave={(saved) => {
+          saveWebsiteChannel(saved);
+          selectWebsiteChannel(saved.id);
+        }}
+        onDelete={(channelId) => {
+          removeWebsiteChannel(channelId);
+        }}
+      />
+
+      {/* ── Side Drawer: Website Agent Rule Drawer ── */}
+      <WebsiteAgentDrawer
+        isOpen={showWebsiteAgentDrawer}
+        onClose={() => {
+          setShowWebsiteAgentDrawer(false);
+          setSelectedWebsiteRule(null);
+        }}
+        rule={selectedWebsiteRule}
+        onSave={(saved) => {
+          saveWebsiteRule(saved);
+        }}
+        onDelete={(ruleId) => {
+          deleteWebsiteRule(ruleId);
+        }}
+      />
 
       {/* ── Slim Side Drawer: Companion Care Bot Settings ── */}
       <DrawerShell

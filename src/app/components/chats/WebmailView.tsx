@@ -1242,11 +1242,6 @@ export default function WebmailView({
             >
               {email.subject}
             </span>
-            {email.attachments && email.attachments.length > 0 && (
-              <span title={`${email.attachments.length} attachment(s)`} className="inline-flex items-center shrink-0">
-                <Paperclip className="w-3.5 h-3.5 text-gray-400" />
-              </span>
-            )}
             <span className="text-gray-400 font-normal truncate hidden sm:inline">
               — {email.preview}
             </span>
@@ -1262,22 +1257,12 @@ export default function WebmailView({
       render: (email) => {
         const emailLabels = email.labels || [];
         if (emailLabels.length === 0) {
-          return <span className="text-slate-400 text-xs italic">—</span>;
+          return <span className="text-slate-400 text-xs">—</span>;
         }
         return (
-          <div className="flex flex-wrap items-center gap-1">
-            {emailLabels.map((lbl) => (
-              <span
-                key={lbl}
-                className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${getLabelBadgeColor(
-                  lbl
-                )}`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {lbl}
-              </span>
-            ))}
-          </div>
+          <span className="text-xs font-medium text-slate-600 truncate block">
+            {emailLabels.join(", ")}
+          </span>
         );
       },
     },
@@ -1396,8 +1381,8 @@ export default function WebmailView({
               {sig.title}
             </span>
             {sig.isDefault && (
-              <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.2 rounded-full border border-emerald-200">
-                Default
+              <span className="text-[11px] font-medium text-slate-500">
+                (Default)
               </span>
             )}
           </div>
