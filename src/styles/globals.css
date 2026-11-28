@@ -9,6 +9,29 @@
   scrollbar-width: none;
 }
 
+/* Ultra-thin clean scrollbar for widgets and drawers */
+.scrollbar-thin-clean {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.scrollbar-thin-clean::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.scrollbar-thin-clean::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin-clean::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+.scrollbar-thin-clean:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.6);
+}
+.scrollbar-thin-clean::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Drawer slide-in animation */
 @keyframes slide-in-right {
   from {

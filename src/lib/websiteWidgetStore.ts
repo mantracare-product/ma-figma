@@ -22,6 +22,10 @@ export interface WebsiteWidgetConfig {
   botAvatar?: string;
   launcherIcon?: string;
   welcomeMessage: string;
+  autoWelcomeMode?: "all" | "selected" | "off";
+  autoWelcomeDelay?: "immediate" | "3s" | "5s" | "10s" | "30s";
+  autoWelcomeExcludedPages?: string[];
+  customWelcomeMessages?: Array<{ id: string; pagePattern: string; message: string }>;
   removeSignature: boolean;
   position: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
@@ -120,6 +124,10 @@ export const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
   botAvatar: "",
   launcherIcon: "chat",
   welcomeMessage: "Hello! Welcome to Mantra Health. How can we assist you today?",
+  autoWelcomeMode: "all",
+  autoWelcomeDelay: "immediate",
+  autoWelcomeExcludedPages: [],
+  customWelcomeMessages: [],
   removeSignature: false,
   position: "bottom-right",
 

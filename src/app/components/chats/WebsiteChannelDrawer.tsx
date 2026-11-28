@@ -156,6 +156,15 @@ export default function WebsiteChannelDrawer({
   const [launcherDropdownOpen, setLauncherDropdownOpen] = useState(false);
   const [launcherIconSearch, setLauncherIconSearch] = useState("");
   const launcherDropdownRef = useRef<HTMLDivElement>(null);
+  const [autoWelcomeMode, setAutoWelcomeMode] = useState<"all" | "selected" | "off">("all");
+  const [autoWelcomeDelay, setAutoWelcomeDelay] = useState<
+    "immediate" | "3s" | "5s" | "10s" | "30s"
+  >("immediate");
+  const [autoWelcomeExcludedPages, setAutoWelcomeExcludedPages] = useState<string[]>([]);
+  const [newExcludedPage, setNewExcludedPage] = useState("");
+  const [customWelcomeMessages, setCustomWelcomeMessages] = useState<
+    Array<{ id: string; pagePattern: string; message: string }>
+  >([]);
   const [removeSignature, setRemoveSignature] = useState(false);
 
   // ── 3. Position ──
@@ -244,6 +253,15 @@ export default function WebsiteChannelDrawer({
       setThemeColor(channel.themeColor || DEFAULT_WIDGET_CONFIG.themeColor);
       setThemeMode(channel.themeMode || "light");
       setLauncherIcon(channel.launcherIcon || "chat");
+      setAutoWelcomeMode(channel.autoWelcomeMode || "all");
+      setAutoWelcomeDelay(channel.autoWelcomeDelay || "immediate");
+      setAutoWelcomeExcludedPages(
+        Array.isArray(channel.autoWelcomeExcludedPages) ? channel.autoWelcomeExcludedPages : []
+      );
+      setCustomWelcomeMessages(
+        Array.isArray(channel.customWelcomeMessages) ? channel.customWelcomeMessages : []
+      );
+      setNewExcludedPage("");
       setRemoveSignature(Boolean(channel.removeSignature));
       setPosition(channel.position || "bottom-right");
       setEnablePreChatForm(channel.enablePreChatForm !== false);
@@ -269,6 +287,11 @@ export default function WebsiteChannelDrawer({
       setThemeColor("#1456f0");
       setThemeMode("light");
       setLauncherIcon("chat");
+      setAutoWelcomeMode("all");
+      setAutoWelcomeDelay("immediate");
+      setAutoWelcomeExcludedPages([]);
+      setCustomWelcomeMessages([]);
+      setNewExcludedPage("");
       setRemoveSignature(false);
       setPosition("bottom-right");
       setEnablePreChatForm(true);
@@ -375,6 +398,10 @@ export default function WebsiteChannelDrawer({
       launcherIcon,
       welcomeMessage:
         welcomeMessage.trim() || "Hello! Welcome to Mantra Health. How can we assist you today?",
+      autoWelcomeMode,
+      autoWelcomeDelay,
+      autoWelcomeExcludedPages,
+      customWelcomeMessages,
       removeSignature,
       position,
       enablePreChatForm,
@@ -419,6 +446,24 @@ export default function WebsiteChannelDrawer({
   }, [launcherIconSearch]);
 
   const botInitials = useMemo(() => getChatbotInitials(name), [name]);
+
+  const handleAddExcludedPage = () => {
+    const raw = newExcludedPage.trim();
+    if (!raw) return;
+    if (autoWelcomeExcludedPages.some((p) => p.toLowerCase() === raw.toLowerCase())) {
+      toast.error("Page rule already excluded");
+      return;
+    }
+    setAutoWelcomeExcludedPages((prev) => [...prev, raw]);
+    setNewExcludedPage("");
+  };
+
+  const handleAddCustomWelcome = () => {
+    setCustomWelcomeMessages((prev) => [
+      ...prev,
+      { id: `cwm-${Date.now()}`, pagePattern: "", message: "" },
+    ]);
+  };
 
   const renderLauncherGlyph = (sizeClass = "w-5 h-5") => {
     const { Icon } = selectedLauncherEntry;
@@ -622,20 +667,6 @@ export default function WebsiteChannelDrawer({
                       )}
                     </div>
                   </div>
-                </div>
-
-                {/* Welcome Message */}
-                <div>
-                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
-                    <span>Welcome greeting message</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={welcomeMessage}
-                    onChange={(e) => setWelcomeMessage(e.target.value)}
-                    placeholder="Hello! Welcome to Mantra Health. How can we assist you today?"
-                    className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-                  />
                 </div>
 
                 {/* Primary Color */}
@@ -1151,7 +1182,7 @@ export default function WebsiteChannelDrawer({
             )}
           </div>
 
-          {/* ── SECTION 5: INSTALLATION & EMBED SCRIPT (AT THE BOTTOM) ── */}
+          {/* ── SECTION 5: AUTO WELCOME MESSAGE ── */}
           <div className={`border rounded-lg bg-white transition-colors ${openSection === 5 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
             <button
               type="button"
@@ -1160,9 +1191,9 @@ export default function WebsiteChannelDrawer({
                 openSection === 5 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
               }`}
             >
-              <span className="text-sm font-bold text-slate-900">5. Installation &amp; Embed Script</span>
+              <span className="text-sm font-bold text-slate-900">5. Auto Welcome Message</span>
               <div className="flex items-center gap-2">
-                {scriptKey && <Check className="w-4 h-4 text-emerald-600" />}
+                {autoWelcomeMode !== "off" && <Check className="w-4 h-4 text-emerald-600" />}
                 {openSection === 5 ? (
                   <ChevronUp className="w-4 h-4 text-slate-400" />
                 ) : (
@@ -1172,6 +1203,210 @@ export default function WebsiteChannelDrawer({
             </button>
 
             {openSection === 5 && (
+              <div className="px-4 py-4 border-t border-slate-100 space-y-4">
+                <div>
+                  <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                    <span>Welcome message show mode</span>
+                  </label>
+                  <select
+                    value={autoWelcomeMode}
+                    onChange={(e) =>
+                      setAutoWelcomeMode(e.target.value as "all" | "selected" | "off")
+                    }
+                    className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
+                  >
+                    <option value="all">On all pages</option>
+                    <option value="selected">Only on selected pages</option>
+                    <option value="off">Off</option>
+                  </select>
+                </div>
+
+                {autoWelcomeMode !== "off" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                        <span>Welcome message</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={welcomeMessage}
+                        onChange={(e) => setWelcomeMessage(e.target.value)}
+                        placeholder="Hello! Welcome to Mantra Health. How can we assist you today?"
+                        className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                        <span>Show delay</span>
+                        <InfoTip text="Delay before the launcher welcome message pops up for visitors." />
+                      </label>
+                      <select
+                        value={autoWelcomeDelay}
+                        onChange={(e) =>
+                          setAutoWelcomeDelay(
+                            e.target.value as "immediate" | "3s" | "5s" | "10s" | "30s"
+                          )
+                        }
+                        className="w-full h-10 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 cursor-pointer"
+                      >
+                        <option value="immediate">Show immediately</option>
+                        <option value="3s">After 3 seconds</option>
+                        <option value="5s">After 5 seconds</option>
+                        <option value="10s">After 10 seconds</option>
+                        <option value="30s">After 30 seconds</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="flex items-center text-[13px] font-medium text-slate-700 mb-1.5">
+                        <span>Except these pages</span>
+                        <InfoTip text="Pages matching these URLs or paths, and pages with individually configured messages, will not auto-open the default welcome bubble." />
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newExcludedPage}
+                          onChange={(e) => setNewExcludedPage(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddExcludedPage();
+                            }
+                          }}
+                          placeholder="http://example.com/dir/page"
+                          className="flex-1 h-10 px-3 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#1456f0]"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddExcludedPage}
+                          className="h-10 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-[#1456f0] flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                      {autoWelcomeExcludedPages.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {autoWelcomeExcludedPages.map((pg) => (
+                            <span
+                              key={pg}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-200 bg-white text-[11px] font-mono text-slate-700"
+                            >
+                              <span className="truncate max-w-[220px]">{pg}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAutoWelcomeExcludedPages((prev) =>
+                                    prev.filter((item) => item !== pg)
+                                  )
+                                }
+                                className="text-slate-400 hover:text-red-500 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/70 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center text-[13px] font-medium text-slate-700">
+                          <span>Custom welcome messages</span>
+                          <InfoTip text="Show a tailored greeting message when visitors land on specific page URLs or paths." />
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddCustomWelcome}
+                          className="text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer"
+                        >
+                          + Add welcome message
+                        </button>
+                      </div>
+
+                      {customWelcomeMessages.length > 0 && (
+                        <div className="space-y-2">
+                          {customWelcomeMessages.map((item) => (
+                            <div
+                              key={item.id}
+                              className="p-3 rounded-lg border border-slate-200 bg-slate-50/40 space-y-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={item.pagePattern}
+                                  onChange={(e) =>
+                                    setCustomWelcomeMessages((prev) =>
+                                      prev.map((m) =>
+                                        m.id === item.id
+                                          ? { ...m, pagePattern: e.target.value }
+                                          : m
+                                      )
+                                    )
+                                  }
+                                  placeholder="/pricing or https://example.com/pricing"
+                                  className="flex-1 h-9 px-3 text-xs rounded-lg border border-slate-200 bg-white text-slate-900"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomWelcomeMessages((prev) =>
+                                      prev.filter((m) => m.id !== item.id)
+                                    )
+                                  }
+                                  className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer"
+                                  title="Remove custom welcome message"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <input
+                                type="text"
+                                value={item.message}
+                                onChange={(e) =>
+                                  setCustomWelcomeMessages((prev) =>
+                                    prev.map((m) =>
+                                      m.id === item.id ? { ...m, message: e.target.value } : m
+                                    )
+                                  )
+                                }
+                                placeholder="Page-specific welcome greeting..."
+                                className="w-full h-9 px-3 text-xs rounded-lg border border-slate-200 bg-white text-slate-900"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── SECTION 6: INSTALLATION & EMBED SCRIPT (AT THE BOTTOM) ── */}
+          <div className={`border rounded-lg bg-white transition-colors ${openSection === 6 ? "border-slate-300 shadow-2xs" : "border-slate-200"}`}>
+            <button
+              type="button"
+              onClick={() => handleToggleSection(6)}
+              className={`w-full flex items-center justify-between p-4 transition-colors text-left cursor-pointer ${
+                openSection === 6 ? "rounded-t-lg bg-slate-50/70 border-b border-slate-200" : "rounded-lg bg-white hover:bg-slate-50/80"
+              }`}
+            >
+              <span className="text-sm font-bold text-slate-900">6. Installation &amp; Embed Script</span>
+              <div className="flex items-center gap-2">
+                {scriptKey && <Check className="w-4 h-4 text-emerald-600" />}
+                {openSection === 6 ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </div>
+            </button>
+
+            {openSection === 6 && (
               <div className="px-4 py-4 border-t border-slate-100 space-y-4">
                 {/* Embed Script Card */}
                 <div className="p-3.5 border border-slate-200 rounded-xl bg-slate-50/40 space-y-2.5">
@@ -1311,7 +1546,7 @@ export default function WebsiteChannelDrawer({
             </div>
 
             {/* Simulated Browser Viewport */}
-            <div className="relative h-[470px] bg-slate-100/80 flex flex-col overflow-hidden">
+            <div className="relative h-[520px] bg-slate-100/80 flex flex-col overflow-hidden">
               {/* Mock Browser Bar */}
               <div className="h-8 px-3 bg-white border-b border-slate-200/80 flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1">
@@ -1340,7 +1575,7 @@ export default function WebsiteChannelDrawer({
                 {/* Expanded Widget Card */}
                 {previewExpanded && (
                   <div
-                    className={`relative z-10 w-[290px] rounded-2xl border shadow-xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150 ${
+                    className={`relative z-10 w-[290px] max-h-[420px] flex flex-col rounded-2xl border shadow-xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150 ${
                       themeMode === "dark"
                         ? "bg-slate-900 border-slate-700 text-white"
                         : "bg-white border-slate-200 text-slate-900"
@@ -1348,7 +1583,7 @@ export default function WebsiteChannelDrawer({
                   >
                     {/* Header */}
                     <div
-                      className="px-3.5 py-3 flex items-center justify-between text-white"
+                      className="px-3.5 py-3 flex items-center justify-between text-white shrink-0"
                       style={{ backgroundColor: themeColor }}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -1412,8 +1647,8 @@ export default function WebsiteChannelDrawer({
                       </div>
                     </div>
 
-                    {/* Body */}
-                    <div className="p-3 space-y-2.5">
+                    {/* Scrollable Body */}
+                    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin-clean p-3 space-y-2.5">
                       {showOnlineMembers && (() => {
                         const previewMembers =
                           agentQueue.length > 0
@@ -1615,7 +1850,16 @@ export default function WebsiteChannelDrawer({
                           )}
                         </div>
                       )}
+                    </div>
 
+                    {/* Pinned Composer Footer */}
+                    <div
+                      className={`shrink-0 px-3 pt-2 pb-2.5 border-t space-y-1.5 ${
+                        themeMode === "dark"
+                          ? "bg-slate-900 border-slate-800"
+                          : "bg-white border-slate-100"
+                      }`}
+                    >
                       <div className="flex items-center gap-1.5">
                         <input
                           type="text"
@@ -1637,7 +1881,7 @@ export default function WebsiteChannelDrawer({
                       </div>
 
                       {!removeSignature && (
-                        <div className="text-center text-[9px] text-slate-400 pt-0.5">
+                        <div className="text-center text-[9px] text-slate-400">
                           Powered by MantraAssist
                         </div>
                       )}
@@ -1645,16 +1889,89 @@ export default function WebsiteChannelDrawer({
                   </div>
                 )}
 
-                {/* Floating Launcher Button anchored to exact chosen corner/edge */}
-                <button
-                  type="button"
-                  onClick={() => setPreviewExpanded((v) => !v)}
-                  title={previewExpanded ? "Minimize preview widget" : "Expand preview widget"}
-                  className={`absolute ${launcherAnchorClass} z-20 w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 cursor-pointer overflow-hidden border-2 border-white/80`}
-                  style={{ backgroundColor: themeColor }}
-                >
-                  {renderLauncherGlyph("w-4 h-4")}
-                </button>
+                {/* Minimized Launcher Auto-Welcome Callout + Icon Launcher Button */}
+                {!previewExpanded ? (
+                  <div
+                    className={`absolute ${launcherAnchorClass} z-20 flex items-center gap-2.5 ${
+                      position.endsWith("left") ? "flex-row-reverse" : "flex-row"
+                    }`}
+                  >
+                    {autoWelcomeMode !== "off" && (
+                      <div
+                        onClick={() => setPreviewExpanded(true)}
+                        className={`relative w-[220px] rounded-xl border p-2.5 shadow-md cursor-pointer transition-all animate-in fade-in zoom-in-95 duration-150 ${
+                          themeMode === "dark"
+                            ? "bg-slate-900 text-white"
+                            : "bg-white text-slate-900"
+                        }`}
+                        style={{ borderColor: themeColor }}
+                      >
+                        {/* Pointer caret toward launcher icon */}
+                        <span
+                          className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rotate-45 ${
+                            themeMode === "dark" ? "bg-slate-900" : "bg-white"
+                          } ${
+                            position.endsWith("left")
+                              ? "-left-[6px] border-l border-b"
+                              : "-right-[6px] border-r border-t"
+                          }`}
+                          style={{ borderColor: themeColor }}
+                        />
+                        <div className="relative flex items-start gap-2.5">
+                          <div
+                            className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0 border border-slate-200/70"
+                            style={{ backgroundColor: botAvatar ? "#ffffff" : themeColor }}
+                          >
+                            {botAvatar ? (
+                              <img
+                                src={botAvatar}
+                                alt={name || "Chatbot"}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span>{botInitials}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1 pr-3">
+                            <div className="text-[11px] font-bold truncate">
+                              {name.trim() || "Website Chat"}
+                            </div>
+                            <p
+                              className={`text-[10px] leading-snug mt-0.5 line-clamp-3 ${
+                                themeMode === "dark" ? "text-slate-300" : "text-slate-600"
+                              }`}
+                            >
+                              {welcomeMessage.trim() ||
+                                "Hello! Welcome to Mantra Health. How can we assist you today?"}
+                            </p>
+                          </div>
+                          <X className="w-3 h-3 text-slate-400 shrink-0 absolute top-0 right-0" />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setPreviewExpanded(true)}
+                      title="Expand preview widget"
+                      className="w-11 h-11 rounded-full text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shrink-0 ring-4 ring-slate-200/70"
+                      style={{ backgroundColor: themeColor }}
+                    >
+                      {renderLauncherGlyph("w-5 h-5")}
+                    </button>
+                  </div>
+                ) : (
+                  /* Floating Launcher Button anchored to exact chosen corner/edge when widget is open */
+                  <button
+                    type="button"
+                    onClick={() => setPreviewExpanded(false)}
+                    title="Minimize preview widget"
+                    className={`absolute ${launcherAnchorClass} z-20 w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 cursor-pointer overflow-hidden border-2 border-white/80`}
+                    style={{ backgroundColor: themeColor }}
+                  >
+                    {renderLauncherGlyph("w-4 h-4")}
+                  </button>
+                )}
               </div>
             </div>
           </div>
